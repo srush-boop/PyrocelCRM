@@ -15,7 +15,9 @@ export interface ServiceType {
   id: string
   name: string
   description: string | null
-  default_frequency_months: number
+  default_frequency_months?: number // Legacy field
+  default_frequency_value: number
+  default_frequency_unit: 'weeks' | 'months'
   created_at: string
 }
 
@@ -64,7 +66,9 @@ export interface SiteService {
   id: string
   site_id: string
   service_type_id: string
-  frequency_months: number
+  frequency_months?: number // Legacy field
+  frequency_value: number
+  frequency_unit: 'weeks' | 'months'
   last_service_date: string | null
   next_service_date: string | null
   created_at: string

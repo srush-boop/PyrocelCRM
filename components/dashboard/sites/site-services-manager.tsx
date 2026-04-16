@@ -23,8 +23,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Trash2, Wrench, Loader2, Calendar } from 'lucide-react'
-import type { ServiceType, SiteService } from '@/lib/types/database'
+import { Plus, Trash2, Wrench, Loader2, Calendar, Edit2 } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 interface SiteServicesManagerProps {
   siteId: string
@@ -38,6 +39,9 @@ export function SiteServicesManager({
   availableServiceTypes,
 }: SiteServicesManagerProps) {
   const [selectedServiceType, setSelectedServiceType] = useState<string>('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editFrequencyValue, setEditFrequencyValue] = useState<number>(12)
+  const [editFrequencyUnit, setEditFrequencyUnit] = useState<'weeks' | 'months'>('months')
   const [adding, setAdding] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const router = useRouter()
@@ -52,11 +56,25 @@ export function SiteServicesManager({
     await supabase.from('site_services').insert({
       site_id: siteId,
       service_type_id: selectedServiceType,
-      frequency_months: serviceType?.default_frequency_months || 12,
+      frequency_value: serviceType?.default_frequency_value || 12,
+      frequency_unit: serviceType?.default_frequency_unit || 'months',
     })
 
     setAdding(false)
     setSelectedServiceType('')
+    router.refresh()
+  }
+
+  const handleEditFrequency = async (serviceId: string) => {
+    await supabase
+      .from('site_services')
+      .update({
+        frequency_value: editFrequencyValue,
+        frequency_unit: editFrequencyUnit,
+      })
+      .eq('id', serviceId)
+
+    setEditingId(null)
     router.refresh()
   }
 
@@ -95,7 +113,7 @@ export function SiteServicesManager({
                   <div>
                     <p className="font-medium">{ss.service_type?.name}</p>
                     <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                      <span>Every {ss.frequency_months} months</span>
+                      <span>Every {ss.frequency_value} {ss.frequency_unit}</span>
                       {ss.last_service_date && (
                         <span className="flex items-center gap-1">
                           <Calendar className="h-3 w-3" />
@@ -104,14 +122,28 @@ export function SiteServicesManager({
                       )}
                     </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setDeleteId(ss.id)}
-                    className="text-destructive hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        setEditingId(ss.id)
+                        setEditFrequencyValue(ss.frequency_value)
+                        setEditFrequencyUnit(ss.frequency_unit)
+                      }}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setDeleteId(ss.id)}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -165,6 +197,52 @@ export function SiteServicesManager({
               className="bg-destructive text-destructive-foreground"
             >
               Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!editingId} onOpenChange={() => setEditingId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Edit Service Frequency</AlertDialogTitle>
+            <AlertDialogDescription>
+              Update how often this service should be performed
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="grid grid-cols-2 gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="freq-value">Frequency Value</Label>
+              <Input
+                id="freq-value"
+                type="number"
+                min={1}
+                max={60}
+                value={editFrequencyValue}
+                onChange={(e) => setEditFrequencyValue(parseInt(e.target.value) || 1)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="freq-unit">Unit</Label>
+              <Select value={editFrequencyUnit} onValueChange={(value) =>
+                setEditFrequencyUnit(value as 'weeks' | 'months')
+              }>
+                <SelectTrigger id="freq-unit">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="weeks">Weeks</SelectItem>
+                  <SelectItem value="months">Months</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => editingId && handleEditFrequency(editingId)}
+            >
+              Save Changes
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -1,0 +1,132 @@
+'use client'
+
+import { useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Loader2 } from 'lucide-react'
+import type { Route, Profile } from '@/lib/types/database'
+
+interface EditRouteDialogProps {
+  route: Route & { assigned_engineer: Profile | null }
+  engineers: Profile[]
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+
+export function EditRouteDialog({ route, engineers, open, onOpenChange }: EditRouteDialogProps) {
+  const [loading, setLoading] = useState(false)
+  const [formData, setFormData] = useState({
+    name: route.name,
+    description: route.description || '',
+    assigned_engineer_id: route.assigned_engineer_id || '',
+  })
+  const router = useRouter()
+  const supabase = createClient()
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+
+    const { error } = await supabase
+      .from('routes')
+      .update({
+        ...formData,
+        assigned_engineer_id: formData.assigned_engineer_id || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', route.id)
+
+    setLoading(false)
+
+    if (!error) {
+      onOpenChange(false)
+      router.refresh()
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <form onSubmit={handleSubmit}>
+          <DialogHeader>
+            <DialogTitle>Edit Route</DialogTitle>
+            <DialogDescription>
+              Update route information and assignments
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="name">Route Name *</Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="engineer">Assign Engineer</Label>
+              <Select
+                value={formData.assigned_engineer_id}
+                onValueChange={(value) => setFormData({ ...formData, assigned_engineer_id: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select an engineer (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {engineers.map((engineer) => (
+                    <SelectItem key={engineer.id} value={engineer.id}>
+                      {engineer.full_name || engineer.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save Changes'
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}

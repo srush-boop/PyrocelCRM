@@ -1,0 +1,72 @@
+import { createClient } from '@/lib/supabase/server'
+import { redirect, notFound } from 'next/navigation'
+import { TaskExecution } from '@/components/dashboard/tasks/task-execution'
+import type { Profile, TaskWithDetails, ChecklistTemplate } from '@/lib/types/database'
+
+interface PageProps {
+  params: Promise<{ id: string }>
+}
+
+export default async function TaskPage({ params }: PageProps) {
+  const { id } = await params
+  const supabase = await createClient()
+  
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/auth/login')
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single()
+
+  if (!profile) redirect('/auth/login')
+
+  // Fetch task with all related data
+  const { data: task } = await supabase
+    .from('tasks')
+    .select(`
+      *,
+      site_service:site_services(
+        *,
+        site:sites(*),
+        service_type:service_types(*)
+      ),
+      assigned_engineer:profiles(*)
+    `)
+    .eq('id', id)
+    .single()
+
+  if (!task) {
+    notFound()
+  }
+
+  // Check if engineer can access this task
+  if ((profile as Profile).role === 'engineer' && task.assigned_engineer_id !== user.id) {
+    redirect('/dashboard')
+  }
+
+  // Fetch checklist template for this service type
+  const { data: checklistTemplate } = await supabase
+    .from('checklist_templates')
+    .select('*')
+    .eq('service_type_id', task.site_service.service_type_id)
+    .limit(1)
+    .single()
+
+  // Fetch existing task result if any
+  const { data: taskResult } = await supabase
+    .from('task_results')
+    .select('*')
+    .eq('task_id', id)
+    .single()
+
+  return (
+    <TaskExecution
+      task={task as TaskWithDetails}
+      checklistTemplate={checklistTemplate as ChecklistTemplate | null}
+      existingResult={taskResult}
+      profile={profile as Profile}
+    />
+  )
+}

@@ -1,0 +1,193 @@
+'use client'
+
+import { useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Calendar } from '@/components/ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Plus, Loader2, CalendarIcon } from 'lucide-react'
+import { format } from 'date-fns'
+import type { Profile, SiteService, Site, ServiceType } from '@/lib/types/database'
+import { cn } from '@/lib/utils'
+
+interface CreateTaskDialogProps {
+  siteServices: (SiteService & { site: Site; service_type: ServiceType })[]
+  engineers: Profile[]
+}
+
+export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogProps) {
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [formData, setFormData] = useState({
+    site_service_id: '',
+    assigned_engineer_id: '',
+    scheduled_date: new Date(),
+  })
+  const router = useRouter()
+  const supabase = createClient()
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+
+    const { error } = await supabase.from('tasks').insert({
+      site_service_id: formData.site_service_id,
+      assigned_engineer_id: formData.assigned_engineer_id || null,
+      scheduled_date: format(formData.scheduled_date, 'yyyy-MM-dd'),
+      status: 'pending',
+    })
+
+    setLoading(false)
+
+    if (!error) {
+      setOpen(false)
+      setFormData({
+        site_service_id: '',
+        assigned_engineer_id: '',
+        scheduled_date: new Date(),
+      })
+      router.refresh()
+    }
+  }
+
+  // Group site services by site
+  const siteServicesBySite = siteServices.reduce((acc, ss) => {
+    const siteName = ss.site?.name || 'Unknown'
+    if (!acc[siteName]) {
+      acc[siteName] = []
+    }
+    acc[siteName].push(ss)
+    return acc
+  }, {} as Record<string, typeof siteServices>)
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button>
+          <Plus className="mr-2 h-4 w-4" />
+          Schedule Task
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg">
+        <form onSubmit={handleSubmit}>
+          <DialogHeader>
+            <DialogTitle>Schedule New Task</DialogTitle>
+            <DialogDescription>
+              Create a new service task for a site
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label>Site & Service *</Label>
+              <Select
+                value={formData.site_service_id}
+                onValueChange={(value) => setFormData({ ...formData, site_service_id: value })}
+                required
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a site service" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(siteServicesBySite).map(([siteName, services]) => (
+                    <div key={siteName}>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                        {siteName}
+                      </div>
+                      {services.map((ss) => (
+                        <SelectItem key={ss.id} value={ss.id}>
+                          {ss.service_type?.name}
+                        </SelectItem>
+                      ))}
+                    </div>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Assign Engineer</Label>
+              <Select
+                value={formData.assigned_engineer_id}
+                onValueChange={(value) => setFormData({ ...formData, assigned_engineer_id: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select an engineer (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {engineers.map((engineer) => (
+                    <SelectItem key={engineer.id} value={engineer.id}>
+                      {engineer.full_name || engineer.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Scheduled Date *</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      'justify-start text-left font-normal',
+                      !formData.scheduled_date && 'text-muted-foreground'
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {formData.scheduled_date ? (
+                      format(formData.scheduled_date, 'PPP')
+                    ) : (
+                      <span>Pick a date</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={formData.scheduled_date}
+                    onSelect={(date) => date && setFormData({ ...formData, scheduled_date: date })}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={loading || !formData.site_service_id}>
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                'Schedule Task'
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}

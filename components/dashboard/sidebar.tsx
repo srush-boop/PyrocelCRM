@@ -24,6 +24,7 @@ import {
   Settings,
   Wrench,
   Calendar,
+  FileText,
 } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 
@@ -39,6 +40,7 @@ const adminNavItems = [
   { title: 'Service Types', href: '/dashboard/service-types', icon: Wrench },
   { title: 'Checklists', href: '/dashboard/checklists', icon: ClipboardList },
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
+  { title: 'Reports', href: '/dashboard/reports', icon: FileText },
 ]
 
 const engineerNavItems = [
@@ -51,6 +53,7 @@ const officeNavItems = [
   { title: 'Sites', href: '/dashboard/sites', icon: Building2 },
   { title: 'Routes', href: '/dashboard/routes', icon: Route },
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
+  { title: 'Reports', href: '/dashboard/reports', icon: FileText },
 ]
 
 export function DashboardSidebar({ profile }: DashboardSidebarProps) {

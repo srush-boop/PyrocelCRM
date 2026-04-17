@@ -17,6 +17,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Plus, Loader2 } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 export function AddServiceTypeDialog() {
   const [open, setOpen] = useState(false)
@@ -24,7 +31,8 @@ export function AddServiceTypeDialog() {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    default_frequency_months: 12,
+    default_frequency_value: 12,
+    default_frequency_unit: 'months' as 'weeks' | 'months',
   })
   const router = useRouter()
   const supabase = createClient()
@@ -42,7 +50,8 @@ export function AddServiceTypeDialog() {
       setFormData({
         name: '',
         description: '',
-        default_frequency_months: 12,
+        default_frequency_value: 12,
+        default_frequency_unit: 'months',
       })
       router.refresh()
     }
@@ -84,18 +93,34 @@ export function AddServiceTypeDialog() {
                 placeholder="Describe the service"
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="frequency">Default Frequency (months)</Label>
-              <Input
-                id="frequency"
-                type="number"
-                min={1}
-                max={60}
-                value={formData.default_frequency_months}
-                onChange={(e) =>
-                  setFormData({ ...formData, default_frequency_months: parseInt(e.target.value) || 12 })
-                }
-              />
+            <div className="grid grid-cols-2 gap-2">
+              <div className="grid gap-2">
+                <Label htmlFor="frequency-value">Frequency Value *</Label>
+                <Input
+                  id="frequency-value"
+                  type="number"
+                  min={1}
+                  max={60}
+                  value={formData.default_frequency_value}
+                  onChange={(e) =>
+                    setFormData({ ...formData, default_frequency_value: parseInt(e.target.value) || 12 })
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="frequency-unit">Unit *</Label>
+                <Select value={formData.default_frequency_unit} onValueChange={(value) =>
+                  setFormData({ ...formData, default_frequency_unit: value as 'weeks' | 'months' })
+                }>
+                  <SelectTrigger id="frequency-unit">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="weeks">Weeks</SelectItem>
+                    <SelectItem value="months">Months</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
           <DialogFooter>

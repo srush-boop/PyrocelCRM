@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { ArrowLeft, MapPin, Phone, Mail, Building2 } from 'lucide-react'
 import { SiteServicesManager } from '@/components/dashboard/sites/site-services-manager'
-import type { Profile, Site, Route, ServiceType, SiteService } from '@/lib/types/database'
+import type { Profile, Site, Route, ServiceType, SiteService, Task } from '@/lib/types/database'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -42,7 +42,7 @@ export default async function SiteDetailPage({ params }: PageProps) {
     notFound()
   }
 
-  const [siteServicesResult, serviceTypesResult] = await Promise.all([
+  const [siteServicesResult, serviceTypesResult, engineersResult] = await Promise.all([
     supabase
       .from('site_services')
       .select(`
@@ -51,10 +51,27 @@ export default async function SiteDetailPage({ params }: PageProps) {
       `)
       .eq('site_id', id),
     supabase.from('service_types').select('*').order('name'),
+    supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'engineer')
+      .order('full_name'),
   ])
 
   const siteServices = (siteServicesResult.data || []) as (SiteService & { service_type: ServiceType })[]
   const serviceTypes = (serviceTypesResult.data || []) as ServiceType[]
+  const engineers = (engineersResult.data || []) as Profile[]
+
+  // Get tasks for this site's services
+  const siteServiceIds = siteServices.map(ss => ss.id)
+  const { data: tasksData } = siteServiceIds.length > 0 
+    ? await supabase
+        .from('tasks')
+        .select('*')
+        .in('site_service_id', siteServiceIds)
+    : { data: [] }
+  
+  const tasks = (tasksData || []) as Task[]
 
   // Filter out service types already added to this site
   const availableServiceTypes = serviceTypes.filter(
@@ -125,6 +142,8 @@ export default async function SiteDetailPage({ params }: PageProps) {
           siteId={id}
           siteServices={siteServices}
           availableServiceTypes={availableServiceTypes}
+          engineers={engineers}
+          tasks={tasks}
         />
       </div>
     </div>

@@ -96,6 +96,12 @@ export default function LoginPage() {
               Sign up
             </Link>
           </div>
+          <div className="mt-2 text-center text-xs text-muted-foreground">
+            Setting up for the first time?{' '}
+            <Link href="/auth/create-admin" className="text-primary hover:underline">
+              Create administrator account
+            </Link>
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -46,14 +46,28 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
     e.preventDefault()
     setLoading(true)
 
+    // Calculate months equivalent for backwards compatibility
+    const frequencyInMonths = formData.default_frequency_unit === 'weeks' 
+      ? Math.ceil(formData.default_frequency_value / 4) 
+      : formData.default_frequency_value
+
     const { error } = await supabase
       .from('service_types')
-      .update(formData)
+      .update({
+        name: formData.name,
+        description: formData.description || null,
+        default_frequency_months: frequencyInMonths,
+        default_frequency_value: formData.default_frequency_value,
+        default_frequency_unit: formData.default_frequency_unit,
+      })
       .eq('id', serviceType.id)
 
     setLoading(false)
 
-    if (!error) {
+    if (error) {
+      console.error('[v0] Error updating service type:', error)
+      alert(`Error updating service type: ${error.message}`)
+    } else {
       onOpenChange(false)
       router.refresh()
     }

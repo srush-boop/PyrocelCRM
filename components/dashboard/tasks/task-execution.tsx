@@ -87,7 +87,7 @@ export function TaskExecution({
 
   // Calculate overall status based on checklist results
   const calculateOverallStatus = (): TaskResultStatus => {
-    if (checklistResults.length === 0) return 'pending'
+    if (checklistResults.length === 0) return 'pass'
     
     const passFailItems = checklistResults.filter((r) => r.type === 'pass_fail')
     if (passFailItems.length === 0) return 'pass'

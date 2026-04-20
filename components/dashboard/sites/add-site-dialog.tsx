@@ -23,7 +23,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Plus, Loader2 } from 'lucide-react'
+import { Plus, Loader2, X } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import type { Route } from '@/lib/types/database'
 
 interface AddSiteDialogProps {
@@ -42,8 +43,21 @@ export function AddSiteDialog({ routes }: AddSiteDialogProps) {
     route_id: '',
     notes: '',
   })
+  const [reportingEmails, setReportingEmails] = useState<string[]>([])
+  const [newReportingEmail, setNewReportingEmail] = useState('')
   const router = useRouter()
   const supabase = createClient()
+
+  const handleAddReportingEmail = () => {
+    if (newReportingEmail && !reportingEmails.includes(newReportingEmail)) {
+      setReportingEmails([...reportingEmails, newReportingEmail])
+      setNewReportingEmail('')
+    }
+  }
+
+  const handleRemoveReportingEmail = (email: string) => {
+    setReportingEmails(reportingEmails.filter((e) => e !== email))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -52,6 +66,7 @@ export function AddSiteDialog({ routes }: AddSiteDialogProps) {
     const { error } = await supabase.from('sites').insert({
       ...formData,
       route_id: formData.route_id || null,
+      reporting_emails: reportingEmails,
     })
 
     setLoading(false)
@@ -67,6 +82,8 @@ export function AddSiteDialog({ routes }: AddSiteDialogProps) {
         route_id: '',
         notes: '',
       })
+      setReportingEmails([])
+      setNewReportingEmail('')
       router.refresh()
     }
   }
@@ -155,6 +172,46 @@ export function AddSiteDialog({ routes }: AddSiteDialogProps) {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="reporting_email">Reporting Email Addresses</Label>
+              <p className="text-xs text-muted-foreground">
+                Email addresses that will receive completed test reports
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  id="reporting_email"
+                  type="email"
+                  value={newReportingEmail}
+                  onChange={(e) => setNewReportingEmail(e.target.value)}
+                  placeholder="report@example.com"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      handleAddReportingEmail()
+                    }
+                  }}
+                />
+                <Button type="button" variant="outline" onClick={handleAddReportingEmail}>
+                  Add
+                </Button>
+              </div>
+              {reportingEmails.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {reportingEmails.map((email) => (
+                    <Badge key={email} variant="secondary" className="gap-1">
+                      {email}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveReportingEmail(email)}
+                        className="ml-1 hover:text-destructive"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="notes">Notes</Label>

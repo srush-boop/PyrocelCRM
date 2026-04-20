@@ -6,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { ArrowLeft, MapPin, Phone, Mail, Building2 } from 'lucide-react'
 import { SiteServicesManager } from '@/components/dashboard/sites/site-services-manager'
-import type { Profile, Site, Route, ServiceType, SiteService, Task } from '@/lib/types/database'
+import { SiteReports } from '@/components/dashboard/sites/site-reports'
+import type { Profile, Site, Route, ServiceType, SiteService, Task, TaskResult } from '@/lib/types/database'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -73,6 +74,30 @@ export default async function SiteDetailPage({ params }: PageProps) {
   
   const tasks = (tasksData || []) as Task[]
 
+  // Get completed tasks with their results for reporting
+  const { data: completedTasksData } = siteServiceIds.length > 0 
+    ? await supabase
+        .from('tasks')
+        .select(`
+          *,
+          site_service:site_services(*, service_type:service_types(*)),
+          assigned_engineer:profiles(*),
+          task_result:task_results(*)
+        `)
+        .in('site_service_id', siteServiceIds)
+        .eq('status', 'completed')
+        .order('completed_at', { ascending: false })
+    : { data: [] }
+  
+  const completedTasks = (completedTasksData || []).map((task: Record<string, unknown>) => ({
+    ...task,
+    task_result: Array.isArray(task.task_result) ? task.task_result[0] : task.task_result
+  })) as (Task & { 
+    site_service: SiteService & { service_type: ServiceType }
+    assigned_engineer: Profile | null
+    task_result: TaskResult | null 
+  })[]
+
   // Filter out service types already added to this site
   const availableServiceTypes = serviceTypes.filter(
     (st) => !siteServices.some((ss) => ss.service_type_id === st.id)
@@ -129,6 +154,18 @@ export default async function SiteDetailPage({ params }: PageProps) {
                 {site.contact_email}
               </a>
             )}
+            {(site as Site).reporting_emails && (site as Site).reporting_emails.length > 0 && (
+              <div className="text-sm pt-2 border-t">
+                <span className="text-muted-foreground block mb-1">Reporting Emails:</span>
+                <div className="flex flex-wrap gap-1">
+                  {(site as Site).reporting_emails.map((email: string) => (
+                    <Badge key={email} variant="outline" className="text-xs">
+                      {email}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
             {site.notes && (
               <div className="text-sm pt-2 border-t">
                 <span className="text-muted-foreground">Notes: </span>
@@ -146,6 +183,13 @@ export default async function SiteDetailPage({ params }: PageProps) {
           tasks={tasks}
         />
       </div>
+
+      <SiteReports
+        siteName={site.name}
+        siteAddress={site.address}
+        completedTasks={completedTasks}
+        reportingEmails={(site as Site).reporting_emails || []}
+      />
     </div>
   )
 }

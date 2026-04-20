@@ -27,8 +27,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
-import { MoreHorizontal, Search, Users } from 'lucide-react'
+import { MoreHorizontal, Search, Users, Plus } from 'lucide-react'
 import type { Profile, UserRole } from '@/lib/types/database'
+import { InviteEngineerDialog } from './invite-engineer-dialog'
 
 interface EngineersTableProps {
   users: Profile[]
@@ -43,6 +44,7 @@ const roleColors: Record<UserRole, string> = {
 export function EngineersTable({ users }: EngineersTableProps) {
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
+  const [inviteOpen, setInviteOpen] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -64,7 +66,7 @@ export function EngineersTable({ users }: EngineersTableProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -85,6 +87,10 @@ export function EngineersTable({ users }: EngineersTableProps) {
             <SelectItem value="office">Office</SelectItem>
           </SelectContent>
         </Select>
+        <Button onClick={() => setInviteOpen(true)} className="gap-2">
+          <Plus className="h-4 w-4" />
+          Add Member
+        </Button>
       </div>
 
       <div className="rounded-md border">
@@ -151,6 +157,8 @@ export function EngineersTable({ users }: EngineersTableProps) {
           </TableBody>
         </Table>
       </div>
+
+      <InviteEngineerDialog open={inviteOpen} onOpenChange={setInviteOpen} />
     </div>
   )
 }

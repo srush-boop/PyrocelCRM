@@ -36,7 +36,7 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
   const [formData, setFormData] = useState({
     name: serviceType.name,
     description: serviceType.description || '',
-    default_frequency_value: serviceType.default_frequency_value || serviceType.default_frequency_months || 12,
+    default_frequency_value: serviceType.default_frequency_value ?? serviceType.default_frequency_months ?? 12,
     default_frequency_unit: (serviceType.default_frequency_unit || 'months') as 'weeks' | 'months',
   })
   const router = useRouter()

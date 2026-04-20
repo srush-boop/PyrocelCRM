@@ -113,6 +113,7 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
                   onChange={(e) =>
                     setFormData({ ...formData, default_frequency_value: parseInt(e.target.value) || 12 })
                   }
+                  required
                 />
               </div>
               <div className="grid gap-2">

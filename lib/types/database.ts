@@ -57,6 +57,7 @@ export interface Site {
   contact_phone: string | null
   route_id: string | null
   notes: string | null
+  reporting_emails: string[]
   created_at: string
   updated_at: string
   route?: Route

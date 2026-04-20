@@ -15,11 +15,14 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { taskId } = body
+    const { taskId, emails, resend } = body
 
     if (!taskId) {
       return NextResponse.json({ error: 'Task ID required' }, { status: 400 })
     }
+
+    // If custom emails provided (resend), validate them
+    const customEmails = resend && Array.isArray(emails) ? emails : null
 
     // Fetch task with all related data
     const { data: task, error: taskError } = await supabase
@@ -108,24 +111,45 @@ Client Contact:
 Please review and take appropriate action.
       `.trim()
 
-    // In production, send actual email here
+    // Determine recipients
+    // If custom emails provided (resend scenario), use those
+    // Otherwise, use site's reporting emails or fall back to contact email
+    let recipients: string[] = []
+    
+    if (customEmails && customEmails.length > 0) {
+      recipients = customEmails
+    } else if (site?.reporting_emails && Array.isArray(site.reporting_emails) && site.reporting_emails.length > 0) {
+      recipients = site.reporting_emails
+    } else if (site?.contact_email) {
+      recipients = [site.contact_email]
+    }
+
+    // For failed tests, also send to internal email
+    const internalEmail = process.env.INTERNAL_REPORT_EMAIL || 'office@pyrocel.com'
+    const allRecipients = overallStatus === 'pass' 
+      ? recipients 
+      : [...recipients, internalEmail]
+
+    // In production, send actual email here using Resend, SendGrid, etc.
     // For now, log the email content and mark as sent
     console.log('=== EMAIL REPORT ===')
-    console.log('To:', overallStatus === 'pass' ? site?.contact_email : 'office@pyrocel.com')
+    console.log('To:', allRecipients.join(', '))
     console.log('Subject:', emailSubject)
     console.log('Body:', emailBody)
     console.log('===================')
 
-    // Update task_result to mark email as sent
-    await supabase
-      .from('task_results')
-      .update({ email_sent_at: new Date().toISOString() })
-      .eq('id', taskResult.id)
+    // Update task_result to mark email as sent (only if not a resend to preserve original send time)
+    if (!resend) {
+      await supabase
+        .from('task_results')
+        .update({ email_sent_at: new Date().toISOString() })
+        .eq('id', taskResult.id)
+    }
 
     return NextResponse.json({
       success: true,
       message: 'Report sent successfully',
-      recipient: overallStatus === 'pass' ? site?.contact_email : 'Internal (office)',
+      recipients: allRecipients,
     })
   } catch (error) {
     console.error('Error sending report:', error)

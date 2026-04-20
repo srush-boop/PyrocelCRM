@@ -82,6 +82,7 @@ export default async function SchedulePage() {
       <ScheduleView 
         tasks={tasks || []} 
         profile={profile as Profile}
+        engineers={engineers}
       />
     </div>
   )

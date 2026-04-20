@@ -7,19 +7,38 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { Calendar as CalendarComponent } from '@/components/ui/calendar'
 import { 
   Calendar,
   Search,
   ClipboardCheck,
   CheckCircle2,
   Clock,
-  XCircle
+  XCircle,
+  CalendarIcon,
+  X,
+  Filter
 } from 'lucide-react'
+import { format } from 'date-fns'
+import { cn } from '@/lib/utils'
 import type { Profile, TaskWithDetails } from '@/lib/types/database'
 
 interface ScheduleViewProps {
   tasks: TaskWithDetails[]
   profile: Profile
+  engineers?: Profile[]
 }
 
 const statusConfig = {
@@ -29,19 +48,45 @@ const statusConfig = {
   cancelled: { label: 'Cancelled', icon: XCircle, variant: 'destructive' as const },
 }
 
-export function ScheduleView({ tasks, profile }: ScheduleViewProps) {
+export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewProps) {
   const [search, setSearch] = useState('')
   const [activeTab, setActiveTab] = useState('upcoming')
+  const [selectedEngineer, setSelectedEngineer] = useState<string>('all')
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined)
+  const [dateTo, setDateTo] = useState<Date | undefined>(undefined)
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
+  const isEngineer = profile.role === 'engineer'
+  const isAdminOrOffice = profile.role === 'admin' || profile.role === 'office'
+
+  const hasActiveFilters = search || selectedEngineer !== 'all' || dateFrom || dateTo
+
+  const clearFilters = () => {
+    setSearch('')
+    setSelectedEngineer('all')
+    setDateFrom(undefined)
+    setDateTo(undefined)
+  }
+
   const filteredTasks = tasks.filter((task) => {
-    const matchesSearch =
+    // Text search
+    const matchesSearch = !search ||
       task.site_service?.site?.name.toLowerCase().includes(search.toLowerCase()) ||
       task.site_service?.service_type?.name.toLowerCase().includes(search.toLowerCase()) ||
       task.assigned_engineer?.full_name?.toLowerCase().includes(search.toLowerCase())
-    return matchesSearch
+    
+    // Engineer filter (only for admin/office)
+    const matchesEngineer = selectedEngineer === 'all' || 
+      (selectedEngineer === 'unassigned' ? !task.assigned_engineer_id : task.assigned_engineer_id === selectedEngineer)
+    
+    // Date range filter
+    const taskDate = new Date(task.scheduled_date)
+    const matchesDateFrom = !dateFrom || taskDate >= dateFrom
+    const matchesDateTo = !dateTo || taskDate <= dateTo
+
+    return matchesSearch && matchesEngineer && matchesDateFrom && matchesDateTo
   })
 
   const upcomingTasks = filteredTasks.filter(
@@ -51,8 +96,6 @@ export function ScheduleView({ tasks, profile }: ScheduleViewProps) {
   const overdueTasks = upcomingTasks.filter(
     (task) => new Date(task.scheduled_date) < today && task.status === 'pending'
   )
-
-  const isEngineer = profile.role === 'engineer'
 
   const TaskCard = ({ task }: { task: TaskWithDetails }) => {
     const config = statusConfig[task.status]
@@ -122,8 +165,8 @@ export function ScheduleView({ tasks, profile }: ScheduleViewProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search tasks..."
@@ -132,6 +175,76 @@ export function ScheduleView({ tasks, profile }: ScheduleViewProps) {
             className="pl-9"
           />
         </div>
+
+        {isAdminOrOffice && engineers.length > 0 && (
+          <Select value={selectedEngineer} onValueChange={setSelectedEngineer}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Engineer" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Engineers</SelectItem>
+              <SelectItem value="unassigned">Unassigned</SelectItem>
+              {engineers.map((eng) => (
+                <SelectItem key={eng.id} value={eng.id}>
+                  {eng.full_name || eng.email}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn(
+                "w-[140px] justify-start text-left font-normal",
+                !dateFrom && "text-muted-foreground"
+              )}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {dateFrom ? format(dateFrom, "dd/MM/yy") : "From"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <CalendarComponent
+              mode="single"
+              selected={dateFrom}
+              onSelect={setDateFrom}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
+
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn(
+                "w-[140px] justify-start text-left font-normal",
+                !dateTo && "text-muted-foreground"
+              )}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {dateTo ? format(dateTo, "dd/MM/yy") : "To"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <CalendarComponent
+              mode="single"
+              selected={dateTo}
+              onSelect={setDateTo}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
+
+        {hasActiveFilters && (
+          <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-2">
+            <X className="h-4 w-4" />
+            Clear
+          </Button>
+        )}
       </div>
 
       {overdueTasks.length > 0 && (

@@ -1,11 +1,24 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { Calendar } from '@/components/ui/calendar'
 import {
   Dialog,
   DialogContent,
@@ -22,7 +35,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { FileText, Send, Eye, Loader2, CheckCircle, XCircle, AlertCircle, Mail, X } from 'lucide-react'
+import { FileText, Send, Eye, Loader2, CheckCircle, XCircle, AlertCircle, Mail, X, Search, CalendarIcon } from 'lucide-react'
+import { format } from 'date-fns'
+import { cn } from '@/lib/utils'
 import type { Task, TaskResult, SiteService, ServiceType, Profile } from '@/lib/types/database'
 
 interface CompletedTask extends Task {
@@ -45,6 +60,67 @@ export function SiteReports({ siteName, siteAddress, completedTasks, reportingEm
   const [newEmail, setNewEmail] = useState('')
   const [sending, setSending] = useState(false)
   const [sendSuccess, setSendSuccess] = useState(false)
+
+  // Filter states
+  const [search, setSearch] = useState('')
+  const [selectedEngineer, setSelectedEngineer] = useState<string>('all')
+  const [selectedStatus, setSelectedStatus] = useState<string>('all')
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined)
+  const [dateTo, setDateTo] = useState<Date | undefined>(undefined)
+
+  // Get unique engineers from completed tasks
+  const engineers = useMemo(() => {
+    const uniqueEngineers = new Map<string, string>()
+    completedTasks.forEach((task) => {
+      if (task.assigned_engineer) {
+        uniqueEngineers.set(task.assigned_engineer.id, task.assigned_engineer.full_name || task.assigned_engineer.email)
+      }
+    })
+    return Array.from(uniqueEngineers, ([id, name]) => ({ id, name }))
+  }, [completedTasks])
+
+  // Filtered tasks
+  const filteredTasks = useMemo(() => {
+    return completedTasks.filter((task) => {
+      // Text search
+      if (search) {
+        const searchLower = search.toLowerCase()
+        const matchesSearch =
+          task.site_service?.service_type?.name.toLowerCase().includes(searchLower) ||
+          task.assigned_engineer?.full_name?.toLowerCase().includes(searchLower)
+        if (!matchesSearch) return false
+      }
+
+      // Engineer filter
+      if (selectedEngineer !== 'all' && task.assigned_engineer?.id !== selectedEngineer) return false
+
+      // Status filter
+      if (selectedStatus !== 'all' && task.task_result?.overall_status !== selectedStatus) return false
+
+      // Date range filter
+      if (task.completed_at) {
+        const completedDate = new Date(task.completed_at)
+        if (dateFrom && completedDate < dateFrom) return false
+        if (dateTo) {
+          const endOfDay = new Date(dateTo)
+          endOfDay.setHours(23, 59, 59, 999)
+          if (completedDate > endOfDay) return false
+        }
+      }
+
+      return true
+    })
+  }, [completedTasks, search, selectedEngineer, selectedStatus, dateFrom, dateTo])
+
+  const hasActiveFilters = search || selectedEngineer !== 'all' || selectedStatus !== 'all' || dateFrom || dateTo
+
+  const clearFilters = () => {
+    setSearch('')
+    setSelectedEngineer('all')
+    setSelectedStatus('all')
+    setDateFrom(undefined)
+    setDateTo(undefined)
+  }
 
   const handleOpenResend = (task: CompletedTask) => {
     setResendingTask(task)
@@ -130,13 +206,112 @@ export function SiteReports({ siteName, siteAddress, completedTasks, reportingEm
     <>
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Completed Reports
-          </CardTitle>
-          <CardDescription>View and resend completed test reports</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Completed Reports
+              </CardTitle>
+              <CardDescription>
+                {filteredTasks.length} of {completedTasks.length} reports
+              </CardDescription>
+            </div>
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-2">
+                <X className="h-4 w-4" />
+                Clear Filters
+              </Button>
+            )}
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* Filters Row */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[150px] max-w-xs">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+
+            {engineers.length > 0 && (
+              <Select value={selectedEngineer} onValueChange={setSelectedEngineer}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="Engineer" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Engineers</SelectItem>
+                  {engineers.map((eng) => (
+                    <SelectItem key={eng.id} value={eng.id}>
+                      {eng.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+              <SelectTrigger className="w-[120px]">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="pass">Pass</SelectItem>
+                <SelectItem value="fail">Fail</SelectItem>
+                <SelectItem value="partial">Partial</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-[120px] justify-start text-left font-normal",
+                    !dateFrom && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {dateFrom ? format(dateFrom, "dd/MM/yy") : "From"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={dateFrom}
+                  onSelect={setDateFrom}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-[120px] justify-start text-left font-normal",
+                    !dateTo && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {dateTo ? format(dateTo, "dd/MM/yy") : "To"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={dateTo}
+                  onSelect={setDateTo}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+
           <Table>
             <TableHeader>
               <TableRow>
@@ -149,7 +324,19 @@ export function SiteReports({ siteName, siteAddress, completedTasks, reportingEm
               </TableRow>
             </TableHeader>
             <TableBody>
-              {completedTasks.map((task) => (
+              {filteredTasks.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-24 text-center">
+                    <div className="flex flex-col items-center gap-2">
+                      <AlertCircle className="h-8 w-8 text-muted-foreground/50" />
+                      <p className="text-muted-foreground">
+                        {hasActiveFilters ? 'No reports match your filters' : 'No completed reports yet'}
+                      </p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredTasks.map((task) => (
                 <TableRow key={task.id}>
                   <TableCell className="font-medium">
                     {task.site_service?.service_type?.name || 'Unknown Service'}
@@ -198,7 +385,8 @@ export function SiteReports({ siteName, siteAddress, completedTasks, reportingEm
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>

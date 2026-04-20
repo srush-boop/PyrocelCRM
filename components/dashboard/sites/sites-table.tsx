@@ -30,7 +30,14 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Input } from '@/components/ui/input'
-import { MoreHorizontal, Pencil, Trash2, Search, Building2 } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { MoreHorizontal, Pencil, Trash2, Search, Building2, X } from 'lucide-react'
 import { EditSiteDialog } from './edit-site-dialog'
 import type { Site, Route } from '@/lib/types/database'
 import Link from 'next/link'
@@ -42,17 +49,34 @@ interface SitesTableProps {
 
 export function SitesTable({ sites, routes }: SitesTableProps) {
   const [search, setSearch] = useState('')
+  const [selectedRoute, setSelectedRoute] = useState<string>('all')
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [editSite, setEditSite] = useState<(Site & { route: Route | null }) | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
-  const filteredSites = sites.filter(
-    (site) =>
+  const filteredSites = sites.filter((site) => {
+    // Text search
+    const matchesSearch = 
       site.name.toLowerCase().includes(search.toLowerCase()) ||
       site.address.toLowerCase().includes(search.toLowerCase()) ||
-      site.route?.name.toLowerCase().includes(search.toLowerCase())
-  )
+      site.contact_name?.toLowerCase().includes(search.toLowerCase()) ||
+      site.contact_email?.toLowerCase().includes(search.toLowerCase()) ||
+      site.route?.name?.toLowerCase().includes(search.toLowerCase())
+    
+    // Route filter
+    const matchesRoute = selectedRoute === 'all' || 
+      (selectedRoute === 'unassigned' ? !site.route_id : site.route_id === selectedRoute)
+    
+    return matchesSearch && matchesRoute
+  })
+
+  const hasActiveFilters = search || selectedRoute !== 'all'
+
+  const clearFilters = () => {
+    setSearch('')
+    setSelectedRoute('all')
+  }
 
   const handleDelete = async () => {
     if (!deleteId) return
@@ -64,8 +88,8 @@ export function SitesTable({ sites, routes }: SitesTableProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search sites..."
@@ -74,6 +98,28 @@ export function SitesTable({ sites, routes }: SitesTableProps) {
             className="pl-9"
           />
         </div>
+        
+        <Select value={selectedRoute} onValueChange={setSelectedRoute}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filter by route" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Routes</SelectItem>
+            <SelectItem value="unassigned">Unassigned</SelectItem>
+            {routes.map((route) => (
+              <SelectItem key={route.id} value={route.id}>
+                {route.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {hasActiveFilters && (
+          <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-2">
+            <X className="h-4 w-4" />
+            Clear
+          </Button>
+        )}
       </div>
 
       <div className="rounded-md border">

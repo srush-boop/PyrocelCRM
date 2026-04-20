@@ -80,7 +80,7 @@ export function ServiceTypesTable({ serviceTypes }: ServiceTypesTableProps) {
                     {serviceType.description || '-'}
                   </TableCell>
                   <TableCell>
-                    {serviceType.default_frequency_months} months
+                    {serviceType.default_frequency_value} {serviceType.default_frequency_unit}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>

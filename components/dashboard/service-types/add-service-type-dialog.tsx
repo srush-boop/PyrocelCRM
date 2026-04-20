@@ -41,11 +41,25 @@ export function AddServiceTypeDialog() {
     e.preventDefault()
     setLoading(true)
 
-    const { error } = await supabase.from('service_types').insert(formData)
+    // Calculate months equivalent for backwards compatibility
+    const frequencyInMonths = formData.default_frequency_unit === 'weeks' 
+      ? Math.ceil(formData.default_frequency_value / 4) 
+      : formData.default_frequency_value
+
+    const { error } = await supabase.from('service_types').insert({
+      name: formData.name,
+      description: formData.description || null,
+      default_frequency_months: frequencyInMonths,
+      default_frequency_value: formData.default_frequency_value,
+      default_frequency_unit: formData.default_frequency_unit,
+    })
 
     setLoading(false)
 
-    if (!error) {
+    if (error) {
+      console.error('[v0] Error creating service type:', error)
+      alert(`Error creating service type: ${error.message}`)
+    } else {
       setOpen(false)
       setFormData({
         name: '',

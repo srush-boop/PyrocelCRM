@@ -36,7 +36,7 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
   const [formData, setFormData] = useState({
     name: serviceType.name,
     description: serviceType.description || '',
-    default_frequency_value: serviceType.default_frequency_value || serviceType.default_frequency_months || 12,
+    default_frequency_value: serviceType.default_frequency_value ?? serviceType.default_frequency_months ?? 12,
     default_frequency_unit: (serviceType.default_frequency_unit || 'months') as 'weeks' | 'months',
   })
   const router = useRouter()
@@ -46,14 +46,28 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
     e.preventDefault()
     setLoading(true)
 
+    // Calculate months equivalent for backwards compatibility
+    const frequencyInMonths = formData.default_frequency_unit === 'weeks' 
+      ? Math.ceil(formData.default_frequency_value / 4) 
+      : formData.default_frequency_value
+
     const { error } = await supabase
       .from('service_types')
-      .update(formData)
+      .update({
+        name: formData.name,
+        description: formData.description || null,
+        default_frequency_months: frequencyInMonths,
+        default_frequency_value: formData.default_frequency_value,
+        default_frequency_unit: formData.default_frequency_unit,
+      })
       .eq('id', serviceType.id)
 
     setLoading(false)
 
-    if (!error) {
+    if (error) {
+      console.error('[v0] Error updating service type:', error)
+      alert(`Error updating service type: ${error.message}`)
+    } else {
       onOpenChange(false)
       router.refresh()
     }
@@ -99,6 +113,7 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
                   onChange={(e) =>
                     setFormData({ ...formData, default_frequency_value: parseInt(e.target.value) || 12 })
                   }
+                  required
                 />
               </div>
               <div className="grid gap-2">

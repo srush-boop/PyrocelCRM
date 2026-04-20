@@ -90,8 +90,8 @@ export function SiteServicesManager({
       return {
         site_id: siteId,
         service_type_id: serviceTypeId,
-        frequency_value: serviceType?.default_frequency_value || 12,
-        frequency_unit: serviceType?.default_frequency_unit || 'months',
+        frequency_value: serviceType?.default_frequency_value ?? 12,
+        frequency_unit: serviceType?.default_frequency_unit ?? 'months',
       }
     })
 

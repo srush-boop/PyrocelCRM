@@ -2,6 +2,18 @@
 
 export type UserRole = 'admin' | 'engineer' | 'office'
 
+export interface Client {
+  id: string
+  name: string
+  contact_name: string | null
+  contact_email: string | null
+  contact_phone: string | null
+  address: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface Profile {
   id: string
   email: string
@@ -56,11 +68,13 @@ export interface Site {
   contact_email: string | null
   contact_phone: string | null
   route_id: string | null
+  client_id: string | null
   notes: string | null
   reporting_emails: string[]
   created_at: string
   updated_at: string
   route?: Route
+  client?: Client
 }
 
 export interface SiteService {

@@ -176,6 +176,8 @@ export function TaskExecution({
       checklist_results: checklistResults,
       overall_status: overallStatus,
       engineer_notes: engineerNotes,
+      testing_start_time: testingStartTime?.toISOString(),
+      testing_end_time: testingEndTime?.toISOString(),
       photos: existingResult?.photos || [],
       updated_at: new Date().toISOString(),
     }
@@ -191,22 +193,61 @@ export function TaskExecution({
     }
 
     // Mark task as completed
+    const completedAt = new Date()
     await supabase
       .from('tasks')
       .update({
         status: 'completed',
-        completed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        completed_at: completedAt.toISOString(),
+        updated_at: completedAt.toISOString(),
       })
       .eq('id', task.id)
 
     // Update site service with last service date
+    const lastServiceDate = completedAt.toISOString().split('T')[0]
     await supabase
       .from('site_services')
       .update({
-        last_service_date: new Date().toISOString().split('T')[0],
+        last_service_date: lastServiceDate,
       })
       .eq('id', task.site_service_id)
+
+    // Generate next recurring task if site is live
+    const { data: siteServiceData } = await supabase
+      .from('site_services')
+      .select(`
+        frequency_value,
+        frequency_unit,
+        site:sites!inner(id, status)
+      `)
+      .eq('id', task.site_service_id)
+      .single()
+
+    if (siteServiceData && siteServiceData.site?.status === 'live') {
+      // Calculate next scheduled date based on frequency
+      const nextDate = new Date(completedAt)
+      if (siteServiceData.frequency_unit === 'weeks') {
+        nextDate.setDate(nextDate.getDate() + (siteServiceData.frequency_value * 7))
+      } else {
+        nextDate.setMonth(nextDate.getMonth() + siteServiceData.frequency_value)
+      }
+
+      // Create the next recurring task
+      await supabase.from('tasks').insert({
+        site_service_id: task.site_service_id,
+        assigned_engineer_id: task.assigned_engineer_id, // Keep same engineer
+        scheduled_date: nextDate.toISOString().split('T')[0],
+        status: 'pending',
+      })
+
+      // Update next_service_date on site_service
+      await supabase
+        .from('site_services')
+        .update({
+          next_service_date: nextDate.toISOString().split('T')[0],
+        })
+        .eq('id', task.site_service_id)
+    }
 
     setSubmitting(false)
     setShowSubmitDialog(false)

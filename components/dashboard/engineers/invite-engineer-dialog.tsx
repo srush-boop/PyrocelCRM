@@ -66,13 +66,14 @@ export function InviteEngineerDialog({ open, onOpenChange }: InviteEngineerDialo
         return
       }
 
-      // The profile is auto-created by the trigger, but ensure it has the correct role
+      // The profile is auto-created by the trigger, but ensure it has the correct role and invited_at
       if (authData.user) {
         const { error: profileError } = await supabase
           .from('profiles')
           .update({
             full_name: formData.full_name,
             role: formData.role,
+            invited_at: new Date().toISOString(),
           })
           .eq('id', authData.user.id)
 

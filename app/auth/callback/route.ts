@@ -8,8 +8,15 @@ export async function GET(request: NextRequest) {
 
   if (code) {
     const supabase = await createClient()
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
-    if (!error) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+    if (!error && data.user) {
+      // Mark user as accepted if they haven't been already
+      await supabase
+        .from('profiles')
+        .update({ accepted_at: new Date().toISOString() })
+        .eq('id', data.user.id)
+        .is('accepted_at', null)
+      
       return NextResponse.redirect(`${origin}${next}`)
     }
   }

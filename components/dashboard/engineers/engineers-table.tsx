@@ -38,7 +38,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
-import { MoreHorizontal, Search, Users, Plus, Trash2, Loader2 } from 'lucide-react'
+import { MoreHorizontal, Search, Users, Plus, Trash2, Loader2, Clock, CheckCircle2 } from 'lucide-react'
 import type { Profile, UserRole } from '@/lib/types/database'
 import { formatDateUK } from '@/lib/utils'
 import { InviteEngineerDialog } from './invite-engineer-dialog'
@@ -133,14 +133,16 @@ export function EngineersTable({ users }: EngineersTableProps) {
               <TableHead>Name</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Role</TableHead>
-              <TableHead>Joined</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Invited</TableHead>
+              <TableHead>Accepted</TableHead>
               <TableHead className="w-[70px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredUsers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <Users className="h-8 w-8 text-muted-foreground/50 mb-2" />
                     <p className="text-muted-foreground">No users found</p>
@@ -161,8 +163,26 @@ export function EngineersTable({ users }: EngineersTableProps) {
                       {user.role}
                     </Badge>
                   </TableCell>
+                  <TableCell>
+                    {user.accepted_at ? (
+                      <span className="flex items-center gap-1.5 text-green-600">
+                        <CheckCircle2 className="h-4 w-4" />
+                        Active
+                      </span>
+                    ) : user.invited_at ? (
+                      <span className="flex items-center gap-1.5 text-amber-600">
+                        <Clock className="h-4 w-4" />
+                        Pending
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {formatDateUK(user.created_at)}
+                    {user.invited_at ? formatDateUK(user.invited_at) : '-'}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {user.accepted_at ? formatDateUK(user.accepted_at) : '-'}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>

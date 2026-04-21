@@ -36,7 +36,9 @@ import {
   Save,
   Send,
   Play,
-  Building2
+  Building2,
+  Clock,
+  StopCircle
 } from 'lucide-react'
 import type { 
   Profile, 
@@ -77,6 +79,13 @@ export function TaskExecution({
     }))
   })
   const [engineerNotes, setEngineerNotes] = useState(existingResult?.engineer_notes || '')
+  const [testingStartTime, setTestingStartTime] = useState<Date | null>(
+    existingResult?.testing_start_time ? new Date(existingResult.testing_start_time) : null
+  )
+  const [testingEndTime, setTestingEndTime] = useState<Date | null>(
+    existingResult?.testing_end_time ? new Date(existingResult.testing_end_time) : null
+  )
+  const [timerRunning, setTimerRunning] = useState(false)
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [showSubmitDialog, setShowSubmitDialog] = useState(false)
@@ -139,6 +148,8 @@ export function TaskExecution({
       checklist_results: checklistResults,
       overall_status: calculateOverallStatus(),
       engineer_notes: engineerNotes,
+      testing_start_time: testingStartTime?.toISOString(),
+      testing_end_time: testingEndTime?.toISOString(),
       photos: existingResult?.photos || [],
       updated_at: new Date().toISOString(),
     }
@@ -274,14 +285,81 @@ export function TaskExecution({
 
       {/* Checklist */}
       {(status === 'in_progress' || status === 'completed') && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Inspection Checklist</CardTitle>
-            <CardDescription>
-              {checklistTemplate?.name || 'Standard inspection checklist'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <>
+          {/* Time Recording */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Testing Time
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Start Time</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="datetime-local"
+                      value={testingStartTime?.toISOString().slice(0, 16) || ''}
+                      onChange={(e) => setTestingStartTime(e.target.value ? new Date(e.target.value) : null)}
+                      disabled={!canEdit}
+                    />
+                    {!testingStartTime && canEdit && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setTestingStartTime(new Date())}
+                        title="Set current time"
+                      >
+                        <Play className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>End Time</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="datetime-local"
+                      value={testingEndTime?.toISOString().slice(0, 16) || ''}
+                      onChange={(e) => setTestingEndTime(e.target.value ? new Date(e.target.value) : null)}
+                      disabled={!canEdit}
+                    />
+                    {!testingEndTime && canEdit && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setTestingEndTime(new Date())}
+                        title="Set current time"
+                      >
+                        <StopCircle className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+              {testingStartTime && testingEndTime && (
+                <div className="p-3 bg-muted rounded-md">
+                  <p className="text-sm">
+                    <strong>Duration:</strong>{' '}
+                    {Math.round((testingEndTime.getTime() - testingStartTime.getTime()) / 60000)} minutes
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Inspection Checklist</CardTitle>
+              <CardDescription>
+                {checklistTemplate?.name || 'Standard inspection checklist'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
             {checklistResults.length === 0 ? (
               <p className="text-muted-foreground text-center py-4">
                 No checklist items configured for this service type
@@ -370,6 +448,7 @@ export function TaskExecution({
             )}
           </CardContent>
         </Card>
+        </>
       )}
 
       {/* Engineer Notes */}

@@ -19,6 +19,9 @@ export interface Profile {
   email: string
   full_name: string | null
   role: UserRole
+  status: 'active' | 'inactive'
+  invited_at: string | null
+  accepted_at: string | null
   created_at: string
   updated_at: string
 }
@@ -69,6 +72,8 @@ export interface Site {
   contact_phone: string | null
   route_id: string | null
   client_id: string | null
+  site_id_cash: string | null
+  status: 'live' | 'dead'
   notes: string | null
   reporting_emails: string[]
   created_at: string
@@ -127,6 +132,8 @@ export interface TaskResult {
   photos: string[]
   engineer_notes: string | null
   client_signature: string | null
+  testing_start_time: string | null
+  testing_end_time: string | null
   email_sent_at: string | null
   created_at: string
   updated_at: string

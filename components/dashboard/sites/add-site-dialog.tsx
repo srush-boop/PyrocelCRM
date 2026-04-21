@@ -43,6 +43,8 @@ export function AddSiteDialog({ routes, clients }: AddSiteDialogProps) {
     contact_phone: '',
     route_id: '',
     client_id: '',
+    site_id_cash: '',
+    status: 'live' as 'live' | 'dead',
     notes: '',
   })
   const [reportingEmails, setReportingEmails] = useState<string[]>([])
@@ -84,6 +86,8 @@ export function AddSiteDialog({ routes, clients }: AddSiteDialogProps) {
         contact_phone: '',
         route_id: '',
         client_id: '',
+        site_id_cash: '',
+        status: 'live',
         notes: '',
       })
       setReportingEmails([])
@@ -193,6 +197,32 @@ export function AddSiteDialog({ routes, clients }: AddSiteDialogProps) {
                         {route.name}
                       </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="site_id_cash">Site ID (CASH)</Label>
+                <Input
+                  id="site_id_cash"
+                  value={formData.site_id_cash}
+                  onChange={(e) => setFormData({ ...formData, site_id_cash: e.target.value })}
+                  placeholder="CASH site ID"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="status">Status</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(value) => setFormData({ ...formData, status: value as 'live' | 'dead' })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="live">Live</SelectItem>
+                    <SelectItem value="dead">Dead</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

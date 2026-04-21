@@ -150,6 +150,8 @@ export function SitesTable({ sites, routes, clients }: SitesTableProps) {
           <TableHeader>
             <TableRow>
               <TableHead>Site Name</TableHead>
+              <TableHead>CASH ID</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead>Client</TableHead>
               <TableHead>Address</TableHead>
               <TableHead>Contact</TableHead>
@@ -160,7 +162,7 @@ export function SitesTable({ sites, routes, clients }: SitesTableProps) {
           <TableBody>
             {filteredSites.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={8} className="h-24 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <Building2 className="h-8 w-8 text-muted-foreground/50 mb-2" />
                     <p className="text-muted-foreground">No sites found</p>
@@ -177,6 +179,16 @@ export function SitesTable({ sites, routes, clients }: SitesTableProps) {
                     >
                       {site.name}
                     </Link>
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-sm font-mono text-muted-foreground">
+                      {site.site_id_cash || '-'}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={site.status === 'live' ? 'default' : 'destructive'}>
+                      {site.status}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     {site.client ? (

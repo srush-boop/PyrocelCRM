@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { formatDateUK } from '@/lib/utils'
 import {
   Select,
   SelectContent,
@@ -197,7 +198,7 @@ export function SiteServicesManager({
                         {ss.last_service_date && (
                           <span className="flex items-center gap-1">
                             <CalendarIcon className="h-3 w-3" />
-                            Last: {new Date(ss.last_service_date).toLocaleDateString()}
+                            Last: {formatDateUK(ss.last_service_date)}
                           </span>
                         )}
                       </div>

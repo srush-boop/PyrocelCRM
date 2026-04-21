@@ -24,7 +24,7 @@ import { Calendar } from '@/components/ui/calendar'
 import { Mail, AlertCircle, CheckCircle, Search, Filter, CalendarIcon, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
-import { cn } from '@/lib/utils'
+import { formatDateUK, cn } from '@/lib/utils'
 
 interface TaskReport {
   id: string
@@ -471,7 +471,7 @@ export default function ReportsPage() {
                           <div className="flex items-center gap-2">
                             <CheckCircle className="h-4 w-4 text-green-600" />
                             <span className="text-sm">
-                              {new Date(report.emailSentAt).toLocaleDateString()}
+                              {formatDateUK(report.emailSentAt)}
                             </span>
                           </div>
                         ) : (
@@ -483,8 +483,8 @@ export default function ReportsPage() {
                       </TableCell>
                       <TableCell className="text-sm">
                         {report.completedAt 
-                          ? new Date(report.completedAt).toLocaleDateString()
-                          : new Date(report.createdAt).toLocaleDateString()}
+                          ? formatDateUK(report.completedAt)
+                          : formatDateUK(report.createdAt)}
                       </TableCell>
                       <TableCell>
                         <Button

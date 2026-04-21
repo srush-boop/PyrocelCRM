@@ -37,7 +37,7 @@ import {
 } from '@/components/ui/table'
 import { FileText, Send, Eye, Loader2, CheckCircle, XCircle, AlertCircle, Mail, X, Search, CalendarIcon } from 'lucide-react'
 import { format } from 'date-fns'
-import { cn } from '@/lib/utils'
+import { formatDateUK, cn } from '@/lib/utils'
 import type { Task, TaskResult, SiteService, ServiceType, Profile } from '@/lib/types/database'
 
 interface CompletedTask extends Task {
@@ -343,7 +343,7 @@ export function SiteReports({ siteName, siteAddress, completedTasks, reportingEm
                   </TableCell>
                   <TableCell>
                     {task.completed_at
-                      ? new Date(task.completed_at).toLocaleDateString()
+                      ? formatDateUK(task.completed_at)
                       : '-'}
                   </TableCell>
                   <TableCell>
@@ -358,7 +358,7 @@ export function SiteReports({ siteName, siteAddress, completedTasks, reportingEm
                     {task.task_result?.email_sent_at ? (
                       <span className="flex items-center gap-1 text-green-600 text-sm">
                         <Mail className="h-3 w-3" />
-                        {new Date(task.task_result.email_sent_at).toLocaleDateString()}
+                        {formatDateUK(task.task_result.email_sent_at)}
                       </span>
                     ) : (
                       <span className="text-muted-foreground text-sm">Not sent</span>
@@ -400,7 +400,7 @@ export function SiteReports({ siteName, siteAddress, completedTasks, reportingEm
             <DialogDescription>
               {viewingTask?.site_service?.service_type?.name} - {' '}
               {viewingTask?.completed_at
-                ? new Date(viewingTask.completed_at).toLocaleDateString()
+                ? formatDateUK(viewingTask.completed_at)
                 : 'N/A'}
             </DialogDescription>
           </DialogHeader>

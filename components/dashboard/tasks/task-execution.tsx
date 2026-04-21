@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Separator } from '@/components/ui/separator'
+import { formatDateUK, formatTimeUK } from '@/lib/utils'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -258,7 +259,7 @@ export function TaskExecution({
           )}
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Calendar className="h-4 w-4" />
-            Scheduled: {new Date(task.scheduled_date).toLocaleDateString()}
+            Scheduled: {formatDateUK(task.scheduled_date)}
           </div>
         </CardContent>
       </Card>
@@ -453,17 +454,7 @@ export function TaskExecution({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleSubmit} disabled={submitting}>
               {submitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Submitting...
-                </>
-              ) : (
-                'Submit Inspection'
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
-  )
-}
+              <>
+                Completed on {formatDateUK(task.completed_at!)} at {formatTimeUK(task.completed_at!)}
+              </>
+              

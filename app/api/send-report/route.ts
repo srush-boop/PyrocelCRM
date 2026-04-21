@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { formatDateUK } from '@/lib/utils'
 
 // This API route handles sending completion reports
 // In production, integrate with an email service like Resend, SendGrid, etc.
@@ -77,7 +78,7 @@ We are pleased to confirm that the ${serviceType?.name} service at ${site?.name}
 
 Service Details:
 - Service Type: ${serviceType?.name}
-- Date Completed: ${new Date(task.completed_at || '').toLocaleDateString()}
+- Date Completed: ${formatDateUK(task.completed_at || '')}
 - Engineer: ${engineer?.full_name || engineer?.email}
 - Result: All checks passed
 
@@ -94,7 +95,7 @@ INTERNAL ALERT: Service Issues Detected
 Site: ${site?.name}
 Address: ${site?.address}
 Service: ${serviceType?.name}
-Date: ${new Date(task.completed_at || '').toLocaleDateString()}
+Date: ${formatDateUK(task.completed_at || '')}
 Engineer: ${engineer?.full_name || engineer?.email}
 Status: ${overallStatus.toUpperCase()}
 

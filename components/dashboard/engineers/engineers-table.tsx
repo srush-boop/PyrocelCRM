@@ -29,6 +29,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { MoreHorizontal, Search, Users, Plus } from 'lucide-react'
 import type { Profile, UserRole } from '@/lib/types/database'
+import { formatDateUK } from '@/lib/utils'
 import { InviteEngineerDialog } from './invite-engineer-dialog'
 
 interface EngineersTableProps {
@@ -129,7 +130,7 @@ export function EngineersTable({ users }: EngineersTableProps) {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {new Date(user.created_at).toLocaleDateString()}
+                    {formatDateUK(user.created_at)}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>

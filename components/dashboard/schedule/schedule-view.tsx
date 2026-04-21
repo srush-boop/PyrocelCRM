@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
+import { formatDateUK } from '@/lib/utils'
 import {
   Select,
   SelectContent,
@@ -129,7 +130,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-1 text-muted-foreground">
                 <Calendar className="h-4 w-4" />
-                {taskDate.toLocaleDateString()}
+                {formatDateUK(task.scheduled_date)}
               </div>
               {isOverdue && (
                 <Badge variant="destructive" className="text-xs">

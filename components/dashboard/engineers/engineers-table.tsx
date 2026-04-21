@@ -17,8 +17,19 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import {
   Select,
   SelectContent,
@@ -27,7 +38,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
-import { MoreHorizontal, Search, Users, Plus } from 'lucide-react'
+import { MoreHorizontal, Search, Users, Plus, Trash2, Loader2 } from 'lucide-react'
 import type { Profile, UserRole } from '@/lib/types/database'
 import { formatDateUK } from '@/lib/utils'
 import { InviteEngineerDialog } from './invite-engineer-dialog'
@@ -46,6 +57,8 @@ export function EngineersTable({ users }: EngineersTableProps) {
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
   const [inviteOpen, setInviteOpen] = useState(false)
+  const [deleteUser, setDeleteUser] = useState<Profile | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -63,6 +76,25 @@ export function EngineersTable({ users }: EngineersTableProps) {
       .update({ role: newRole, updated_at: new Date().toISOString() })
       .eq('id', userId)
     router.refresh()
+  }
+
+  const handleDelete = async () => {
+    if (!deleteUser) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/users/${deleteUser.id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) {
+        alert(data.error || 'Failed to delete user.')
+      } else {
+        setDeleteUser(null)
+        router.refresh()
+      }
+    } catch {
+      alert('An unexpected error occurred.')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   return (
@@ -149,6 +181,14 @@ export function EngineersTable({ users }: EngineersTableProps) {
                         <DropdownMenuItem onClick={() => handleRoleChange(user.id, 'office')}>
                           Set as Office
                         </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() => setDeleteUser(user)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete User
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -160,6 +200,30 @@ export function EngineersTable({ users }: EngineersTableProps) {
       </div>
 
       <InviteEngineerDialog open={inviteOpen} onOpenChange={setInviteOpen} />
+
+      <AlertDialog open={!!deleteUser} onOpenChange={(open) => !open && setDeleteUser(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete user?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete{' '}
+              <strong>{deleteUser?.full_name || deleteUser?.email}</strong> and revoke
+              their access. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {deleting ? 'Deleting...' : 'Delete User'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

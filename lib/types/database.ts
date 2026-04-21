@@ -33,6 +33,7 @@ export interface ServiceType {
   default_frequency_months?: number // Legacy field
   default_frequency_value: number
   default_frequency_unit: 'weeks' | 'months'
+  default_deadline_tolerance_days: number
   created_at: string
 }
 
@@ -91,6 +92,7 @@ export interface SiteService {
   frequency_unit: 'weeks' | 'months'
   last_service_date: string | null
   next_service_date: string | null
+  deadline_tolerance_days: number
   created_at: string
   site?: Site
   service_type?: ServiceType

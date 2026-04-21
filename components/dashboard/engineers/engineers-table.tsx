@@ -17,8 +17,19 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import {
   Select,
   SelectContent,
@@ -27,8 +38,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
-import { MoreHorizontal, Search, Users } from 'lucide-react'
+import { MoreHorizontal, Search, Users, Plus, Trash2, Loader2, Clock, CheckCircle2 } from 'lucide-react'
 import type { Profile, UserRole } from '@/lib/types/database'
+import { formatDateUK } from '@/lib/utils'
+import { InviteEngineerDialog } from './invite-engineer-dialog'
 
 interface EngineersTableProps {
   users: Profile[]
@@ -43,6 +56,9 @@ const roleColors: Record<UserRole, string> = {
 export function EngineersTable({ users }: EngineersTableProps) {
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [deleteUser, setDeleteUser] = useState<Profile | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -62,9 +78,28 @@ export function EngineersTable({ users }: EngineersTableProps) {
     router.refresh()
   }
 
+  const handleDelete = async () => {
+    if (!deleteUser) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/users/${deleteUser.id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) {
+        alert(data.error || 'Failed to delete user.')
+      } else {
+        setDeleteUser(null)
+        router.refresh()
+      }
+    } catch {
+      alert('An unexpected error occurred.')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -85,6 +120,10 @@ export function EngineersTable({ users }: EngineersTableProps) {
             <SelectItem value="office">Office</SelectItem>
           </SelectContent>
         </Select>
+        <Button onClick={() => setInviteOpen(true)} className="gap-2">
+          <Plus className="h-4 w-4" />
+          Add Member
+        </Button>
       </div>
 
       <div className="rounded-md border">
@@ -94,14 +133,16 @@ export function EngineersTable({ users }: EngineersTableProps) {
               <TableHead>Name</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Role</TableHead>
-              <TableHead>Joined</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Invited</TableHead>
+              <TableHead>Accepted</TableHead>
               <TableHead className="w-[70px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredUsers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <Users className="h-8 w-8 text-muted-foreground/50 mb-2" />
                     <p className="text-muted-foreground">No users found</p>
@@ -122,8 +163,26 @@ export function EngineersTable({ users }: EngineersTableProps) {
                       {user.role}
                     </Badge>
                   </TableCell>
+                  <TableCell>
+                    {user.accepted_at ? (
+                      <span className="flex items-center gap-1.5 text-green-600">
+                        <CheckCircle2 className="h-4 w-4" />
+                        Active
+                      </span>
+                    ) : user.invited_at ? (
+                      <span className="flex items-center gap-1.5 text-amber-600">
+                        <Clock className="h-4 w-4" />
+                        Pending
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {new Date(user.created_at).toLocaleDateString()}
+                    {user.invited_at ? formatDateUK(user.invited_at) : '-'}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {user.accepted_at ? formatDateUK(user.accepted_at) : '-'}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>
@@ -142,6 +201,14 @@ export function EngineersTable({ users }: EngineersTableProps) {
                         <DropdownMenuItem onClick={() => handleRoleChange(user.id, 'office')}>
                           Set as Office
                         </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() => setDeleteUser(user)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete User
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -151,6 +218,32 @@ export function EngineersTable({ users }: EngineersTableProps) {
           </TableBody>
         </Table>
       </div>
+
+      <InviteEngineerDialog open={inviteOpen} onOpenChange={setInviteOpen} />
+
+      <AlertDialog open={!!deleteUser} onOpenChange={(open) => !open && setDeleteUser(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete user?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete{' '}
+              <strong>{deleteUser?.full_name || deleteUser?.email}</strong> and revoke
+              their access. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {deleting ? 'Deleting...' : 'Delete User'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

@@ -18,6 +18,7 @@ import {
   Flame,
   LayoutDashboard,
   Building2,
+  Building,
   Route,
   Users,
   ClipboardList,
@@ -34,6 +35,7 @@ interface DashboardSidebarProps {
 
 const adminNavItems = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { title: 'Clients', href: '/dashboard/clients', icon: Building },
   { title: 'Sites', href: '/dashboard/sites', icon: Building2 },
   { title: 'Routes', href: '/dashboard/routes', icon: Route },
   { title: 'Engineers', href: '/dashboard/engineers', icon: Users },
@@ -50,6 +52,7 @@ const engineerNavItems = [
 
 const officeNavItems = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { title: 'Clients', href: '/dashboard/clients', icon: Building },
   { title: 'Sites', href: '/dashboard/sites', icon: Building2 },
   { title: 'Routes', href: '/dashboard/routes', icon: Route },
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },

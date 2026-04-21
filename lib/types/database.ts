@@ -2,11 +2,26 @@
 
 export type UserRole = 'admin' | 'engineer' | 'office'
 
+export interface Client {
+  id: string
+  name: string
+  contact_name: string | null
+  contact_email: string | null
+  contact_phone: string | null
+  address: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface Profile {
   id: string
   email: string
   full_name: string | null
   role: UserRole
+  status: 'active' | 'inactive'
+  invited_at: string | null
+  accepted_at: string | null
   created_at: string
   updated_at: string
 }
@@ -18,6 +33,7 @@ export interface ServiceType {
   default_frequency_months?: number // Legacy field
   default_frequency_value: number
   default_frequency_unit: 'weeks' | 'months'
+  default_deadline_tolerance_days: number
   created_at: string
 }
 
@@ -56,11 +72,15 @@ export interface Site {
   contact_email: string | null
   contact_phone: string | null
   route_id: string | null
+  client_id: string | null
+  site_id_cash: string | null
+  status: 'live' | 'dead'
   notes: string | null
   reporting_emails: string[]
   created_at: string
   updated_at: string
   route?: Route
+  client?: Client
 }
 
 export interface SiteService {
@@ -72,6 +92,7 @@ export interface SiteService {
   frequency_unit: 'weeks' | 'months'
   last_service_date: string | null
   next_service_date: string | null
+  deadline_tolerance_days: number
   created_at: string
   site?: Site
   service_type?: ServiceType
@@ -113,6 +134,8 @@ export interface TaskResult {
   photos: string[]
   engineer_notes: string | null
   client_signature: string | null
+  testing_start_time: string | null
+  testing_end_time: string | null
   email_sent_at: string | null
   created_at: string
   updated_at: string

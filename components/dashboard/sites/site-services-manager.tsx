@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { formatDateUK } from '@/lib/utils'
 import {
   Select,
   SelectContent,
@@ -61,6 +62,7 @@ export function SiteServicesManager({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editFrequencyValue, setEditFrequencyValue] = useState<number>(12)
   const [editFrequencyUnit, setEditFrequencyUnit] = useState<'weeks' | 'months'>('months')
+  const [editToleranceDays, setEditToleranceDays] = useState<number>(7)
   const [adding, setAdding] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   
@@ -109,6 +111,7 @@ export function SiteServicesManager({
       .update({
         frequency_value: editFrequencyValue,
         frequency_unit: editFrequencyUnit,
+        deadline_tolerance_days: editToleranceDays,
       })
       .eq('id', serviceId)
 
@@ -194,11 +197,16 @@ export function SiteServicesManager({
                       </div>
                       <div className="flex items-center gap-3 text-sm text-muted-foreground">
                         <span>Every {ss.frequency_value} {ss.frequency_unit}</span>
+                        <span>•</span>
+                        <span>Tolerance: {ss.deadline_tolerance_days} days</span>
                         {ss.last_service_date && (
-                          <span className="flex items-center gap-1">
-                            <CalendarIcon className="h-3 w-3" />
-                            Last: {new Date(ss.last_service_date).toLocaleDateString()}
-                          </span>
+                          <>
+                            <span>•</span>
+                            <span className="flex items-center gap-1">
+                              <CalendarIcon className="h-3 w-3" />
+                              Last: {formatDateUK(ss.last_service_date)}
+                            </span>
+                          </>
                         )}
                       </div>
                     </div>
@@ -223,6 +231,7 @@ export function SiteServicesManager({
                           setEditingId(ss.id)
                           setEditFrequencyValue(ss.frequency_value)
                           setEditFrequencyUnit(ss.frequency_unit)
+                          setEditToleranceDays(ss.deadline_tolerance_days)
                         }}
                         className="text-muted-foreground hover:text-foreground"
                         title="Edit Frequency"
@@ -283,6 +292,9 @@ export function SiteServicesManager({
                   <p className="font-medium">{st.name}</p>
                   <p className="text-sm text-muted-foreground">
                     Default: Every {st.default_frequency_value} {st.default_frequency_unit}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Tolerance: {st.default_deadline_tolerance_days} days
                   </p>
                   {st.description && (
                     <p className="text-xs text-muted-foreground mt-1">{st.description}</p>
@@ -415,40 +427,56 @@ export function SiteServicesManager({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Edit Frequency Dialog */}
+      {/* Edit Frequency and Tolerance Dialog */}
       <AlertDialog open={!!editingId} onOpenChange={() => setEditingId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Edit Service Frequency</AlertDialogTitle>
+            <AlertDialogTitle>Edit Service Details</AlertDialogTitle>
             <AlertDialogDescription>
-              Update how often this service should be performed
+              Update frequency and deadline tolerance for this service
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="grid grid-cols-2 gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="freq-value">Frequency Value</Label>
-              <Input
-                id="freq-value"
-                type="number"
-                min={1}
-                max={60}
-                value={editFrequencyValue}
-                onChange={(e) => setEditFrequencyValue(parseInt(e.target.value) || 1)}
-              />
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="freq-value">Frequency Value</Label>
+                <Input
+                  id="freq-value"
+                  type="number"
+                  min={1}
+                  max={60}
+                  value={editFrequencyValue}
+                  onChange={(e) => setEditFrequencyValue(parseInt(e.target.value) || 1)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="freq-unit">Unit</Label>
+                <Select value={editFrequencyUnit} onValueChange={(value) =>
+                  setEditFrequencyUnit(value as 'weeks' | 'months')
+                }>
+                  <SelectTrigger id="freq-unit">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="weeks">Weeks</SelectItem>
+                    <SelectItem value="months">Months</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="freq-unit">Unit</Label>
-              <Select value={editFrequencyUnit} onValueChange={(value) =>
-                setEditFrequencyUnit(value as 'weeks' | 'months')
-              }>
-                <SelectTrigger id="freq-unit">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="weeks">Weeks</SelectItem>
-                  <SelectItem value="months">Months</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label htmlFor="tolerance-days">Deadline Tolerance (days)</Label>
+              <Input
+                id="tolerance-days"
+                type="number"
+                min={1}
+                max={365}
+                value={editToleranceDays}
+                onChange={(e) => setEditToleranceDays(parseInt(e.target.value) || 7)}
+              />
+              <p className="text-xs text-muted-foreground">
+                How many days after the due date before this service is considered overdue
+              </p>
             </div>
           </div>
           <AlertDialogFooter>

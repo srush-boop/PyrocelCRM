@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { SitesTable } from '@/components/dashboard/sites/sites-table'
 import { AddSiteDialog } from '@/components/dashboard/sites/add-site-dialog'
-import type { Profile, Site, Route } from '@/lib/types/database'
+import type { Profile, Site, Route, Client } from '@/lib/types/database'
 
 export default async function SitesPage() {
   const supabase = await createClient()
@@ -20,19 +20,22 @@ export default async function SitesPage() {
     redirect('/dashboard')
   }
 
-  const [sitesResult, routesResult] = await Promise.all([
+  const [sitesResult, routesResult, clientsResult] = await Promise.all([
     supabase
       .from('sites')
       .select(`
         *,
-        route:routes(*)
+        route:routes(*),
+        client:clients(*)
       `)
       .order('name'),
     supabase.from('routes').select('*').order('name'),
+    supabase.from('clients').select('*').order('name'),
   ])
 
-  const sites = (sitesResult.data || []) as (Site & { route: Route | null })[]
+  const sites = (sitesResult.data || []) as (Site & { route: Route | null; client: Client | null })[]
   const routes = (routesResult.data || []) as Route[]
+  const clients = (clientsResult.data || []) as Client[]
 
   return (
     <div className="space-y-6">
@@ -43,10 +46,10 @@ export default async function SitesPage() {
             Manage client sites and their service schedules
           </p>
         </div>
-        <AddSiteDialog routes={routes} />
+        <AddSiteDialog routes={routes} clients={clients} />
       </div>
 
-      <SitesTable sites={sites} routes={routes} />
+      <SitesTable sites={sites} routes={routes} clients={clients} />
     </div>
   )
 }

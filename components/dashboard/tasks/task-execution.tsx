@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Separator } from '@/components/ui/separator'
+import { formatDateUK, formatTimeUK } from '@/lib/utils'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,7 +36,9 @@ import {
   Save,
   Send,
   Play,
-  Building2
+  Building2,
+  Clock,
+  StopCircle
 } from 'lucide-react'
 import type { 
   Profile, 
@@ -76,6 +79,13 @@ export function TaskExecution({
     }))
   })
   const [engineerNotes, setEngineerNotes] = useState(existingResult?.engineer_notes || '')
+  const [testingStartTime, setTestingStartTime] = useState<Date | null>(
+    existingResult?.testing_start_time ? new Date(existingResult.testing_start_time) : null
+  )
+  const [testingEndTime, setTestingEndTime] = useState<Date | null>(
+    existingResult?.testing_end_time ? new Date(existingResult.testing_end_time) : null
+  )
+  const [timerRunning, setTimerRunning] = useState(false)
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [showSubmitDialog, setShowSubmitDialog] = useState(false)
@@ -138,6 +148,8 @@ export function TaskExecution({
       checklist_results: checklistResults,
       overall_status: calculateOverallStatus(),
       engineer_notes: engineerNotes,
+      testing_start_time: testingStartTime?.toISOString(),
+      testing_end_time: testingEndTime?.toISOString(),
       photos: existingResult?.photos || [],
       updated_at: new Date().toISOString(),
     }
@@ -164,6 +176,8 @@ export function TaskExecution({
       checklist_results: checklistResults,
       overall_status: overallStatus,
       engineer_notes: engineerNotes,
+      testing_start_time: testingStartTime?.toISOString(),
+      testing_end_time: testingEndTime?.toISOString(),
       photos: existingResult?.photos || [],
       updated_at: new Date().toISOString(),
     }
@@ -179,22 +193,61 @@ export function TaskExecution({
     }
 
     // Mark task as completed
+    const completedAt = new Date()
     await supabase
       .from('tasks')
       .update({
         status: 'completed',
-        completed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        completed_at: completedAt.toISOString(),
+        updated_at: completedAt.toISOString(),
       })
       .eq('id', task.id)
 
     // Update site service with last service date
+    const lastServiceDate = completedAt.toISOString().split('T')[0]
     await supabase
       .from('site_services')
       .update({
-        last_service_date: new Date().toISOString().split('T')[0],
+        last_service_date: lastServiceDate,
       })
       .eq('id', task.site_service_id)
+
+    // Generate next recurring task if site is live
+    const { data: siteServiceData } = await supabase
+      .from('site_services')
+      .select(`
+        frequency_value,
+        frequency_unit,
+        site:sites!inner(id, status)
+      `)
+      .eq('id', task.site_service_id)
+      .single()
+
+    if (siteServiceData && siteServiceData.site?.status === 'live') {
+      // Calculate next scheduled date based on frequency
+      const nextDate = new Date(completedAt)
+      if (siteServiceData.frequency_unit === 'weeks') {
+        nextDate.setDate(nextDate.getDate() + (siteServiceData.frequency_value * 7))
+      } else {
+        nextDate.setMonth(nextDate.getMonth() + siteServiceData.frequency_value)
+      }
+
+      // Create the next recurring task
+      await supabase.from('tasks').insert({
+        site_service_id: task.site_service_id,
+        assigned_engineer_id: task.assigned_engineer_id, // Keep same engineer
+        scheduled_date: nextDate.toISOString().split('T')[0],
+        status: 'pending',
+      })
+
+      // Update next_service_date on site_service
+      await supabase
+        .from('site_services')
+        .update({
+          next_service_date: nextDate.toISOString().split('T')[0],
+        })
+        .eq('id', task.site_service_id)
+    }
 
     setSubmitting(false)
     setShowSubmitDialog(false)
@@ -258,7 +311,7 @@ export function TaskExecution({
           )}
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Calendar className="h-4 w-4" />
-            Scheduled: {new Date(task.scheduled_date).toLocaleDateString()}
+            Scheduled: {formatDateUK(task.scheduled_date)}
           </div>
         </CardContent>
       </Card>
@@ -273,14 +326,81 @@ export function TaskExecution({
 
       {/* Checklist */}
       {(status === 'in_progress' || status === 'completed') && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Inspection Checklist</CardTitle>
-            <CardDescription>
-              {checklistTemplate?.name || 'Standard inspection checklist'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <>
+          {/* Time Recording */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Testing Time
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Start Time</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="datetime-local"
+                      value={testingStartTime?.toISOString().slice(0, 16) || ''}
+                      onChange={(e) => setTestingStartTime(e.target.value ? new Date(e.target.value) : null)}
+                      disabled={!canEdit}
+                    />
+                    {!testingStartTime && canEdit && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setTestingStartTime(new Date())}
+                        title="Set current time"
+                      >
+                        <Play className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>End Time</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="datetime-local"
+                      value={testingEndTime?.toISOString().slice(0, 16) || ''}
+                      onChange={(e) => setTestingEndTime(e.target.value ? new Date(e.target.value) : null)}
+                      disabled={!canEdit}
+                    />
+                    {!testingEndTime && canEdit && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setTestingEndTime(new Date())}
+                        title="Set current time"
+                      >
+                        <StopCircle className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+              {testingStartTime && testingEndTime && (
+                <div className="p-3 bg-muted rounded-md">
+                  <p className="text-sm">
+                    <strong>Duration:</strong>{' '}
+                    {Math.round((testingEndTime.getTime() - testingStartTime.getTime()) / 60000)} minutes
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Inspection Checklist</CardTitle>
+              <CardDescription>
+                {checklistTemplate?.name || 'Standard inspection checklist'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
             {checklistResults.length === 0 ? (
               <p className="text-muted-foreground text-center py-4">
                 No checklist items configured for this service type
@@ -369,6 +489,7 @@ export function TaskExecution({
             )}
           </CardContent>
         </Card>
+        </>
       )}
 
       {/* Engineer Notes */}
@@ -453,17 +574,7 @@ export function TaskExecution({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleSubmit} disabled={submitting}>
               {submitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Submitting...
-                </>
-              ) : (
-                'Submit Inspection'
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
-  )
-}
+              <>
+                Completed on {formatDateUK(task.completed_at!)} at {formatTimeUK(task.completed_at!)}
+              </>
+              

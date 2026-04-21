@@ -26,11 +26,13 @@ export default async function EngineersPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Engineers & Staff</h1>
-        <p className="text-muted-foreground">
-          Manage team members and their roles
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Engineers & Staff</h1>
+          <p className="text-muted-foreground">
+            Manage team members and their roles
+          </p>
+        </div>
       </div>
 
       <EngineersTable users={(users || []) as Profile[]} />

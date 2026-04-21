@@ -24,13 +24,15 @@ import { Calendar } from '@/components/ui/calendar'
 import { Mail, AlertCircle, CheckCircle, Search, Filter, CalendarIcon, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
-import { cn } from '@/lib/utils'
+import { formatDateUK, cn } from '@/lib/utils'
 
 interface TaskReport {
   id: string
   taskId: string
   siteName: string
   siteId: string
+  clientName: string
+  clientId: string
   serviceName: string
   serviceTypeId: string
   engineerName: string
@@ -56,6 +58,7 @@ export default function ReportsPage() {
   // Filter states
   const [search, setSearch] = useState('')
   const [selectedSite, setSelectedSite] = useState<string>('all')
+  const [selectedClient, setSelectedClient] = useState<string>('all')
   const [selectedEngineer, setSelectedEngineer] = useState<string>('all')
   const [selectedServiceType, setSelectedServiceType] = useState<string>('all')
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
@@ -65,6 +68,7 @@ export default function ReportsPage() {
 
   // Filter options
   const [sites, setSites] = useState<FilterOption[]>([])
+  const [clients, setClients] = useState<FilterOption[]>([])
   const [engineers, setEngineers] = useState<FilterOption[]>([])
   const [serviceTypes, setServiceTypes] = useState<FilterOption[]>([])
 
@@ -74,13 +78,15 @@ export default function ReportsPage() {
   }, [])
 
   const loadFilterOptions = async () => {
-    const [sitesRes, engineersRes, serviceTypesRes] = await Promise.all([
+    const [sitesRes, clientsRes, engineersRes, serviceTypesRes] = await Promise.all([
       supabase.from('sites').select('id, name').order('name'),
+      supabase.from('clients').select('id, name').order('name'),
       supabase.from('profiles').select('id, full_name, email').eq('role', 'engineer'),
       supabase.from('service_types').select('id, name').order('name'),
     ])
 
     setSites(sitesRes.data?.map(s => ({ id: s.id, name: s.name })) || [])
+    setClients(clientsRes.data?.map(c => ({ id: c.id, name: c.name })) || [])
     setEngineers(engineersRes.data?.map(e => ({ id: e.id, name: e.full_name || e.email })) || [])
     setServiceTypes(serviceTypesRes.data?.map(st => ({ id: st.id, name: st.name })) || [])
   }
@@ -104,7 +110,7 @@ export default function ReportsPage() {
             site_services(
               site_id,
               service_type_id,
-              sites(id, name, contact_email),
+              sites(id, name, contact_email, client_id, clients(id, name)),
               service_types(id, name)
             )
           )
@@ -119,6 +125,8 @@ export default function ReportsPage() {
         taskId: item.task_id,
         siteName: item.tasks?.site_services?.sites?.name || 'Unknown',
         siteId: item.tasks?.site_services?.sites?.id || '',
+        clientName: item.tasks?.site_services?.sites?.clients?.name || '',
+        clientId: item.tasks?.site_services?.sites?.client_id || '',
         serviceName: item.tasks?.site_services?.service_types?.name || 'Unknown',
         serviceTypeId: item.tasks?.site_services?.service_types?.id || '',
         engineerName: item.tasks?.profiles?.full_name || item.tasks?.profiles?.email || 'Unassigned',
@@ -155,6 +163,12 @@ export default function ReportsPage() {
       // Site filter
       if (selectedSite !== 'all' && report.siteId !== selectedSite) return false
 
+      // Client filter
+      if (selectedClient !== 'all') {
+        if (selectedClient === 'unassigned' && report.clientId) return false
+        if (selectedClient !== 'unassigned' && report.clientId !== selectedClient) return false
+      }
+
       // Engineer filter
       if (selectedEngineer !== 'all' && report.engineerId !== selectedEngineer) return false
 
@@ -179,11 +193,12 @@ export default function ReportsPage() {
 
       return true
     })
-  }, [reports, search, selectedSite, selectedEngineer, selectedServiceType, selectedStatus, emailStatus, dateFrom, dateTo])
+  }, [reports, search, selectedSite, selectedClient, selectedEngineer, selectedServiceType, selectedStatus, emailStatus, dateFrom, dateTo])
 
   const clearFilters = () => {
     setSearch('')
     setSelectedSite('all')
+    setSelectedClient('all')
     setSelectedEngineer('all')
     setSelectedServiceType('all')
     setSelectedStatus('all')
@@ -192,9 +207,9 @@ export default function ReportsPage() {
     setDateTo(undefined)
   }
 
-  const hasActiveFilters = search || selectedSite !== 'all' || selectedEngineer !== 'all' || 
-    selectedServiceType !== 'all' || selectedStatus !== 'all' || emailStatus !== 'all' || 
-    dateFrom || dateTo
+  const hasActiveFilters = search || selectedSite !== 'all' || selectedClient !== 'all' || 
+    selectedEngineer !== 'all' || selectedServiceType !== 'all' || selectedStatus !== 'all' || 
+    emailStatus !== 'all' || dateFrom || dateTo
 
   const resendEmail = async (reportId: string) => {
     try {
@@ -284,6 +299,24 @@ export default function ReportsPage() {
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Filter className="h-4 w-4" />
               Filters:
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label className="text-xs text-muted-foreground">Client</Label>
+              <Select value={selectedClient} onValueChange={setSelectedClient}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="All Clients" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Clients</SelectItem>
+                  <SelectItem value="unassigned">No Client</SelectItem>
+                  {clients.map((client) => (
+                    <SelectItem key={client.id} value={client.id}>
+                      {client.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid gap-1.5">
@@ -395,11 +428,11 @@ export default function ReportsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Client</TableHead>
                   <TableHead>Site</TableHead>
                   <TableHead>Service</TableHead>
                   <TableHead>Engineer</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Client Email</TableHead>
                   <TableHead>Email Sent</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Actions</TableHead>
@@ -424,6 +457,7 @@ export default function ReportsPage() {
                 ) : (
                   filteredReports.map((report) => (
                     <TableRow key={report.id}>
+                      <TableCell>{report.clientName || <span className="text-muted-foreground">-</span>}</TableCell>
                       <TableCell className="font-medium">{report.siteName}</TableCell>
                       <TableCell>{report.serviceName}</TableCell>
                       <TableCell>{report.engineerName}</TableCell>
@@ -432,15 +466,12 @@ export default function ReportsPage() {
                           {report.overallStatus === 'pass' ? 'Pass' : report.overallStatus === 'fail' ? 'Fail' : 'Partial'}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {report.clientEmail || '-'}
-                      </TableCell>
                       <TableCell>
                         {report.emailSentAt ? (
                           <div className="flex items-center gap-2">
                             <CheckCircle className="h-4 w-4 text-green-600" />
                             <span className="text-sm">
-                              {new Date(report.emailSentAt).toLocaleDateString()}
+                              {formatDateUK(report.emailSentAt)}
                             </span>
                           </div>
                         ) : (
@@ -452,8 +483,8 @@ export default function ReportsPage() {
                       </TableCell>
                       <TableCell className="text-sm">
                         {report.completedAt 
-                          ? new Date(report.completedAt).toLocaleDateString()
-                          : new Date(report.createdAt).toLocaleDateString()}
+                          ? formatDateUK(report.completedAt)
+                          : formatDateUK(report.createdAt)}
                       </TableCell>
                       <TableCell>
                         <Button

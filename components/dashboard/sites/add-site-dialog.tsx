@@ -25,13 +25,14 @@ import {
 } from '@/components/ui/select'
 import { Plus, Loader2, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import type { Route } from '@/lib/types/database'
+import type { Route, Client } from '@/lib/types/database'
 
 interface AddSiteDialogProps {
   routes: Route[]
+  clients: Client[]
 }
 
-export function AddSiteDialog({ routes }: AddSiteDialogProps) {
+export function AddSiteDialog({ routes, clients }: AddSiteDialogProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
@@ -41,6 +42,9 @@ export function AddSiteDialog({ routes }: AddSiteDialogProps) {
     contact_email: '',
     contact_phone: '',
     route_id: '',
+    client_id: '',
+    site_id_cash: '',
+    status: 'live' as 'live' | 'dead',
     notes: '',
   })
   const [reportingEmails, setReportingEmails] = useState<string[]>([])
@@ -66,6 +70,7 @@ export function AddSiteDialog({ routes }: AddSiteDialogProps) {
     const { error } = await supabase.from('sites').insert({
       ...formData,
       route_id: formData.route_id || null,
+      client_id: formData.client_id || null,
       reporting_emails: reportingEmails,
     })
 
@@ -80,6 +85,9 @@ export function AddSiteDialog({ routes }: AddSiteDialogProps) {
         contact_email: '',
         contact_phone: '',
         route_id: '',
+        client_id: '',
+        site_id_cash: '',
+        status: 'live',
         notes: '',
       })
       setReportingEmails([])
@@ -155,23 +163,69 @@ export function AddSiteDialog({ routes }: AddSiteDialogProps) {
                 placeholder="contact@example.com"
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="route">Assign to Route</Label>
-              <Select
-                value={formData.route_id}
-                onValueChange={(value) => setFormData({ ...formData, route_id: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a route (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {routes.map((route) => (
-                    <SelectItem key={route.id} value={route.id}>
-                      {route.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="client">Client</Label>
+                <Select
+                  value={formData.client_id}
+                  onValueChange={(value) => setFormData({ ...formData, client_id: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select client (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clients.map((client) => (
+                      <SelectItem key={client.id} value={client.id}>
+                        {client.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="route">Route</Label>
+                <Select
+                  value={formData.route_id}
+                  onValueChange={(value) => setFormData({ ...formData, route_id: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select route (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {routes.map((route) => (
+                      <SelectItem key={route.id} value={route.id}>
+                        {route.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="site_id_cash">Site ID (CASH)</Label>
+                <Input
+                  id="site_id_cash"
+                  value={formData.site_id_cash}
+                  onChange={(e) => setFormData({ ...formData, site_id_cash: e.target.value })}
+                  placeholder="CASH site ID"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="status">Status</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(value) => setFormData({ ...formData, status: value as 'live' | 'dead' })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="live">Live</SelectItem>
+                    <SelectItem value="dead">Dead</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="reporting_email">Reporting Email Addresses</Label>

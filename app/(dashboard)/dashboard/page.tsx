@@ -6,6 +6,7 @@ import { Building2, Route, ClipboardCheck, AlertTriangle, Calendar, CheckCircle2
 import type { Profile } from '@/lib/types/database'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { formatDateUK } from '@/lib/utils'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -146,7 +147,7 @@ export default async function DashboardPage() {
                       {task.status}
                     </Badge>
                     <span className="text-sm text-muted-foreground">
-                      {new Date(task.scheduled_date).toLocaleDateString()}
+                      {formatDateUK(task.scheduled_date)}
                     </span>
                     {(profile as Profile).role === 'engineer' && (
                       <Button size="sm" asChild>

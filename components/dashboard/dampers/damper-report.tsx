@@ -67,6 +67,9 @@ export function DamperReport({ task, inspections, template }: DamperReportProps)
     (i) => i.overall_result === 'fail' || i.overall_result === 'remedial',
   )
 
+  const withPhotos = inspections.filter((i) => (i.photos?.length ?? 0) > 0)
+  const photoCount = withPhotos.reduce((sum, i) => sum + (i.photos?.length ?? 0), 0)
+
   useEffect(() => {
     const t = setTimeout(() => window.print(), 600)
     return () => clearTimeout(t)
@@ -260,6 +263,52 @@ export function DamperReport({ task, inspections, template }: DamperReportProps)
             </table>
           </div>
         </section>
+
+        {/* Photographic evidence */}
+        {withPhotos.length > 0 && (
+          <section className="mb-8">
+            <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
+              Photographic Evidence ({photoCount})
+            </h2>
+            <div className="space-y-5">
+              {withPhotos.map((insp) => (
+                <div key={insp.id} className="avoid-break">
+                  <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+                    <span className="font-mono font-semibold">{insp.damper?.urn || '-'}</span>
+                    {insp.damper?.location && (
+                      <span className="text-muted-foreground">{insp.damper.location}</span>
+                    )}
+                    {insp.damper?.floor && (
+                      <span className="text-muted-foreground">· {insp.damper.floor}</span>
+                    )}
+                    <span
+                      className="ml-auto inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
+                      style={{ backgroundColor: RESULT_COLORS[insp.overall_result] }}
+                    >
+                      {RESULT_LABELS[insp.overall_result]}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {insp.photos.map((url, idx) => (
+                      <div
+                        key={url}
+                        className="avoid-break overflow-hidden rounded-md border bg-muted"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={url || '/placeholder.svg'}
+                          alt={`${insp.damper?.urn || 'Damper'} photo ${idx + 1}`}
+                          crossOrigin="anonymous"
+                          className="aspect-[4/3] h-full w-full object-cover"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Signature & footer */}
         {template?.include_signature !== false && (

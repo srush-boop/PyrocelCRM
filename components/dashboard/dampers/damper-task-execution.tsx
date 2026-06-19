@@ -30,9 +30,11 @@ import {
   Loader2,
   Search,
   Wind,
+  FileText,
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { DamperInspectionCard, type InspectionState } from './damper-inspection-card'
+import { ScanQrButton } from './scan-qr-button'
 import type { Profile, TaskWithDetails, Damper, DamperInspection, DamperResult } from '@/lib/types/database'
 
 interface DamperTaskExecutionProps {
@@ -287,7 +289,7 @@ export function DamperTaskExecution({
 
     setSubmitting(false)
     setShowSubmit(false)
-    router.push('/dashboard')
+    router.push(`/dashboard/dampers/report/${task.id}`)
     router.refresh()
   }
 
@@ -308,6 +310,15 @@ export function DamperTaskExecution({
           </div>
           <h1 className="text-2xl font-bold">{site?.name}</h1>
         </div>
+        {status === 'completed' && (
+          <Button variant="outline" size="sm" asChild className="mt-1">
+            <Link href={`/dashboard/dampers/report/${task.id}`}>
+              <FileText className="mr-2 h-4 w-4" />
+              View Report
+            </Link>
+          </Button>
+        )}
+        <ScanQrButton className="mt-1" />
       </div>
 
       <Card>

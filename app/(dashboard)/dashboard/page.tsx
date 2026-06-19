@@ -7,6 +7,7 @@ import type { Profile } from '@/lib/types/database'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { formatDateUK } from '@/lib/utils'
+import { ScanQrButton } from '@/components/dashboard/dampers/scan-qr-button'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -57,13 +58,16 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">
-          {(profile as Profile).role === 'engineer' ? 'My Tasks' : 'Dashboard'}
-        </h1>
-        <p className="text-muted-foreground">
-          Welcome back, {(profile as Profile).full_name || 'User'}
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">
+            {(profile as Profile).role === 'engineer' ? 'My Tasks' : 'Dashboard'}
+          </h1>
+          <p className="text-muted-foreground">
+            Welcome back, {(profile as Profile).full_name || 'User'}
+          </p>
+        </div>
+        <ScanQrButton />
       </div>
 
       {isAdminOrOffice && (

@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { RoutesTable } from '@/components/dashboard/routes/routes-table'
 import { AddRouteDialog } from '@/components/dashboard/routes/add-route-dialog'
+import type { PlannerSite } from '@/components/dashboard/routes/route-planner-dialog'
 import type { Profile, Route } from '@/lib/types/database'
 
 export default async function RoutesPage() {
@@ -29,12 +30,12 @@ export default async function RoutesPage() {
       `)
       .order('name'),
     supabase.from('profiles').select('*').eq('role', 'engineer').order('full_name'),
-    supabase.from('sites').select('id, name, route_id'),
+    supabase.from('sites').select('id, name, route_id, route_position'),
   ])
 
   const routes = (routesResult.data || []) as (Route & { assigned_engineer: Profile | null })[]
   const engineers = (engineersResult.data || []) as Profile[]
-  const sites = (sitesResult.data || []) as { id: string; name: string; route_id: string | null }[]
+  const sites = (sitesResult.data || []) as PlannerSite[]
 
   // Count sites per route
   const routesWithSiteCounts = routes.map((route) => ({
@@ -54,7 +55,7 @@ export default async function RoutesPage() {
         <AddRouteDialog engineers={engineers} />
       </div>
 
-      <RoutesTable routes={routesWithSiteCounts} engineers={engineers} />
+      <RoutesTable routes={routesWithSiteCounts} engineers={engineers} sites={sites} />
     </div>
   )
 }

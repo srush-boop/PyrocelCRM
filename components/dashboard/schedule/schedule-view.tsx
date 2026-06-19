@@ -30,11 +30,16 @@ import {
   XCircle,
   CalendarIcon,
   X,
-  Filter
+  LayoutGrid,
+  List as ListIcon,
+  Route as RouteIcon,
+  ChevronRight,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
-import type { Profile, TaskWithDetails } from '@/lib/types/database'
+import type { Profile, TaskWithDetails, Site, Route } from '@/lib/types/database'
+
+type ViewMode = 'grid' | 'list' | 'route'
 
 interface ScheduleViewProps {
   tasks: TaskWithDetails[]
@@ -51,6 +56,7 @@ const statusConfig = {
 
 export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewProps) {
   const [search, setSearch] = useState('')
+  const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [activeTab, setActiveTab] = useState('upcoming')
   const [selectedEngineer, setSelectedEngineer] = useState<string>('all')
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined)
@@ -164,6 +170,166 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     )
   }
 
+  const TaskRow = ({ task }: { task: TaskWithDetails }) => {
+    const config = statusConfig[task.status]
+    const Icon = config.icon
+    const taskDate = new Date(task.scheduled_date)
+    const isOverdue = taskDate < today && task.status === 'pending'
+    const actionable =
+      (isEngineer || profile.role === 'admin') &&
+      task.status !== 'completed' &&
+      task.status !== 'cancelled'
+
+    return (
+      <Link
+        href={`/dashboard/tasks/${task.id}`}
+        className={cn(
+          'flex items-center gap-3 rounded-lg border bg-card p-3 transition-colors hover:bg-accent',
+          isOverdue && 'border-destructive',
+        )}
+      >
+        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">{task.site_service?.site?.name}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {task.site_service?.service_type?.name}
+            {!isEngineer && task.assigned_engineer
+              ? ` · ${task.assigned_engineer.full_name || task.assigned_engineer.email}`
+              : ''}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {isOverdue && (
+            <Badge variant="destructive" className="hidden text-xs sm:inline-flex">
+              Overdue
+            </Badge>
+          )}
+          <span className="hidden text-xs text-muted-foreground sm:inline">
+            {formatDateUK(task.scheduled_date)}
+          </span>
+          <Badge variant={config.variant} className="text-xs">
+            {config.label}
+          </Badge>
+          {actionable && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+        </div>
+      </Link>
+    )
+  }
+
+  // Group tasks by their site's route, ordered by route position then name.
+  const groupByRoute = (list: TaskWithDetails[]) => {
+    const groups = new Map<string, { name: string; tasks: TaskWithDetails[] }>()
+    for (const task of list) {
+      const site = task.site_service?.site as (Site & { route?: Route | null }) | undefined
+      const route = site?.route
+      const key = route?.id ?? 'unassigned'
+      const name = route?.name ?? 'No route assigned'
+      if (!groups.has(key)) groups.set(key, { name, tasks: [] })
+      groups.get(key)!.tasks.push(task)
+    }
+    // Sort tasks within each route by the site's planned position, then name
+    for (const group of groups.values()) {
+      group.tasks.sort((a, b) => {
+        const sa = a.site_service?.site as Site | undefined
+        const sb = b.site_service?.site as Site | undefined
+        const pa = sa?.route_position ?? Number.MAX_SAFE_INTEGER
+        const pb = sb?.route_position ?? Number.MAX_SAFE_INTEGER
+        if (pa !== pb) return pa - pb
+        return (sa?.name ?? '').localeCompare(sb?.name ?? '')
+      })
+    }
+    return Array.from(groups.values()).sort((a, b) => {
+      if (a.name === 'No route assigned') return 1
+      if (b.name === 'No route assigned') return -1
+      return a.name.localeCompare(b.name)
+    })
+  }
+
+  const EmptyState = ({ icon: Icon, label }: { icon: typeof ClipboardCheck; label: string }) => (
+    <Card>
+      <CardContent className="flex flex-col items-center justify-center py-12">
+        <Icon className="mb-4 h-12 w-12 text-muted-foreground/50" />
+        <p className="text-muted-foreground">{label}</p>
+      </CardContent>
+    </Card>
+  )
+
+  const renderTasks = (list: TaskWithDetails[], emptyLabel: string) => {
+    if (list.length === 0) {
+      return <EmptyState icon={activeTab === 'completed' ? CheckCircle2 : ClipboardCheck} label={emptyLabel} />
+    }
+    if (viewMode === 'list') {
+      return (
+        <div className="space-y-2">
+          {list.map((task) => (
+            <TaskRow key={task.id} task={task} />
+          ))}
+        </div>
+      )
+    }
+    if (viewMode === 'route') {
+      return (
+        <div className="space-y-6">
+          {groupByRoute(list).map((group) => (
+            <div key={group.name} className="space-y-2">
+              <div className="flex items-center gap-2">
+                <RouteIcon className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold">{group.name}</h3>
+                <Badge variant="secondary" className="text-xs">
+                  {group.tasks.length}
+                </Badge>
+              </div>
+              <div className="space-y-2">
+                {group.tasks.map((task, idx) => (
+                  <div key={task.id} className="flex items-center gap-2">
+                    <span className="w-6 shrink-0 text-right text-xs font-medium text-muted-foreground">
+                      {idx + 1}.
+                    </span>
+                    <div className="flex-1">
+                      <TaskRow task={task} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )
+    }
+    return (
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {list.map((task) => (
+          <TaskCard key={task.id} task={task} />
+        ))}
+      </div>
+    )
+  }
+
+  const viewToggle = (
+    <div className="flex items-center rounded-md border p-0.5">
+      {(
+        [
+          { mode: 'grid' as const, icon: LayoutGrid, label: 'Grid' },
+          { mode: 'list' as const, icon: ListIcon, label: 'List' },
+          { mode: 'route' as const, icon: RouteIcon, label: 'By route' },
+        ]
+      ).map(({ mode, icon: Icon, label }) => (
+        <Button
+          key={mode}
+          type="button"
+          variant={viewMode === mode ? 'secondary' : 'ghost'}
+          size="sm"
+          className="h-8 gap-1.5 px-2.5"
+          onClick={() => setViewMode(mode)}
+          aria-pressed={viewMode === mode}
+        >
+          <Icon className="h-4 w-4" />
+          <span className="hidden sm:inline">{label}</span>
+        </Button>
+      ))}
+    </div>
+  )
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -246,9 +412,11 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
             Clear
           </Button>
         )}
+
+        <div className="ml-auto">{viewToggle}</div>
       </div>
 
-      {overdueTasks.length > 0 && (
+      {viewMode === 'grid' && overdueTasks.length > 0 && (
         <Card className="border-destructive bg-destructive/5">
           <CardHeader className="pb-2">
             <CardTitle className="text-destructive flex items-center gap-2">
@@ -277,39 +445,16 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
         </TabsList>
 
         <TabsContent value="upcoming" className="mt-4">
-          {upcomingTasks.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <ClipboardCheck className="h-12 w-12 text-muted-foreground/50 mb-4" />
-                <p className="text-muted-foreground">No upcoming tasks</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {upcomingTasks
-                .filter((t) => !overdueTasks.includes(t))
-                .map((task) => (
-                  <TaskCard key={task.id} task={task} />
-                ))}
-            </div>
+          {renderTasks(
+            viewMode === 'grid'
+              ? upcomingTasks.filter((t) => !overdueTasks.includes(t))
+              : upcomingTasks,
+            'No upcoming tasks',
           )}
         </TabsContent>
 
         <TabsContent value="completed" className="mt-4">
-          {completedTasks.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <CheckCircle2 className="h-12 w-12 text-muted-foreground/50 mb-4" />
-                <p className="text-muted-foreground">No completed tasks</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {completedTasks.map((task) => (
-                <TaskCard key={task.id} task={task} />
-              ))}
-            </div>
-          )}
+          {renderTasks(completedTasks, 'No completed tasks')}
         </TabsContent>
       </Tabs>
     </div>

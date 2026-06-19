@@ -8,9 +8,22 @@ import { ArrowLeft, MapPin, Phone, Mail, Building2, Radio } from 'lucide-react'
 import { SiteServicesManager } from '@/components/dashboard/sites/site-services-manager'
 import { SiteReports } from '@/components/dashboard/sites/site-reports'
 import { DamperRegister } from '@/components/dashboard/dampers/damper-register'
+import { McpRegister } from '@/components/dashboard/mcps/mcp-register'
 import { isDamperService } from '@/lib/dampers'
+import { isFireAlarmService } from '@/lib/mcps'
 import { REMOTE_MONITORING_LABELS } from '@/lib/sites'
-import type { Profile, Site, Route, ServiceType, SiteService, Task, TaskResult, Damper } from '@/lib/types/database'
+import type {
+  Profile,
+  Site,
+  Route,
+  ServiceType,
+  SiteService,
+  Task,
+  TaskResult,
+  Damper,
+  Mcp,
+  McpInspection,
+} from '@/lib/types/database'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -120,6 +133,28 @@ export default async function SiteDetailPage({ params }: PageProps) {
   const dampers = (dampersData || []) as Damper[]
   const showDamperRegister = hasDamperService || dampers.length > 0
 
+  // MCP register: shown when the site has the fire alarm service or any MCPs
+  const hasFireAlarmService = siteServices.some((ss) => isFireAlarmService(ss.service_type?.name))
+  const { data: mcpsData } = await supabase
+    .from('mcps')
+    .select('*, inspections:mcp_inspections(result, inspection_date)')
+    .eq('site_id', id)
+    .order('map_reference', { ascending: true })
+  const mcps = ((mcpsData || []) as (Mcp & { inspections: Pick<McpInspection, 'result' | 'inspection_date'>[] })[]).map(
+    (mcp) => {
+      const sorted = [...(mcp.inspections || [])].sort((a, b) =>
+        b.inspection_date.localeCompare(a.inspection_date),
+      )
+      const latest = sorted[0]
+      return {
+        ...mcp,
+        latest_result: latest?.result ?? null,
+        last_inspected_date: latest?.inspection_date ?? null,
+      } as Mcp
+    },
+  )
+  const showMcpRegister = hasFireAlarmService || mcps.length > 0
+
   return (
     <div className="space-y-6">
       <div className="flex items-start gap-4">
@@ -220,6 +255,8 @@ export default async function SiteDetailPage({ params }: PageProps) {
       {showDamperRegister && (
         <DamperRegister siteId={id} siteName={site.name} dampers={dampers} />
       )}
+
+      {showMcpRegister && <McpRegister siteId={id} mcps={mcps} />}
 
       <SiteReports
         siteName={site.name}

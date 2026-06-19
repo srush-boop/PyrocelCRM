@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { ClientsTable } from '@/components/dashboard/clients/clients-table'
-import type { Client, Profile } from '@/lib/types/database'
+import type { Client, Profile, Site } from '@/lib/types/database'
 
 export default async function ClientsPage() {
   const supabase = await createClient()
@@ -24,6 +24,19 @@ export default async function ClientsPage() {
     .select('*')
     .order('name')
 
+  const { data: sites } = await supabase
+    .from('sites')
+    .select('id, name, address, status, client_id')
+    .order('name')
+
+  // Group sites by their client_id for the expandable rows
+  const sitesByClient: Record<string, Site[]> = {}
+  for (const site of (sites || []) as Site[]) {
+    if (!site.client_id) continue
+    if (!sitesByClient[site.client_id]) sitesByClient[site.client_id] = []
+    sitesByClient[site.client_id].push(site)
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -33,7 +46,10 @@ export default async function ClientsPage() {
         </p>
       </div>
 
-      <ClientsTable clients={(clients || []) as Client[]} />
+      <ClientsTable
+        clients={(clients || []) as Client[]}
+        sitesByClient={sitesByClient}
+      />
     </div>
   )
 }

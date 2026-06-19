@@ -49,6 +49,7 @@ export function EditSiteDialog({ site, routes, clients, open, onOpenChange }: Ed
   })
   const [reportingEmails, setReportingEmails] = useState<string[]>(site.reporting_emails || [])
   const [newReportingEmail, setNewReportingEmail] = useState('')
+  const [error, setError] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -65,9 +66,16 @@ export function EditSiteDialog({ site, routes, clients, open, onOpenChange }: Ed
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError(null)
+
+    if (formData.status === 'live' && !formData.client_id) {
+      setError('A client is required for a site when its status is Live.')
+      return
+    }
+
     setLoading(true)
 
-    const { error } = await supabase
+    const { error: updateError } = await supabase
       .from('sites')
       .update({
         ...formData,
@@ -80,7 +88,8 @@ export function EditSiteDialog({ site, routes, clients, open, onOpenChange }: Ed
 
     setLoading(false)
 
-    if (!error) {
+    if (!updateError) {
+      setError(null)
       onOpenChange(false)
       router.refresh()
     }
@@ -144,10 +153,15 @@ export function EditSiteDialog({ site, routes, clients, open, onOpenChange }: Ed
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="client">Client</Label>
+                <Label htmlFor="client">
+                  Client {formData.status === 'live' && <span className="text-destructive">*</span>}
+                </Label>
                 <Select
                   value={formData.client_id}
-                  onValueChange={(value) => setFormData({ ...formData, client_id: value })}
+                  onValueChange={(value) => {
+                    setFormData({ ...formData, client_id: value })
+                    setError(null)
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select client (optional)" />
@@ -249,6 +263,11 @@ export function EditSiteDialog({ site, routes, clients, open, onOpenChange }: Ed
               />
             </div>
           </div>
+          {error && (
+            <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2 mb-2">
+              {error}
+            </p>
+          )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel

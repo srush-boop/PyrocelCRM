@@ -1,5 +1,25 @@
 import { generateClientPassEmail, generateClientFailEmail, generateInternalAlertEmail, EmailData } from './templates'
 
+// Sending address on the verified `pyrocel.co.uk` domain.
+const DEFAULT_FROM_EMAIL = 'PyrocelCRM <noreply@pyrocel.co.uk>'
+
+// Resolve the "from" address defensively. The RESEND_FROM_EMAIL env var has been
+// misconfigured before (e.g. set to an API key), which makes Resend reject every
+// send with a 422. If the configured value is not a valid email/"Name <email>"
+// format, fall back to the verified default instead of failing all emails.
+function resolveFromAddress(): string {
+  const configured = process.env.RESEND_FROM_EMAIL?.trim()
+  if (configured && /.+@.+\..+/.test(configured)) {
+    return configured
+  }
+  if (configured) {
+    console.warn(
+      `[v0] RESEND_FROM_EMAIL is not a valid email address ("${configured.slice(0, 6)}..."). Falling back to ${DEFAULT_FROM_EMAIL}. Set it to a verified sender like "PyrocelCRM <noreply@pyrocel.co.uk>".`
+    )
+  }
+  return DEFAULT_FROM_EMAIL
+}
+
 export async function sendEmail(to: string, subject: string, html: string) {
   // Using Resend as the default email service
   // Users can set RESEND_API_KEY in their environment
@@ -18,7 +38,7 @@ export async function sendEmail(to: string, subject: string, html: string) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: process.env.RESEND_FROM_EMAIL || 'PyrocelCRM <noreply@pyrocelcrm.com>',
+        from: resolveFromAddress(),
         to,
         subject,
         html,

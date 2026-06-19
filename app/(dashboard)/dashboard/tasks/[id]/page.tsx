@@ -1,7 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import { TaskExecution } from '@/components/dashboard/tasks/task-execution'
-import type { Profile, TaskWithDetails, ChecklistTemplate } from '@/lib/types/database'
+import { DamperTaskExecution } from '@/components/dashboard/dampers/damper-task-execution'
+import { isDamperService } from '@/lib/dampers'
+import type { Profile, TaskWithDetails, ChecklistTemplate, Damper, DamperInspection } from '@/lib/types/database'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -44,6 +46,24 @@ export default async function TaskPage({ params }: PageProps) {
   // Check if engineer can access this task
   if ((profile as Profile).role === 'engineer' && task.assigned_engineer_id !== user.id) {
     redirect('/dashboard')
+  }
+
+  // Damper inspection tasks use a dedicated per-asset flow
+  if (isDamperService(task.site_service?.service_type?.name)) {
+    const siteId = task.site_service?.site?.id ?? task.site_service?.site_id
+    const [{ data: dampersData }, { data: inspectionsData }] = await Promise.all([
+      supabase.from('dampers').select('*').eq('site_id', siteId).order('reference', { ascending: true }),
+      supabase.from('damper_inspections').select('*').eq('task_id', id),
+    ])
+
+    return (
+      <DamperTaskExecution
+        task={task as TaskWithDetails}
+        profile={profile as Profile}
+        dampers={(dampersData || []) as Damper[]}
+        existingInspections={(inspectionsData || []) as DamperInspection[]}
+      />
+    )
   }
 
   // Fetch checklist template for this service type

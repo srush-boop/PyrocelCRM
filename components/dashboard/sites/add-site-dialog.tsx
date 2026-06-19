@@ -49,6 +49,7 @@ export function AddSiteDialog({ routes, clients }: AddSiteDialogProps) {
   })
   const [reportingEmails, setReportingEmails] = useState<string[]>([])
   const [newReportingEmail, setNewReportingEmail] = useState('')
+  const [error, setError] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -65,9 +66,16 @@ export function AddSiteDialog({ routes, clients }: AddSiteDialogProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError(null)
+
+    if (formData.status === 'live' && !formData.client_id) {
+      setError('A client is required for a site when its status is Live.')
+      return
+    }
+
     setLoading(true)
 
-    const { error } = await supabase.from('sites').insert({
+    const { error: insertError } = await supabase.from('sites').insert({
       ...formData,
       route_id: formData.route_id || null,
       client_id: formData.client_id || null,
@@ -76,8 +84,9 @@ export function AddSiteDialog({ routes, clients }: AddSiteDialogProps) {
 
     setLoading(false)
 
-    if (!error) {
+    if (!insertError) {
       setOpen(false)
+      setError(null)
       setFormData({
         name: '',
         address: '',
@@ -165,10 +174,15 @@ export function AddSiteDialog({ routes, clients }: AddSiteDialogProps) {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="client">Client</Label>
+                <Label htmlFor="client">
+                  Client {formData.status === 'live' && <span className="text-destructive">*</span>}
+                </Label>
                 <Select
                   value={formData.client_id}
-                  onValueChange={(value) => setFormData({ ...formData, client_id: value })}
+                  onValueChange={(value) => {
+                    setFormData({ ...formData, client_id: value })
+                    setError(null)
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select client (optional)" />
@@ -277,6 +291,11 @@ export function AddSiteDialog({ routes, clients }: AddSiteDialogProps) {
               />
             </div>
           </div>
+          {error && (
+            <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2 mb-2">
+              {error}
+            </p>
+          )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel

@@ -7,7 +7,9 @@ import { Badge } from '@/components/ui/badge'
 import { ArrowLeft, MapPin, Phone, Mail, Building2 } from 'lucide-react'
 import { SiteServicesManager } from '@/components/dashboard/sites/site-services-manager'
 import { SiteReports } from '@/components/dashboard/sites/site-reports'
-import type { Profile, Site, Route, ServiceType, SiteService, Task, TaskResult } from '@/lib/types/database'
+import { DamperRegister } from '@/components/dashboard/dampers/damper-register'
+import { isDamperService } from '@/lib/dampers'
+import type { Profile, Site, Route, ServiceType, SiteService, Task, TaskResult, Damper } from '@/lib/types/database'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -107,6 +109,16 @@ export default async function SiteDetailPage({ params }: PageProps) {
     (st) => !siteServices.some((ss) => ss.service_type_id === st.id)
   )
 
+  // Damper register: shown when the site has the damper service or any dampers
+  const hasDamperService = siteServices.some((ss) => isDamperService(ss.service_type?.name))
+  const { data: dampersData } = await supabase
+    .from('dampers')
+    .select('*')
+    .eq('site_id', id)
+    .order('reference', { ascending: true })
+  const dampers = (dampersData || []) as Damper[]
+  const showDamperRegister = hasDamperService || dampers.length > 0
+
   return (
     <div className="space-y-6">
       <div className="flex items-start gap-4">
@@ -192,6 +204,10 @@ export default async function SiteDetailPage({ params }: PageProps) {
           siteStatus={(site as Site).status}
         />
       </div>
+
+      {showDamperRegister && (
+        <DamperRegister siteId={id} siteName={site.name} dampers={dampers} />
+      )}
 
       <SiteReports
         siteName={site.name}

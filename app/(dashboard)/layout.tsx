@@ -31,9 +31,9 @@ export default async function DashboardLayout({
   return (
     <SidebarProvider>
       <DashboardSidebar profile={profile as Profile} />
-      <SidebarInset>
+      <SidebarInset className="h-svh overflow-hidden">
         <DashboardHeader profile={profile as Profile} />
-        <main className="flex-1 p-6">
+        <main className="flex-1 overflow-y-auto p-4 pb-24 md:p-6 md:pb-24">
           {children}
         </main>
       </SidebarInset>

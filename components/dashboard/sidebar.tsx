@@ -26,6 +26,7 @@ import {
   Wrench,
   Calendar,
   FileText,
+  Wind,
 } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 
@@ -37,6 +38,7 @@ const adminNavItems = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { title: 'Clients', href: '/dashboard/clients', icon: Building },
   { title: 'Sites', href: '/dashboard/sites', icon: Building2 },
+  { title: 'Dampers', href: '/dashboard/dampers', icon: Wind },
   { title: 'Routes', href: '/dashboard/routes', icon: Route },
   { title: 'Engineers', href: '/dashboard/engineers', icon: Users },
   { title: 'Service Types', href: '/dashboard/service-types', icon: Wrench },
@@ -54,6 +56,7 @@ const officeNavItems = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { title: 'Clients', href: '/dashboard/clients', icon: Building },
   { title: 'Sites', href: '/dashboard/sites', icon: Building2 },
+  { title: 'Dampers', href: '/dashboard/dampers', icon: Wind },
   { title: 'Routes', href: '/dashboard/routes', icon: Route },
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
   { title: 'Reports', href: '/dashboard/reports', icon: FileText },

@@ -44,6 +44,7 @@ export function EditSiteDialog({ site, routes, clients, open, onOpenChange }: Ed
     contact_phone: site.contact_phone || '',
     route_id: site.route_id || '',
     client_id: site.client_id || '',
+    status: site.status || 'live',
     notes: site.notes || '',
   })
   const [reportingEmails, setReportingEmails] = useState<string[]>(site.reporting_emails || [])
@@ -178,6 +179,26 @@ export function EditSiteDialog({ site, routes, clients, open, onOpenChange }: Ed
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="status">Site Status</Label>
+              <Select
+                value={formData.status}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, status: value as 'live' | 'dead' })
+                }
+              >
+                <SelectTrigger id="status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="live">Live</SelectItem>
+                  <SelectItem value="dead">Dead</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Dead sites are paused and will not generate any new tasks.
+              </p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="reporting_email">Reporting Email Addresses</Label>

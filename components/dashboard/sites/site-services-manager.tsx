@@ -35,19 +35,23 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Plus, Trash2, Wrench, Loader2, Calendar as CalendarIcon, Edit2, Clock } from 'lucide-react'
+import { Plus, Trash2, Wrench, Loader2, Calendar as CalendarIcon, Edit2, Clock, X, MapPin, User } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
-import type { ServiceType, SiteService, Profile, Task } from '@/lib/types/database'
+import type { ServiceType, SiteService, Profile, Task, Route } from '@/lib/types/database'
+
+const NONE_VALUE = '__none__'
 
 interface SiteServicesManagerProps {
   siteId: string
   siteServices: (SiteService & { service_type: ServiceType })[]
   availableServiceTypes: ServiceType[]
   engineers?: Profile[]
+  routes?: Route[]
   tasks?: Task[]
+  siteStatus?: 'live' | 'dead'
 }
 
 export function SiteServicesManager({
@@ -55,28 +59,40 @@ export function SiteServicesManager({
   siteServices,
   availableServiceTypes,
   engineers = [],
+  routes = [],
   tasks = [],
+  siteStatus = 'live',
 }: SiteServicesManagerProps) {
   const [selectedServiceTypes, setSelectedServiceTypes] = useState<string[]>([])
   const [addServicesOpen, setAddServicesOpen] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+
+  // Edit service state
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editFrequencyValue, setEditFrequencyValue] = useState<number>(12)
   const [editFrequencyUnit, setEditFrequencyUnit] = useState<'weeks' | 'months'>('months')
   const [editToleranceDays, setEditToleranceDays] = useState<number>(7)
-  const [adding, setAdding] = useState(false)
-  const [deleteId, setDeleteId] = useState<string | null>(null)
-  
-  // Task scheduling state
+  const [editRouteId, setEditRouteId] = useState<string>(NONE_VALUE)
+  const [editEngineerId, setEditEngineerId] = useState<string>(NONE_VALUE)
+  const [editNextServiceDate, setEditNextServiceDate] = useState<Date | undefined>(undefined)
+  const [editReportingEmails, setEditReportingEmails] = useState<string[]>([])
+  const [newEmail, setNewEmail] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
+
+  // One-off task scheduling state
   const [scheduleServiceId, setScheduleServiceId] = useState<string | null>(null)
   const [scheduleDate, setScheduleDate] = useState<Date>(new Date())
   const [scheduleEngineerId, setScheduleEngineerId] = useState<string>('')
   const [scheduling, setScheduling] = useState(false)
-  
+
   const router = useRouter()
   const supabase = createClient()
 
+  const isDead = siteStatus === 'dead'
+
   const handleToggleService = (serviceTypeId: string) => {
-    setSelectedServiceTypes(prev => 
+    setSelectedServiceTypes(prev =>
       prev.includes(serviceTypeId)
         ? prev.filter(id => id !== serviceTypeId)
         : [...prev, serviceTypeId]
@@ -105,23 +121,56 @@ export function SiteServicesManager({
     router.refresh()
   }
 
-  const handleEditFrequency = async (serviceId: string) => {
+  const openEditDialog = (ss: SiteService & { service_type: ServiceType }) => {
+    setEditingId(ss.id)
+    setEditFrequencyValue(ss.frequency_value)
+    setEditFrequencyUnit(ss.frequency_unit)
+    setEditToleranceDays(ss.deadline_tolerance_days)
+    setEditRouteId(ss.route_id || NONE_VALUE)
+    setEditEngineerId(ss.assigned_engineer_id || NONE_VALUE)
+    setEditNextServiceDate(ss.next_service_date ? new Date(ss.next_service_date) : undefined)
+    setEditReportingEmails(Array.isArray(ss.reporting_emails) ? ss.reporting_emails : [])
+    setNewEmail('')
+  }
+
+  const handleAddEmail = () => {
+    const email = newEmail.trim()
+    if (email && !editReportingEmails.includes(email)) {
+      setEditReportingEmails([...editReportingEmails, email])
+      setNewEmail('')
+    }
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editingId) return
+    setSavingEdit(true)
+
+    // A service may be assigned to a route, OR directly to an engineer with no route.
+    const routeId = editRouteId === NONE_VALUE ? null : editRouteId
+    const engineerId = editEngineerId === NONE_VALUE ? null : editEngineerId
+
     await supabase
       .from('site_services')
       .update({
         frequency_value: editFrequencyValue,
         frequency_unit: editFrequencyUnit,
         deadline_tolerance_days: editToleranceDays,
+        route_id: routeId,
+        assigned_engineer_id: engineerId,
+        next_service_date: editNextServiceDate
+          ? format(editNextServiceDate, 'yyyy-MM-dd')
+          : null,
+        reporting_emails: editReportingEmails,
       })
-      .eq('id', serviceId)
+      .eq('id', editingId)
 
+    setSavingEdit(false)
     setEditingId(null)
     router.refresh()
   }
 
   const handleDeleteService = async () => {
     if (!deleteId) return
-
     await supabase.from('site_services').delete().eq('id', deleteId)
     setDeleteId(null)
     router.refresh()
@@ -145,7 +194,6 @@ export function SiteServicesManager({
     router.refresh()
   }
 
-  // Get pending tasks count for each service
   const getServiceTaskCount = (serviceId: string) => {
     return tasks.filter(t => t.site_service_id === serviceId && t.status === 'pending').length
   }
@@ -173,6 +221,11 @@ export function SiteServicesManager({
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {isDead && (
+            <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">
+              This site is marked Dead. No new tasks will be generated until it is set back to Live.
+            </p>
+          )}
           {siteServices.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">
               No services configured for this site
@@ -181,12 +234,15 @@ export function SiteServicesManager({
             <div className="space-y-3">
               {siteServices.map((ss) => {
                 const pendingTasks = getServiceTaskCount(ss.id)
+                const route = ss.route
+                const engineer = ss.assigned_engineer
+                const serviceEmails = Array.isArray(ss.reporting_emails) ? ss.reporting_emails : []
                 return (
                   <div
                     key={ss.id}
-                    className="flex items-center justify-between p-3 border rounded-lg"
+                    className="flex items-start justify-between p-3 border rounded-lg gap-2"
                   >
-                    <div className="flex-1">
+                    <div className="flex-1 space-y-1">
                       <div className="flex items-center gap-2">
                         <p className="font-medium">{ss.service_type?.name}</p>
                         {pendingTasks > 0 && (
@@ -195,10 +251,19 @@ export function SiteServicesManager({
                           </Badge>
                         )}
                       </div>
-                      <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
                         <span>Every {ss.frequency_value} {ss.frequency_unit}</span>
                         <span>•</span>
                         <span>Tolerance: {ss.deadline_tolerance_days} days</span>
+                        {ss.next_service_date && (
+                          <>
+                            <span>•</span>
+                            <span className="flex items-center gap-1">
+                              <CalendarIcon className="h-3 w-3" />
+                              Next: {formatDateUK(ss.next_service_date)}
+                            </span>
+                          </>
+                        )}
                         {ss.last_service_date && (
                           <>
                             <span>•</span>
@@ -209,32 +274,50 @@ export function SiteServicesManager({
                           </>
                         )}
                       </div>
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                        {route ? (
+                          <Badge variant="outline" className="gap-1 text-xs font-normal">
+                            <MapPin className="h-3 w-3" />
+                            {route.name}
+                          </Badge>
+                        ) : engineer ? (
+                          <Badge variant="outline" className="gap-1 text-xs font-normal">
+                            <User className="h-3 w-3" />
+                            {engineer.full_name || engineer.email}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
+                            Unassigned
+                          </Badge>
+                        )}
+                        {serviceEmails.length > 0 && (
+                          <Badge variant="outline" className="text-xs font-normal">
+                            {serviceEmails.length} report email{serviceEmails.length !== 1 ? 's' : ''}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 shrink-0">
                       <Button
                         variant="ghost"
                         size="icon"
+                        disabled={isDead}
                         onClick={() => {
                           setScheduleServiceId(ss.id)
                           setScheduleDate(new Date())
-                          setScheduleEngineerId('')
+                          setScheduleEngineerId(ss.assigned_engineer_id || '')
                         }}
                         className="text-primary hover:text-primary"
-                        title="Schedule Task"
+                        title={isDead ? 'Site is dead — scheduling disabled' : 'Schedule Task'}
                       >
                         <Clock className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => {
-                          setEditingId(ss.id)
-                          setEditFrequencyValue(ss.frequency_value)
-                          setEditFrequencyUnit(ss.frequency_unit)
-                          setEditToleranceDays(ss.deadline_tolerance_days)
-                        }}
+                        onClick={() => openEditDialog(ss)}
                         className="text-muted-foreground hover:text-foreground"
-                        title="Edit Frequency"
+                        title="Edit Service"
                       >
                         <Edit2 className="h-4 w-4" />
                       </Button>
@@ -277,8 +360,8 @@ export function SiteServicesManager({
                 key={st.id}
                 className={cn(
                   "flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors",
-                  selectedServiceTypes.includes(st.id) 
-                    ? "border-primary bg-primary/5" 
+                  selectedServiceTypes.includes(st.id)
+                    ? "border-primary bg-primary/5"
                     : "hover:bg-muted/50"
                 )}
                 onClick={() => handleToggleService(st.id)}
@@ -310,8 +393,8 @@ export function SiteServicesManager({
             }}>
               Cancel
             </Button>
-            <Button 
-              onClick={handleAddServices} 
+            <Button
+              onClick={handleAddServices}
               disabled={selectedServiceTypes.length === 0 || adding}
             >
               {adding ? (
@@ -330,7 +413,7 @@ export function SiteServicesManager({
         </DialogContent>
       </Dialog>
 
-      {/* Schedule Task Dialog */}
+      {/* Schedule One-off Task Dialog */}
       <Dialog open={!!scheduleServiceId} onOpenChange={() => setScheduleServiceId(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -427,15 +510,15 @@ export function SiteServicesManager({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Edit Frequency and Tolerance Dialog */}
-      <AlertDialog open={!!editingId} onOpenChange={() => setEditingId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Edit Service Details</AlertDialogTitle>
-            <AlertDialogDescription>
-              Update frequency and deadline tolerance for this service
-            </AlertDialogDescription>
-          </AlertDialogHeader>
+      {/* Edit Service Dialog */}
+      <Dialog open={!!editingId} onOpenChange={(open) => !open && setEditingId(null)}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Service</DialogTitle>
+            <DialogDescription>
+              Configure the recurring schedule, assignment and client report emails for this service.
+            </DialogDescription>
+          </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
@@ -464,6 +547,7 @@ export function SiteServicesManager({
                 </Select>
               </div>
             </div>
+
             <div className="grid gap-2">
               <Label htmlFor="tolerance-days">Deadline Tolerance (days)</Label>
               <Input
@@ -478,17 +562,147 @@ export function SiteServicesManager({
                 How many days after the due date before this service is considered overdue
               </p>
             </div>
+
+            <div className="grid gap-2">
+              <Label>Next Service Date</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      'w-full justify-start text-left font-normal',
+                      !editNextServiceDate && 'text-muted-foreground'
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {editNextServiceDate ? format(editNextServiceDate, 'PPP') : <span>Not scheduled</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={editNextServiceDate}
+                    onSelect={setEditNextServiceDate}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              <p className="text-xs text-muted-foreground">
+                The date the next recurring service is due for this system.
+              </p>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Route</Label>
+              <Select
+                value={editRouteId}
+                onValueChange={(value) => {
+                  setEditRouteId(value)
+                  // Assigning to a route clears the direct engineer assignment
+                  if (value !== NONE_VALUE) setEditEngineerId(NONE_VALUE)
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="No route" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE_VALUE}>No route</SelectItem>
+                  {routes.map((route) => (
+                    <SelectItem key={route.id} value={route.id}>
+                      {route.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Engineer (no route)</Label>
+              <Select
+                value={editEngineerId}
+                onValueChange={(value) => {
+                  setEditEngineerId(value)
+                  // Assigning directly to an engineer clears the route
+                  if (value !== NONE_VALUE) setEditRouteId(NONE_VALUE)
+                }}
+                disabled={editRouteId !== NONE_VALUE}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="No engineer" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE_VALUE}>No engineer</SelectItem>
+                  {engineers.map((engineer) => (
+                    <SelectItem key={engineer.id} value={engineer.id}>
+                      {engineer.full_name || engineer.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Assign this service to a route, or directly to an engineer with no route.
+              </p>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="service-email">Client Report Emails (this service)</Label>
+              <p className="text-xs text-muted-foreground">
+                If set, reports for this service are sent to these addresses instead of the
+                site-level reporting emails.
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  id="service-email"
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder="report@example.com"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      handleAddEmail()
+                    }
+                  }}
+                />
+                <Button type="button" variant="outline" onClick={handleAddEmail}>
+                  Add
+                </Button>
+              </div>
+              {editReportingEmails.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {editReportingEmails.map((email) => (
+                    <Badge key={email} variant="secondary" className="gap-1">
+                      {email}
+                      <button
+                        type="button"
+                        onClick={() => setEditReportingEmails(editReportingEmails.filter((e) => e !== email))}
+                        className="ml-1 hover:text-destructive"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => editingId && handleEditFrequency(editingId)}
-            >
-              Save Changes
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingId(null)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={savingEdit}>
+              {savingEdit ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save Changes'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

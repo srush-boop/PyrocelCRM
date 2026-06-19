@@ -61,7 +61,7 @@ export interface Route {
   assigned_engineer_id: string | null
   created_at: string
   updated_at: string
-  assigned_engineer?: Profile
+  assigned_engineer?: Profile | null
 }
 
 export interface Site {
@@ -93,9 +93,14 @@ export interface SiteService {
   last_service_date: string | null
   next_service_date: string | null
   deadline_tolerance_days: number
+  route_id: string | null
+  assigned_engineer_id: string | null
+  reporting_emails: string[]
   created_at: string
   site?: Site
   service_type?: ServiceType
+  route?: Route
+  assigned_engineer?: Profile
 }
 
 export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled'
@@ -112,7 +117,7 @@ export interface Task {
   created_at: string
   updated_at: string
   site_service?: SiteService
-  assigned_engineer?: Profile
+  assigned_engineer?: Profile | null
 }
 
 export interface ChecklistResult {

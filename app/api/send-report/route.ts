@@ -1,14 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateUK } from '@/lib/utils'
+import { sendEmail } from '@/lib/email/send-email'
+import {
+  generateClientPassEmail,
+  generateClientFailEmail,
+  generateInternalAlertEmail,
+  EmailData,
+} from '@/lib/email/templates'
 
-// This API route handles sending completion reports
-// In production, integrate with an email service like Resend, SendGrid, etc.
+// This API route handles sending completion reports via Resend.
+// Requires RESEND_API_KEY (and optionally RESEND_FROM_EMAIL) to be set.
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
-    
+
     // Verify authentication
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
@@ -55,91 +62,96 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Task result not found' }, { status: 404 })
     }
 
-    const site = task.site_service?.site
-    const serviceType = task.site_service?.service_type
+    const siteService = task.site_service
+    const site = siteService?.site
+    const serviceType = siteService?.service_type
     const engineer = task.assigned_engineer
-    const overallStatus = taskResult.overall_status
+    const overallStatus = taskResult.overall_status as 'pass' | 'fail' | 'partial'
 
-    // Generate email content
-    const emailSubject = overallStatus === 'pass'
-      ? `Service Completed: ${serviceType?.name} at ${site?.name}`
-      : `Service Alert: Issues Found at ${site?.name}`
-
-    const failedItems = (taskResult.checklist_results || [])
-      .filter((r: { passed: boolean | null }) => r.passed === false)
-      .map((r: { label: string; notes?: string }) => `- ${r.label}${r.notes ? `: ${r.notes}` : ''}`)
-      .join('\n')
-
-    const emailBody = overallStatus === 'pass'
-      ? `
-Dear ${site?.contact_name || 'Client'},
-
-We are pleased to confirm that the ${serviceType?.name} service at ${site?.name} has been completed successfully.
-
-Service Details:
-- Service Type: ${serviceType?.name}
-- Date Completed: ${formatDateUK(task.completed_at || '')}
-- Engineer: ${engineer?.full_name || engineer?.email}
-- Result: All checks passed
-
-${taskResult.engineer_notes ? `Engineer Notes:\n${taskResult.engineer_notes}\n` : ''}
-
-Thank you for choosing our services.
-
-Best regards,
-Pyrocel Fire & Safety
-      `.trim()
-      : `
-INTERNAL ALERT: Service Issues Detected
-
-Site: ${site?.name}
-Address: ${site?.address}
-Service: ${serviceType?.name}
-Date: ${formatDateUK(task.completed_at || '')}
-Engineer: ${engineer?.full_name || engineer?.email}
-Status: ${overallStatus.toUpperCase()}
-
-Issues Found:
-${failedItems || 'See detailed checklist results'}
-
-${taskResult.engineer_notes ? `Engineer Notes:\n${taskResult.engineer_notes}\n` : ''}
-
-Client Contact:
-- Name: ${site?.contact_name || 'N/A'}
-- Email: ${site?.contact_email || 'N/A'}
-- Phone: ${site?.contact_phone || 'N/A'}
-
-Please review and take appropriate action.
-      `.trim()
-
-    // Determine recipients
-    // If custom emails provided (resend scenario), use those
-    // Otherwise, use site's reporting emails or fall back to contact email
+    // Determine recipients.
+    // Priority: explicit resend emails > per-service reporting emails (override) >
+    // site-level reporting emails > site contact email.
     let recipients: string[] = []
-    
+
+    const serviceEmails = Array.isArray(siteService?.reporting_emails)
+      ? (siteService.reporting_emails as string[])
+      : []
+    const siteEmails = Array.isArray(site?.reporting_emails)
+      ? (site.reporting_emails as string[])
+      : []
+
     if (customEmails && customEmails.length > 0) {
       recipients = customEmails
-    } else if (site?.reporting_emails && Array.isArray(site.reporting_emails) && site.reporting_emails.length > 0) {
-      recipients = site.reporting_emails
+    } else if (serviceEmails.length > 0) {
+      // System-specific client emails override the site-level emails
+      recipients = serviceEmails
+    } else if (siteEmails.length > 0) {
+      recipients = siteEmails
     } else if (site?.contact_email) {
       recipients = [site.contact_email]
     }
 
-    // For failed tests, also send to internal email
-    const internalEmail = process.env.INTERNAL_REPORT_EMAIL || 'office@pyrocel.com'
-    const allRecipients = overallStatus === 'pass' 
-      ? recipients 
-      : [...recipients, internalEmail]
+    // Build the shared email data for the templates
+    const emailData: EmailData = {
+      clientName: site?.contact_name || 'Client',
+      clientEmail: recipients[0] || site?.contact_email || '',
+      siteName: site?.name || 'Site',
+      serviceType: serviceType?.name || 'Service',
+      completedDate: formatDateUK(task.completed_at || new Date().toISOString()),
+      overallStatus,
+      checklist: (taskResult.checklist_results || []).map(
+        (r: { label: string; passed: boolean | null; notes?: string }) => ({
+          id: r.label,
+          label: r.label,
+          passed: r.passed === true,
+          notes: r.notes,
+        })
+      ),
+      engineerName: engineer?.full_name || engineer?.email || 'Engineer',
+      engineerNotes: taskResult.engineer_notes || undefined,
+    }
 
-    // In production, send actual email here using Resend, SendGrid, etc.
-    // For now, log the email content and mark as sent
-    console.log('=== EMAIL REPORT ===')
-    console.log('To:', allRecipients.join(', '))
-    console.log('Subject:', emailSubject)
-    console.log('Body:', emailBody)
-    console.log('===================')
+    if (recipients.length === 0) {
+      return NextResponse.json(
+        { error: 'No recipient email addresses configured for this site or service.' },
+        { status: 400 }
+      )
+    }
 
-    // Update task_result to mark email as sent (only if not a resend to preserve original send time)
+    // Pick the right client-facing template based on result
+    const { subject, html } =
+      overallStatus === 'pass'
+        ? generateClientPassEmail(emailData)
+        : generateClientFailEmail(emailData)
+
+    // Send to every client recipient
+    const results = await Promise.all(
+      recipients.map((to) => sendEmail(to, subject, html))
+    )
+
+    const failed = results.filter((r) => !r.success)
+    if (failed.length > 0) {
+      const firstError = failed[0]?.error || 'Unknown error'
+      return NextResponse.json(
+        { error: `Failed to send report: ${firstError}` },
+        { status: 502 }
+      )
+    }
+
+    // For failed/partial inspections, also notify internal staff
+    if (overallStatus !== 'pass') {
+      const internalEmails =
+        process.env.INTERNAL_ALERT_EMAILS?.split(',').map((e) => e.trim()).filter(Boolean) ||
+        []
+      if (internalEmails.length > 0) {
+        const internal = generateInternalAlertEmail(emailData)
+        await Promise.all(
+          internalEmails.map((to) => sendEmail(to, internal.subject, internal.html))
+        )
+      }
+    }
+
+    // Mark email as sent (preserve original send time on resend)
     if (!resend) {
       await supabase
         .from('task_results')
@@ -150,10 +162,10 @@ Please review and take appropriate action.
     return NextResponse.json({
       success: true,
       message: 'Report sent successfully',
-      recipients: allRecipients,
+      recipients,
     })
   } catch (error) {
-    console.error('Error sending report:', error)
+    console.error('[v0] Error sending report:', error)
     return NextResponse.json(
       { error: 'Failed to send report' },
       { status: 500 }

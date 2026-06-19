@@ -43,12 +43,14 @@ export default async function SiteDetailPage({ params }: PageProps) {
     notFound()
   }
 
-  const [siteServicesResult, serviceTypesResult, engineersResult] = await Promise.all([
+  const [siteServicesResult, serviceTypesResult, engineersResult, routesResult] = await Promise.all([
     supabase
       .from('site_services')
       .select(`
         *,
-        service_type:service_types(*)
+        service_type:service_types(*),
+        route:routes(*),
+        assigned_engineer:profiles(*)
       `)
       .eq('site_id', id),
     supabase.from('service_types').select('*').order('name'),
@@ -57,11 +59,13 @@ export default async function SiteDetailPage({ params }: PageProps) {
       .select('*')
       .eq('role', 'engineer')
       .order('full_name'),
+    supabase.from('routes').select('*').order('name'),
   ])
 
   const siteServices = (siteServicesResult.data || []) as (SiteService & { service_type: ServiceType })[]
   const serviceTypes = (serviceTypesResult.data || []) as ServiceType[]
   const engineers = (engineersResult.data || []) as Profile[]
+  const routes = (routesResult.data || []) as Route[]
 
   // Get tasks for this site's services
   const siteServiceIds = siteServices.map(ss => ss.id)
@@ -113,6 +117,9 @@ export default async function SiteDetailPage({ params }: PageProps) {
         </Button>
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
+            <Badge variant={(site as Site).status === 'dead' ? 'destructive' : 'default'}>
+              {(site as Site).status === 'dead' ? 'Dead' : 'Live'}
+            </Badge>
             {(site as Site & { route: Route | null }).route && (
               <Badge variant="secondary">
                 {(site as Site & { route: Route | null }).route?.name}
@@ -180,7 +187,9 @@ export default async function SiteDetailPage({ params }: PageProps) {
           siteServices={siteServices}
           availableServiceTypes={availableServiceTypes}
           engineers={engineers}
+          routes={routes}
           tasks={tasks}
+          siteStatus={(site as Site).status}
         />
       </div>
 

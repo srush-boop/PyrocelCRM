@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Flame, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -42,12 +42,13 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-primary">
-            <Flame className="h-8 w-8 text-primary-foreground" />
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-xl border bg-white p-1.5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/images/pyrocel-logo.png" alt="Pyrocel logo" className="h-full w-full object-contain" />
           </div>
-          <CardTitle className="text-2xl font-bold">PyrocelCRM</CardTitle>
+          <CardTitle className="text-2xl font-bold">Pyrocel Fire &amp; Security</CardTitle>
           <CardDescription>
-            Fire & Emergency Lighting Testing Management
+            Service &amp; Compliance Management
           </CardDescription>
         </CardHeader>
         <CardContent>

@@ -15,7 +15,6 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
 import {
-  Flame,
   LayoutDashboard,
   Building2,
   Building,
@@ -75,11 +74,16 @@ export function DashboardSidebar({ profile }: DashboardSidebarProps) {
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border px-6 py-4">
         <Link href="/dashboard" className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary">
-            <Flame className="h-5 w-5 text-sidebar-primary-foreground" />
+          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-white">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/images/pyrocel-logo.png"
+              alt="Pyrocel logo"
+              className="h-9 w-9 object-contain"
+            />
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-semibold text-sidebar-foreground">PyrocelCRM</span>
+            <span className="text-sm font-semibold text-sidebar-foreground">Pyrocel</span>
             <span className="text-xs text-sidebar-foreground/60 capitalize">{profile.role}</span>
           </div>
         </Link>

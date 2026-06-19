@@ -15,7 +15,7 @@ import {
   Legend,
 } from 'recharts'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Printer, Flame, CheckCircle2, XCircle, AlertTriangle, MinusCircle } from 'lucide-react'
+import { ArrowLeft, Printer, CheckCircle2, XCircle, AlertTriangle, MinusCircle } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { RESULT_COLORS, RESULT_LABELS, PHOTO_CATEGORIES, emptyPhotoCategories } from '@/lib/dampers'
 import { CHECK_ITEMS } from './damper-inspection-card'
@@ -31,8 +31,8 @@ export function DamperReport({ task, inspections, template }: DamperReportProps)
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
   const engineer = task.assigned_engineer
-  const headerColor = template?.header_color || '#dc2626'
-  const companyName = template?.company_name || 'PyrocelCRM Ltd'
+  const headerColor = template?.header_color || '#c8102e'
+  const companyName = template?.company_name || 'Pyrocel Fire & Security'
   const sections = template?.sections || {}
 
   const stats = useMemo(() => {
@@ -118,8 +118,14 @@ export function DamperReport({ task, inspections, template }: DamperReportProps)
           style={{ backgroundColor: headerColor }}
         >
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-white/20">
-              <Flame className="h-6 w-6" />
+            <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg bg-white p-1">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/images/pyrocel-logo.png"
+                alt="Pyrocel logo"
+                crossOrigin="anonymous"
+                className="h-full w-full object-contain"
+              />
             </div>
             <div>
               <p className="text-lg font-bold leading-tight">{companyName}</p>

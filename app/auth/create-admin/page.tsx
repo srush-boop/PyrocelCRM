@@ -14,7 +14,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Flame, Loader2, ShieldCheck } from 'lucide-react'
+import { Loader2, ShieldCheck } from 'lucide-react'
 
 export default function CreateAdminPage() {
   const [fullName, setFullName] = useState('')
@@ -68,13 +68,14 @@ export default function CreateAdminPage() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12">
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="text-center space-y-3">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-primary">
-            <Flame className="h-8 w-8 text-primary-foreground" />
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-xl border bg-white p-1.5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/images/pyrocel-logo.png" alt="Pyrocel logo" className="h-full w-full object-contain" />
           </div>
           <div>
             <CardTitle className="text-2xl font-bold">Create Administrator</CardTitle>
             <CardDescription className="mt-1">
-              Set up the first admin account for PyrocelCRM
+              Set up the first admin account for Pyrocel Fire &amp; Security
             </CardDescription>
           </div>
           <div className="flex items-center justify-center gap-2 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">

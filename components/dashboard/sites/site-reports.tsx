@@ -376,13 +376,11 @@ export function SiteReports({ siteName, siteAddress, completedTasks, reportingEm
                           </Link>
                         </Button>
                       ) : (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setViewingTask(task)}
-                        >
-                          <Eye className="h-4 w-4 mr-1" />
-                          View
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link href={`/dashboard/reports/${task.id}`} target="_blank">
+                            <Eye className="h-4 w-4 mr-1" />
+                            View
+                          </Link>
                         </Button>
                       )}
                       <Button

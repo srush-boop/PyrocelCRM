@@ -260,10 +260,16 @@ export function SiteServicesManager({
                 return (
                   <div
                     key={ss.id}
-                    className="flex items-start justify-between p-3 border rounded-lg gap-2"
+                    className="flex items-start justify-between p-3 border rounded-lg gap-2 border-l-4"
+                    style={{ borderLeftColor: ss.service_type?.color || 'var(--border)' }}
                   >
                     <div className="flex-1 space-y-1">
                       <div className="flex items-center gap-2">
+                        <span
+                          className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: ss.service_type?.color || 'var(--muted-foreground)' }}
+                          aria-hidden="true"
+                        />
                         <p className="font-medium">{ss.service_type?.name}</p>
                         {pendingTasks > 0 && (
                           <Badge variant="secondary" className="text-xs">

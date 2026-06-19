@@ -34,6 +34,8 @@ export interface ServiceType {
   default_frequency_value: number
   default_frequency_unit: 'weeks' | 'months'
   default_deadline_tolerance_days: number
+  color?: string | null
+  icon?: string | null
   created_at: string
 }
 

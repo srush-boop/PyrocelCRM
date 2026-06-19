@@ -184,6 +184,22 @@ export function SiteServicesManager({
       })
       .eq('id', editingId)
 
+    // Resolve the effective engineer for this service: a directly-assigned
+    // engineer takes priority, otherwise fall back to the assigned route's
+    // engineer. Propagate it to existing pending tasks so the engineer can
+    // actually see their assigned work (engineers query tasks by
+    // assigned_engineer_id, which is null on auto-generated tasks).
+    const routeEngineerId = routeId
+      ? routes.find((r) => r.id === routeId)?.assigned_engineer_id ?? null
+      : null
+    const effectiveEngineerId = engineerId ?? routeEngineerId
+
+    await supabase
+      .from('tasks')
+      .update({ assigned_engineer_id: effectiveEngineerId })
+      .eq('site_service_id', editingId)
+      .eq('status', 'pending')
+
     setSavingEdit(false)
     setEditingId(null)
     router.refresh()

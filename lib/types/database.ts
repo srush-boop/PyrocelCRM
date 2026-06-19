@@ -66,6 +66,8 @@ export interface Route {
   assigned_engineer?: Profile | null
 }
 
+export type RemoteMonitoringType = 'fire' | 'fire_and_fault' | 'fault'
+
 export interface Site {
   id: string
   name: string
@@ -79,6 +81,9 @@ export interface Site {
   status: 'live' | 'dead'
   notes: string | null
   reporting_emails: string[]
+  has_remote_monitoring: boolean
+  remote_monitoring_type: RemoteMonitoringType | null
+  route_position: number | null
   created_at: string
   updated_at: string
   route?: Route
@@ -241,4 +246,48 @@ export interface SiteWithServices extends Site {
 export interface RouteWithSites extends Route {
   sites: Site[]
   assigned_engineer: Profile | null
+}
+
+// Editable, shared damper size/shape options
+export interface DamperSizeOption {
+  id: string
+  label: string
+  created_by: string | null
+  created_at: string
+}
+
+// Manual Call Point (MCP) types — fire alarm asset register
+
+export type McpResult = 'pass' | 'fail' | 'remedial' | 'na'
+
+export interface Mcp {
+  id: string
+  site_id: string
+  urn: string | null
+  map_reference: string | null
+  location: string | null
+  floor: string | null
+  test_key_type: string | null
+  notes: string | null
+  photos: string[]
+  created_at: string
+  updated_at: string
+  site?: Site
+  inspections?: McpInspection[]
+  latest_result?: McpResult | null
+  last_inspected_date?: string | null
+}
+
+export interface McpInspection {
+  id: string
+  mcp_id: string
+  task_id: string | null
+  inspector_id: string | null
+  inspection_date: string
+  result: McpResult
+  comments: string | null
+  photos: string[]
+  created_at: string
+  mcp?: Mcp
+  inspector?: Profile | null
 }

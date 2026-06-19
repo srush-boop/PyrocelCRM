@@ -4,11 +4,12 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { ArrowLeft, MapPin, Phone, Mail, Building2 } from 'lucide-react'
+import { ArrowLeft, MapPin, Phone, Mail, Building2, Radio } from 'lucide-react'
 import { SiteServicesManager } from '@/components/dashboard/sites/site-services-manager'
 import { SiteReports } from '@/components/dashboard/sites/site-reports'
 import { DamperRegister } from '@/components/dashboard/dampers/damper-register'
 import { isDamperService } from '@/lib/dampers'
+import { REMOTE_MONITORING_LABELS } from '@/lib/sites'
 import type { Profile, Site, Route, ServiceType, SiteService, Task, TaskResult, Damper } from '@/lib/types/database'
 
 interface PageProps {
@@ -185,6 +186,17 @@ export default async function SiteDetailPage({ params }: PageProps) {
                 </div>
               </div>
             )}
+            <div className="flex items-center gap-2 text-sm pt-2 border-t">
+              <Radio className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="text-muted-foreground">Remote Monitoring: </span>
+              {(site as Site).has_remote_monitoring ? (
+                <Badge variant="secondary" className="text-xs">
+                  {REMOTE_MONITORING_LABELS[(site as Site).remote_monitoring_type ?? 'fire']}
+                </Badge>
+              ) : (
+                <span>None</span>
+              )}
+            </div>
             {site.notes && (
               <div className="text-sm pt-2 border-t">
                 <span className="text-muted-foreground">Notes: </span>

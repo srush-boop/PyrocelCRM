@@ -51,6 +51,7 @@ import {
 import { Plus, Wind, Loader2, QrCode, Printer, MoreHorizontal, Pencil, Trash2, ExternalLink } from 'lucide-react'
 import { ImportDampersDialog } from './import-dampers-dialog'
 import { ScanQrButton } from './scan-qr-button'
+import { SizeCombobox } from './size-combobox'
 import { DAMPER_TYPE_LABELS, generateUrn } from '@/lib/dampers'
 import type { Damper, DamperType, DamperResult } from '@/lib/types/database'
 
@@ -332,12 +333,12 @@ export function DamperRegister({ siteId, siteName, dampers }: DamperRegisterProp
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="size">Size (mm)</Label>
-              <Input
+              <Label htmlFor="size">Size / Shape</Label>
+              <SizeCombobox
                 id="size"
                 value={form.size_mm}
-                onChange={(e) => setForm({ ...form, size_mm: e.target.value })}
-                placeholder="e.g. 300x300"
+                onChange={(v) => setForm({ ...form, size_mm: v })}
+                placeholder="e.g. 300x300 Rectangular"
               />
             </div>
             <div className="grid gap-2 sm:col-span-2">

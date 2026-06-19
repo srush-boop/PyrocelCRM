@@ -30,9 +30,9 @@ import {
   X,
   CircleDashed,
 } from 'lucide-react'
-import { DAMPER_TYPE_LABELS } from '@/lib/dampers'
+import { DAMPER_TYPE_LABELS, PHOTO_CATEGORIES } from '@/lib/dampers'
 import { cn } from '@/lib/utils'
-import type { Damper, DamperResult, DamperCondition } from '@/lib/types/database'
+import type { Damper, DamperResult, DamperCondition, DamperPhotoCategory } from '@/lib/types/database'
 
 export interface InspectionState {
   accessible: boolean
@@ -48,7 +48,7 @@ export interface InspectionState {
   overall_result: DamperResult
   remedial_action: string
   comments: string
-  photos: string[]
+  photos: Record<DamperPhotoCategory, string[]>
   touched: boolean
 }
 
@@ -76,17 +76,17 @@ export function DamperInspectionCard({
   onChange,
 }: DamperInspectionCardProps) {
   const [open, setOpen] = useState(false)
-  const [uploading, setUploading] = useState(false)
+  const [uploading, setUploading] = useState<DamperPhotoCategory | null>(null)
   const supabase = createClient()
 
   const set = (patch: Partial<InspectionState>) => onChange({ ...state, ...patch, touched: true })
 
-  const handlePhotos = async (files: FileList | null) => {
+  const handlePhotos = async (category: DamperPhotoCategory, files: FileList | null) => {
     if (!files || files.length === 0) return
-    setUploading(true)
+    setUploading(category)
     const urls: string[] = []
     for (const file of Array.from(files)) {
-      const path = `${damper.id}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`
+      const path = `${damper.id}/${category}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`
       const { error } = await supabase.storage.from('damper-photos').upload(path, file, {
         upsert: false,
       })
@@ -97,8 +97,14 @@ export function DamperInspectionCard({
       const { data } = supabase.storage.from('damper-photos').getPublicUrl(path)
       urls.push(data.publicUrl)
     }
-    setUploading(false)
-    set({ photos: [...state.photos, ...urls] })
+    setUploading(null)
+    const current = state.photos[category] ?? []
+    set({ photos: { ...state.photos, [category]: [...current, ...urls] } })
+  }
+
+  const removePhoto = (category: DamperPhotoCategory, url: string) => {
+    const current = state.photos[category] ?? []
+    set({ photos: { ...state.photos, [category]: current.filter((p) => p !== url) } })
   }
 
   const statusBadge = () => {
@@ -288,48 +294,59 @@ export function DamperInspectionCard({
           />
         </div>
 
-        {/* Photos */}
-        <div className="grid gap-2">
-          <Label>Photos</Label>
-          <div className="flex flex-wrap gap-2">
-            {state.photos.map((url) => (
-              <div key={url} className="relative h-20 w-20 overflow-hidden rounded-md border">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url || '/placeholder.svg'} alt="Damper inspection" className="h-full w-full object-cover" />
-                {!disabled && (
-                  <button
-                    type="button"
-                    onClick={() => set({ photos: state.photos.filter((p) => p !== url) })}
-                    className="absolute right-0.5 top-0.5 rounded-full bg-background/80 p-0.5"
-                    aria-label="Remove photo"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                )}
+        {/* Photos by category */}
+        <div className="grid gap-4">
+          <Label className="text-sm font-semibold">Photos</Label>
+          {PHOTO_CATEGORIES.map((cat) => {
+            const urls = state.photos[cat.key] ?? []
+            return (
+              <div key={cat.key} className="grid gap-1.5">
+                <div>
+                  <p className="text-sm font-medium">{cat.label}</p>
+                  <p className="text-xs text-muted-foreground">{cat.hint}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {urls.map((url) => (
+                    <div key={url} className="relative h-20 w-20 overflow-hidden rounded-md border">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url || '/placeholder.svg'} alt={cat.label} className="h-full w-full object-cover" />
+                      {!disabled && (
+                        <button
+                          type="button"
+                          onClick={() => removePhoto(cat.key, url)}
+                          className="absolute right-0.5 top-0.5 rounded-full bg-background/80 p-0.5"
+                          aria-label="Remove photo"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {!disabled && (
+                    <label className="flex h-20 w-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed text-muted-foreground hover:bg-muted">
+                      {uploading === cat.key ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <>
+                          <Camera className="h-5 w-5" />
+                          <span className="text-[10px]">Add</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        multiple
+                        className="hidden"
+                        disabled={uploading !== null}
+                        onChange={(e) => handlePhotos(cat.key, e.target.files)}
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
-            ))}
-            {!disabled && (
-              <label className="flex h-20 w-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed text-muted-foreground hover:bg-muted">
-                {uploading ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <>
-                    <Camera className="h-5 w-5" />
-                    <span className="text-[10px]">Add</span>
-                  </>
-                )}
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  multiple
-                  className="hidden"
-                  disabled={uploading}
-                  onChange={(e) => handlePhotos(e.target.files)}
-                />
-              </label>
-            )}
-          </div>
+            )
+          })}
         </div>
       </CollapsibleContent>
     </Collapsible>

@@ -33,6 +33,7 @@ import {
   FileText,
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
+import { emptyPhotoCategories } from '@/lib/dampers'
 import { DamperInspectionCard, type InspectionState } from './damper-inspection-card'
 import { ScanQrButton } from './scan-qr-button'
 import type { Profile, TaskWithDetails, Damper, DamperInspection, DamperResult } from '@/lib/types/database'
@@ -59,7 +60,7 @@ function blankState(): InspectionState {
     overall_result: 'pass',
     remedial_action: '',
     comments: '',
-    photos: [],
+    photos: emptyPhotoCategories(),
     touched: false,
   }
 }
@@ -79,9 +80,25 @@ function stateFromInspection(insp: DamperInspection): InspectionState {
     overall_result: insp.overall_result,
     remedial_action: insp.remedial_action || '',
     comments: insp.comments || '',
-    photos: insp.photos || [],
+    photos: photosFromInspection(insp),
     touched: true,
   }
+}
+
+// Build the categorized photo map from a stored inspection, migrating any
+// legacy uncategorized photos into the "additional" bucket.
+function photosFromInspection(insp: DamperInspection): InspectionState['photos'] {
+  const base = emptyPhotoCategories()
+  const cats = insp.photo_categories
+  if (cats) {
+    for (const key of Object.keys(base) as (keyof typeof base)[]) {
+      if (Array.isArray(cats[key])) base[key] = cats[key]
+    }
+  }
+  const categorized = Object.values(base).flat()
+  const legacy = (insp.photos || []).filter((url) => !categorized.includes(url))
+  if (legacy.length > 0) base.additional = [...base.additional, ...legacy]
+  return base
 }
 
 export function DamperTaskExecution({
@@ -166,7 +183,8 @@ export function DamperTaskExecution({
           overall_result: s.overall_result,
           remedial_action: s.remedial_action || null,
           comments: s.comments || null,
-          photos: s.photos,
+          photo_categories: s.photos,
+          photos: Object.values(s.photos).flat(),
         }
       })
   }

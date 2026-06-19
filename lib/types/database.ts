@@ -154,6 +154,9 @@ export interface TaskResult {
 export type DamperType = 'fire' | 'smoke' | 'fire_smoke'
 export type DamperResult = 'pass' | 'fail' | 'remedial' | 'na'
 export type DamperCondition = 'good' | 'fair' | 'poor'
+export type DamperPhotoCategory = 'as_found' | 'when_tested' | 'fire_compartment' | 'additional'
+
+export type DamperPhotoCategories = Record<DamperPhotoCategory, string[]>
 
 export interface Damper {
   id: string
@@ -193,6 +196,7 @@ export interface DamperInspection {
   remedial_action: string | null
   comments: string | null
   photos: string[]
+  photo_categories: DamperPhotoCategories | null
   created_at: string
   damper?: Damper
   inspector?: Profile | null

@@ -17,7 +17,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, Printer, Flame, CheckCircle2, XCircle, AlertTriangle, MinusCircle } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
-import { RESULT_COLORS, RESULT_LABELS } from '@/lib/dampers'
+import { RESULT_COLORS, RESULT_LABELS, PHOTO_CATEGORIES, emptyPhotoCategories } from '@/lib/dampers'
 import { CHECK_ITEMS } from './damper-inspection-card'
 import type { TaskWithDetails, DamperInspection, Damper, ReportTemplate, DamperResult } from '@/lib/types/database'
 
@@ -67,8 +67,26 @@ export function DamperReport({ task, inspections, template }: DamperReportProps)
     (i) => i.overall_result === 'fail' || i.overall_result === 'remedial',
   )
 
-  const withPhotos = inspections.filter((i) => (i.photos?.length ?? 0) > 0)
-  const photoCount = withPhotos.reduce((sum, i) => sum + (i.photos?.length ?? 0), 0)
+  const photoGroups = useMemo(() => {
+    return inspections
+      .map((insp) => {
+        const cats = emptyPhotoCategories()
+        const stored = insp.photo_categories
+        if (stored) {
+          for (const key of Object.keys(cats) as (keyof typeof cats)[]) {
+            if (Array.isArray(stored[key])) cats[key] = stored[key]
+          }
+        }
+        const categorized = Object.values(cats).flat()
+        const legacy = (insp.photos || []).filter((url) => !categorized.includes(url))
+        if (legacy.length > 0) cats.additional = [...cats.additional, ...legacy]
+        const count = Object.values(cats).reduce((n, arr) => n + arr.length, 0)
+        return { insp, cats, count }
+      })
+      .filter((g) => g.count > 0)
+  }, [inspections])
+
+  const photoCount = photoGroups.reduce((sum, g) => sum + g.count, 0)
 
   useEffect(() => {
     const t = setTimeout(() => window.print(), 600)
@@ -265,15 +283,15 @@ export function DamperReport({ task, inspections, template }: DamperReportProps)
         </section>
 
         {/* Photographic evidence */}
-        {withPhotos.length > 0 && (
+        {photoGroups.length > 0 && (
           <section className="mb-8">
             <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
               Photographic Evidence ({photoCount})
             </h2>
-            <div className="space-y-5">
-              {withPhotos.map((insp) => (
-                <div key={insp.id} className="avoid-break">
-                  <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <div className="space-y-6">
+              {photoGroups.map(({ insp, cats }) => (
+                <div key={insp.id} className="avoid-break rounded-md border p-3">
+                  <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
                     <span className="font-mono font-semibold">{insp.damper?.urn || '-'}</span>
                     {insp.damper?.location && (
                       <span className="text-muted-foreground">{insp.damper.location}</span>
@@ -288,21 +306,34 @@ export function DamperReport({ task, inspections, template }: DamperReportProps)
                       {RESULT_LABELS[insp.overall_result]}
                     </span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {insp.photos.map((url, idx) => (
-                      <div
-                        key={url}
-                        className="avoid-break overflow-hidden rounded-md border bg-muted"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={url || '/placeholder.svg'}
-                          alt={`${insp.damper?.urn || 'Damper'} photo ${idx + 1}`}
-                          crossOrigin="anonymous"
-                          className="aspect-[4/3] h-full w-full object-cover"
-                        />
-                      </div>
-                    ))}
+                  <div className="space-y-3">
+                    {PHOTO_CATEGORIES.map((cat) => {
+                      const urls = cats[cat.key]
+                      if (!urls || urls.length === 0) return null
+                      return (
+                        <div key={cat.key} className="avoid-break">
+                          <p className="mb-1.5 text-xs font-semibold text-muted-foreground">
+                            {cat.label}
+                          </p>
+                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                            {urls.map((url, idx) => (
+                              <div
+                                key={url}
+                                className="avoid-break overflow-hidden rounded-md border bg-muted"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={url || '/placeholder.svg'}
+                                  alt={`${insp.damper?.urn || 'Damper'} — ${cat.label} ${idx + 1}`}
+                                  crossOrigin="anonymous"
+                                  className="aspect-[4/3] h-full w-full object-cover"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               ))}

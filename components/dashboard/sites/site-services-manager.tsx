@@ -65,6 +65,7 @@ export function SiteServicesManager({
 }: SiteServicesManagerProps) {
   const [selectedServiceTypes, setSelectedServiceTypes] = useState<string[]>([])
   const [addServicesOpen, setAddServicesOpen] = useState(false)
+  const [initialVisitDate, setInitialVisitDate] = useState<Date>(new Date())
   const [adding, setAdding] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
 
@@ -103,6 +104,8 @@ export function SiteServicesManager({
     if (selectedServiceTypes.length === 0) return
     setAdding(true)
 
+    const visitDateStr = format(initialVisitDate, 'yyyy-MM-dd')
+
     const insertData = selectedServiceTypes.map(serviceTypeId => {
       const serviceType = availableServiceTypes.find(st => st.id === serviceTypeId)
       return {
@@ -110,13 +113,30 @@ export function SiteServicesManager({
         service_type_id: serviceTypeId,
         frequency_value: serviceType?.default_frequency_value ?? 12,
         frequency_unit: serviceType?.default_frequency_unit ?? 'months',
+        // Live sites get their first visit scheduled on the chosen date
+        next_service_date: isDead ? null : visitDateStr,
       }
     })
 
-    await supabase.from('site_services').insert(insertData)
+    const { data: inserted } = await supabase
+      .from('site_services')
+      .insert(insertData)
+      .select('id')
+
+    // Generate a scheduled task for each new service on the visit date.
+    // Dead sites never generate tasks.
+    if (!isDead && inserted && inserted.length > 0) {
+      const taskData = (inserted as { id: string }[]).map((row) => ({
+        site_service_id: row.id,
+        scheduled_date: visitDateStr,
+        status: 'pending' as const,
+      }))
+      await supabase.from('tasks').insert(taskData)
+    }
 
     setAdding(false)
     setSelectedServiceTypes([])
+    setInitialVisitDate(new Date())
     setAddServicesOpen(false)
     router.refresh()
   }
@@ -354,7 +374,38 @@ export function SiteServicesManager({
               Select one or more services to add to this site
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-3 max-h-[300px] overflow-y-auto">
+          <div className="py-2 grid gap-2">
+            <Label>First Visit Date *</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  disabled={isDead}
+                  className={cn(
+                    'w-full justify-start text-left font-normal',
+                    !initialVisitDate && 'text-muted-foreground'
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {initialVisitDate ? format(initialVisitDate, 'PPP') : <span>Pick a date</span>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={initialVisitDate}
+                  onSelect={(date) => date && setInitialVisitDate(date)}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+            <p className="text-xs text-muted-foreground">
+              {isDead
+                ? 'This site is Dead — services will be added but no tasks will be scheduled.'
+                : 'A scheduled task will be generated for each selected service on this date.'}
+            </p>
+          </div>
+          <div className="py-2 space-y-3 max-h-[300px] overflow-y-auto">
             {availableServiceTypes.map((st) => (
               <div
                 key={st.id}

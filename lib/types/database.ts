@@ -147,6 +147,77 @@ export interface TaskResult {
   task?: Task
 }
 
+// Fire & Smoke Damper Testing types
+
+export type DamperType = 'fire' | 'smoke' | 'fire_smoke'
+export type DamperResult = 'pass' | 'fail' | 'remedial' | 'na'
+export type DamperCondition = 'good' | 'fair' | 'poor'
+
+export interface Damper {
+  id: string
+  site_id: string
+  urn: string
+  reference: string | null
+  floor: string | null
+  location: string | null
+  damper_type: DamperType
+  size_mm: string | null
+  notes: string | null
+  latest_result: DamperResult | null
+  last_inspected_date: string | null
+  created_at: string
+  updated_at: string
+  site?: Site
+  inspections?: DamperInspection[]
+}
+
+export interface DamperInspection {
+  id: string
+  damper_id: string
+  task_id: string | null
+  inspected_by: string | null
+  inspection_date: string
+  accessible: boolean
+  access_notes: string | null
+  drop_test_pass: boolean | null
+  fire_barrier_intact: boolean | null
+  installation_correct: boolean | null
+  fusible_link_ok: boolean | null
+  spring_operation_ok: boolean | null
+  actuator_ok: boolean | null
+  damper_clean: boolean | null
+  condition: DamperCondition | null
+  overall_result: DamperResult
+  remedial_action: string | null
+  comments: string | null
+  photos: string[]
+  created_at: string
+  damper?: Damper
+  inspector?: Profile | null
+}
+
+export interface ReportTemplate {
+  id: string
+  service_type_id: string
+  name: string
+  company_name: string | null
+  company_logo_url?: string | null
+  header_color: string | null
+  footer_text: string | null
+  include_signature: boolean
+  sections: {
+    company_address?: string
+    company_phone?: string
+    company_email?: string
+    signatory_name?: string
+    signatory_title?: string
+    standards?: string
+    [key: string]: unknown
+  } | null
+  created_at?: string
+  updated_at?: string
+}
+
 // Extended types for dashboard views
 export interface TaskWithDetails extends Task {
   site_service: SiteService & {

@@ -223,7 +223,9 @@ export function TaskExecution({
       .eq('id', task.site_service_id)
       .single()
 
-    if (siteServiceData && siteServiceData.site?.status === 'live') {
+    const siteRel = (siteServiceData as { site?: { status?: string } | { status?: string }[] } | null)?.site
+    const siteStatus = Array.isArray(siteRel) ? siteRel[0]?.status : siteRel?.status
+    if (siteServiceData && siteStatus === 'live') {
       // Calculate next scheduled date based on frequency
       const nextDate = new Date(completedAt)
       if (siteServiceData.frequency_unit === 'weeks') {
@@ -247,6 +249,22 @@ export function TaskExecution({
           next_service_date: nextDate.toISOString().split('T')[0],
         })
         .eq('id', task.site_service_id)
+    }
+
+    // Send the completion report email (uses per-service emails if set,
+    // otherwise the site-level reporting emails).
+    try {
+      const reportRes = await fetch('/api/send-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId: task.id }),
+      })
+      if (!reportRes.ok) {
+        const data = await reportRes.json().catch(() => ({}))
+        console.error('[v0] Report email failed:', data?.error)
+      }
+    } catch (err) {
+      console.error('[v0] Report email request error:', err)
     }
 
     setSubmitting(false)
@@ -574,7 +592,17 @@ export function TaskExecution({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleSubmit} disabled={submitting}>
               {submitting ? (
-              <>
-                Completed on {formatDateUK(task.completed_at!)} at {formatTimeUK(task.completed_at!)}
-              </>
-              
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                'Complete Inspection'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}

@@ -21,6 +21,23 @@ export function generateMcpUrn(prefix = 'MCP'): string {
   return `${prefix}-${out}`
 }
 
+/**
+ * The standard weekly fire alarm / manual call point test checklist.
+ * Each item is scored pass / fail / na per call point.
+ */
+export interface McpCheckItem {
+  id: string
+  label: string
+}
+
+export const MCP_CHECKLIST: McpCheckItem[] = [
+  { id: 'activates', label: 'Operates correctly on activation' },
+  { id: 'panel_zone', label: 'Panel displays correct zone / device' },
+  { id: 'sounders', label: 'Sounders / beacons activate' },
+  { id: 'resets', label: 'Call point resets correctly' },
+  { id: 'element_intact', label: 'Glass / element intact and undamaged' },
+]
+
 /** Common manual call point test key types (engineers can also type their own). */
 export const TEST_KEY_TYPES = [
   'Standard reset key',

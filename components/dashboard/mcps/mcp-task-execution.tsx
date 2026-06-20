@@ -126,6 +126,10 @@ export function McpTaskExecution({
       .filter(Boolean)
       .join(' · ') || m.urn || 'Call point'
 
+  // For the weekly rotation, only the call point due this week must be tested
+  // or marked not accessible before the test can be submitted.
+  const dueDone = !nextMcp || Boolean(states[nextMcp.id]?.touched)
+
   const handleStart = async () => {
     await supabase
       .from('tasks')
@@ -415,10 +419,21 @@ export function McpTaskExecution({
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             Save Progress
           </Button>
-          <Button onClick={() => setShowSubmit(true)} className="flex-1">
-            <Send className="mr-2 h-4 w-4" />
-            Complete &amp; Submit
-          </Button>
+          <div className="flex flex-1 flex-col items-stretch gap-1">
+            <Button
+              onClick={() => setShowSubmit(true)}
+              disabled={!dueDone}
+              className="w-full"
+            >
+              <Send className="mr-2 h-4 w-4" />
+              Complete &amp; Submit
+            </Button>
+            {!dueDone && (
+              <p className="text-center text-xs text-muted-foreground">
+                Test or mark the call point due this week before submitting
+              </p>
+            )}
+          </div>
         </div>
       )}
 

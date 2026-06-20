@@ -29,6 +29,7 @@ import { formatDateUK, cn } from '@/lib/utils'
 interface TaskReport {
   id: string
   taskId: string
+  referenceNumber: string
   siteName: string
   siteId: string
   clientName: string
@@ -99,6 +100,7 @@ export default function ReportsPage() {
         .select(`
           id,
           task_id,
+          reference_number,
           overall_status,
           email_sent_at,
           created_at,
@@ -123,6 +125,7 @@ export default function ReportsPage() {
       const formatted = data?.map((item: any) => ({
         id: item.id,
         taskId: item.task_id,
+        referenceNumber: item.reference_number || '-',
         siteName: item.tasks?.site_services?.sites?.name || 'Unknown',
         siteId: item.tasks?.site_services?.sites?.id || '',
         clientName: item.tasks?.site_services?.sites?.clients?.name || '',
@@ -153,6 +156,7 @@ export default function ReportsPage() {
       if (search) {
         const searchLower = search.toLowerCase()
         const matchesSearch =
+          report.referenceNumber.toLowerCase().includes(searchLower) ||
           report.siteName.toLowerCase().includes(searchLower) ||
           report.serviceName.toLowerCase().includes(searchLower) ||
           report.engineerName.toLowerCase().includes(searchLower) ||
@@ -428,6 +432,7 @@ export default function ReportsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Reference</TableHead>
                   <TableHead>Client</TableHead>
                   <TableHead>Site</TableHead>
                   <TableHead>Service</TableHead>
@@ -441,13 +446,13 @@ export default function ReportsPage() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="h-24 text-center">
+                    <TableCell colSpan={9} className="h-24 text-center">
                       Loading reports...
                     </TableCell>
                   </TableRow>
                 ) : filteredReports.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="h-24 text-center">
+                    <TableCell colSpan={9} className="h-24 text-center">
                       <div className="flex flex-col items-center gap-2">
                         <AlertCircle className="h-8 w-8 text-muted-foreground/50" />
                         <p className="text-muted-foreground">No reports found matching your filters</p>
@@ -457,6 +462,7 @@ export default function ReportsPage() {
                 ) : (
                   filteredReports.map((report) => (
                     <TableRow key={report.id}>
+                      <TableCell className="font-mono text-xs font-medium">{report.referenceNumber}</TableCell>
                       <TableCell>{report.clientName || <span className="text-muted-foreground">-</span>}</TableCell>
                       <TableCell className="font-medium">{report.siteName}</TableCell>
                       <TableCell>{report.serviceName}</TableCell>

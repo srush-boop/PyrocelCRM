@@ -124,13 +124,17 @@ export function ServiceReport({ task, result, template }: ServiceReportProps) {
           <div className="text-right">
             <p className="text-sm font-semibold uppercase tracking-wide">Service Report</p>
             <p className="text-xs text-white/80">{serviceType?.name}</p>
+            {result?.reference_number && (
+              <p className="mt-1 font-mono text-sm font-bold">{result.reference_number}</p>
+            )}
           </div>
         </header>
 
         {/* Meta */}
         <section className="mb-8 grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
-          <Meta label="Site" value={site?.name} />
+          <Meta label="Inspection Reference" value={result?.reference_number} />
           <Meta label="Report Date" value={formatDateUK(completedDate)} />
+          <Meta label="Site" value={site?.name} />
           <Meta label="Address" value={site?.address} />
           <Meta label="Engineer" value={engineer?.full_name || engineer?.email} />
           <Meta label="Service" value={serviceType?.name} />
@@ -208,8 +212,9 @@ export function ServiceReport({ task, result, template }: ServiceReportProps) {
           </div>
         </div>
 
-        {/* Detailed checklist */}
-        <section className="avoid-break mb-8">
+        {/* Detailed checklist — table may span multiple pages, so the section
+            itself must not be break-inside: avoid (that would clip rows). */}
+        <section className="mb-8">
           <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
             Checklist Results
           </h2>
@@ -255,7 +260,7 @@ export function ServiceReport({ task, result, template }: ServiceReportProps) {
 
         {/* Engineer notes */}
         {result?.engineer_notes && (
-          <section className="avoid-break mb-8">
+          <section className="mb-8">
             <h2 className="mb-2 text-base font-bold" style={{ color: headerColor }}>
               Engineer Notes
             </h2>
@@ -267,7 +272,7 @@ export function ServiceReport({ task, result, template }: ServiceReportProps) {
 
         {/* Photos */}
         {result?.photos && result.photos.length > 0 && (
-          <section className="avoid-break mb-8">
+          <section className="mb-8">
             <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
               Photographic Evidence
             </h2>

@@ -25,9 +25,10 @@ interface DamperReportProps {
   task: TaskWithDetails
   inspections: (DamperInspection & { damper: Damper | null })[]
   template: ReportTemplate | null
+  referenceNumber?: string | null
 }
 
-export function DamperReport({ task, inspections, template }: DamperReportProps) {
+export function DamperReport({ task, inspections, template, referenceNumber }: DamperReportProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
   const engineer = task.assigned_engineer
@@ -137,13 +138,17 @@ export function DamperReport({ task, inspections, template }: DamperReportProps)
           <div className="text-right">
             <p className="text-sm font-semibold uppercase tracking-wide">Inspection Report</p>
             <p className="text-xs text-white/80">Fire &amp; Smoke Dampers</p>
+            {referenceNumber && (
+              <p className="mt-1 font-mono text-sm font-bold">{referenceNumber}</p>
+            )}
           </div>
         </header>
 
         {/* Meta */}
         <section className="mb-8 grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
-          <Meta label="Site" value={site?.name} />
+          <Meta label="Inspection Reference" value={referenceNumber} />
           <Meta label="Report Date" value={formatDateUK(completedDate)} />
+          <Meta label="Site" value={site?.name} />
           <Meta label="Address" value={site?.address} />
           <Meta label="Inspected By" value={engineer?.full_name || engineer?.email} />
           <Meta label="Service" value={serviceType?.name} />
@@ -215,7 +220,7 @@ export function DamperReport({ task, inspections, template }: DamperReportProps)
 
         {/* Remedial actions */}
         {remedials.length > 0 && (
-          <section className="avoid-break mb-8">
+          <section className="mb-8">
             <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
               Remedial Actions Required ({remedials.length})
             </h2>
@@ -223,7 +228,7 @@ export function DamperReport({ task, inspections, template }: DamperReportProps)
               {remedials.map((insp) => (
                 <div
                   key={insp.id}
-                  className="rounded-md border-l-4 bg-muted/40 p-3 text-sm"
+                  className="avoid-break rounded-md border-l-4 bg-muted/40 p-3 text-sm"
                   style={{ borderLeftColor: RESULT_COLORS[insp.overall_result] }}
                 >
                   <p className="font-medium">
@@ -239,8 +244,9 @@ export function DamperReport({ task, inspections, template }: DamperReportProps)
           </section>
         )}
 
-        {/* Detailed results */}
-        <section className="avoid-break mb-8">
+        {/* Detailed results — table may span multiple pages, so the section
+            itself must not be break-inside: avoid (that would clip rows). */}
+        <section className="mb-8">
           <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
             Detailed Results
           </h2>
@@ -287,6 +293,73 @@ export function DamperReport({ task, inspections, template }: DamperReportProps)
             </table>
           </div>
         </section>
+
+        {/* Per-damper inspection checklist */}
+        {inspections.length > 0 && (
+          <section className="mb-8">
+            <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
+              Inspection Checklist
+            </h2>
+            <div className="space-y-4">
+              {inspections.map((insp) => (
+                <div key={insp.id} className="avoid-break rounded-md border p-4">
+                  <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+                    <span className="font-mono font-semibold">{insp.damper?.urn || '-'}</span>
+                    {insp.damper?.location && (
+                      <span className="text-muted-foreground">{insp.damper.location}</span>
+                    )}
+                    {insp.damper?.floor && (
+                      <span className="text-muted-foreground">· {insp.damper.floor}</span>
+                    )}
+                    <span
+                      className="ml-auto inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
+                      style={{ backgroundColor: RESULT_COLORS[insp.overall_result] }}
+                    >
+                      {RESULT_LABELS[insp.overall_result]}
+                    </span>
+                  </div>
+
+                  {insp.accessible ? (
+                    <div className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+                      {CHECK_ITEMS.map((item) => (
+                        <CheckRow
+                          key={item.key}
+                          label={item.label}
+                          value={insp[item.key as keyof DamperInspection] as boolean | null}
+                        />
+                      ))}
+                      {insp.condition && (
+                        <div className="flex items-center justify-between gap-3 border-t py-1 text-xs sm:col-span-2">
+                          <span className="text-muted-foreground">Overall condition</span>
+                          <span className="font-medium capitalize">{insp.condition}</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Not accessible for testing.
+                      {insp.access_notes ? ` ${insp.access_notes}` : ''}
+                    </p>
+                  )}
+
+                  {(insp.overall_result === 'fail' || insp.overall_result === 'remedial') &&
+                    insp.remedial_action && (
+                      <p className="mt-2 border-t pt-2 text-xs">
+                        <span className="font-semibold">Remedial: </span>
+                        {insp.remedial_action}
+                      </p>
+                    )}
+                  {insp.comments && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      <span className="font-semibold">Notes: </span>
+                      {insp.comments}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Photographic evidence */}
         {photoGroups.length > 0 && (
@@ -368,6 +441,30 @@ export function DamperReport({ task, inspections, template }: DamperReportProps)
           </footer>
         )}
       </div>
+    </div>
+  )
+}
+
+function CheckRow({ label, value }: { label: string; value: boolean | null }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-1 text-xs">
+      <span className="text-muted-foreground">{label}</span>
+      {value === true ? (
+        <span className="flex items-center gap-1 font-medium text-green-600">
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          Pass
+        </span>
+      ) : value === false ? (
+        <span className="flex items-center gap-1 font-medium text-destructive">
+          <XCircle className="h-3.5 w-3.5" />
+          Fail
+        </span>
+      ) : (
+        <span className="flex items-center gap-1 text-muted-foreground">
+          <MinusCircle className="h-3.5 w-3.5" />
+          N/A
+        </span>
+      )}
     </div>
   )
 }

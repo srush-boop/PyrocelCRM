@@ -10,6 +10,11 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
+import {
   Table,
   TableBody,
   TableCell,
@@ -41,7 +46,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Plus, BellRing, Loader2, MoreHorizontal, Pencil, Trash2, Camera, X, MapPin } from 'lucide-react'
+import { Plus, BellRing, Loader2, MoreHorizontal, Pencil, Trash2, Camera, X, MapPin, ChevronDown } from 'lucide-react'
 import { MCP_RESULT_VARIANT, TEST_KEY_TYPES, generateMcpUrn } from '@/lib/mcps'
 import type { Mcp } from '@/lib/types/database'
 
@@ -61,6 +66,7 @@ const emptyForm = {
 }
 
 export function McpRegister({ siteId, mcps }: McpRegisterProps) {
+  const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Mcp | null>(null)
@@ -164,17 +170,32 @@ export function McpRegister({ siteId, mcps }: McpRegisterProps) {
   }
 
   return (
+    <Collapsible asChild open={open} onOpenChange={setOpen}>
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <BellRing className="h-5 w-5" />
-              Manual Call Point Register
-            </CardTitle>
-            <CardDescription>
-              {mcps.length} call point{mcps.length === 1 ? '' : 's'} registered for this site
-            </CardDescription>
+          <div className="flex items-start gap-2">
+            <CollapsibleTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0"
+                aria-label={open ? 'Collapse call point register' : 'Expand call point register'}
+              >
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${open ? '' : '-rotate-90'}`}
+                />
+              </Button>
+            </CollapsibleTrigger>
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <BellRing className="h-5 w-5" />
+                Manual Call Point Register
+              </CardTitle>
+              <CardDescription>
+                {mcps.length} call point{mcps.length === 1 ? '' : 's'} registered for this site
+              </CardDescription>
+            </div>
           </div>
           <Button size="sm" onClick={openAdd}>
             <Plus className="mr-2 h-4 w-4" />
@@ -182,6 +203,7 @@ export function McpRegister({ siteId, mcps }: McpRegisterProps) {
           </Button>
         </div>
       </CardHeader>
+      <CollapsibleContent>
       <CardContent className="space-y-4">
         {mcps.length > 0 && (
           <Input
@@ -260,6 +282,7 @@ export function McpRegister({ siteId, mcps }: McpRegisterProps) {
           </Table>
         </div>
       </CardContent>
+      </CollapsibleContent>
 
       {/* Add / Edit dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -401,5 +424,6 @@ export function McpRegister({ siteId, mcps }: McpRegisterProps) {
         </AlertDialogContent>
       </AlertDialog>
     </Card>
+    </Collapsible>
   )
 }

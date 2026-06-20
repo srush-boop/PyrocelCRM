@@ -10,6 +10,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
+import {
   Table,
   TableBody,
   TableCell,
@@ -48,7 +53,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Wind, Loader2, QrCode, Printer, MoreHorizontal, Pencil, Trash2, ExternalLink } from 'lucide-react'
+import { Plus, Wind, Loader2, QrCode, Printer, MoreHorizontal, Pencil, Trash2, ExternalLink, ChevronDown } from 'lucide-react'
 import { ImportDampersDialog } from './import-dampers-dialog'
 import { ScanQrButton } from './scan-qr-button'
 import { SizeCombobox } from './size-combobox'
@@ -78,6 +83,7 @@ const emptyForm = {
 }
 
 export function DamperRegister({ siteId, siteName, dampers }: DamperRegisterProps) {
+  const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Damper | null>(null)
@@ -156,17 +162,32 @@ export function DamperRegister({ siteId, siteName, dampers }: DamperRegisterProp
   }
 
   return (
+    <Collapsible asChild open={open} onOpenChange={setOpen}>
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Wind className="h-5 w-5" />
-              Damper Register
-            </CardTitle>
-            <CardDescription>
-              {dampers.length} damper{dampers.length === 1 ? '' : 's'} registered for this site
-            </CardDescription>
+          <div className="flex items-start gap-2">
+            <CollapsibleTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0"
+                aria-label={open ? 'Collapse damper register' : 'Expand damper register'}
+              >
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${open ? '' : '-rotate-90'}`}
+                />
+              </Button>
+            </CollapsibleTrigger>
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Wind className="h-5 w-5" />
+                Damper Register
+              </CardTitle>
+              <CardDescription>
+                {dampers.length} damper{dampers.length === 1 ? '' : 's'} registered for this site
+              </CardDescription>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <ScanQrButton />
@@ -186,6 +207,7 @@ export function DamperRegister({ siteId, siteName, dampers }: DamperRegisterProp
           </div>
         </div>
       </CardHeader>
+      <CollapsibleContent>
       <CardContent className="space-y-4">
         {dampers.length > 0 && (
           <Input
@@ -285,6 +307,7 @@ export function DamperRegister({ siteId, siteName, dampers }: DamperRegisterProp
           </Table>
         </div>
       </CardContent>
+      </CollapsibleContent>
 
       {/* Add / Edit dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -389,5 +412,6 @@ export function DamperRegister({ siteId, siteName, dampers }: DamperRegisterProp
         </AlertDialogContent>
       </AlertDialog>
     </Card>
+    </Collapsible>
   )
 }

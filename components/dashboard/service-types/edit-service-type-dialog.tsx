@@ -39,6 +39,7 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
     default_frequency_value: serviceType.default_frequency_value ?? serviceType.default_frequency_months ?? 12,
     default_frequency_unit: (serviceType.default_frequency_unit || 'months') as 'weeks' | 'months',
     defects_to_email: serviceType.defects_to_email || '',
+    status: (serviceType.status || 'live') as 'live' | 'dead',
   })
   const router = useRouter()
   const supabase = createClient()
@@ -61,6 +62,7 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
         default_frequency_value: formData.default_frequency_value,
         default_frequency_unit: formData.default_frequency_unit,
         defects_to_email: formData.defects_to_email.trim() || null,
+        status: formData.status,
       })
       .eq('id', serviceType.id)
 
@@ -145,6 +147,26 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
               <p className="text-xs text-muted-foreground">
                 When a report contains defects, this address is CC&apos;d in. Can be overridden per
                 site in the service setup.
+              </p>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="status">Service Status</Label>
+              <Select
+                value={formData.status}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, status: value as 'live' | 'dead' })
+                }
+              >
+                <SelectTrigger id="status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="live">Live</SelectItem>
+                  <SelectItem value="dead">Dead</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Dead services are paused and will not generate any new tasks.
               </p>
             </div>
           </div>

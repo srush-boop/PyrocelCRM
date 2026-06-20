@@ -37,6 +37,7 @@ export interface ServiceType {
   color?: string | null
   icon?: string | null
   defects_to_email: string | null
+  status: 'live' | 'dead'
   created_at: string
 }
 

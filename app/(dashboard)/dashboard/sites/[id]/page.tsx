@@ -9,8 +9,10 @@ import { SiteServicesManager } from '@/components/dashboard/sites/site-services-
 import { SiteReports } from '@/components/dashboard/sites/site-reports'
 import { DamperRegister } from '@/components/dashboard/dampers/damper-register'
 import { McpRegister } from '@/components/dashboard/mcps/mcp-register'
+import { EmergencyLightRegister } from '@/components/dashboard/emergency-lights/emergency-light-register'
 import { isDamperService } from '@/lib/dampers'
 import { isFireAlarmService } from '@/lib/mcps'
+import { isEmergencyLightService } from '@/lib/emergency-lights'
 import { REMOTE_MONITORING_LABELS } from '@/lib/sites'
 import type {
   Profile,
@@ -23,6 +25,8 @@ import type {
   Damper,
   Mcp,
   McpInspection,
+  EmergencyLight,
+  EmergencyLightInspection,
 } from '@/lib/types/database'
 
 interface PageProps {
@@ -155,6 +159,30 @@ export default async function SiteDetailPage({ params }: PageProps) {
   )
   const showMcpRegister = hasFireAlarmService || mcps.length > 0
 
+  // Emergency lighting register: shown when the site has the emergency lighting service or any fittings
+  const hasEmergencyLightService = siteServices.some((ss) => isEmergencyLightService(ss.service_type?.name))
+  const { data: lightsData } = await supabase
+    .from('emergency_lights')
+    .select('*, inspections:emergency_light_inspections(result, inspection_date)')
+    .eq('site_id', id)
+    .order('map_reference', { ascending: true })
+  const emergencyLights = (
+    (lightsData || []) as (EmergencyLight & {
+      inspections: Pick<EmergencyLightInspection, 'result' | 'inspection_date'>[]
+    })[]
+  ).map((light) => {
+    const sorted = [...(light.inspections || [])].sort((a, b) =>
+      b.inspection_date.localeCompare(a.inspection_date),
+    )
+    const latest = sorted[0]
+    return {
+      ...light,
+      latest_result: latest?.result ?? null,
+      last_inspected_date: latest?.inspection_date ?? null,
+    } as EmergencyLight
+  })
+  const showEmergencyLightRegister = hasEmergencyLightService || emergencyLights.length > 0
+
   return (
     <div className="space-y-6">
       <div className="flex items-start gap-4">
@@ -257,6 +285,10 @@ export default async function SiteDetailPage({ params }: PageProps) {
       )}
 
       {showMcpRegister && <McpRegister siteId={id} mcps={mcps} />}
+
+      {showEmergencyLightRegister && (
+        <EmergencyLightRegister siteId={id} lights={emergencyLights} />
+      )}
 
       <SiteReports
         siteName={site.name}

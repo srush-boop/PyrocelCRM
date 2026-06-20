@@ -33,6 +33,7 @@ export function AddServiceTypeDialog() {
     description: '',
     default_frequency_value: 12,
     default_frequency_unit: 'months' as 'weeks' | 'months',
+    defects_to_email: '',
   })
   const router = useRouter()
   const supabase = createClient()

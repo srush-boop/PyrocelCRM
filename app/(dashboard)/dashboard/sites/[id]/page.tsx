@@ -4,12 +4,26 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { ArrowLeft, MapPin, Phone, Mail, Building2 } from 'lucide-react'
+import { ArrowLeft, MapPin, Phone, Mail, Building2, Radio } from 'lucide-react'
 import { SiteServicesManager } from '@/components/dashboard/sites/site-services-manager'
 import { SiteReports } from '@/components/dashboard/sites/site-reports'
 import { DamperRegister } from '@/components/dashboard/dampers/damper-register'
+import { McpRegister } from '@/components/dashboard/mcps/mcp-register'
 import { isDamperService } from '@/lib/dampers'
-import type { Profile, Site, Route, ServiceType, SiteService, Task, TaskResult, Damper } from '@/lib/types/database'
+import { isFireAlarmService } from '@/lib/mcps'
+import { REMOTE_MONITORING_LABELS } from '@/lib/sites'
+import type {
+  Profile,
+  Site,
+  Route,
+  ServiceType,
+  SiteService,
+  Task,
+  TaskResult,
+  Damper,
+  Mcp,
+  McpInspection,
+} from '@/lib/types/database'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -119,6 +133,28 @@ export default async function SiteDetailPage({ params }: PageProps) {
   const dampers = (dampersData || []) as Damper[]
   const showDamperRegister = hasDamperService || dampers.length > 0
 
+  // MCP register: shown when the site has the fire alarm service or any MCPs
+  const hasFireAlarmService = siteServices.some((ss) => isFireAlarmService(ss.service_type?.name))
+  const { data: mcpsData } = await supabase
+    .from('mcps')
+    .select('*, inspections:mcp_inspections(result, inspection_date)')
+    .eq('site_id', id)
+    .order('map_reference', { ascending: true })
+  const mcps = ((mcpsData || []) as (Mcp & { inspections: Pick<McpInspection, 'result' | 'inspection_date'>[] })[]).map(
+    (mcp) => {
+      const sorted = [...(mcp.inspections || [])].sort((a, b) =>
+        b.inspection_date.localeCompare(a.inspection_date),
+      )
+      const latest = sorted[0]
+      return {
+        ...mcp,
+        latest_result: latest?.result ?? null,
+        last_inspected_date: latest?.inspection_date ?? null,
+      } as Mcp
+    },
+  )
+  const showMcpRegister = hasFireAlarmService || mcps.length > 0
+
   return (
     <div className="space-y-6">
       <div className="flex items-start gap-4">
@@ -185,6 +221,17 @@ export default async function SiteDetailPage({ params }: PageProps) {
                 </div>
               </div>
             )}
+            <div className="flex items-center gap-2 text-sm pt-2 border-t">
+              <Radio className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="text-muted-foreground">Remote Monitoring: </span>
+              {(site as Site).has_remote_monitoring ? (
+                <Badge variant="secondary" className="text-xs">
+                  {REMOTE_MONITORING_LABELS[(site as Site).remote_monitoring_type ?? 'fire']}
+                </Badge>
+              ) : (
+                <span>None</span>
+              )}
+            </div>
             {site.notes && (
               <div className="text-sm pt-2 border-t">
                 <span className="text-muted-foreground">Notes: </span>
@@ -208,6 +255,8 @@ export default async function SiteDetailPage({ params }: PageProps) {
       {showDamperRegister && (
         <DamperRegister siteId={id} siteName={site.name} dampers={dampers} />
       )}
+
+      {showMcpRegister && <McpRegister siteId={id} mcps={mcps} />}
 
       <SiteReports
         siteName={site.name}

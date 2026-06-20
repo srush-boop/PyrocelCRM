@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { Loader2, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import type { Site, Route, Client } from '@/lib/types/database'
@@ -46,6 +47,12 @@ export function EditSiteDialog({ site, routes, clients, open, onOpenChange }: Ed
     client_id: site.client_id || '',
     status: site.status || 'live',
     notes: site.notes || '',
+    has_remote_monitoring: site.has_remote_monitoring ?? false,
+    remote_monitoring_type: (site.remote_monitoring_type || '') as
+      | ''
+      | 'fire'
+      | 'fire_and_fault'
+      | 'fault',
   })
   const [reportingEmails, setReportingEmails] = useState<string[]>(site.reporting_emails || [])
   const [newReportingEmail, setNewReportingEmail] = useState('')
@@ -81,6 +88,9 @@ export function EditSiteDialog({ site, routes, clients, open, onOpenChange }: Ed
         ...formData,
         route_id: formData.route_id || null,
         client_id: formData.client_id || null,
+        remote_monitoring_type: formData.has_remote_monitoring
+          ? formData.remote_monitoring_type || null
+          : null,
         reporting_emails: reportingEmails,
         updated_at: new Date().toISOString(),
       })
@@ -251,6 +261,52 @@ export function EditSiteDialog({ site, routes, clients, open, onOpenChange }: Ed
                       </button>
                     </Badge>
                   ))}
+                </div>
+              )}
+            </div>
+            <div className="rounded-lg border p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <Label htmlFor="has_remote_monitoring" className="text-sm font-medium">
+                    Remote Monitoring
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Does this site have a remotely monitored alarm system?
+                  </p>
+                </div>
+                <Switch
+                  id="has_remote_monitoring"
+                  checked={formData.has_remote_monitoring}
+                  onCheckedChange={(checked) =>
+                    setFormData({
+                      ...formData,
+                      has_remote_monitoring: checked,
+                      remote_monitoring_type: checked ? formData.remote_monitoring_type : '',
+                    })
+                  }
+                />
+              </div>
+              {formData.has_remote_monitoring && (
+                <div className="mt-4 grid gap-2">
+                  <Label htmlFor="remote_monitoring_type">Monitoring Type</Label>
+                  <Select
+                    value={formData.remote_monitoring_type}
+                    onValueChange={(value) =>
+                      setFormData({
+                        ...formData,
+                        remote_monitoring_type: value as 'fire' | 'fire_and_fault' | 'fault',
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select what is monitored" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fire">Fire</SelectItem>
+                      <SelectItem value="fire_and_fault">Fire and Fault</SelectItem>
+                      <SelectItem value="fault">Fault only</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
             </div>

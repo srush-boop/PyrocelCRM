@@ -46,14 +46,37 @@ export function EditRouteDialog({ route, engineers, open, onOpenChange }: EditRo
     e.preventDefault()
     setLoading(true)
 
+    const newEngineerId = formData.assigned_engineer_id || null
+
     const { error } = await supabase
       .from('routes')
       .update({
         ...formData,
-        assigned_engineer_id: formData.assigned_engineer_id || null,
+        assigned_engineer_id: newEngineerId,
         updated_at: new Date().toISOString(),
       })
       .eq('id', route.id)
+
+    if (!error) {
+      // Propagate the route's engineer to pending tasks of services that rely
+      // on the route for their engineer (i.e. have no direct engineer of their
+      // own). Engineers query tasks by assigned_engineer_id, so without this
+      // they would never see route-assigned work.
+      const { data: routeServices } = await supabase
+        .from('site_services')
+        .select('id')
+        .eq('route_id', route.id)
+        .is('assigned_engineer_id', null)
+
+      const serviceIds = (routeServices ?? []).map((s) => (s as { id: string }).id)
+      if (serviceIds.length > 0) {
+        await supabase
+          .from('tasks')
+          .update({ assigned_engineer_id: newEngineerId })
+          .in('site_service_id', serviceIds)
+          .eq('status', 'pending')
+      }
+    }
 
     setLoading(false)
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateUK } from '@/lib/utils'
+import { isDamperService } from '@/lib/dampers'
 import { sendEmail } from '@/lib/email/send-email'
 import {
   generateClientPassEmail,
@@ -68,6 +69,17 @@ export async function POST(request: NextRequest) {
     const engineer = task.assigned_engineer
     const overallStatus = taskResult.overall_status as 'pass' | 'fail' | 'partial'
 
+    // Build the "Open report" link. Auto-route to the damper or service report
+    // page based on the service type. Requires NEXT_PUBLIC_APP_URL to be set.
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '')
+    const reportPath = isDamperService(serviceType?.name)
+      ? `/dashboard/dampers/report/${taskId}`
+      : `/dashboard/reports/${taskId}`
+    const reportUrl = baseUrl ? `${baseUrl}${reportPath}` : undefined
+    if (!baseUrl) {
+      console.warn('[v0] NEXT_PUBLIC_APP_URL not set — "Open report" link omitted from email.')
+    }
+
     // Determine recipients.
     // Priority: explicit resend emails > per-service reporting emails (override) >
     // site-level reporting emails > site contact email.
@@ -109,6 +121,7 @@ export async function POST(request: NextRequest) {
       ),
       engineerName: engineer?.full_name || engineer?.email || 'Engineer',
       engineerNotes: taskResult.engineer_notes || undefined,
+      reportUrl,
     }
 
     if (recipients.length === 0) {

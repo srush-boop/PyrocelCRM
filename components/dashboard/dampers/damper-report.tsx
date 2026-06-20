@@ -15,9 +15,9 @@ import {
   Legend,
 } from 'recharts'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Printer, Flame, CheckCircle2, XCircle, AlertTriangle, MinusCircle } from 'lucide-react'
+import { ArrowLeft, Printer, CheckCircle2, XCircle, AlertTriangle, MinusCircle } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
-import { RESULT_COLORS, RESULT_LABELS } from '@/lib/dampers'
+import { RESULT_COLORS, RESULT_LABELS, PHOTO_CATEGORIES, emptyPhotoCategories } from '@/lib/dampers'
 import { CHECK_ITEMS } from './damper-inspection-card'
 import type { TaskWithDetails, DamperInspection, Damper, ReportTemplate, DamperResult } from '@/lib/types/database'
 
@@ -31,8 +31,8 @@ export function DamperReport({ task, inspections, template }: DamperReportProps)
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
   const engineer = task.assigned_engineer
-  const headerColor = template?.header_color || '#dc2626'
-  const companyName = template?.company_name || 'PyrocelCRM Ltd'
+  const headerColor = template?.header_color || '#c8102e'
+  const companyName = template?.company_name || 'Pyrocel Fire & Security'
   const sections = template?.sections || {}
 
   const stats = useMemo(() => {
@@ -67,6 +67,27 @@ export function DamperReport({ task, inspections, template }: DamperReportProps)
     (i) => i.overall_result === 'fail' || i.overall_result === 'remedial',
   )
 
+  const photoGroups = useMemo(() => {
+    return inspections
+      .map((insp) => {
+        const cats = emptyPhotoCategories()
+        const stored = insp.photo_categories
+        if (stored) {
+          for (const key of Object.keys(cats) as (keyof typeof cats)[]) {
+            if (Array.isArray(stored[key])) cats[key] = stored[key]
+          }
+        }
+        const categorized = Object.values(cats).flat()
+        const legacy = (insp.photos || []).filter((url) => !categorized.includes(url))
+        if (legacy.length > 0) cats.additional = [...cats.additional, ...legacy]
+        const count = Object.values(cats).reduce((n, arr) => n + arr.length, 0)
+        return { insp, cats, count }
+      })
+      .filter((g) => g.count > 0)
+  }, [inspections])
+
+  const photoCount = photoGroups.reduce((sum, g) => sum + g.count, 0)
+
   useEffect(() => {
     const t = setTimeout(() => window.print(), 600)
     return () => clearTimeout(t)
@@ -97,8 +118,14 @@ export function DamperReport({ task, inspections, template }: DamperReportProps)
           style={{ backgroundColor: headerColor }}
         >
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-white/20">
-              <Flame className="h-6 w-6" />
+            <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg bg-white p-1">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/images/pyrocel-logo.png"
+                alt="Pyrocel logo"
+                crossOrigin="anonymous"
+                className="h-full w-full object-contain"
+              />
             </div>
             <div>
               <p className="text-lg font-bold leading-tight">{companyName}</p>
@@ -260,6 +287,65 @@ export function DamperReport({ task, inspections, template }: DamperReportProps)
             </table>
           </div>
         </section>
+
+        {/* Photographic evidence */}
+        {photoGroups.length > 0 && (
+          <section className="mb-8">
+            <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
+              Photographic Evidence ({photoCount})
+            </h2>
+            <div className="space-y-6">
+              {photoGroups.map(({ insp, cats }) => (
+                <div key={insp.id} className="avoid-break rounded-md border p-3">
+                  <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+                    <span className="font-mono font-semibold">{insp.damper?.urn || '-'}</span>
+                    {insp.damper?.location && (
+                      <span className="text-muted-foreground">{insp.damper.location}</span>
+                    )}
+                    {insp.damper?.floor && (
+                      <span className="text-muted-foreground">· {insp.damper.floor}</span>
+                    )}
+                    <span
+                      className="ml-auto inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
+                      style={{ backgroundColor: RESULT_COLORS[insp.overall_result] }}
+                    >
+                      {RESULT_LABELS[insp.overall_result]}
+                    </span>
+                  </div>
+                  <div className="space-y-3">
+                    {PHOTO_CATEGORIES.map((cat) => {
+                      const urls = cats[cat.key]
+                      if (!urls || urls.length === 0) return null
+                      return (
+                        <div key={cat.key} className="avoid-break">
+                          <p className="mb-1.5 text-xs font-semibold text-muted-foreground">
+                            {cat.label}
+                          </p>
+                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                            {urls.map((url, idx) => (
+                              <div
+                                key={url}
+                                className="avoid-break overflow-hidden rounded-md border bg-muted"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={url || '/placeholder.svg'}
+                                  alt={`${insp.damper?.urn || 'Damper'} — ${cat.label} ${idx + 1}`}
+                                  crossOrigin="anonymous"
+                                  className="aspect-[4/3] h-full w-full object-cover"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Signature & footer */}
         {template?.include_signature !== false && (

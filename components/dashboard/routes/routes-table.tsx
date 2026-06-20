@@ -30,19 +30,22 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Input } from '@/components/ui/input'
-import { MoreHorizontal, Pencil, Trash2, Search, Route as RouteIcon, Building2 } from 'lucide-react'
+import { MoreHorizontal, Pencil, Trash2, Search, Route as RouteIcon, Building2, MapPin } from 'lucide-react'
 import { EditRouteDialog } from './edit-route-dialog'
+import { RoutePlannerDialog, type PlannerSite } from './route-planner-dialog'
 import type { Route, Profile } from '@/lib/types/database'
 
 interface RoutesTableProps {
   routes: (Route & { assigned_engineer: Profile | null; siteCount: number })[]
   engineers: Profile[]
+  sites: PlannerSite[]
 }
 
-export function RoutesTable({ routes, engineers }: RoutesTableProps) {
+export function RoutesTable({ routes, engineers, sites }: RoutesTableProps) {
   const [search, setSearch] = useState('')
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [editRoute, setEditRoute] = useState<(Route & { assigned_engineer: Profile | null }) | null>(null)
+  const [planRoute, setPlanRoute] = useState<(Route & { siteCount: number }) | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -129,6 +132,10 @@ export function RoutesTable({ routes, engineers }: RoutesTableProps) {
                           <Pencil className="mr-2 h-4 w-4" />
                           Edit
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setPlanRoute(route)}>
+                          <MapPin className="mr-2 h-4 w-4" />
+                          Plan visit order
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => setDeleteId(route.id)}
                           className="text-destructive"
@@ -170,6 +177,16 @@ export function RoutesTable({ routes, engineers }: RoutesTableProps) {
           engineers={engineers}
           open={!!editRoute}
           onOpenChange={() => setEditRoute(null)}
+        />
+      )}
+
+      {planRoute && (
+        <RoutePlannerDialog
+          routeId={planRoute.id}
+          routeName={planRoute.name}
+          sites={sites}
+          open={!!planRoute}
+          onOpenChange={() => setPlanRoute(null)}
         />
       )}
     </div>

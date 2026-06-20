@@ -14,7 +14,6 @@ import { Button } from '@/components/ui/button'
 import {
   ArrowLeft,
   Printer,
-  ShieldCheck,
   CheckCircle2,
   XCircle,
   MinusCircle,
@@ -42,7 +41,7 @@ export function ServiceReport({ task, result, template }: ServiceReportProps) {
   // Header colour is driven by the service type's own colour, falling back to the template/default
   const headerColor =
     serviceType?.color || template?.header_color || '#0f172a'
-  const companyName = template?.company_name || 'PyrocelCRM Ltd'
+  const companyName = template?.company_name || 'Pyrocel Fire & Security'
   const sections = template?.sections || {}
 
   const checklist = result?.checklist_results || []
@@ -106,8 +105,14 @@ export function ServiceReport({ task, result, template }: ServiceReportProps) {
           style={{ backgroundColor: headerColor }}
         >
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-white/20">
-              <ShieldCheck className="h-6 w-6" />
+            <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg bg-white p-1">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/images/pyrocel-logo.png"
+                alt="Pyrocel logo"
+                crossOrigin="anonymous"
+                className="h-full w-full object-contain"
+              />
             </div>
             <div>
               <p className="text-lg font-bold leading-tight">{companyName}</p>

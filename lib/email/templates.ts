@@ -17,6 +17,27 @@ export interface EmailData {
   checklist: ChecklistItem[]
   engineerName: string
   engineerNotes?: string
+  reportUrl?: string
+}
+
+// Pyrocel brand palette (shared across all transactional emails).
+const BRAND = {
+  red: '#c8362b',
+  charcoal: '#1f2937',
+  ink: '#111827',
+}
+
+// Renders a branded "Open report" call-to-action button. Returns an empty
+// string when no URL is available so emails still send without a link.
+const reportButton = (url?: string): string => {
+  if (!url) return ''
+  return `
+    <div style="text-align: center; margin: 28px 0;">
+      <a href="${url}" style="display: inline-block; background: ${BRAND.red}; color: #ffffff; text-decoration: none; font-weight: bold; padding: 12px 28px; border-radius: 6px;">
+        Open Full Report
+      </a>
+    </div>
+  `
 }
 
 export const generateClientPassEmail = (data: EmailData): { subject: string; html: string } => {
@@ -27,7 +48,8 @@ export const generateClientPassEmail = (data: EmailData): { subject: string; htm
         <style>
           body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
           .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #1a4d2e; color: white; padding: 20px; text-align: center; border-radius: 5px; }
+          .header { background: ${BRAND.red}; color: white; padding: 24px 20px; text-align: center; border-radius: 5px; }
+          .brand { font-size: 22px; font-weight: bold; letter-spacing: 1px; margin: 0 0 4px; }
           .content { padding: 20px; background: #f9f9f9; margin: 20px 0; border-radius: 5px; }
           .checklist { margin: 20px 0; }
           .item { padding: 10px; border-left: 4px solid #2d8659; background: white; margin: 10px 0; }
@@ -40,7 +62,8 @@ export const generateClientPassEmail = (data: EmailData): { subject: string; htm
       <body>
         <div class="container">
           <div class="header">
-            <h1>Service Completed Successfully</h1>
+            <p class="brand">PYROCEL</p>
+            <h1 style="margin: 0; font-size: 18px;">Service Completed Successfully</h1>
           </div>
           
           <div class="content">
@@ -67,6 +90,8 @@ export const generateClientPassEmail = (data: EmailData): { subject: string; htm
                 </div>
               `).join('')}
             </div>
+
+            ${reportButton(data.reportUrl)}
             
             ${data.engineerNotes ? `
               <h3>Engineer Notes</h3>
@@ -75,11 +100,11 @@ export const generateClientPassEmail = (data: EmailData): { subject: string; htm
             
             <p>If you have any questions about this service, please don't hesitate to contact us.</p>
             
-            <p>Best regards,<br/>PyrocelCRM Team</p>
+            <p>Best regards,<br/>The Pyrocel Team</p>
           </div>
           
           <div class="footer">
-            <p>This is an automated report. Please do not reply to this email.</p>
+            <p>This is an automated report from Pyrocel. Please do not reply to this email.</p>
           </div>
         </div>
       </body>
@@ -101,7 +126,8 @@ export const generateClientFailEmail = (data: EmailData): { subject: string; htm
         <style>
           body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
           .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #dc3545; color: white; padding: 20px; text-align: center; border-radius: 5px; }
+          .header { background: ${BRAND.charcoal}; color: white; padding: 24px 20px; text-align: center; border-radius: 5px; }
+          .brand { font-size: 22px; font-weight: bold; letter-spacing: 1px; margin: 0 0 4px; color: ${'#f87171'}; }
           .content { padding: 20px; background: #f9f9f9; margin: 20px 0; border-radius: 5px; }
           .checklist { margin: 20px 0; }
           .item { padding: 10px; border-left: 4px solid #dc3545; background: white; margin: 10px 0; }
@@ -115,7 +141,8 @@ export const generateClientFailEmail = (data: EmailData): { subject: string; htm
       <body>
         <div class="container">
           <div class="header">
-            <h1>Service Requires Attention</h1>
+            <p class="brand">PYROCEL</p>
+            <h1 style="margin: 0; font-size: 18px;">Service Requires Attention</h1>
           </div>
           
           <div class="content">
@@ -150,14 +177,16 @@ export const generateClientFailEmail = (data: EmailData): { subject: string; htm
               <p>${data.engineerNotes}</p>
             ` : ''}
             
+            ${reportButton(data.reportUrl)}
+
             <h3>Next Steps</h3>
             <p>Please contact us as soon as possible to discuss the failed items and schedule any necessary follow-up work.</p>
             
-            <p>Best regards,<br/>PyrocelCRM Team</p>
+            <p>Best regards,<br/>The Pyrocel Team</p>
           </div>
           
           <div class="footer">
-            <p>This is an automated report. Please do not reply to this email.</p>
+            <p>This is an automated report from Pyrocel. Please do not reply to this email.</p>
           </div>
         </div>
       </body>
@@ -179,7 +208,8 @@ export const generateInternalAlertEmail = (data: EmailData): { subject: string; 
         <style>
           body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
           .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #dc3545; color: white; padding: 20px; text-align: center; border-radius: 5px; }
+          .header { background: ${BRAND.charcoal}; color: white; padding: 24px 20px; text-align: center; border-radius: 5px; }
+          .brand { font-size: 22px; font-weight: bold; letter-spacing: 1px; margin: 0 0 4px; color: #f87171; }
           .content { padding: 20px; background: #f9f9f9; margin: 20px 0; border-radius: 5px; }
           .checklist { margin: 20px 0; }
           .item { padding: 10px; border-left: 4px solid #dc3545; background: white; margin: 10px 0; }
@@ -192,7 +222,8 @@ export const generateInternalAlertEmail = (data: EmailData): { subject: string; 
       <body>
         <div class="container">
           <div class="header">
-            <h1>Internal Alert: Failed Inspection Items</h1>
+            <p class="brand">PYROCEL</p>
+            <h1 style="margin: 0; font-size: 18px;">Internal Alert: Failed Inspection Items</h1>
           </div>
           
           <div class="content">
@@ -229,6 +260,8 @@ export const generateInternalAlertEmail = (data: EmailData): { subject: string; 
               <p>${data.engineerNotes}</p>
             ` : ''}
             
+            ${reportButton(data.reportUrl)}
+
             <h3>Action Required</h3>
             <p>Please review the failed items and contact the client to schedule follow-up work or issue corrective actions.</p>
           </div>

@@ -1,4 +1,4 @@
-import type { Damper, DamperInspection, DamperResult } from '@/lib/types/database'
+import type { Damper, DamperInspection, DamperResult, DamperPhotoCategory } from '@/lib/types/database'
 
 export const DAMPER_SERVICE_NAME = 'Fire & Smoke Damper Testing'
 
@@ -25,6 +25,18 @@ export const DAMPER_TYPE_LABELS: Record<string, string> = {
   fire: 'Fire Damper',
   smoke: 'Smoke Damper',
   fire_smoke: 'Fire/Smoke Damper',
+}
+
+/** Required photo categories captured for each damper inspection. */
+export const PHOTO_CATEGORIES: { key: DamperPhotoCategory; label: string; hint: string }[] = [
+  { key: 'as_found', label: 'Damper as found (internal)', hint: 'Internal condition before testing' },
+  { key: 'when_tested', label: 'When tested', hint: 'Damper during the drop / operation test' },
+  { key: 'fire_compartment', label: 'Fire compartment (external)', hint: 'External barrier / penetration' },
+  { key: 'additional', label: 'Additional (comments / recommendations)', hint: 'Any further evidence' },
+]
+
+export function emptyPhotoCategories(): Record<DamperPhotoCategory, string[]> {
+  return { as_found: [], when_tested: [], fire_compartment: [], additional: [] }
 }
 
 export const RESULT_LABELS: Record<DamperResult, string> = {

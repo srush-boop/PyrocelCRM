@@ -7,8 +7,8 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'PyrocelCRM - Fire & Emergency Lighting Testing',
-  description: 'Comprehensive CRM for managing fire alarm and emergency lighting testing services',
+  title: 'Pyrocel Fire & Security - Service & Compliance CRM',
+  description: 'Pyrocel Fire & Security CRM for managing fire alarm, damper, and emergency lighting testing services',
   generator: 'v0.app',
   icons: {
     icon: [

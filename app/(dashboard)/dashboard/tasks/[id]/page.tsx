@@ -2,8 +2,18 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import { TaskExecution } from '@/components/dashboard/tasks/task-execution'
 import { DamperTaskExecution } from '@/components/dashboard/dampers/damper-task-execution'
+import { McpTaskExecution } from '@/components/dashboard/mcps/mcp-task-execution'
 import { isDamperService } from '@/lib/dampers'
-import type { Profile, TaskWithDetails, ChecklistTemplate, Damper, DamperInspection } from '@/lib/types/database'
+import { isFireAlarmService } from '@/lib/mcps'
+import type {
+  Profile,
+  TaskWithDetails,
+  ChecklistTemplate,
+  Damper,
+  DamperInspection,
+  Mcp,
+  McpInspection,
+} from '@/lib/types/database'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -62,6 +72,24 @@ export default async function TaskPage({ params }: PageProps) {
         profile={profile as Profile}
         dampers={(dampersData || []) as Damper[]}
         existingInspections={(inspectionsData || []) as DamperInspection[]}
+      />
+    )
+  }
+
+  // Weekly fire alarm tasks use a dedicated per-call-point flow
+  if (isFireAlarmService(task.site_service?.service_type?.name)) {
+    const siteId = task.site_service?.site?.id ?? task.site_service?.site_id
+    const [{ data: mcpsData }, { data: inspectionsData }] = await Promise.all([
+      supabase.from('mcps').select('*').eq('site_id', siteId).order('map_reference', { ascending: true }),
+      supabase.from('mcp_inspections').select('*').eq('task_id', id),
+    ])
+
+    return (
+      <McpTaskExecution
+        task={task as TaskWithDetails}
+        profile={profile as Profile}
+        mcps={(mcpsData || []) as Mcp[]}
+        existingInspections={(inspectionsData || []) as McpInspection[]}
       />
     )
   }

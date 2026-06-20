@@ -27,7 +27,7 @@ export default async function SchedulePage() {
       *,
       site_service:site_services(
         *,
-        site:sites(*),
+        site:sites(*, route:routes(*)),
         service_type:service_types(*)
       ),
       assigned_engineer:profiles(*)

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -20,6 +21,21 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   ArrowLeft,
   MapPin,
   Calendar,
@@ -31,11 +47,14 @@ import {
   Search,
   Wind,
   FileText,
+  Plus,
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
+import { emptyPhotoCategories, generateUrn } from '@/lib/dampers'
 import { DamperInspectionCard, type InspectionState } from './damper-inspection-card'
+import { SizeCombobox } from './size-combobox'
 import { ScanQrButton } from './scan-qr-button'
-import type { Profile, TaskWithDetails, Damper, DamperInspection, DamperResult } from '@/lib/types/database'
+import type { Profile, TaskWithDetails, Damper, DamperType, DamperInspection, DamperResult } from '@/lib/types/database'
 
 interface DamperTaskExecutionProps {
   task: TaskWithDetails
@@ -59,7 +78,7 @@ function blankState(): InspectionState {
     overall_result: 'pass',
     remedial_action: '',
     comments: '',
-    photos: [],
+    photos: emptyPhotoCategories(),
     touched: false,
   }
 }
@@ -79,15 +98,40 @@ function stateFromInspection(insp: DamperInspection): InspectionState {
     overall_result: insp.overall_result,
     remedial_action: insp.remedial_action || '',
     comments: insp.comments || '',
-    photos: insp.photos || [],
+    photos: photosFromInspection(insp),
     touched: true,
   }
+}
+
+// Build the categorized photo map from a stored inspection, migrating any
+// legacy uncategorized photos into the "additional" bucket.
+function photosFromInspection(insp: DamperInspection): InspectionState['photos'] {
+  const base = emptyPhotoCategories()
+  const cats = insp.photo_categories
+  if (cats) {
+    for (const key of Object.keys(base) as (keyof typeof base)[]) {
+      if (Array.isArray(cats[key])) base[key] = cats[key]
+    }
+  }
+  const categorized = Object.values(base).flat()
+  const legacy = (insp.photos || []).filter((url) => !categorized.includes(url))
+  if (legacy.length > 0) base.additional = [...base.additional, ...legacy]
+  return base
+}
+
+const emptyDamperForm = {
+  reference: '',
+  floor: '',
+  location: '',
+  damper_type: 'fire' as DamperType,
+  size_mm: '',
+  notes: '',
 }
 
 export function DamperTaskExecution({
   task,
   profile,
-  dampers,
+  dampers: initialDampers,
   existingInspections,
 }: DamperTaskExecutionProps) {
   const site = task.site_service?.site
@@ -98,6 +142,10 @@ export function DamperTaskExecution({
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [showSubmit, setShowSubmit] = useState(false)
+  const [dampers, setDampers] = useState<Damper[]>(initialDampers)
+  const [addOpen, setAddOpen] = useState(false)
+  const [addForm, setAddForm] = useState(emptyDamperForm)
+  const [addingDamper, setAddingDamper] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -142,6 +190,36 @@ export function DamperTaskExecution({
     router.refresh()
   }
 
+  // Engineers build the register in the field — add dampers as they find them.
+  const handleAddDamper = async () => {
+    if (!site?.id) return
+    setAddingDamper(true)
+    const { data, error } = await supabase
+      .from('dampers')
+      .insert({
+        site_id: site.id,
+        urn: generateUrn(),
+        reference: addForm.reference || null,
+        floor: addForm.floor || null,
+        location: addForm.location || null,
+        damper_type: addForm.damper_type,
+        size_mm: addForm.size_mm || null,
+        notes: addForm.notes || null,
+      })
+      .select()
+      .single()
+    setAddingDamper(false)
+    if (error || !data) {
+      console.log('[v0] Add damper error:', error?.message)
+      return
+    }
+    const newDamper = data as Damper
+    setDampers((prev) => [...prev, newDamper])
+    setStates((prev) => ({ ...prev, [newDamper.id]: blankState() }))
+    setAddForm(emptyDamperForm)
+    setAddOpen(false)
+  }
+
   const buildRows = (touchedOnly: boolean) => {
     const today = new Date().toISOString().split('T')[0]
     return dampers
@@ -166,7 +244,8 @@ export function DamperTaskExecution({
           overall_result: s.overall_result,
           remedial_action: s.remedial_action || null,
           comments: s.comments || null,
-          photos: s.photos,
+          photo_categories: s.photos,
+          photos: Object.values(s.photos).flat(),
         }
       })
   }
@@ -372,24 +451,37 @@ export function DamperTaskExecution({
 
           {dampers.length === 0 ? (
             <Card>
-              <CardContent className="py-8 text-center text-muted-foreground">
-                No dampers are registered for this site yet. Add them on the{' '}
-                <Link href={`/dashboard/sites/${site?.id}`} className="text-primary hover:underline">
-                  site page
-                </Link>{' '}
-                first.
+              <CardContent className="flex flex-col items-center gap-4 py-8 text-center">
+                <p className="text-muted-foreground">
+                  No dampers registered for this site yet. Add the dampers you find on site to
+                  build the register and start testing.
+                </p>
+                {canEdit && (
+                  <Button onClick={() => setAddOpen(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Damper
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ) : (
             <div className="space-y-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search dampers…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-9"
-                />
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search dampers…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                {canEdit && (
+                  <Button variant="outline" onClick={() => setAddOpen(true)} className="shrink-0">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Damper
+                  </Button>
+                )}
               </div>
               {filtered.map((damper) => (
                 <DamperInspectionCard
@@ -439,6 +531,90 @@ export function DamperTaskExecution({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Add damper in the field */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Damper</DialogTitle>
+            <DialogDescription>
+              A unique URN will be generated automatically for the QR label.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="add-reference">Reference</Label>
+              <Input
+                id="add-reference"
+                value={addForm.reference}
+                onChange={(e) => setAddForm({ ...addForm, reference: e.target.value })}
+                placeholder="e.g. FD-001"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="add-type">Damper Type</Label>
+              <Select
+                value={addForm.damper_type}
+                onValueChange={(v) => setAddForm({ ...addForm, damper_type: v as DamperType })}
+              >
+                <SelectTrigger id="add-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="fire">Fire Damper</SelectItem>
+                  <SelectItem value="smoke">Smoke Damper</SelectItem>
+                  <SelectItem value="fire_smoke">Fire/Smoke Damper</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="add-floor">Floor / Level</Label>
+              <Input
+                id="add-floor"
+                value={addForm.floor}
+                onChange={(e) => setAddForm({ ...addForm, floor: e.target.value })}
+                placeholder="e.g. Ground"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="add-size">Size / Shape</Label>
+              <SizeCombobox
+                id="add-size"
+                value={addForm.size_mm}
+                onChange={(v) => setAddForm({ ...addForm, size_mm: v })}
+                placeholder="e.g. 300x300 Rectangular"
+              />
+            </div>
+            <div className="grid gap-2 sm:col-span-2">
+              <Label htmlFor="add-location">Location</Label>
+              <Input
+                id="add-location"
+                value={addForm.location}
+                onChange={(e) => setAddForm({ ...addForm, location: e.target.value })}
+                placeholder="e.g. Plant Room AHU-1"
+              />
+            </div>
+            <div className="grid gap-2 sm:col-span-2">
+              <Label htmlFor="add-notes">Notes</Label>
+              <Input
+                id="add-notes"
+                value={addForm.notes}
+                onChange={(e) => setAddForm({ ...addForm, notes: e.target.value })}
+                placeholder="Access notes, etc."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddDamper} disabled={addingDamper}>
+              {addingDamper && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Add damper
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

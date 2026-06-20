@@ -165,6 +165,14 @@
     break-inside: avoid;
   }
 
+  /* Any clipping container (e.g. `overflow-hidden` used for rounded corners)
+     will cut off content that crosses a page boundary when printing. Force
+     everything inside a report to overflow visibly so nothing is clipped. */
+  .report-page,
+  .report-page * {
+    overflow: visible !important;
+  }
+
   /* Tables may legitimately span multiple pages. Let them flow, but keep
      individual rows intact and repeat the header row on every page so no
      rows get clipped at a page boundary. */

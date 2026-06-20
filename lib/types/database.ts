@@ -105,6 +105,9 @@ export interface SiteService {
   assigned_engineer_id: string | null
   reporting_emails: string[]
   defects_to_email: string | null
+  // When true (default) the next recurring task anchors to the original
+  // scheduled date (fixed cadence); when false it anchors to completion date.
+  anchor_next_to_schedule: boolean
   created_at: string
   site?: Site
   service_type?: ServiceType

@@ -34,6 +34,7 @@ import {
   History,
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
+import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import { McpInspectionCard, type McpInspectionState } from './mcp-inspection-card'
 import type { Profile, TaskWithDetails, Mcp, McpInspection } from '@/lib/types/database'
 
@@ -226,24 +227,24 @@ export function McpTaskExecution({
     // Generate next recurring task if site live
     const { data: ss } = await supabase
       .from('site_services')
-      .select('frequency_value, frequency_unit, site:sites!inner(status)')
+      .select('frequency_value, frequency_unit, anchor_next_to_schedule, site:sites!inner(status)')
       .eq('id', task.site_service_id)
       .single()
     const siteRel = (ss as { site?: { status?: string } | { status?: string }[] } | null)?.site
     const siteStatus = Array.isArray(siteRel) ? siteRel[0]?.status : siteRel?.status
     if (ss && siteStatus === 'live') {
-      const nextDate = new Date(completedAt)
-      if (ss.frequency_unit === 'weeks') nextDate.setDate(nextDate.getDate() + ss.frequency_value * 7)
-      else nextDate.setMonth(nextDate.getMonth() + ss.frequency_value)
+      const nextDateStr = toDateString(
+        computeNextScheduledDate(ss, { completedAt, scheduledDate: task.scheduled_date }),
+      )
       await supabase.from('tasks').insert({
         site_service_id: task.site_service_id,
         assigned_engineer_id: task.assigned_engineer_id,
-        scheduled_date: nextDate.toISOString().split('T')[0],
+        scheduled_date: nextDateStr,
         status: 'pending',
       })
       await supabase
         .from('site_services')
-        .update({ next_service_date: nextDate.toISOString().split('T')[0] })
+        .update({ next_service_date: nextDateStr })
         .eq('id', task.site_service_id)
     }
 

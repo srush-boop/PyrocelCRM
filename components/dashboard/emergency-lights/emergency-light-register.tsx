@@ -10,6 +10,11 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
+import {
   Table,
   TableBody,
   TableCell,
@@ -41,7 +46,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Lightbulb, Loader2, MoreHorizontal, Pencil, Trash2, Camera, X, MapPin } from 'lucide-react'
+import { Plus, Lightbulb, Loader2, MoreHorizontal, Pencil, Trash2, Camera, X, MapPin, ChevronDown } from 'lucide-react'
 import {
   EMERGENCY_LIGHT_RESULT_VARIANT,
   FITTING_TYPES,
@@ -64,6 +69,7 @@ const emptyForm = {
 }
 
 export function EmergencyLightRegister({ siteId, lights }: EmergencyLightRegisterProps) {
+  const [open, setOpen] = useState(true)
   const [search, setSearch] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<EmergencyLight | null>(null)
@@ -168,17 +174,32 @@ export function EmergencyLightRegister({ siteId, lights }: EmergencyLightRegiste
   }
 
   return (
+    <Collapsible asChild open={open} onOpenChange={setOpen}>
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Lightbulb className="h-5 w-5" />
-              Emergency Lighting Register
-            </CardTitle>
-            <CardDescription>
-              {lights.length} fitting{lights.length === 1 ? '' : 's'} registered for this site
-            </CardDescription>
+          <div className="flex items-start gap-2">
+            <CollapsibleTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0"
+                aria-label={open ? 'Collapse emergency lighting register' : 'Expand emergency lighting register'}
+              >
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${open ? '' : '-rotate-90'}`}
+                />
+              </Button>
+            </CollapsibleTrigger>
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Lightbulb className="h-5 w-5" />
+                Emergency Lighting Register
+              </CardTitle>
+              <CardDescription>
+                {lights.length} fitting{lights.length === 1 ? '' : 's'} registered for this site
+              </CardDescription>
+            </div>
           </div>
           <Button size="sm" onClick={openAdd}>
             <Plus className="mr-2 h-4 w-4" />
@@ -186,6 +207,7 @@ export function EmergencyLightRegister({ siteId, lights }: EmergencyLightRegiste
           </Button>
         </div>
       </CardHeader>
+      <CollapsibleContent>
       <CardContent className="space-y-4">
         {lights.length > 0 && (
           <Input
@@ -267,6 +289,7 @@ export function EmergencyLightRegister({ siteId, lights }: EmergencyLightRegiste
           </Table>
         </div>
       </CardContent>
+      </CollapsibleContent>
 
       {/* Add / Edit dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -415,5 +438,6 @@ export function EmergencyLightRegister({ siteId, lights }: EmergencyLightRegiste
         </AlertDialogContent>
       </AlertDialog>
     </Card>
+    </Collapsible>
   )
 }

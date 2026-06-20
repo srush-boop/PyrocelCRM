@@ -33,7 +33,7 @@ export function DamperReport({ task, inspections, template, referenceNumber }: D
   const serviceType = task.site_service?.service_type
   const engineer = task.assigned_engineer
   const headerColor = template?.header_color || '#c8102e'
-  const companyName = template?.company_name || 'Pyrocel Fire & Security'
+  const companyName = template?.company_name || 'Pyrocel Ltd'
   const sections = template?.sections || {}
 
   const stats = useMemo(() => {
@@ -376,14 +376,14 @@ export function DamperReport({ task, inspections, template, referenceNumber }: D
                                     {urls.map((url, idx) => (
                                       <div
                                         key={url}
-                                        className="avoid-break overflow-hidden rounded-md border bg-muted"
+                                        className="avoid-break relative aspect-[4/3] w-full overflow-hidden rounded-md border bg-muted"
                                       >
                                         {/* eslint-disable-next-line @next/next/no-img-element */}
                                         <img
                                           src={url || '/placeholder.svg'}
                                           alt={`${insp.damper?.urn || 'Damper'} — ${cat.label} ${idx + 1}`}
                                           crossOrigin="anonymous"
-                                          className="aspect-[4/3] h-full w-full object-cover"
+                                          className="absolute inset-0 h-full w-full object-cover"
                                         />
                                       </div>
                                     ))}

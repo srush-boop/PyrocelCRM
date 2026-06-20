@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -20,8 +21,17 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Calendar } from '@/components/ui/calendar'
-import { Mail, AlertCircle, CheckCircle, Search, Filter, CalendarIcon, X } from 'lucide-react'
+import { Mail, AlertCircle, CheckCircle, Search, Filter, CalendarIcon, X, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { formatDateUK, cn } from '@/lib/utils'
@@ -55,6 +65,15 @@ export default function ReportsPage() {
   const [reports, setReports] = useState<TaskReport[]>([])
   const [loading, setLoading] = useState(true)
   const [sendingEmail, setSendingEmail] = useState<string | null>(null)
+
+  // Multi-select + bulk email
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false)
+  const [recipientMode, setRecipientMode] = useState<'default' | 'alternate'>('default')
+  const [alternateEmails, setAlternateEmails] = useState<string[]>([])
+  const [newAlternateEmail, setNewAlternateEmail] = useState('')
+  const [bulkSending, setBulkSending] = useState(false)
+  const [bulkResult, setBulkResult] = useState<{ sent: number; failed: number } | null>(null)
 
   // Filter states
   const [search, setSearch] = useState('')
@@ -215,14 +234,14 @@ export default function ReportsPage() {
     selectedEngineer !== 'all' || selectedServiceType !== 'all' || selectedStatus !== 'all' || 
     emailStatus !== 'all' || dateFrom || dateTo
 
-  const resendEmail = async (reportId: string) => {
+  const resendEmail = async (report: TaskReport) => {
     try {
-      setSendingEmail(reportId)
-      
+      setSendingEmail(report.id)
+
       const response = await fetch('/api/send-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskResultId: reportId }),
+        body: JSON.stringify({ taskId: report.taskId, resend: true }),
       })
 
       if (!response.ok) throw new Error('Failed to send email')
@@ -235,6 +254,73 @@ export default function ReportsPage() {
     } finally {
       setSendingEmail(null)
     }
+  }
+
+  const toggleOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleAll = (checked: boolean) => {
+    setSelectedIds(checked ? new Set(filteredReports.map((r) => r.id)) : new Set())
+  }
+
+  const addAlternateEmail = () => {
+    const email = newAlternateEmail.trim()
+    if (email && !alternateEmails.includes(email)) {
+      setAlternateEmails([...alternateEmails, email])
+      setNewAlternateEmail('')
+    }
+  }
+
+  const openEmailDialog = () => {
+    setRecipientMode('default')
+    setAlternateEmails([])
+    setNewAlternateEmail('')
+    setBulkResult(null)
+    setEmailDialogOpen(true)
+  }
+
+  const handleBulkSend = async () => {
+    const selected = reports.filter((r) => selectedIds.has(r.id))
+    if (selected.length === 0) return
+    if (recipientMode === 'alternate' && alternateEmails.length === 0) {
+      toast.error('Add at least one alternate email address')
+      return
+    }
+
+    setBulkSending(true)
+    let sent = 0
+    let failed = 0
+
+    for (const report of selected) {
+      try {
+        const response = await fetch('/api/send-report', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            taskId: report.taskId,
+            resend: true,
+            ...(recipientMode === 'alternate' ? { emails: alternateEmails } : {}),
+          }),
+        })
+        if (response.ok) sent += 1
+        else failed += 1
+      } catch {
+        failed += 1
+      }
+    }
+
+    setBulkSending(false)
+    setBulkResult({ sent, failed })
+    if (sent > 0) toast.success(`Sent ${sent} report${sent === 1 ? '' : 's'}`)
+    if (failed > 0) toast.error(`Failed to send ${failed} report${failed === 1 ? '' : 's'}`)
+    setSelectedIds(new Set())
+    loadReports()
   }
 
   return (
@@ -253,12 +339,23 @@ export default function ReportsPage() {
                 {filteredReports.length} of {reports.length} reports
               </CardDescription>
             </div>
-            {hasActiveFilters && (
-              <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-2">
-                <X className="h-4 w-4" />
-                Clear Filters
+            <div className="flex items-center gap-2">
+              {hasActiveFilters && (
+                <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-2">
+                  <X className="h-4 w-4" />
+                  Clear Filters
+                </Button>
+              )}
+              <Button
+                size="sm"
+                onClick={openEmailDialog}
+                disabled={selectedIds.size === 0}
+                className="gap-2"
+              >
+                <Send className="h-4 w-4" />
+                Email Selected{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
               </Button>
-            )}
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -432,6 +529,16 @@ export default function ReportsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[40px]">
+                    <Checkbox
+                      checked={
+                        filteredReports.length > 0 &&
+                        filteredReports.every((r) => selectedIds.has(r.id))
+                      }
+                      onCheckedChange={(checked) => toggleAll(checked === true)}
+                      aria-label="Select all reports"
+                    />
+                  </TableHead>
                   <TableHead>Reference</TableHead>
                   <TableHead>Client</TableHead>
                   <TableHead>Site</TableHead>
@@ -446,13 +553,13 @@ export default function ReportsPage() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="h-24 text-center">
+                    <TableCell colSpan={10} className="h-24 text-center">
                       Loading reports...
                     </TableCell>
                   </TableRow>
                 ) : filteredReports.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="h-24 text-center">
+                    <TableCell colSpan={10} className="h-24 text-center">
                       <div className="flex flex-col items-center gap-2">
                         <AlertCircle className="h-8 w-8 text-muted-foreground/50" />
                         <p className="text-muted-foreground">No reports found matching your filters</p>
@@ -461,7 +568,14 @@ export default function ReportsPage() {
                   </TableRow>
                 ) : (
                   filteredReports.map((report) => (
-                    <TableRow key={report.id}>
+                    <TableRow key={report.id} data-state={selectedIds.has(report.id) ? 'selected' : undefined}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedIds.has(report.id)}
+                          onCheckedChange={() => toggleOne(report.id)}
+                          aria-label={`Select report ${report.referenceNumber}`}
+                        />
+                      </TableCell>
                       <TableCell className="font-mono text-xs font-medium">{report.referenceNumber}</TableCell>
                       <TableCell>{report.clientName || <span className="text-muted-foreground">-</span>}</TableCell>
                       <TableCell className="font-medium">{report.siteName}</TableCell>
@@ -496,7 +610,7 @@ export default function ReportsPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => resendEmail(report.id)}
+                          onClick={() => resendEmail(report)}
                           disabled={sendingEmail === report.id}
                           className="gap-2"
                         >
@@ -512,6 +626,113 @@ export default function ReportsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Bulk email dialog with optional alternate recipients */}
+      <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Email Reports</DialogTitle>
+            <DialogDescription>
+              Send {selectedIds.size} selected report{selectedIds.size === 1 ? '' : 's'} to their
+              recipients, or to an alternate email address.
+            </DialogDescription>
+          </DialogHeader>
+
+          {bulkResult ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-6 text-center">
+              <CheckCircle className="h-10 w-10 text-green-600" />
+              <p className="font-medium">
+                {bulkResult.sent} sent
+                {bulkResult.failed > 0 ? `, ${bulkResult.failed} failed` : ''}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <RadioGroup
+                value={recipientMode}
+                onValueChange={(v) => setRecipientMode(v as 'default' | 'alternate')}
+              >
+                <div className="flex items-start gap-2">
+                  <RadioGroupItem value="default" id="mode-default" className="mt-1" />
+                  <Label htmlFor="mode-default" className="font-normal">
+                    Use each report&apos;s configured recipients
+                    <span className="block text-xs text-muted-foreground">
+                      Sends to the client/site emails set up for each report.
+                    </span>
+                  </Label>
+                </div>
+                <div className="flex items-start gap-2">
+                  <RadioGroupItem value="alternate" id="mode-alternate" className="mt-1" />
+                  <Label htmlFor="mode-alternate" className="font-normal">
+                    Send to an alternate email
+                    <span className="block text-xs text-muted-foreground">
+                      Overrides the default recipients for all selected reports.
+                    </span>
+                  </Label>
+                </div>
+              </RadioGroup>
+
+              {recipientMode === 'alternate' && (
+                <div className="space-y-2">
+                  <Label htmlFor="alt-email">Alternate recipients</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="alt-email"
+                      type="email"
+                      value={newAlternateEmail}
+                      onChange={(e) => setNewAlternateEmail(e.target.value)}
+                      placeholder="name@example.com"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          addAlternateEmail()
+                        }
+                      }}
+                    />
+                    <Button type="button" variant="outline" onClick={addAlternateEmail}>
+                      Add
+                    </Button>
+                  </div>
+                  {alternateEmails.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {alternateEmails.map((email) => (
+                        <Badge key={email} variant="secondary" className="gap-1">
+                          {email}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setAlternateEmails(alternateEmails.filter((e) => e !== email))
+                            }
+                            aria-label={`Remove ${email}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            {bulkResult ? (
+              <Button onClick={() => setEmailDialogOpen(false)}>Close</Button>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => setEmailDialogOpen(false)} disabled={bulkSending}>
+                  Cancel
+                </Button>
+                <Button onClick={handleBulkSend} disabled={bulkSending} className="gap-2">
+                  <Mail className="h-4 w-4" />
+                  {bulkSending ? 'Sending...' : `Send ${selectedIds.size} report${selectedIds.size === 1 ? '' : 's'}`}
+                </Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

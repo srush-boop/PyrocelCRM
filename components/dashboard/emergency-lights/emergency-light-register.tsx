@@ -69,7 +69,7 @@ const emptyForm = {
 }
 
 export function EmergencyLightRegister({ siteId, lights }: EmergencyLightRegisterProps) {
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<EmergencyLight | null>(null)

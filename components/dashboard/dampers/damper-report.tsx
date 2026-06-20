@@ -220,7 +220,7 @@ export function DamperReport({ task, inspections, template, referenceNumber }: D
 
         {/* Remedial actions */}
         {remedials.length > 0 && (
-          <section className="avoid-break mb-8">
+          <section className="mb-8">
             <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
               Remedial Actions Required ({remedials.length})
             </h2>
@@ -228,7 +228,7 @@ export function DamperReport({ task, inspections, template, referenceNumber }: D
               {remedials.map((insp) => (
                 <div
                   key={insp.id}
-                  className="rounded-md border-l-4 bg-muted/40 p-3 text-sm"
+                  className="avoid-break rounded-md border-l-4 bg-muted/40 p-3 text-sm"
                   style={{ borderLeftColor: RESULT_COLORS[insp.overall_result] }}
                 >
                   <p className="font-medium">
@@ -244,8 +244,9 @@ export function DamperReport({ task, inspections, template, referenceNumber }: D
           </section>
         )}
 
-        {/* Detailed results */}
-        <section className="avoid-break mb-8">
+        {/* Detailed results — table may span multiple pages, so the section
+            itself must not be break-inside: avoid (that would clip rows). */}
+        <section className="mb-8">
           <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
             Detailed Results
           </h2>

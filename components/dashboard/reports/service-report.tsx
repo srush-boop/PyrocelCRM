@@ -212,8 +212,9 @@ export function ServiceReport({ task, result, template }: ServiceReportProps) {
           </div>
         </div>
 
-        {/* Detailed checklist */}
-        <section className="avoid-break mb-8">
+        {/* Detailed checklist — table may span multiple pages, so the section
+            itself must not be break-inside: avoid (that would clip rows). */}
+        <section className="mb-8">
           <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
             Checklist Results
           </h2>
@@ -259,7 +260,7 @@ export function ServiceReport({ task, result, template }: ServiceReportProps) {
 
         {/* Engineer notes */}
         {result?.engineer_notes && (
-          <section className="avoid-break mb-8">
+          <section className="mb-8">
             <h2 className="mb-2 text-base font-bold" style={{ color: headerColor }}>
               Engineer Notes
             </h2>
@@ -271,7 +272,7 @@ export function ServiceReport({ task, result, template }: ServiceReportProps) {
 
         {/* Photos */}
         {result?.photos && result.photos.length > 0 && (
-          <section className="avoid-break mb-8">
+          <section className="mb-8">
             <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
               Photographic Evidence
             </h2>

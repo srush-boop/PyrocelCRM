@@ -164,6 +164,32 @@
     page-break-inside: avoid;
     break-inside: avoid;
   }
+
+  /* Tables may legitimately span multiple pages. Let them flow, but keep
+     individual rows intact and repeat the header row on every page so no
+     rows get clipped at a page boundary. */
+  table {
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+  thead {
+    display: table-header-group;
+  }
+  tfoot {
+    display: table-footer-group;
+  }
+  tr,
+  img {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Headings should never be stranded at the bottom of a page. */
+  h2,
+  h3 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
 }
 
 @page {

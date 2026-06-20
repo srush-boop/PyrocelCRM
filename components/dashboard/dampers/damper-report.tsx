@@ -25,9 +25,10 @@ interface DamperReportProps {
   task: TaskWithDetails
   inspections: (DamperInspection & { damper: Damper | null })[]
   template: ReportTemplate | null
+  referenceNumber?: string | null
 }
 
-export function DamperReport({ task, inspections, template }: DamperReportProps) {
+export function DamperReport({ task, inspections, template, referenceNumber }: DamperReportProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
   const engineer = task.assigned_engineer
@@ -137,13 +138,17 @@ export function DamperReport({ task, inspections, template }: DamperReportProps)
           <div className="text-right">
             <p className="text-sm font-semibold uppercase tracking-wide">Inspection Report</p>
             <p className="text-xs text-white/80">Fire &amp; Smoke Dampers</p>
+            {referenceNumber && (
+              <p className="mt-1 font-mono text-sm font-bold">{referenceNumber}</p>
+            )}
           </div>
         </header>
 
         {/* Meta */}
         <section className="mb-8 grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
-          <Meta label="Site" value={site?.name} />
+          <Meta label="Inspection Reference" value={referenceNumber} />
           <Meta label="Report Date" value={formatDateUK(completedDate)} />
+          <Meta label="Site" value={site?.name} />
           <Meta label="Address" value={site?.address} />
           <Meta label="Inspected By" value={engineer?.full_name || engineer?.email} />
           <Meta label="Service" value={serviceType?.name} />

@@ -10,6 +10,7 @@ export interface ChecklistItem {
 export interface EmailData {
   clientName: string
   clientEmail: string
+  referenceNumber?: string
   siteName: string
   serviceType: string
   completedDate: string
@@ -73,6 +74,7 @@ export const generateClientPassEmail = (data: EmailData): { subject: string; htm
             
             <h3>Service Details</h3>
             <ul>
+              ${data.referenceNumber ? `<li><strong>Inspection Reference:</strong> ${data.referenceNumber}</li>` : ''}
               <li><strong>Site:</strong> ${data.siteName}</li>
               <li><strong>Service Type:</strong> ${data.serviceType}</li>
               <li><strong>Completion Date:</strong> ${data.completedDate}</li>
@@ -111,7 +113,7 @@ export const generateClientPassEmail = (data: EmailData): { subject: string; htm
     </html>
   `
   return {
-    subject: `Service Completed: ${data.serviceType} at ${data.siteName}`,
+    subject: `Service Completed: ${data.serviceType} at ${data.siteName}${data.referenceNumber ? ` (Ref ${data.referenceNumber})` : ''}`,
     html
   }
 }
@@ -154,6 +156,7 @@ export const generateClientFailEmail = (data: EmailData): { subject: string; htm
             
             <h3>Service Details</h3>
             <ul>
+              ${data.referenceNumber ? `<li><strong>Inspection Reference:</strong> ${data.referenceNumber}</li>` : ''}
               <li><strong>Site:</strong> ${data.siteName}</li>
               <li><strong>Service Type:</strong> ${data.serviceType}</li>
               <li><strong>Completion Date:</strong> ${data.completedDate}</li>
@@ -193,7 +196,7 @@ export const generateClientFailEmail = (data: EmailData): { subject: string; htm
     </html>
   `
   return {
-    subject: `Attention Required: ${data.serviceType} at ${data.siteName}`,
+    subject: `Attention Required: ${data.serviceType} at ${data.siteName}${data.referenceNumber ? ` (Ref ${data.referenceNumber})` : ''}`,
     html
   }
 }
@@ -230,6 +233,7 @@ export const generateInternalAlertEmail = (data: EmailData): { subject: string; 
             <h3>Failed Items Report</h3>
             <table>
               <tr>
+                <th>Reference</th>
                 <th>Site</th>
                 <th>Service Type</th>
                 <th>Client</th>
@@ -237,6 +241,7 @@ export const generateInternalAlertEmail = (data: EmailData): { subject: string; 
                 <th>Date</th>
               </tr>
               <tr>
+                <td>${data.referenceNumber || '-'}</td>
                 <td>${data.siteName}</td>
                 <td>${data.serviceType}</td>
                 <td>${data.clientName}</td>
@@ -274,7 +279,7 @@ export const generateInternalAlertEmail = (data: EmailData): { subject: string; 
     </html>
   `
   return {
-    subject: `[ALERT] Failed Inspection Items - ${data.siteName}`,
+    subject: `[ALERT] Failed Inspection Items - ${data.siteName}${data.referenceNumber ? ` (Ref ${data.referenceNumber})` : ''}`,
     html
   }
 }

@@ -115,6 +115,7 @@ export async function POST(request: NextRequest) {
     const emailData: EmailData = {
       clientName: site?.contact_name || 'Client',
       clientEmail: recipients[0] || site?.contact_email || '',
+      referenceNumber: taskResult.reference_number || undefined,
       siteName: site?.name || 'Site',
       serviceType: serviceType?.name || 'Service',
       completedDate: formatDateUK(task.completed_at || new Date().toISOString()),

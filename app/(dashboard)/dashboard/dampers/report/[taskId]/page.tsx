@@ -43,14 +43,16 @@ export default async function DamperReportPage({ params }: PageProps) {
 
   const serviceTypeId = task.site_service?.service_type_id
 
-  const [{ data: inspectionsData }, { data: templateData }] = await Promise.all([
-    supabase
-      .from('damper_inspections')
-      .select('*, damper:dampers(*)')
-      .eq('task_id', taskId)
-      .order('inspection_date', { ascending: false }),
-    supabase.from('report_templates').select('*').eq('service_type_id', serviceTypeId).maybeSingle(),
-  ])
+  const [{ data: inspectionsData }, { data: templateData }, { data: resultData }] =
+    await Promise.all([
+      supabase
+        .from('damper_inspections')
+        .select('*, damper:dampers(*)')
+        .eq('task_id', taskId)
+        .order('inspection_date', { ascending: false }),
+      supabase.from('report_templates').select('*').eq('service_type_id', serviceTypeId).maybeSingle(),
+      supabase.from('task_results').select('reference_number').eq('task_id', taskId).maybeSingle(),
+    ])
 
   const inspections = (inspectionsData || []) as (DamperInspection & { damper: Damper | null })[]
 
@@ -59,6 +61,7 @@ export default async function DamperReportPage({ params }: PageProps) {
       task={task as TaskWithDetails}
       inspections={inspections}
       template={(templateData as ReportTemplate | null) ?? null}
+      referenceNumber={resultData?.reference_number ?? null}
     />
   )
 }

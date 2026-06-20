@@ -124,13 +124,17 @@ export function ServiceReport({ task, result, template }: ServiceReportProps) {
           <div className="text-right">
             <p className="text-sm font-semibold uppercase tracking-wide">Service Report</p>
             <p className="text-xs text-white/80">{serviceType?.name}</p>
+            {result?.reference_number && (
+              <p className="mt-1 font-mono text-sm font-bold">{result.reference_number}</p>
+            )}
           </div>
         </header>
 
         {/* Meta */}
         <section className="mb-8 grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
-          <Meta label="Site" value={site?.name} />
+          <Meta label="Inspection Reference" value={result?.reference_number} />
           <Meta label="Report Date" value={formatDateUK(completedDate)} />
+          <Meta label="Site" value={site?.name} />
           <Meta label="Address" value={site?.address} />
           <Meta label="Engineer" value={engineer?.full_name || engineer?.email} />
           <Meta label="Service" value={serviceType?.name} />

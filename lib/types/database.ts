@@ -143,6 +143,7 @@ export type TaskResultStatus = 'pending' | 'pass' | 'fail' | 'partial'
 export interface TaskResult {
   id: string
   task_id: string
+  reference_number: string
   checklist_results: ChecklistResult[]
   overall_status: TaskResultStatus
   photos: string[]

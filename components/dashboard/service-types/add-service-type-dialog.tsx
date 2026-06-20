@@ -33,6 +33,7 @@ export function AddServiceTypeDialog() {
     description: '',
     default_frequency_value: 12,
     default_frequency_unit: 'months' as 'weeks' | 'months',
+    defects_to_email: '',
   })
   const router = useRouter()
   const supabase = createClient()
@@ -52,6 +53,7 @@ export function AddServiceTypeDialog() {
       default_frequency_months: frequencyInMonths,
       default_frequency_value: formData.default_frequency_value,
       default_frequency_unit: formData.default_frequency_unit,
+      defects_to_email: formData.defects_to_email.trim() || null,
     })
 
     setLoading(false)
@@ -66,6 +68,7 @@ export function AddServiceTypeDialog() {
         description: '',
         default_frequency_value: 12,
         default_frequency_unit: 'months',
+        defects_to_email: '',
       })
       router.refresh()
     }
@@ -135,6 +138,20 @@ export function AddServiceTypeDialog() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="defects-to-email">Defects to</Label>
+              <Input
+                id="defects-to-email"
+                type="email"
+                value={formData.defects_to_email}
+                onChange={(e) => setFormData({ ...formData, defects_to_email: e.target.value })}
+                placeholder="defects@yourcompany.com"
+              />
+              <p className="text-xs text-muted-foreground">
+                When a report contains defects, this address is CC&apos;d in. Can be overridden per
+                site in the service setup.
+              </p>
             </div>
           </div>
           <DialogFooter>

@@ -48,6 +48,7 @@ import {
   Wind,
   FileText,
   Plus,
+  CheckCircle2,
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { emptyPhotoCategories, generateUrn } from '@/lib/dampers'
@@ -146,6 +147,9 @@ export function DamperTaskExecution({
   const [addOpen, setAddOpen] = useState(false)
   const [addForm, setAddForm] = useState(emptyDamperForm)
   const [addingDamper, setAddingDamper] = useState(false)
+  const [highlightId, setHighlightId] = useState<string | null>(null)
+  const [scanError, setScanError] = useState<string | null>(null)
+  const [showDone, setShowDone] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -171,15 +175,49 @@ export function DamperTaskExecution({
     return { total: dampers.length, tested, passed, failed, remedial, na }
   }, [states, dampers.length])
 
-  const filtered = dampers.filter((d) => {
+  const filtered = useMemo(() => {
     const q = search.toLowerCase()
-    return (
-      d.urn.toLowerCase().includes(q) ||
-      (d.reference || '').toLowerCase().includes(q) ||
-      (d.location || '').toLowerCase().includes(q) ||
-      (d.floor || '').toLowerCase().includes(q)
+    const matches = dampers.filter(
+      (d) =>
+        d.urn.toLowerCase().includes(q) ||
+        (d.reference || '').toLowerCase().includes(q) ||
+        (d.location || '').toLowerCase().includes(q) ||
+        (d.floor || '').toLowerCase().includes(q),
     )
-  })
+    // Keep not-yet-inspected dampers at the top; move inspected ones to the
+    // bottom while preserving each group's original order.
+    return matches
+      .map((d, index) => ({ d, index }))
+      .sort((a, b) => {
+        const aDone = states[a.d.id]?.touched ? 1 : 0
+        const bDone = states[b.d.id]?.touched ? 1 : 0
+        if (aDone !== bDone) return aDone - bDone
+        return a.index - b.index
+      })
+      .map((entry) => entry.d)
+  }, [dampers, search, states])
+
+  // Locate a scanned damper in the current list, clearing any search filter and
+  // scrolling/highlighting its card. Used by the QR scanner during inspection.
+  const handleScanToDamper = (urn: string) => {
+    const target = dampers.find(
+      (d) =>
+        d.urn.toLowerCase() === urn.toLowerCase() ||
+        (d.reference || '').toLowerCase() === urn.toLowerCase(),
+    )
+    if (!target) {
+      setScanError(`No damper matching "${urn}" on this site's register.`)
+      setTimeout(() => setScanError(null), 5000)
+      return
+    }
+    setSearch('')
+    setHighlightId(target.id)
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`damper-${target.id}`)
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+    setTimeout(() => setHighlightId(null), 2500)
+  }
 
   const handleStart = async () => {
     await supabase
@@ -368,7 +406,8 @@ export function DamperTaskExecution({
 
     setSubmitting(false)
     setShowSubmit(false)
-    router.push(`/dashboard/dampers/report/${task.id}`)
+    setStatus('completed')
+    setShowDone(true)
     router.refresh()
   }
 
@@ -397,7 +436,7 @@ export function DamperTaskExecution({
             </Link>
           </Button>
         )}
-        <ScanQrButton className="mt-1" />
+        <ScanQrButton className="mt-1" onScan={handleScanToDamper} />
       </div>
 
       <Card>
@@ -483,14 +522,28 @@ export function DamperTaskExecution({
                   </Button>
                 )}
               </div>
+              {scanError && (
+                <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {scanError}
+                </p>
+              )}
               {filtered.map((damper) => (
-                <DamperInspectionCard
+                <div
                   key={damper.id}
-                  damper={damper}
-                  state={states[damper.id]}
-                  disabled={!canEdit}
-                  onChange={(next) => setStates((prev) => ({ ...prev, [damper.id]: next }))}
-                />
+                  id={`damper-${damper.id}`}
+                  className={
+                    highlightId === damper.id
+                      ? 'rounded-lg ring-2 ring-primary ring-offset-2 transition-all'
+                      : 'transition-all'
+                  }
+                >
+                  <DamperInspectionCard
+                    damper={damper}
+                    state={states[damper.id]}
+                    disabled={!canEdit}
+                    onChange={(next) => setStates((prev) => ({ ...prev, [damper.id]: next }))}
+                  />
+                </div>
               ))}
             </div>
           )}
@@ -611,6 +664,41 @@ export function DamperTaskExecution({
             <Button onClick={handleAddDamper} disabled={addingDamper}>
               {addingDamper && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Add damper
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Inspection complete — let the engineer choose what to do next */}
+      <Dialog open={showDone} onOpenChange={setShowDone}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+              <CheckCircle2 className="h-6 w-6 text-primary" />
+            </div>
+            <DialogTitle className="text-center">Inspection complete</DialogTitle>
+            <DialogDescription className="text-center">
+              The report has been generated and emailed to the site contacts. What would you
+              like to do next?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button
+              className="w-full"
+              onClick={() => router.push(`/dashboard/dampers/report/${task.id}`)}
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              View report
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                setShowDone(false)
+                router.push('/dashboard')
+              }}
+            >
+              Return to tasks
             </Button>
           </DialogFooter>
         </DialogContent>

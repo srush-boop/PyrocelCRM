@@ -3,8 +3,10 @@ import { redirect, notFound } from 'next/navigation'
 import { TaskExecution } from '@/components/dashboard/tasks/task-execution'
 import { DamperTaskExecution } from '@/components/dashboard/dampers/damper-task-execution'
 import { McpTaskExecution } from '@/components/dashboard/mcps/mcp-task-execution'
+import { EmergencyLightTaskExecution } from '@/components/dashboard/emergency-lights/emergency-light-task-execution'
 import { isDamperService } from '@/lib/dampers'
 import { isFireAlarmService } from '@/lib/mcps'
+import { isEmergencyLightService } from '@/lib/emergency-lights'
 import type {
   Profile,
   TaskWithDetails,
@@ -13,6 +15,8 @@ import type {
   DamperInspection,
   Mcp,
   McpInspection,
+  EmergencyLight,
+  EmergencyLightInspection,
 } from '@/lib/types/database'
 
 interface PageProps {
@@ -84,12 +88,56 @@ export default async function TaskPage({ params }: PageProps) {
       supabase.from('mcp_inspections').select('*').eq('task_id', id),
     ])
 
+    // The weekly test rotates through call points: find the most recently
+    // tested MCP from any *previous* task so we can point the engineer at the
+    // next one in the list.
+    const mcpIds = (mcpsData || []).map((m) => m.id)
+    let lastTestedMcpId: string | null = null
+    let lastTestedDate: string | null = null
+    if (mcpIds.length > 0) {
+      const { data: priorInspection } = await supabase
+        .from('mcp_inspections')
+        .select('mcp_id, inspection_date')
+        .in('mcp_id', mcpIds)
+        .neq('task_id', id)
+        .order('inspection_date', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      lastTestedMcpId = priorInspection?.mcp_id ?? null
+      lastTestedDate = priorInspection?.inspection_date ?? null
+    }
+
     return (
       <McpTaskExecution
         task={task as TaskWithDetails}
         profile={profile as Profile}
         mcps={(mcpsData || []) as Mcp[]}
         existingInspections={(inspectionsData || []) as McpInspection[]}
+        lastTestedMcpId={lastTestedMcpId}
+        lastTestedDate={lastTestedDate}
+      />
+    )
+  }
+
+  // Emergency lighting tasks use a dedicated per-fitting checklist flow
+  if (isEmergencyLightService(task.site_service?.service_type?.name)) {
+    const siteId = task.site_service?.site?.id ?? task.site_service?.site_id
+    const [{ data: lightsData }, { data: inspectionsData }] = await Promise.all([
+      supabase
+        .from('emergency_lights')
+        .select('*')
+        .eq('site_id', siteId)
+        .order('map_reference', { ascending: true }),
+      supabase.from('emergency_light_inspections').select('*').eq('task_id', id),
+    ])
+
+    return (
+      <EmergencyLightTaskExecution
+        task={task as TaskWithDetails}
+        profile={profile as Profile}
+        lights={(lightsData || []) as EmergencyLight[]}
+        existingInspections={(inspectionsData || []) as EmergencyLightInspection[]}
       />
     )
   }

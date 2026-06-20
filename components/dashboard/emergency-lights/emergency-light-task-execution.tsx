@@ -20,6 +20,14 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   ArrowLeft,
   MapPin,
   Calendar,
@@ -29,46 +37,51 @@ import {
   Send,
   Loader2,
   Search,
-  BellRing,
-  ArrowRight,
-  History,
+  Lightbulb,
+  FileText,
+  CheckCircle2,
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
-import { McpInspectionCard, type McpInspectionState } from './mcp-inspection-card'
-import type { Profile, TaskWithDetails, Mcp, McpInspection } from '@/lib/types/database'
+import { EMERGENCY_LIGHT_CHECKLIST } from '@/lib/emergency-lights'
+import {
+  EmergencyLightInspectionCard,
+  type EmergencyLightInspectionState,
+  type CheckValue,
+} from './emergency-light-inspection-card'
+import type {
+  Profile,
+  TaskWithDetails,
+  EmergencyLight,
+  EmergencyLightInspection,
+} from '@/lib/types/database'
 
-interface McpTaskExecutionProps {
+interface EmergencyLightTaskExecutionProps {
   task: TaskWithDetails
   profile: Profile
-  mcps: Mcp[]
-  existingInspections: McpInspection[]
-  /** MCP id tested on the most recent previous weekly test (rotation pointer). */
-  lastTestedMcpId?: string | null
-  /** Date of that previous test, for display. */
-  lastTestedDate?: string | null
+  lights: EmergencyLight[]
+  existingInspections: EmergencyLightInspection[]
 }
 
-function blankState(): McpInspectionState {
-  return { result: 'pass', comments: '', photos: [], touched: false }
+function blankState(): EmergencyLightInspectionState {
+  return { result: 'pass', checklist: {}, comments: '', photos: [], touched: false }
 }
 
-function stateFromInspection(insp: McpInspection): McpInspectionState {
+function stateFromInspection(insp: EmergencyLightInspection): EmergencyLightInspectionState {
   return {
     result: insp.result,
+    checklist: (insp.checklist || {}) as Record<string, CheckValue>,
     comments: insp.comments || '',
     photos: insp.photos || [],
     touched: true,
   }
 }
 
-export function McpTaskExecution({
+export function EmergencyLightTaskExecution({
   task,
   profile,
-  mcps,
+  lights,
   existingInspections,
-  lastTestedMcpId,
-  lastTestedDate,
-}: McpTaskExecutionProps) {
+}: EmergencyLightTaskExecutionProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
 
@@ -77,14 +90,15 @@ export function McpTaskExecution({
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [showSubmit, setShowSubmit] = useState(false)
+  const [showDone, setShowDone] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
-  const [states, setStates] = useState<Record<string, McpInspectionState>>(() => {
-    const map: Record<string, McpInspectionState> = {}
-    for (const mcp of mcps) {
-      const existing = existingInspections.find((i) => i.mcp_id === mcp.id)
-      map[mcp.id] = existing ? stateFromInspection(existing) : blankState()
+  const [states, setStates] = useState<Record<string, EmergencyLightInspectionState>>(() => {
+    const map: Record<string, EmergencyLightInspectionState> = {}
+    for (const light of lights) {
+      const existing = existingInspections.find((i) => i.emergency_light_id === light.id)
+      map[light.id] = existing ? stateFromInspection(existing) : blankState()
     }
     return map
   })
@@ -98,55 +112,81 @@ export function McpTaskExecution({
     const failed = values.filter((s) => s.touched && s.result === 'fail').length
     const remedial = values.filter((s) => s.touched && s.result === 'remedial').length
     const na = values.filter((s) => s.touched && s.result === 'na').length
-    return { total: mcps.length, tested, passed, failed, remedial, na }
-  }, [states, mcps.length])
+    return { total: lights.length, tested, passed, failed, remedial, na }
+  }, [states, lights.length])
 
-  const filtered = mcps.filter((m) => {
+  const filtered = useMemo(() => {
     const q = search.toLowerCase()
-    return (
-      (m.urn || '').toLowerCase().includes(q) ||
-      (m.map_reference || '').toLowerCase().includes(q) ||
-      (m.location || '').toLowerCase().includes(q) ||
-      (m.floor || '').toLowerCase().includes(q)
+    const matches = lights.filter(
+      (l) =>
+        (l.urn || '').toLowerCase().includes(q) ||
+        (l.map_reference || '').toLowerCase().includes(q) ||
+        (l.location || '').toLowerCase().includes(q) ||
+        (l.floor || '').toLowerCase().includes(q),
     )
-  })
-
-  // Weekly rotation: the call point tested last week, and the one due next
-  // (the next item in the ordered register, wrapping back to the start).
-  const { lastTestedMcp, nextMcp } = useMemo(() => {
-    if (mcps.length === 0) return { lastTestedMcp: null, nextMcp: null }
-    const lastIdx = lastTestedMcpId ? mcps.findIndex((m) => m.id === lastTestedMcpId) : -1
-    const last = lastIdx >= 0 ? mcps[lastIdx] : null
-    const next = mcps[(lastIdx + 1) % mcps.length]
-    return { lastTestedMcp: last, nextMcp: next }
-  }, [mcps, lastTestedMcpId])
-
-  const describeMcp = (m: Mcp) =>
-    [m.map_reference ? `Map ${m.map_reference}` : null, m.location, m.floor]
-      .filter(Boolean)
-      .join(' · ') || m.urn || 'Call point'
+    // Keep not-yet-inspected fittings at the top; move inspected ones to the bottom.
+    return matches
+      .map((l, index) => ({ l, index }))
+      .sort((a, b) => {
+        const aDone = states[a.l.id]?.touched ? 1 : 0
+        const bDone = states[b.l.id]?.touched ? 1 : 0
+        if (aDone !== bDone) return aDone - bDone
+        return a.index - b.index
+      })
+      .map((entry) => entry.l)
+  }, [lights, search, states])
 
   const handleStart = async () => {
     await supabase
       .from('tasks')
-      .update({ status: 'in_progress', started_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .update({
+        status: 'in_progress',
+        started_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', task.id)
     setStatus('in_progress')
     router.refresh()
   }
 
+  // Bulk pass: mark every fitting as tested with all checklist items passing.
+  // Fittings that already have a recorded defect (fail/remedial) are left
+  // untouched so the engineer doesn't accidentally overwrite real findings.
+  const handleAllSatisfactory = () => {
+    const passChecklist: Record<string, CheckValue> = {}
+    for (const item of EMERGENCY_LIGHT_CHECKLIST) passChecklist[item.id] = 'pass'
+    setStates((prev) => {
+      const next: Record<string, EmergencyLightInspectionState> = { ...prev }
+      for (const light of lights) {
+        const current = prev[light.id]
+        if (current?.touched && (current.result === 'fail' || current.result === 'remedial')) {
+          continue
+        }
+        next[light.id] = {
+          result: 'pass',
+          checklist: { ...passChecklist },
+          comments: current?.comments || '',
+          photos: current?.photos || [],
+          touched: true,
+        }
+      }
+      return next
+    })
+  }
+
   const buildRows = () => {
     const today = new Date().toISOString().split('T')[0]
-    return mcps
-      .filter((m) => states[m.id].touched)
-      .map((m) => {
-        const s = states[m.id]
+    return lights
+      .filter((l) => states[l.id].touched)
+      .map((l) => {
+        const s = states[l.id]
         return {
-          mcp_id: m.id,
+          emergency_light_id: l.id,
           task_id: task.id,
           inspector_id: profile.id,
           inspection_date: today,
           result: s.result,
+          checklist: s.checklist,
           comments: s.comments || null,
           photos: s.photos,
         }
@@ -154,10 +194,10 @@ export function McpTaskExecution({
   }
 
   const persistInspections = async () => {
-    await supabase.from('mcp_inspections').delete().eq('task_id', task.id)
+    await supabase.from('emergency_light_inspections').delete().eq('task_id', task.id)
     const rows = buildRows()
     if (rows.length > 0) {
-      await supabase.from('mcp_inspections').insert(rows)
+      await supabase.from('emergency_light_inspections').insert(rows)
     }
     return rows
   }
@@ -182,8 +222,8 @@ export function McpTaskExecution({
 
     const overall = overallTaskStatus()
     const checklistResults = [
-      { item_id: 'total', label: 'Call points on register', type: 'number', value: summary.total, passed: null, notes: '' },
-      { item_id: 'tested', label: 'Call points tested', type: 'number', value: summary.tested, passed: null, notes: '' },
+      { item_id: 'total', label: 'Fittings on register', type: 'number', value: summary.total, passed: null, notes: '' },
+      { item_id: 'tested', label: 'Fittings tested', type: 'number', value: summary.tested, passed: null, notes: '' },
       { item_id: 'passed', label: 'Passed', type: 'number', value: summary.passed, passed: null, notes: '' },
       { item_id: 'remedial', label: 'Remedial', type: 'number', value: summary.remedial, passed: null, notes: '' },
       { item_id: 'failed', label: 'Failed', type: 'number', value: summary.failed, passed: null, notes: '' },
@@ -193,7 +233,7 @@ export function McpTaskExecution({
       task_id: task.id,
       checklist_results: checklistResults,
       overall_status: overall,
-      engineer_notes: `Fire alarm test: ${summary.tested}/${summary.total} call points tested, ${summary.passed} pass, ${summary.remedial} remedial, ${summary.failed} fail.`,
+      engineer_notes: `Emergency lighting test: ${summary.tested}/${summary.total} fittings tested, ${summary.passed} pass, ${summary.remedial} remedial, ${summary.failed} fail.`,
       photos: [] as string[],
       updated_at: new Date().toISOString(),
     }
@@ -211,7 +251,11 @@ export function McpTaskExecution({
     const completedAt = new Date()
     await supabase
       .from('tasks')
-      .update({ status: 'completed', completed_at: completedAt.toISOString(), updated_at: completedAt.toISOString() })
+      .update({
+        status: 'completed',
+        completed_at: completedAt.toISOString(),
+        updated_at: completedAt.toISOString(),
+      })
       .eq('id', task.id)
 
     await supabase
@@ -255,7 +299,8 @@ export function McpTaskExecution({
 
     setSubmitting(false)
     setShowSubmit(false)
-    router.push('/dashboard')
+    setStatus('completed')
+    setShowDone(true)
     router.refresh()
   }
 
@@ -297,44 +342,10 @@ export function McpTaskExecution({
         </CardContent>
       </Card>
 
-      {mcps.length > 0 && nextMcp && (
-        <Card className="border-primary/40 bg-primary/5">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <BellRing className="h-5 w-5 text-primary" />
-              Call point due this week
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center gap-2">
-              {nextMcp.map_reference && (
-                <Badge variant="default" className="font-mono">
-                  {nextMcp.map_reference}
-                </Badge>
-              )}
-              <span className="font-medium">{describeMcp(nextMcp)}</span>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {lastTestedMcp ? (
-                <span className="flex flex-wrap items-center gap-1">
-                  <History className="h-3.5 w-3.5" />
-                  Last week: {describeMcp(lastTestedMcp)}
-                  {lastTestedDate ? ` (${formatDateUK(lastTestedDate)})` : ''}
-                  <ArrowRight className="h-3.5 w-3.5" />
-                  next in rotation shown above.
-                </span>
-              ) : (
-                'No previous weekly test recorded — start the rotation with the call point above.'
-              )}
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
       {status === 'pending' && canEdit && (
         <Button onClick={handleStart} size="lg" className="w-full">
           <Play className="mr-2 h-5 w-5" />
-          Start Test
+          Start Inspection
         </Button>
       )}
 
@@ -343,8 +354,8 @@ export function McpTaskExecution({
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
-                <BellRing className="h-5 w-5" />
-                Test Progress
+                <Lightbulb className="h-5 w-5" />
+                Inspection Progress
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -361,10 +372,10 @@ export function McpTaskExecution({
             </CardContent>
           </Card>
 
-          {mcps.length === 0 ? (
+          {lights.length === 0 ? (
             <Card>
               <CardContent className="py-8 text-center text-muted-foreground">
-                No manual call points are registered for this site yet. Add them on the{' '}
+                No emergency light fittings are registered for this site yet. Add them on the{' '}
                 <Link href={`/dashboard/sites/${site?.id}`} className="text-primary hover:underline">
                   site page
                 </Link>{' '}
@@ -373,43 +384,42 @@ export function McpTaskExecution({
             </Card>
           ) : (
             <div className="space-y-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search call points…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-              {filtered.map((mcp) => (
-                <div
-                  key={mcp.id}
-                  className={
-                    nextMcp && mcp.id === nextMcp.id && !states[mcp.id]?.touched
-                      ? 'rounded-lg ring-2 ring-primary ring-offset-2'
-                      : undefined
-                  }
-                >
-                  {nextMcp && mcp.id === nextMcp.id && !states[mcp.id]?.touched && (
-                    <Badge variant="default" className="mb-1 ml-1">
-                      Due this week
-                    </Badge>
-                  )}
-                  <McpInspectionCard
-                    mcp={mcp}
-                    state={states[mcp.id]}
-                    disabled={!canEdit}
-                    onChange={(next) => setStates((prev) => ({ ...prev, [mcp.id]: next }))}
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search fittings…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-9"
                   />
                 </div>
+                {canEdit && (
+                  <Button
+                    variant="outline"
+                    onClick={handleAllSatisfactory}
+                    className="shrink-0 bg-transparent"
+                  >
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                    All tested satisfactory
+                  </Button>
+                )}
+              </div>
+              {filtered.map((light) => (
+                <EmergencyLightInspectionCard
+                  key={light.id}
+                  light={light}
+                  state={states[light.id]}
+                  disabled={!canEdit}
+                  onChange={(next) => setStates((prev) => ({ ...prev, [light.id]: next }))}
+                />
               ))}
             </div>
           )}
         </>
       )}
 
-      {status === 'in_progress' && canEdit && mcps.length > 0 && (
+      {status === 'in_progress' && canEdit && lights.length > 0 && (
         <div className="fixed bottom-0 left-0 right-0 flex gap-2 border-t bg-background p-4 md:relative md:border-0 md:p-0">
           <Button variant="outline" onClick={handleSave} disabled={saving} className="flex-1">
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
@@ -425,9 +435,9 @@ export function McpTaskExecution({
       <AlertDialog open={showSubmit} onOpenChange={setShowSubmit}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Complete Fire Alarm Test</AlertDialogTitle>
+            <AlertDialogTitle>Complete Emergency Lighting Inspection</AlertDialogTitle>
             <AlertDialogDescription>
-              You have tested {summary.tested} of {summary.total} call points ({summary.passed} pass,{' '}
+              You have tested {summary.tested} of {summary.total} fittings ({summary.passed} pass,{' '}
               {summary.remedial} remedial, {summary.failed} fail). Submitting marks the task complete and
               emails the report.
             </AlertDialogDescription>
@@ -436,11 +446,43 @@ export function McpTaskExecution({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleSubmit} disabled={submitting}>
               {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Complete Test
+              Complete Inspection
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Inspection complete — let the engineer choose what to do next */}
+      <Dialog open={showDone} onOpenChange={setShowDone}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+              <CheckCircle2 className="h-6 w-6 text-primary" />
+            </div>
+            <DialogTitle className="text-center">Inspection complete</DialogTitle>
+            <DialogDescription className="text-center">
+              The report has been generated and emailed to the site contacts. What would you like to
+              do next?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button className="w-full" onClick={() => router.push(`/dashboard/reports/${task.id}`)}>
+              <FileText className="mr-2 h-4 w-4" />
+              View report
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                setShowDone(false)
+                router.push('/dashboard')
+              }}
+            >
+              Return to tasks
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

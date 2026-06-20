@@ -38,6 +38,7 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
     description: serviceType.description || '',
     default_frequency_value: serviceType.default_frequency_value ?? serviceType.default_frequency_months ?? 12,
     default_frequency_unit: (serviceType.default_frequency_unit || 'months') as 'weeks' | 'months',
+    defects_to_email: serviceType.defects_to_email || '',
   })
   const router = useRouter()
   const supabase = createClient()
@@ -59,6 +60,7 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
         default_frequency_months: frequencyInMonths,
         default_frequency_value: formData.default_frequency_value,
         default_frequency_unit: formData.default_frequency_unit,
+        defects_to_email: formData.defects_to_email.trim() || null,
       })
       .eq('id', serviceType.id)
 
@@ -130,6 +132,20 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="defects-to-email">Defects to</Label>
+              <Input
+                id="defects-to-email"
+                type="email"
+                value={formData.defects_to_email}
+                onChange={(e) => setFormData({ ...formData, defects_to_email: e.target.value })}
+                placeholder="defects@yourcompany.com"
+              />
+              <p className="text-xs text-muted-foreground">
+                When a report contains defects, this address is CC&apos;d in. Can be overridden per
+                site in the service setup.
+              </p>
             </div>
           </div>
           <DialogFooter>

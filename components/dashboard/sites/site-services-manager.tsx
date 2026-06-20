@@ -78,6 +78,7 @@ export function SiteServicesManager({
   const [editEngineerId, setEditEngineerId] = useState<string>(NONE_VALUE)
   const [editNextServiceDate, setEditNextServiceDate] = useState<Date | undefined>(undefined)
   const [editReportingEmails, setEditReportingEmails] = useState<string[]>([])
+  const [editDefectsToEmail, setEditDefectsToEmail] = useState('')
   const [newEmail, setNewEmail] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
 
@@ -150,6 +151,7 @@ export function SiteServicesManager({
     setEditEngineerId(ss.assigned_engineer_id || NONE_VALUE)
     setEditNextServiceDate(ss.next_service_date ? new Date(ss.next_service_date) : undefined)
     setEditReportingEmails(Array.isArray(ss.reporting_emails) ? ss.reporting_emails : [])
+    setEditDefectsToEmail(ss.defects_to_email || '')
     setNewEmail('')
   }
 
@@ -181,6 +183,7 @@ export function SiteServicesManager({
           ? format(editNextServiceDate, 'yyyy-MM-dd')
           : null,
         reporting_emails: editReportingEmails,
+        defects_to_email: editDefectsToEmail.trim() || null,
       })
       .eq('id', editingId)
 
@@ -757,6 +760,22 @@ export function SiteServicesManager({
                   ))}
                 </div>
               )}
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="service-defects-email">Defects to (this service)</Label>
+              <p className="text-xs text-muted-foreground">
+                If a report contains defects, it is also CC&apos;d to this address — useful for
+                sending problems to a different department. Leave blank to use the service
+                template default.
+              </p>
+              <Input
+                id="service-defects-email"
+                type="email"
+                value={editDefectsToEmail}
+                onChange={(e) => setEditDefectsToEmail(e.target.value)}
+                placeholder="defects@client.com"
+              />
             </div>
           </div>
           <DialogFooter>

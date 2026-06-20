@@ -36,6 +36,7 @@ export interface ServiceType {
   default_deadline_tolerance_days: number
   color?: string | null
   icon?: string | null
+  defects_to_email: string | null
   created_at: string
 }
 
@@ -103,6 +104,7 @@ export interface SiteService {
   route_id: string | null
   assigned_engineer_id: string | null
   reporting_emails: string[]
+  defects_to_email: string | null
   created_at: string
   site?: Site
   service_type?: ServiceType
@@ -289,5 +291,43 @@ export interface McpInspection {
   photos: string[]
   created_at: string
   mcp?: Mcp
+  inspector?: Profile | null
+}
+
+// Emergency Lighting asset register + inspections
+
+export type EmergencyLightResult = 'pass' | 'fail' | 'remedial' | 'na'
+
+export interface EmergencyLight {
+  id: string
+  site_id: string
+  urn: string | null
+  map_reference: string | null
+  location: string | null
+  floor: string | null
+  fitting_type: string | null
+  notes: string | null
+  photos: string[]
+  created_at: string
+  updated_at: string
+  site?: Site
+  inspections?: EmergencyLightInspection[]
+  latest_result?: EmergencyLightResult | null
+  last_inspected_date?: string | null
+}
+
+export interface EmergencyLightInspection {
+  id: string
+  emergency_light_id: string
+  task_id: string | null
+  inspector_id: string | null
+  inspection_date: string
+  result: EmergencyLightResult
+  // Keyed by checklist item id -> pass/fail/na for that check
+  checklist: Record<string, 'pass' | 'fail' | 'na'>
+  comments: string | null
+  photos: string[]
+  created_at: string
+  emergency_light?: EmergencyLight
   inspector?: Profile | null
 }

@@ -70,14 +70,22 @@ export async function POST(request: NextRequest) {
     const overallStatus = taskResult.overall_status as 'pass' | 'fail' | 'partial'
 
     // Build the "Open report" link. Auto-route to the damper or service report
-    // page based on the service type. Requires NEXT_PUBLIC_APP_URL to be set.
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '')
+    // page based on the service type. Prefer an explicit NEXT_PUBLIC_APP_URL,
+    // then fall back to Vercel's deployment URL, then the incoming request
+    // origin — so the link is always present regardless of env config.
+    const vercelUrl =
+      process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL
+    const baseUrl = (
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (vercelUrl ? `https://${vercelUrl}` : '') ||
+      request.nextUrl.origin
+    ).replace(/\/$/, '')
     const reportPath = isDamperService(serviceType?.name)
       ? `/dashboard/dampers/report/${taskId}`
       : `/dashboard/reports/${taskId}`
     const reportUrl = baseUrl ? `${baseUrl}${reportPath}` : undefined
     if (!baseUrl) {
-      console.warn('[v0] NEXT_PUBLIC_APP_URL not set — "Open report" link omitted from email.')
+      console.warn('[v0] Unable to determine base URL — "Open report" link omitted from email.')
     }
 
     // Determine recipients.
@@ -131,15 +139,41 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Defects routing: when the report contains defects (not a clean pass), CC the
+    // "Defects to" addresses so problems also reach the relevant departments.
+    //  - service_types.defects_to_email: company-wide default from the service master template
+    //  - site_services.defects_to_email: per-site client department override
+    // Both are included (de-duplicated) when present. On a clean pass, no defect CCs are added.
+    const hasDefects = overallStatus !== 'pass'
+    const defectsCc: string[] = []
+    if (hasDefects) {
+      const serviceDefectsEmail = (siteService?.defects_to_email || '').trim()
+      const templateDefectsEmail = (serviceType?.defects_to_email || '').trim()
+      // Per-site service address takes priority; fall back to the template default.
+      if (serviceDefectsEmail) defectsCc.push(serviceDefectsEmail)
+      else if (templateDefectsEmail) defectsCc.push(templateDefectsEmail)
+      // Always also include the template default alongside a per-site address when both differ.
+      if (
+        serviceDefectsEmail &&
+        templateDefectsEmail &&
+        serviceDefectsEmail.toLowerCase() !== templateDefectsEmail.toLowerCase()
+      ) {
+        defectsCc.push(templateDefectsEmail)
+      }
+    }
+
     // Pick the right client-facing template based on result
     const { subject, html } =
       overallStatus === 'pass'
         ? generateClientPassEmail(emailData)
         : generateClientFailEmail(emailData)
 
-    // Send to every client recipient
+    // Send to every client recipient (CC the defects addresses on the first
+    // recipient only, so the department is looped in without duplicate emails).
     const results = await Promise.all(
-      recipients.map((to) => sendEmail(to, subject, html))
+      recipients.map((to, index) =>
+        sendEmail(to, subject, html, index === 0 ? { cc: defectsCc } : undefined),
+      )
     )
 
     const failed = results.filter((r) => !r.success)

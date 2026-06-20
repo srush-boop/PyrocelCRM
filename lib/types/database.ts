@@ -292,6 +292,7 @@ export interface McpInspection {
   inspector_id: string | null
   inspection_date: string
   result: McpResult
+  checklist?: Record<string, 'pass' | 'fail' | 'na'>
   comments: string | null
   photos: string[]
   created_at: string

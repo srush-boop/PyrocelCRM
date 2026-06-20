@@ -35,7 +35,7 @@ import {
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
-import { McpInspectionCard, type McpInspectionState } from './mcp-inspection-card'
+import { McpInspectionCard, type McpInspectionState, type CheckValue } from './mcp-inspection-card'
 import type { Profile, TaskWithDetails, Mcp, McpInspection } from '@/lib/types/database'
 
 interface McpTaskExecutionProps {
@@ -50,12 +50,13 @@ interface McpTaskExecutionProps {
 }
 
 function blankState(): McpInspectionState {
-  return { result: 'pass', comments: '', photos: [], touched: false }
+  return { result: 'pass', checklist: {}, comments: '', photos: [], touched: false }
 }
 
 function stateFromInspection(insp: McpInspection): McpInspectionState {
   return {
     result: insp.result,
+    checklist: (insp.checklist as Record<string, CheckValue>) || {},
     comments: insp.comments || '',
     photos: insp.photos || [],
     touched: true,
@@ -152,6 +153,7 @@ export function McpTaskExecution({
           inspector_id: profile.id,
           inspection_date: today,
           result: s.result,
+          checklist: s.checklist,
           comments: s.comments || null,
           photos: s.photos,
         }

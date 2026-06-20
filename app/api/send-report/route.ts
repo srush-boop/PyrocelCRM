@@ -139,15 +139,41 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Defects routing: when the report contains defects (not a clean pass), CC the
+    // "Defects to" addresses so problems also reach the relevant departments.
+    //  - service_types.defects_to_email: company-wide default from the service master template
+    //  - site_services.defects_to_email: per-site client department override
+    // Both are included (de-duplicated) when present. On a clean pass, no defect CCs are added.
+    const hasDefects = overallStatus !== 'pass'
+    const defectsCc: string[] = []
+    if (hasDefects) {
+      const serviceDefectsEmail = (siteService?.defects_to_email || '').trim()
+      const templateDefectsEmail = (serviceType?.defects_to_email || '').trim()
+      // Per-site service address takes priority; fall back to the template default.
+      if (serviceDefectsEmail) defectsCc.push(serviceDefectsEmail)
+      else if (templateDefectsEmail) defectsCc.push(templateDefectsEmail)
+      // Always also include the template default alongside a per-site address when both differ.
+      if (
+        serviceDefectsEmail &&
+        templateDefectsEmail &&
+        serviceDefectsEmail.toLowerCase() !== templateDefectsEmail.toLowerCase()
+      ) {
+        defectsCc.push(templateDefectsEmail)
+      }
+    }
+
     // Pick the right client-facing template based on result
     const { subject, html } =
       overallStatus === 'pass'
         ? generateClientPassEmail(emailData)
         : generateClientFailEmail(emailData)
 
-    // Send to every client recipient
+    // Send to every client recipient (CC the defects addresses on the first
+    // recipient only, so the department is looped in without duplicate emails).
     const results = await Promise.all(
-      recipients.map((to) => sendEmail(to, subject, html))
+      recipients.map((to, index) =>
+        sendEmail(to, subject, html, index === 0 ? { cc: defectsCc } : undefined),
+      )
     )
 
     const failed = results.filter((r) => !r.success)

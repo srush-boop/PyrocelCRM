@@ -30,6 +30,8 @@ import {
   Loader2,
   Search,
   BellRing,
+  ArrowRight,
+  History,
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { McpInspectionCard, type McpInspectionState } from './mcp-inspection-card'
@@ -40,6 +42,10 @@ interface McpTaskExecutionProps {
   profile: Profile
   mcps: Mcp[]
   existingInspections: McpInspection[]
+  /** MCP id tested on the most recent previous weekly test (rotation pointer). */
+  lastTestedMcpId?: string | null
+  /** Date of that previous test, for display. */
+  lastTestedDate?: string | null
 }
 
 function blankState(): McpInspectionState {
@@ -55,7 +61,14 @@ function stateFromInspection(insp: McpInspection): McpInspectionState {
   }
 }
 
-export function McpTaskExecution({ task, profile, mcps, existingInspections }: McpTaskExecutionProps) {
+export function McpTaskExecution({
+  task,
+  profile,
+  mcps,
+  existingInspections,
+  lastTestedMcpId,
+  lastTestedDate,
+}: McpTaskExecutionProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
 
@@ -97,6 +110,21 @@ export function McpTaskExecution({ task, profile, mcps, existingInspections }: M
       (m.floor || '').toLowerCase().includes(q)
     )
   })
+
+  // Weekly rotation: the call point tested last week, and the one due next
+  // (the next item in the ordered register, wrapping back to the start).
+  const { lastTestedMcp, nextMcp } = useMemo(() => {
+    if (mcps.length === 0) return { lastTestedMcp: null, nextMcp: null }
+    const lastIdx = lastTestedMcpId ? mcps.findIndex((m) => m.id === lastTestedMcpId) : -1
+    const last = lastIdx >= 0 ? mcps[lastIdx] : null
+    const next = mcps[(lastIdx + 1) % mcps.length]
+    return { lastTestedMcp: last, nextMcp: next }
+  }, [mcps, lastTestedMcpId])
+
+  const describeMcp = (m: Mcp) =>
+    [m.map_reference ? `Map ${m.map_reference}` : null, m.location, m.floor]
+      .filter(Boolean)
+      .join(' · ') || m.urn || 'Call point'
 
   const handleStart = async () => {
     await supabase
@@ -269,6 +297,40 @@ export function McpTaskExecution({ task, profile, mcps, existingInspections }: M
         </CardContent>
       </Card>
 
+      {mcps.length > 0 && nextMcp && (
+        <Card className="border-primary/40 bg-primary/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <BellRing className="h-5 w-5 text-primary" />
+              Call point due this week
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center gap-2">
+              {nextMcp.map_reference && (
+                <Badge variant="default" className="font-mono">
+                  {nextMcp.map_reference}
+                </Badge>
+              )}
+              <span className="font-medium">{describeMcp(nextMcp)}</span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {lastTestedMcp ? (
+                <span className="flex flex-wrap items-center gap-1">
+                  <History className="h-3.5 w-3.5" />
+                  Last week: {describeMcp(lastTestedMcp)}
+                  {lastTestedDate ? ` (${formatDateUK(lastTestedDate)})` : ''}
+                  <ArrowRight className="h-3.5 w-3.5" />
+                  next in rotation shown above.
+                </span>
+              ) : (
+                'No previous weekly test recorded — start the rotation with the call point above.'
+              )}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {status === 'pending' && canEdit && (
         <Button onClick={handleStart} size="lg" className="w-full">
           <Play className="mr-2 h-5 w-5" />
@@ -321,13 +383,26 @@ export function McpTaskExecution({ task, profile, mcps, existingInspections }: M
                 />
               </div>
               {filtered.map((mcp) => (
-                <McpInspectionCard
+                <div
                   key={mcp.id}
-                  mcp={mcp}
-                  state={states[mcp.id]}
-                  disabled={!canEdit}
-                  onChange={(next) => setStates((prev) => ({ ...prev, [mcp.id]: next }))}
-                />
+                  className={
+                    nextMcp && mcp.id === nextMcp.id && !states[mcp.id]?.touched
+                      ? 'rounded-lg ring-2 ring-primary ring-offset-2'
+                      : undefined
+                  }
+                >
+                  {nextMcp && mcp.id === nextMcp.id && !states[mcp.id]?.touched && (
+                    <Badge variant="default" className="mb-1 ml-1">
+                      Due this week
+                    </Badge>
+                  )}
+                  <McpInspectionCard
+                    mcp={mcp}
+                    state={states[mcp.id]}
+                    disabled={!canEdit}
+                    onChange={(next) => setStates((prev) => ({ ...prev, [mcp.id]: next }))}
+                  />
+                </div>
               ))}
             </div>
           )}

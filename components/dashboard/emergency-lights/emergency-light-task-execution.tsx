@@ -42,6 +42,7 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
+import { EMERGENCY_LIGHT_CHECKLIST } from '@/lib/emergency-lights'
 import {
   EmergencyLightInspectionCard,
   type EmergencyLightInspectionState,
@@ -146,6 +147,31 @@ export function EmergencyLightTaskExecution({
       .eq('id', task.id)
     setStatus('in_progress')
     router.refresh()
+  }
+
+  // Bulk pass: mark every fitting as tested with all checklist items passing.
+  // Fittings that already have a recorded defect (fail/remedial) are left
+  // untouched so the engineer doesn't accidentally overwrite real findings.
+  const handleAllSatisfactory = () => {
+    const passChecklist: Record<string, CheckValue> = {}
+    for (const item of EMERGENCY_LIGHT_CHECKLIST) passChecklist[item.id] = 'pass'
+    setStates((prev) => {
+      const next: Record<string, EmergencyLightInspectionState> = { ...prev }
+      for (const light of lights) {
+        const current = prev[light.id]
+        if (current?.touched && (current.result === 'fail' || current.result === 'remedial')) {
+          continue
+        }
+        next[light.id] = {
+          result: 'pass',
+          checklist: { ...passChecklist },
+          comments: current?.comments || '',
+          photos: current?.photos || [],
+          touched: true,
+        }
+      }
+      return next
+    })
   }
 
   const buildRows = () => {
@@ -358,14 +384,26 @@ export function EmergencyLightTaskExecution({
             </Card>
           ) : (
             <div className="space-y-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search fittings…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-9"
-                />
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search fittings…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                {canEdit && (
+                  <Button
+                    variant="outline"
+                    onClick={handleAllSatisfactory}
+                    className="shrink-0 bg-transparent"
+                  >
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                    All tested satisfactory
+                  </Button>
+                )}
               </div>
               {filtered.map((light) => (
                 <EmergencyLightInspectionCard

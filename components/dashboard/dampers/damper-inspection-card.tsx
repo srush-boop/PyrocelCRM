@@ -67,6 +67,8 @@ interface DamperInspectionCardProps {
   state: InspectionState
   disabled?: boolean
   onChange: (next: InspectionState) => void
+  /** Called when the engineer marks the damper inspected and closes the record. */
+  onInspected?: () => void
 }
 
 export function DamperInspectionCard({
@@ -74,12 +76,32 @@ export function DamperInspectionCard({
   state,
   disabled = false,
   onChange,
+  onInspected,
 }: DamperInspectionCardProps) {
   const [open, setOpen] = useState(false)
   const [uploading, setUploading] = useState<DamperPhotoCategory | null>(null)
   const supabase = createClient()
 
   const set = (patch: Partial<InspectionState>) => onChange({ ...state, ...patch, touched: true })
+
+  // Tick every checklist item as satisfactory and mark the overall result as pass.
+  const passAllChecks = () => {
+    const allPassed = Object.fromEntries(CHECK_ITEMS.map((i) => [i.key, true]))
+    set({
+      ...(allPassed as Partial<InspectionState>),
+      accessible: true,
+      condition: 'good',
+      overall_result: 'pass',
+    })
+  }
+
+  // Mark the damper inspected: ensure it's recorded as touched and collapse the card.
+  // The parent list re-sorts touched dampers to the bottom.
+  const markInspected = () => {
+    set({})
+    setOpen(false)
+    onInspected?.()
+  }
 
   const handlePhotos = async (category: DamperPhotoCategory, files: FileList | null) => {
     if (!files || files.length === 0) return
@@ -224,6 +246,18 @@ export function DamperInspectionCard({
           </div>
         ) : (
           <div className="space-y-3">
+            {!disabled && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={passAllChecks}
+                className="w-full border-green-600/40 text-green-700 hover:bg-green-50 hover:text-green-800"
+              >
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+                Pass — all checks satisfactory
+              </Button>
+            )}
             {CHECK_ITEMS.map((item) => (
               <div key={item.key} className="flex items-center justify-between gap-3">
                 <span className="text-sm">{item.label}</span>
@@ -348,6 +382,12 @@ export function DamperInspectionCard({
             )
           })}
         </div>
+        {!disabled && (
+          <Button type="button" onClick={markInspected} className="w-full">
+            <CheckCircle2 className="mr-2 h-4 w-4" />
+            Damper inspected — close record
+          </Button>
+        )}
       </CollapsibleContent>
     </Collapsible>
   )

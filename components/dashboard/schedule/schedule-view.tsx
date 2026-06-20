@@ -2,9 +2,12 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { formatDateUK } from '@/lib/utils'
@@ -34,6 +37,8 @@ import {
   List as ListIcon,
   Route as RouteIcon,
   ChevronRight,
+  UserCheck,
+  Loader2,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
@@ -55,18 +60,65 @@ const statusConfig = {
 }
 
 export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewProps) {
+  const router = useRouter()
+  const supabase = createClient()
   const [search, setSearch] = useState('')
-  const [viewMode, setViewMode] = useState<ViewMode>('grid')
+  const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [activeTab, setActiveTab] = useState('upcoming')
   const [selectedEngineer, setSelectedEngineer] = useState<string>('all')
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined)
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined)
+
+  // Bulk assignment state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [assignTo, setAssignTo] = useState<string>('')
+  const [assigning, setAssigning] = useState(false)
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
   const isEngineer = profile.role === 'engineer'
   const isAdminOrOffice = profile.role === 'admin' || profile.role === 'office'
+  // Only admin/office can multi-select and reassign tasks
+  const canAssign = isAdminOrOffice && engineers.length > 0
+
+  const toggleOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleMany = (ids: string[], checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      for (const id of ids) {
+        if (checked) next.add(id)
+        else next.delete(id)
+      }
+      return next
+    })
+  }
+
+  const clearSelection = () => setSelectedIds(new Set())
+
+  const handleBulkAssign = async () => {
+    if (selectedIds.size === 0 || !assignTo) return
+    setAssigning(true)
+    const engineerId = assignTo === 'unassigned' ? null : assignTo
+    const { error } = await supabase
+      .from('tasks')
+      .update({ assigned_engineer_id: engineerId })
+      .in('id', Array.from(selectedIds))
+    setAssigning(false)
+    if (!error) {
+      clearSelection()
+      setAssignTo('')
+      router.refresh()
+    }
+  }
 
   const hasActiveFilters = search || selectedEngineer !== 'all' || dateFrom || dateTo
 
@@ -179,40 +231,55 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
       (isEngineer || profile.role === 'admin') &&
       task.status !== 'completed' &&
       task.status !== 'cancelled'
+    const selected = selectedIds.has(task.id)
 
     return (
-      <Link
-        href={`/dashboard/tasks/${task.id}`}
+      <div
         className={cn(
-          'flex items-center gap-3 rounded-lg border bg-card p-3 transition-colors hover:bg-accent',
+          'flex items-center gap-3 rounded-lg border bg-card transition-colors hover:bg-accent',
           isOverdue && 'border-destructive',
+          selected && 'border-primary ring-1 ring-primary',
         )}
       >
-        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{task.site_service?.site?.name}</p>
-          <p className="truncate text-xs text-muted-foreground">
-            {task.site_service?.service_type?.name}
-            {!isEngineer && task.assigned_engineer
-              ? ` · ${task.assigned_engineer.full_name || task.assigned_engineer.email}`
-              : ''}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {isOverdue && (
-            <Badge variant="destructive" className="hidden text-xs sm:inline-flex">
-              Overdue
+        {canAssign && (
+          <div className="pl-3">
+            <Checkbox
+              checked={selected}
+              onCheckedChange={() => toggleOne(task.id)}
+              aria-label={`Select task at ${task.site_service?.site?.name}`}
+            />
+          </div>
+        )}
+        <Link
+          href={`/dashboard/tasks/${task.id}`}
+          className={cn('flex min-w-0 flex-1 items-center gap-3 p-3', canAssign && 'pl-0')}
+        >
+          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{task.site_service?.site?.name}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {task.site_service?.service_type?.name}
+              {!isEngineer
+                ? ` · ${task.assigned_engineer ? (task.assigned_engineer.full_name || task.assigned_engineer.email) : 'Unassigned'}`
+                : ''}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {isOverdue && (
+              <Badge variant="destructive" className="hidden text-xs sm:inline-flex">
+                Overdue
+              </Badge>
+            )}
+            <span className="hidden text-xs text-muted-foreground sm:inline">
+              {formatDateUK(task.scheduled_date)}
+            </span>
+            <Badge variant={config.variant} className="text-xs">
+              {config.label}
             </Badge>
-          )}
-          <span className="hidden text-xs text-muted-foreground sm:inline">
-            {formatDateUK(task.scheduled_date)}
-          </span>
-          <Badge variant={config.variant} className="text-xs">
-            {config.label}
-          </Badge>
-          {actionable && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-        </div>
-      </Link>
+            {actionable && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+          </div>
+        </Link>
+      </div>
     )
   }
 
@@ -259,8 +326,20 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
       return <EmptyState icon={activeTab === 'completed' ? CheckCircle2 : ClipboardCheck} label={emptyLabel} />
     }
     if (viewMode === 'list') {
+      const ids = list.map((t) => t.id)
+      const allSelected = ids.length > 0 && ids.every((id) => selectedIds.has(id))
       return (
         <div className="space-y-2">
+          {canAssign && (
+            <label className="flex items-center gap-3 px-3 py-1.5 text-xs font-medium text-muted-foreground">
+              <Checkbox
+                checked={allSelected}
+                onCheckedChange={(checked) => toggleMany(ids, checked === true)}
+                aria-label="Select all tasks"
+              />
+              Select all ({ids.length})
+            </label>
+          )}
           {list.map((task) => (
             <TaskRow key={task.id} task={task} />
           ))}
@@ -270,9 +349,20 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     if (viewMode === 'route') {
       return (
         <div className="space-y-6">
-          {groupByRoute(list).map((group) => (
+          {groupByRoute(list).map((group) => {
+            const groupIds = group.tasks.map((t) => t.id)
+            const allGroupSelected =
+              groupIds.length > 0 && groupIds.every((id) => selectedIds.has(id))
+            return (
             <div key={group.name} className="space-y-2">
               <div className="flex items-center gap-2">
+                {canAssign && (
+                  <Checkbox
+                    checked={allGroupSelected}
+                    onCheckedChange={(checked) => toggleMany(groupIds, checked === true)}
+                    aria-label={`Select all tasks on ${group.name}`}
+                  />
+                )}
                 <RouteIcon className="h-4 w-4 text-muted-foreground" />
                 <h3 className="text-sm font-semibold">{group.name}</h3>
                 <Badge variant="secondary" className="text-xs">
@@ -292,7 +382,8 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                 ))}
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
       )
     }
@@ -457,6 +548,49 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
           {renderTasks(completedTasks, 'No completed tasks')}
         </TabsContent>
       </Tabs>
+
+      {canAssign && selectedIds.size > 0 && (
+        <div className="fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">
+          <div className="flex w-full max-w-2xl flex-wrap items-center gap-3 rounded-lg border bg-card p-3 shadow-lg">
+            <span className="flex items-center gap-2 text-sm font-medium">
+              <UserCheck className="h-4 w-4 text-muted-foreground" />
+              {selectedIds.size} selected
+            </span>
+            <Select value={assignTo} onValueChange={setAssignTo}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Assign to engineer..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unassigned">Unassigned</SelectItem>
+                {engineers.map((eng) => (
+                  <SelectItem key={eng.id} value={eng.id}>
+                    {eng.full_name || eng.email}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button onClick={handleBulkAssign} disabled={!assignTo || assigning} size="sm">
+              {assigning ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Assigning...
+                </>
+              ) : (
+                'Assign'
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearSelection}
+              className="ml-auto gap-2"
+            >
+              <X className="h-4 w-4" />
+              Clear
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

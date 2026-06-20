@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Separator } from '@/components/ui/separator'
 import { formatDateUK, formatTimeUK } from '@/lib/utils'
+import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -218,6 +219,7 @@ export function TaskExecution({
       .select(`
         frequency_value,
         frequency_unit,
+        anchor_next_to_schedule,
         site:sites!inner(id, status)
       `)
       .eq('id', task.site_service_id)
@@ -226,19 +228,18 @@ export function TaskExecution({
     const siteRel = (siteServiceData as { site?: { status?: string } | { status?: string }[] } | null)?.site
     const siteStatus = Array.isArray(siteRel) ? siteRel[0]?.status : siteRel?.status
     if (siteServiceData && siteStatus === 'live') {
-      // Calculate next scheduled date based on frequency
-      const nextDate = new Date(completedAt)
-      if (siteServiceData.frequency_unit === 'weeks') {
-        nextDate.setDate(nextDate.getDate() + (siteServiceData.frequency_value * 7))
-      } else {
-        nextDate.setMonth(nextDate.getMonth() + siteServiceData.frequency_value)
-      }
+      // Calculate next scheduled date based on frequency + anchor preference
+      const nextDate = computeNextScheduledDate(siteServiceData, {
+        completedAt,
+        scheduledDate: task.scheduled_date,
+      })
+      const nextDateStr = toDateString(nextDate)
 
       // Create the next recurring task
       await supabase.from('tasks').insert({
         site_service_id: task.site_service_id,
         assigned_engineer_id: task.assigned_engineer_id, // Keep same engineer
-        scheduled_date: nextDate.toISOString().split('T')[0],
+        scheduled_date: nextDateStr,
         status: 'pending',
       })
 
@@ -246,7 +247,7 @@ export function TaskExecution({
       await supabase
         .from('site_services')
         .update({
-          next_service_date: nextDate.toISOString().split('T')[0],
+          next_service_date: nextDateStr,
         })
         .eq('id', task.site_service_id)
     }

@@ -79,6 +79,7 @@ export function SiteServicesManager({
   const [editNextServiceDate, setEditNextServiceDate] = useState<Date | undefined>(undefined)
   const [editReportingEmails, setEditReportingEmails] = useState<string[]>([])
   const [editDefectsToEmail, setEditDefectsToEmail] = useState('')
+  const [editAnchorNextToSchedule, setEditAnchorNextToSchedule] = useState(true)
   const [newEmail, setNewEmail] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
 
@@ -152,6 +153,7 @@ export function SiteServicesManager({
     setEditNextServiceDate(ss.next_service_date ? new Date(ss.next_service_date) : undefined)
     setEditReportingEmails(Array.isArray(ss.reporting_emails) ? ss.reporting_emails : [])
     setEditDefectsToEmail(ss.defects_to_email || '')
+    setEditAnchorNextToSchedule(ss.anchor_next_to_schedule ?? true)
     setNewEmail('')
   }
 
@@ -184,6 +186,7 @@ export function SiteServicesManager({
           : null,
         reporting_emails: editReportingEmails,
         defects_to_email: editDefectsToEmail.trim() || null,
+        anchor_next_to_schedule: editAnchorNextToSchedule,
       })
       .eq('id', editingId)
 
@@ -666,6 +669,25 @@ export function SiteServicesManager({
               <p className="text-xs text-muted-foreground">
                 The date the next recurring service is due for this system.
               </p>
+            </div>
+
+            <div className="flex items-start gap-3 rounded-md border p-3">
+              <Checkbox
+                id="anchor-next-to-schedule"
+                checked={editAnchorNextToSchedule}
+                onCheckedChange={(checked) => setEditAnchorNextToSchedule(checked === true)}
+                className="mt-0.5"
+              />
+              <div className="grid gap-1">
+                <Label htmlFor="anchor-next-to-schedule" className="cursor-pointer">
+                  Anchor next due date to schedule
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {editAnchorNextToSchedule
+                    ? 'On completion, the next due date is calculated from the scheduled date (fixed cadence — completing early or late will not shift future dates).'
+                    : 'On completion, the next due date is calculated from the actual completion date (the schedule drifts with each visit).'}
+                </p>
+              </div>
             </div>
 
             <div className="grid gap-2">

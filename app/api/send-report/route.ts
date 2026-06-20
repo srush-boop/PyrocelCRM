@@ -70,14 +70,22 @@ export async function POST(request: NextRequest) {
     const overallStatus = taskResult.overall_status as 'pass' | 'fail' | 'partial'
 
     // Build the "Open report" link. Auto-route to the damper or service report
-    // page based on the service type. Requires NEXT_PUBLIC_APP_URL to be set.
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '')
+    // page based on the service type. Prefer an explicit NEXT_PUBLIC_APP_URL,
+    // then fall back to Vercel's deployment URL, then the incoming request
+    // origin — so the link is always present regardless of env config.
+    const vercelUrl =
+      process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL
+    const baseUrl = (
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (vercelUrl ? `https://${vercelUrl}` : '') ||
+      request.nextUrl.origin
+    ).replace(/\/$/, '')
     const reportPath = isDamperService(serviceType?.name)
       ? `/dashboard/dampers/report/${taskId}`
       : `/dashboard/reports/${taskId}`
     const reportUrl = baseUrl ? `${baseUrl}${reportPath}` : undefined
     if (!baseUrl) {
-      console.warn('[v0] NEXT_PUBLIC_APP_URL not set — "Open report" link omitted from email.')
+      console.warn('[v0] Unable to determine base URL — "Open report" link omitted from email.')
     }
 
     // Determine recipients.

@@ -18,6 +18,12 @@ interface ScanQrButtonProps {
   size?: 'default' | 'sm' | 'lg' | 'icon'
   label?: string
   className?: string
+  /**
+   * Optional handler invoked with the decoded URN. When provided, the scanner
+   * hands back the URN (e.g. to locate the damper in the current list) instead
+   * of navigating to the asset page. Return true if the URN was handled.
+   */
+  onScan?: (urn: string) => boolean | void
 }
 
 /**
@@ -29,6 +35,7 @@ export function ScanQrButton({
   size = 'sm',
   label = 'Scan QR',
   className,
+  onScan,
 }: ScanQrButtonProps) {
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -46,6 +53,14 @@ export function ScanQrButton({
     let urn = value
     const match = value.match(/\/dashboard\/dampers\/([^/?#]+)/i)
     if (match) urn = decodeURIComponent(match[1])
+    // When a handler is provided (e.g. during an inspection), let it locate the
+    // damper in the current list instead of navigating to the asset page.
+    if (onScan) {
+      onScan(urn)
+      setManualUrn('')
+      setOpen(false)
+      return
+    }
     router.push(`/dashboard/dampers/${encodeURIComponent(urn)}`)
     setOpen(false)
   }

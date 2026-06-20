@@ -556,10 +556,22 @@ export function DamperTaskExecution({
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             Save Progress
           </Button>
-          <Button onClick={() => setShowSubmit(true)} className="flex-1">
-            <Send className="mr-2 h-4 w-4" />
-            Complete & Submit
-          </Button>
+          <div className="flex flex-1 flex-col items-stretch gap-1">
+            <Button
+              onClick={() => setShowSubmit(true)}
+              disabled={summary.tested < summary.total}
+              className="w-full"
+            >
+              <Send className="mr-2 h-4 w-4" />
+              Complete & Submit
+            </Button>
+            {summary.tested < summary.total && (
+              <p className="text-center text-xs text-muted-foreground">
+                {summary.total - summary.tested} damper
+                {summary.total - summary.tested === 1 ? '' : 's'} still to test or mark not accessible
+              </p>
+            )}
+          </div>
         </div>
       )}
 

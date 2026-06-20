@@ -48,6 +48,7 @@ import {
   Wind,
   FileText,
   Plus,
+  CheckCircle2,
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { emptyPhotoCategories, generateUrn } from '@/lib/dampers'
@@ -148,6 +149,7 @@ export function DamperTaskExecution({
   const [addingDamper, setAddingDamper] = useState(false)
   const [highlightId, setHighlightId] = useState<string | null>(null)
   const [scanError, setScanError] = useState<string | null>(null)
+  const [showDone, setShowDone] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -404,7 +406,8 @@ export function DamperTaskExecution({
 
     setSubmitting(false)
     setShowSubmit(false)
-    router.push(`/dashboard/dampers/report/${task.id}`)
+    setStatus('completed')
+    setShowDone(true)
     router.refresh()
   }
 
@@ -661,6 +664,41 @@ export function DamperTaskExecution({
             <Button onClick={handleAddDamper} disabled={addingDamper}>
               {addingDamper && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Add damper
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Inspection complete — let the engineer choose what to do next */}
+      <Dialog open={showDone} onOpenChange={setShowDone}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+              <CheckCircle2 className="h-6 w-6 text-primary" />
+            </div>
+            <DialogTitle className="text-center">Inspection complete</DialogTitle>
+            <DialogDescription className="text-center">
+              The report has been generated and emailed to the site contacts. What would you
+              like to do next?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button
+              className="w-full"
+              onClick={() => router.push(`/dashboard/dampers/report/${task.id}`)}
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              View report
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                setShowDone(false)
+                router.push('/dashboard')
+              }}
+            >
+              Return to tasks
             </Button>
           </DialogFooter>
         </DialogContent>

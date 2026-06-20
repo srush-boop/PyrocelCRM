@@ -40,9 +40,15 @@ import {
   Lightbulb,
   FileText,
   CheckCircle2,
+  Plus,
 } from 'lucide-react'
+import { Label } from '@/components/ui/label'
 import { formatDateUK } from '@/lib/utils'
-import { EMERGENCY_LIGHT_CHECKLIST } from '@/lib/emergency-lights'
+import {
+  EMERGENCY_LIGHT_CHECKLIST,
+  FITTING_TYPES,
+  generateEmergencyLightUrn,
+} from '@/lib/emergency-lights'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import {
   EmergencyLightInspectionCard,
@@ -95,6 +101,19 @@ export function EmergencyLightTaskExecution({
   const router = useRouter()
   const supabase = createClient()
 
+  // Engineers can register new fittings during the inspection, so keep a local
+  // copy of the register that we can append to without losing in-progress state.
+  const [lightList, setLightList] = useState<EmergencyLight[]>(lights)
+  const [addOpen, setAddOpen] = useState(false)
+  const [addSaving, setAddSaving] = useState(false)
+  const [addForm, setAddForm] = useState({
+    map_reference: '',
+    floor: '',
+    location: '',
+    fitting_type: '',
+    notes: '',
+  })
+
   const [states, setStates] = useState<Record<string, EmergencyLightInspectionState>>(() => {
     const map: Record<string, EmergencyLightInspectionState> = {}
     for (const light of lights) {
@@ -103,6 +122,34 @@ export function EmergencyLightTaskExecution({
     }
     return map
   })
+
+  const handleAddFitting = async () => {
+    setAddSaving(true)
+    const { data, error } = await supabase
+      .from('emergency_lights')
+      .insert({
+        site_id: site?.id,
+        urn: generateEmergencyLightUrn(),
+        map_reference: addForm.map_reference || null,
+        floor: addForm.floor || null,
+        location: addForm.location || null,
+        fitting_type: addForm.fitting_type || null,
+        notes: addForm.notes || null,
+        photos: [],
+      })
+      .select()
+      .single()
+    setAddSaving(false)
+    if (error || !data) {
+      console.log('[v0] Add emergency light error:', error?.message)
+      return
+    }
+    const newLight = data as EmergencyLight
+    setLightList((prev) => [...prev, newLight])
+    setStates((prev) => ({ ...prev, [newLight.id]: blankState() }))
+    setAddForm({ map_reference: '', floor: '', location: '', fitting_type: '', notes: '' })
+    setAddOpen(false)
+  }
 
   const canEdit = status !== 'completed' && status !== 'cancelled'
 
@@ -113,12 +160,12 @@ export function EmergencyLightTaskExecution({
     const failed = values.filter((s) => s.touched && s.result === 'fail').length
     const remedial = values.filter((s) => s.touched && s.result === 'remedial').length
     const na = values.filter((s) => s.touched && s.result === 'na').length
-    return { total: lights.length, tested, passed, failed, remedial, na }
-  }, [states, lights.length])
+    return { total: lightList.length, tested, passed, failed, remedial, na }
+  }, [states, lightList.length])
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
-    const matches = lights.filter(
+    const matches = lightList.filter(
       (l) =>
         (l.urn || '').toLowerCase().includes(q) ||
         (l.map_reference || '').toLowerCase().includes(q) ||
@@ -135,7 +182,7 @@ export function EmergencyLightTaskExecution({
         return a.index - b.index
       })
       .map((entry) => entry.l)
-  }, [lights, search, states])
+  }, [lightList, search, states])
 
   const handleStart = async () => {
     await supabase
@@ -158,7 +205,7 @@ export function EmergencyLightTaskExecution({
     for (const item of EMERGENCY_LIGHT_CHECKLIST) passChecklist[item.id] = 'pass'
     setStates((prev) => {
       const next: Record<string, EmergencyLightInspectionState> = { ...prev }
-      for (const light of lights) {
+      for (const light of lightList) {
         const current = prev[light.id]
         if (current?.touched && (current.result === 'fail' || current.result === 'remedial')) {
           continue
@@ -177,7 +224,7 @@ export function EmergencyLightTaskExecution({
 
   const buildRows = () => {
     const today = new Date().toISOString().split('T')[0]
-    return lights
+    return lightList
       .filter((l) => states[l.id].touched)
       .map((l) => {
         const s = states[l.id]
@@ -375,14 +422,16 @@ export function EmergencyLightTaskExecution({
             </CardContent>
           </Card>
 
-          {lights.length === 0 ? (
+          {lightList.length === 0 ? (
             <Card>
-              <CardContent className="py-8 text-center text-muted-foreground">
-                No emergency light fittings are registered for this site yet. Add them on the{' '}
-                <Link href={`/dashboard/sites/${site?.id}`} className="text-primary hover:underline">
-                  site page
-                </Link>{' '}
-                first.
+              <CardContent className="flex flex-col items-center gap-4 py-8 text-center text-muted-foreground">
+                <p>No emergency light fittings are registered for this site yet.</p>
+                {canEdit && (
+                  <Button onClick={() => setAddOpen(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add a fitting
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ) : (
@@ -398,14 +447,24 @@ export function EmergencyLightTaskExecution({
                   />
                 </div>
                 {canEdit && (
-                  <Button
-                    variant="outline"
-                    onClick={handleAllSatisfactory}
-                    className="shrink-0 bg-transparent"
-                  >
-                    <CheckCircle2 className="mr-2 h-4 w-4" />
-                    All tested satisfactory
-                  </Button>
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => setAddOpen(true)}
+                      className="shrink-0 bg-transparent"
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add fitting
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleAllSatisfactory}
+                      className="shrink-0 bg-transparent"
+                    >
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
+                      All tested satisfactory
+                    </Button>
+                  </>
                 )}
               </div>
               {filtered.map((light) => (
@@ -422,7 +481,7 @@ export function EmergencyLightTaskExecution({
         </>
       )}
 
-      {status === 'in_progress' && canEdit && lights.length > 0 && (
+      {status === 'in_progress' && canEdit && lightList.length > 0 && (
         <div className="fixed bottom-0 left-0 right-0 flex gap-2 border-t bg-background p-4 md:relative md:border-0 md:p-0">
           <Button variant="outline" onClick={handleSave} disabled={saving} className="flex-1">
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
@@ -466,6 +525,82 @@ export function EmergencyLightTaskExecution({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Add fitting — lets engineers register a fitting found on site */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Fitting</DialogTitle>
+            <DialogDescription>
+              A unique URN will be generated automatically for this fitting.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="add-map-ref">Map reference</Label>
+                <Input
+                  id="add-map-ref"
+                  value={addForm.map_reference}
+                  onChange={(e) => setAddForm({ ...addForm, map_reference: e.target.value })}
+                  placeholder="e.g. EL-12"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="add-floor">Floor</Label>
+                <Input
+                  id="add-floor"
+                  value={addForm.floor}
+                  onChange={(e) => setAddForm({ ...addForm, floor: e.target.value })}
+                  placeholder="e.g. Ground"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="add-location">Location</Label>
+              <Input
+                id="add-location"
+                value={addForm.location}
+                onChange={(e) => setAddForm({ ...addForm, location: e.target.value })}
+                placeholder="e.g. Main stairwell, Level 1"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="add-fitting-type">Fitting type</Label>
+              <Input
+                id="add-fitting-type"
+                list="el-fitting-types"
+                value={addForm.fitting_type}
+                onChange={(e) => setAddForm({ ...addForm, fitting_type: e.target.value })}
+                placeholder="e.g. Maintained"
+              />
+              <datalist id="el-fitting-types">
+                {FITTING_TYPES.map((t) => (
+                  <option key={t} value={t} />
+                ))}
+              </datalist>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="add-notes">Notes</Label>
+              <Input
+                id="add-notes"
+                value={addForm.notes}
+                onChange={(e) => setAddForm({ ...addForm, notes: e.target.value })}
+                placeholder="Optional"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddOpen(false)} disabled={addSaving}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddFitting} disabled={addSaving}>
+              {addSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+              Add fitting
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Inspection complete — let the engineer choose what to do next */}
       <Dialog open={showDone} onOpenChange={setShowDone}>

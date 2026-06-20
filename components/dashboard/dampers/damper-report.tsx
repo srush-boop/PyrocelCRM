@@ -33,7 +33,7 @@ export function DamperReport({ task, inspections, template, referenceNumber }: D
   const serviceType = task.site_service?.service_type
   const engineer = task.assigned_engineer
   const headerColor = template?.header_color || '#c8102e'
-  const companyName = template?.company_name || 'Pyrocel Fire & Security'
+  const companyName = template?.company_name || 'Pyrocel Ltd'
   const sections = template?.sections || {}
 
   const stats = useMemo(() => {

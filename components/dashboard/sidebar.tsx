@@ -39,7 +39,7 @@ const adminNavItems = [
   { title: 'Sites', href: '/dashboard/sites', icon: Building2 },
   { title: 'Dampers', href: '/dashboard/dampers', icon: Wind },
   { title: 'Routes', href: '/dashboard/routes', icon: Route },
-  { title: 'Engineers', href: '/dashboard/engineers', icon: Users },
+  { title: 'Users', href: '/dashboard/engineers', icon: Users },
   { title: 'Service Types', href: '/dashboard/service-types', icon: Wrench },
   { title: 'Checklists', href: '/dashboard/checklists', icon: ClipboardList },
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },

@@ -41,7 +41,7 @@ export function ServiceReport({ task, result, template }: ServiceReportProps) {
   // Header colour is driven by the service type's own colour, falling back to the template/default
   const headerColor =
     serviceType?.color || template?.header_color || '#0f172a'
-  const companyName = template?.company_name || 'Pyrocel Fire & Security'
+  const companyName = template?.company_name || 'Pyrocel Ltd'
   const sections = template?.sections || {}
 
   const checklist = result?.checklist_results || []

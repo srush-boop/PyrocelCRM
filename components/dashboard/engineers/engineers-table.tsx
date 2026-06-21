@@ -48,6 +48,7 @@ import {
   Clock,
   CheckCircle2,
   KeyRound,
+  Send,
 } from 'lucide-react'
 import {
   Dialog,
@@ -83,6 +84,7 @@ export function EngineersTable({ users }: EngineersTableProps) {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [savingPassword, setSavingPassword] = useState(false)
+  const [resendingId, setResendingId] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -131,6 +133,35 @@ export function EngineersTable({ users }: EngineersTableProps) {
     const matchesRole = roleFilter === 'all' || user.role === roleFilter
     return matchesSearch && matchesRole
   })
+
+  const handleResendInvite = async (user: Profile) => {
+    setResendingId(user.id)
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: user.email,
+        options: {
+          emailRedirectTo:
+            process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ??
+            `${window.location.origin}/auth/callback`,
+        },
+      })
+      if (error) {
+        alert(`Failed to resend invite: ${error.message}`)
+      } else {
+        await supabase
+          .from('profiles')
+          .update({ invited_at: new Date().toISOString() })
+          .eq('id', user.id)
+        alert(`Invite resent to ${user.email}.`)
+        router.refresh()
+      }
+    } catch {
+      alert('An unexpected error occurred.')
+    } finally {
+      setResendingId(null)
+    }
+  }
 
   const handleRoleChange = async (userId: string, newRole: UserRole) => {
     await supabase
@@ -264,6 +295,19 @@ export function EngineersTable({ users }: EngineersTableProps) {
                           Set as Office
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
+                        {!user.accepted_at && (
+                          <DropdownMenuItem
+                            onClick={() => handleResendInvite(user)}
+                            disabled={resendingId === user.id}
+                          >
+                            {resendingId === user.id ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Send className="mr-2 h-4 w-4" />
+                            )}
+                            Resend Invite
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem onClick={() => openPasswordDialog(user)}>
                           <KeyRound className="mr-2 h-4 w-4" />
                           Change Password

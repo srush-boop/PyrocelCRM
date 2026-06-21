@@ -38,7 +38,26 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
-import { MoreHorizontal, Search, Users, Plus, Trash2, Loader2, Clock, CheckCircle2 } from 'lucide-react'
+import {
+  MoreHorizontal,
+  Search,
+  Users,
+  Plus,
+  Trash2,
+  Loader2,
+  Clock,
+  CheckCircle2,
+  KeyRound,
+} from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
 import type { Profile, UserRole } from '@/lib/types/database'
 import { formatDateUK } from '@/lib/utils'
 import { InviteEngineerDialog } from './invite-engineer-dialog'
@@ -59,8 +78,51 @@ export function EngineersTable({ users }: EngineersTableProps) {
   const [inviteOpen, setInviteOpen] = useState(false)
   const [deleteUser, setDeleteUser] = useState<Profile | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [passwordUser, setPasswordUser] = useState<Profile | null>(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [savingPassword, setSavingPassword] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+
+  const openPasswordDialog = (user: Profile) => {
+    setPasswordUser(user)
+    setNewPassword('')
+    setConfirmPassword('')
+    setPasswordError(null)
+  }
+
+  const handleChangePassword = async () => {
+    if (!passwordUser) return
+    if (newPassword.length < 6) {
+      setPasswordError('Password must be at least 6 characters.')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Passwords do not match.')
+      return
+    }
+    setPasswordError(null)
+    setSavingPassword(true)
+    try {
+      const res = await fetch(`/api/users/${passwordUser.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: newPassword }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setPasswordError(data.error || 'Failed to update password.')
+      } else {
+        setPasswordUser(null)
+      }
+    } catch {
+      setPasswordError('An unexpected error occurred.')
+    } finally {
+      setSavingPassword(false)
+    }
+  }
 
   const filteredUsers = users.filter((user) => {
     const matchesSearch =
@@ -202,6 +264,11 @@ export function EngineersTable({ users }: EngineersTableProps) {
                           Set as Office
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => openPasswordDialog(user)}>
+                          <KeyRound className="mr-2 h-4 w-4" />
+                          Change Password
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="text-destructive focus:text-destructive"
                           onClick={() => setDeleteUser(user)}
@@ -220,6 +287,60 @@ export function EngineersTable({ users }: EngineersTableProps) {
       </div>
 
       <InviteEngineerDialog open={inviteOpen} onOpenChange={setInviteOpen} />
+
+      <Dialog
+        open={!!passwordUser}
+        onOpenChange={(open) => !open && !savingPassword && setPasswordUser(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Password</DialogTitle>
+            <DialogDescription>
+              Set a new password for{' '}
+              <strong>{passwordUser?.full_name || passwordUser?.email}</strong>. They can use it to
+              sign in immediately.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="new-password">New password</Label>
+              <Input
+                id="new-password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="At least 6 characters"
+                autoComplete="new-password"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="confirm-password">Confirm password</Label>
+              <Input
+                id="confirm-password"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Re-enter the password"
+                autoComplete="new-password"
+              />
+            </div>
+            {passwordError && <p className="text-sm text-destructive">{passwordError}</p>}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPasswordUser(null)}
+              disabled={savingPassword}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleChangePassword} disabled={savingPassword}>
+              {savingPassword && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {savingPassword ? 'Saving...' : 'Update Password'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!deleteUser} onOpenChange={(open) => !open && setDeleteUser(null)}>
         <AlertDialogContent>

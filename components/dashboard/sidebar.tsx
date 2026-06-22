@@ -29,6 +29,7 @@ import {
   FireExtinguisher,
   MapPinned,
   HardHat,
+  KeyRound,
 } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 
@@ -45,6 +46,7 @@ const adminNavItems = [
   { title: 'Routes', href: '/dashboard/routes', icon: Route },
   { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
   { title: 'Users', href: '/dashboard/engineers', icon: Users },
+  { title: 'Client Logins', href: '/dashboard/client-logins', icon: KeyRound },
   { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
   { title: 'Service Types', href: '/dashboard/service-types', icon: Wrench },
   { title: 'Checklists', href: '/dashboard/checklists', icon: ClipboardList },

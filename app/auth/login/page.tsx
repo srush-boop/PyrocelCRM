@@ -24,7 +24,7 @@ export default function LoginPage() {
     setError(null)
     setLoading(true)
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
@@ -33,7 +33,17 @@ export default function LoginPage() {
       setError(error.message)
       setLoading(false)
     } else {
-      router.push('/dashboard')
+      // Route client logins to the read-only portal, staff to the dashboard.
+      let destination = '/dashboard'
+      if (data.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', data.user.id)
+          .single()
+        if (profile?.role === 'client') destination = '/portal'
+      }
+      router.push(destination)
       router.refresh()
     }
   }

@@ -28,6 +28,11 @@ export default async function DashboardLayout({
     redirect('/auth/login')
   }
 
+  // Client logins are read-only and belong in the portal, not the staff dashboard.
+  if ((profile as Profile).role === 'client') {
+    redirect('/portal')
+  }
+
   return (
     <SidebarProvider>
       <DashboardSidebar profile={profile as Profile} />

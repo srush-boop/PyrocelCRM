@@ -1,6 +1,6 @@
 // Database types for PyrocelCRM
 
-export type UserRole = 'admin' | 'engineer' | 'office'
+export type UserRole = 'admin' | 'engineer' | 'office' | 'client'
 
 // Who performs a service. Independent of how the work is routed/assigned.
 export type WorkerType = 'cdo' | 'engineer' | 'subcontractor'
@@ -46,10 +46,26 @@ export interface Profile {
   full_name: string | null
   role: UserRole
   status: 'active' | 'inactive'
+  client_id: string | null
   invited_at: string | null
   accepted_at: string | null
   created_at: string
   updated_at: string
+}
+
+// A site a client login is permitted to view (join row).
+export interface ClientSiteAccess {
+  id: string
+  profile_id: string
+  site_id: string
+  client_id: string
+  created_at: string
+}
+
+// A client login row enriched for the management table.
+export interface ClientLogin extends Profile {
+  client_name: string | null
+  site_ids: string[]
 }
 
 export interface ServiceType {

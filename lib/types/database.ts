@@ -192,6 +192,33 @@ export interface Site {
   assigned_engineer?: Profile
 }
 
+// Document store: folders + files attached to a client, site, or a site's service.
+export type DocumentOwnerType = 'client' | 'site' | 'site_service'
+
+export interface DocumentFolder {
+  id: string
+  owner_type: DocumentOwnerType
+  owner_id: string
+  parent_id: string | null
+  name: string
+  created_by: string | null
+  created_at: string
+}
+
+export interface DocumentFile {
+  id: string
+  owner_type: DocumentOwnerType
+  owner_id: string
+  folder_id: string | null
+  name: string
+  blob_pathname: string
+  blob_url: string
+  content_type: string | null
+  size_bytes: number | null
+  uploaded_by: string | null
+  created_at: string
+}
+
 export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled'
 
 export interface Task {

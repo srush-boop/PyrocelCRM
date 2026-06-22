@@ -30,6 +30,7 @@ import {
   MapPinned,
   HardHat,
   KeyRound,
+  FolderOpen,
 } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 
@@ -52,6 +53,7 @@ const adminNavItems = [
   { title: 'Checklists', href: '/dashboard/checklists', icon: ClipboardList },
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
   { title: 'Reports', href: '/dashboard/reports', icon: FileText },
+  { title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
 ]
 
 const engineerNavItems = [
@@ -70,6 +72,7 @@ const officeNavItems = [
   { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
   { title: 'Reports', href: '/dashboard/reports', icon: FileText },
+  { title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
 ]
 
 export function DashboardSidebar({ profile }: DashboardSidebarProps) {

@@ -8,6 +8,8 @@ import { ArrowLeft, MapPin, Phone, Mail, Building2, Radio } from 'lucide-react'
 import { SiteServicesManager } from '@/components/dashboard/sites/site-services-manager'
 import { SiteReports } from '@/components/dashboard/sites/site-reports'
 import { SiteLogbook } from '@/components/dashboard/sites/site-logbook'
+import { SiteDocuments } from '@/components/dashboard/sites/site-documents'
+import { getOwnerDocuments } from '@/lib/documents/data'
 import type { ReportTimelineItem } from '@/components/logbook/logbook-timeline'
 import { DamperRegister } from '@/components/dashboard/dampers/damper-register'
 import { McpRegister } from '@/components/dashboard/mcps/mcp-register'
@@ -232,6 +234,10 @@ export default async function SiteDetailPage({ params }: PageProps) {
     }
   })
 
+  // Documents stored against this site.
+  const siteDocuments = await getOwnerDocuments('site', id)
+  const canManageDocuments = ['admin', 'office'].includes((profile as Profile).role)
+
   return (
     <div className="space-y-6">
       <div className="flex items-start gap-4">
@@ -391,6 +397,13 @@ export default async function SiteDetailPage({ params }: PageProps) {
         postcode={(site as Site).postcode}
         reports={logbookReports}
         entries={logbookEntries}
+      />
+
+      <SiteDocuments
+        siteId={id}
+        folders={siteDocuments.folders}
+        files={siteDocuments.files}
+        canManage={canManageDocuments}
       />
 
       <SiteReports

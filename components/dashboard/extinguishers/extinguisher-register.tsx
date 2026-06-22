@@ -10,6 +10,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
+import {
   Table,
   TableBody,
   TableCell,
@@ -58,6 +63,7 @@ import {
   Pencil,
   Trash2,
   ExternalLink,
+  ChevronDown,
 } from 'lucide-react'
 import { ImportExtinguishersDialog } from './import-extinguishers-dialog'
 import { ScanQrButton } from './scan-qr-button'
@@ -90,6 +96,7 @@ const emptyForm = {
 }
 
 export function ExtinguisherRegister({ siteId, siteName, extinguishers }: ExtinguisherRegisterProps) {
+  const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Extinguisher | null>(null)
@@ -178,17 +185,32 @@ export function ExtinguisherRegister({ siteId, siteName, extinguishers }: Exting
   }
 
   return (
+    <Collapsible asChild open={open} onOpenChange={setOpen}>
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <FireExtinguisher className="h-5 w-5" />
-              Extinguisher Register
-            </CardTitle>
-            <CardDescription>
-              {extinguishers.length} extinguisher{extinguishers.length === 1 ? '' : 's'} registered for this site
-            </CardDescription>
+          <div className="flex items-start gap-2">
+            <CollapsibleTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0"
+                aria-label={open ? 'Collapse extinguisher register' : 'Expand extinguisher register'}
+              >
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${open ? '' : '-rotate-90'}`}
+                />
+              </Button>
+            </CollapsibleTrigger>
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <FireExtinguisher className="h-5 w-5" />
+                Extinguisher Register
+              </CardTitle>
+              <CardDescription>
+                {extinguishers.length} extinguisher{extinguishers.length === 1 ? '' : 's'} registered for this site
+              </CardDescription>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <ScanQrButton />
@@ -208,6 +230,7 @@ export function ExtinguisherRegister({ siteId, siteName, extinguishers }: Exting
           </div>
         </div>
       </CardHeader>
+      <CollapsibleContent>
       <CardContent className="space-y-4">
         {extinguishers.length > 0 && (
           <Input
@@ -313,6 +336,7 @@ export function ExtinguisherRegister({ siteId, siteName, extinguishers }: Exting
           </Table>
         </div>
       </CardContent>
+      </CollapsibleContent>
 
       {/* Add / Edit dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -449,5 +473,6 @@ export function ExtinguisherRegister({ siteId, siteName, extinguishers }: Exting
         </AlertDialogContent>
       </AlertDialog>
     </Card>
+    </Collapsible>
   )
 }

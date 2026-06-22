@@ -174,7 +174,7 @@ export function KpiDashboard({
             </p>
           ) : (
             <ChartContainer config={chartConfig} className="h-[320px] w-full">
-              <BarChart accessibilityLayer data={chartData} margin={{ left: -16, right: 8 }}>
+              <BarChart accessibilityLayer data={chartData} margin={{ left: 0, right: 8 }}>
                 <CartesianGrid vertical={false} />
                 <XAxis
                   dataKey="label"
@@ -187,7 +187,13 @@ export function KpiDashboard({
                   height={chartData.length > 4 ? 60 : 30}
                   tickFormatter={(v: string) => (v.length > 16 ? `${v.slice(0, 15)}…` : v)}
                 />
-                <YAxis domain={[0, 100]} tickLine={false} axisLine={false} width={40} />
+                <YAxis
+                  domain={[0, 100]}
+                  tickLine={false}
+                  axisLine={false}
+                  width={44}
+                  tickFormatter={(v: number) => `${v}%`}
+                />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Bar dataKey="regulatory" fill="var(--color-regulatory)" radius={4} />
                 <Bar dataKey="client" fill="var(--color-client)" radius={4} />

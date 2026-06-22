@@ -433,13 +433,13 @@ export default function ReportsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Reference</TableHead>
-                  <TableHead>Client</TableHead>
+                  <TableHead className="hidden xl:table-cell">Client</TableHead>
                   <TableHead>Site</TableHead>
                   <TableHead>Service</TableHead>
-                  <TableHead>Engineer</TableHead>
+                  <TableHead className="hidden lg:table-cell">Engineer</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Email Sent</TableHead>
-                  <TableHead>Date</TableHead>
+                  <TableHead className="hidden xl:table-cell">Email Sent</TableHead>
+                  <TableHead className="hidden lg:table-cell">Date</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -463,16 +463,16 @@ export default function ReportsPage() {
                   filteredReports.map((report) => (
                     <TableRow key={report.id}>
                       <TableCell className="font-mono text-xs font-medium">{report.referenceNumber}</TableCell>
-                      <TableCell>{report.clientName || <span className="text-muted-foreground">-</span>}</TableCell>
+                      <TableCell className="hidden xl:table-cell">{report.clientName || <span className="text-muted-foreground">-</span>}</TableCell>
                       <TableCell className="font-medium">{report.siteName}</TableCell>
                       <TableCell>{report.serviceName}</TableCell>
-                      <TableCell>{report.engineerName}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{report.engineerName}</TableCell>
                       <TableCell>
                         <Badge variant={report.overallStatus === 'pass' ? 'default' : 'destructive'}>
                           {report.overallStatus === 'pass' ? 'Pass' : report.overallStatus === 'fail' ? 'Fail' : 'Partial'}
                         </Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden xl:table-cell">
                         {report.emailSentAt ? (
                           <div className="flex items-center gap-2">
                             <CheckCircle className="h-4 w-4 text-green-600" />
@@ -487,7 +487,7 @@ export default function ReportsPage() {
                           </span>
                         )}
                       </TableCell>
-                      <TableCell className="text-sm">
+                      <TableCell className="hidden text-sm lg:table-cell">
                         {report.completedAt 
                           ? formatDateUK(report.completedAt)
                           : formatDateUK(report.createdAt)}

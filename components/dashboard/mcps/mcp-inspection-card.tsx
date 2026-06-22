@@ -125,8 +125,21 @@ export function McpInspectionCard({ mcp, state, disabled = false, onChange }: Mc
       <CollapsibleContent className="space-y-4 px-4 pb-4">
         <Separator />
 
-        {(mcp.test_key_type || (mcp.photos && mcp.photos.length > 0)) && (
-          <div className="space-y-2 rounded-md bg-muted/50 p-3 text-sm">
+        {(mcp.asset_image_url || mcp.test_key_type || (mcp.photos && mcp.photos.length > 0)) && (
+          <div className="space-y-3 rounded-md bg-muted/50 p-3 text-sm">
+            {mcp.asset_image_url && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground">Call point to test</p>
+                <div className="h-40 w-full overflow-hidden rounded-md border bg-background sm:w-48">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={mcp.asset_image_url || '/placeholder.svg'}
+                    alt={`Manual call point ${mcp.urn ?? ''}`}
+                    className="h-full w-full object-contain"
+                  />
+                </div>
+              </div>
+            )}
             {mcp.test_key_type && (
               <p>
                 <span className="text-muted-foreground">Test key: </span>
@@ -134,13 +147,16 @@ export function McpInspectionCard({ mcp, state, disabled = false, onChange }: Mc
               </p>
             )}
             {mcp.photos && mcp.photos.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {mcp.photos.map((url) => (
-                  <div key={url} className="h-16 w-16 overflow-hidden rounded-md border">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={url || '/placeholder.svg'} alt="Position reference" className="h-full w-full object-cover" />
-                  </div>
-                ))}
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground">Position reference</p>
+                <div className="flex flex-wrap gap-2">
+                  {mcp.photos.map((url) => (
+                    <div key={url} className="h-16 w-16 overflow-hidden rounded-md border">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url || '/placeholder.svg'} alt="Position reference" className="h-full w-full object-cover" />
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

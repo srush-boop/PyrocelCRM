@@ -28,6 +28,8 @@ export default async function SchedulePage() {
       site_service:site_services(
         *,
         route:routes(*),
+        area:areas(*),
+        subcontractor:subcontractors(*),
         site:sites(*, route:routes(*)),
         service_type:service_types(*)
       ),

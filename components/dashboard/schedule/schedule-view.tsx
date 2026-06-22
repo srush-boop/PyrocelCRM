@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -33,13 +35,18 @@ import {
   LayoutGrid,
   List as ListIcon,
   Route as RouteIcon,
+  MapPinned,
+  HardHat,
+  UserPlus,
+  Loader2,
   ChevronRight,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
-import type { Profile, TaskWithDetails, Site, Route } from '@/lib/types/database'
+import type { Profile, TaskWithDetails, Site, Route, Area } from '@/lib/types/database'
+import { WORKER_TYPE_LABELS } from '@/lib/assignment'
 
-type ViewMode = 'grid' | 'list' | 'route'
+type ViewMode = 'grid' | 'list' | 'route' | 'area'
 
 interface ScheduleViewProps {
   tasks: TaskWithDetails[]
@@ -55,18 +62,32 @@ const statusConfig = {
 }
 
 export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewProps) {
+  const router = useRouter()
+  const supabase = createClient()
   const [search, setSearch] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [activeTab, setActiveTab] = useState('upcoming')
   const [selectedEngineer, setSelectedEngineer] = useState<string>('all')
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined)
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined)
+  const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null)
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
   const isEngineer = profile.role === 'engineer'
   const isAdminOrOffice = profile.role === 'admin' || profile.role === 'office'
+
+  // Assign an open (unassigned) task to a person directly from the schedule.
+  const assignTask = async (taskId: string, engineerId: string) => {
+    setAssigningTaskId(taskId)
+    await supabase
+      .from('tasks')
+      .update({ assigned_engineer_id: engineerId })
+      .eq('id', taskId)
+    setAssigningTaskId(null)
+    router.refresh()
+  }
 
   const hasActiveFilters = search || selectedEngineer !== 'all' || dateFrom || dateTo
 
@@ -103,6 +124,40 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   const overdueTasks = upcomingTasks.filter(
     (task) => new Date(task.scheduled_date) < today && task.status === 'pending'
   )
+
+  // Inline control to pick up an open task. Only shown to admin/office for
+  // unassigned, still-actionable tasks (e.g. CDO non-route work like dampers).
+  const AssignControl = ({ task, className }: { task: TaskWithDetails; className?: string }) => {
+    if (!isAdminOrOffice) return null
+    if (task.assigned_engineer_id) return null
+    if (task.status === 'completed' || task.status === 'cancelled') return null
+    if (task.site_service?.worker_type === 'subcontractor') return null
+    const busy = assigningTaskId === task.id
+    return (
+      <div className={cn('flex items-center gap-2', className)} onClick={(e) => e.preventDefault()}>
+        <Select disabled={busy} onValueChange={(value) => assignTask(task.id, value)}>
+          <SelectTrigger className="h-8 flex-1 text-xs">
+            {busy ? (
+              <span className="flex items-center gap-1.5">
+                <Loader2 className="h-3 w-3 animate-spin" /> Assigning...
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5">
+                <UserPlus className="h-3.5 w-3.5" /> Assign to...
+              </span>
+            )}
+          </SelectTrigger>
+          <SelectContent>
+            {engineers.map((eng) => (
+              <SelectItem key={eng.id} value={eng.id}>
+                {eng.full_name || eng.email}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    )
+  }
 
   const TaskCard = ({ task }: { task: TaskWithDetails }) => {
     const config = statusConfig[task.status]
@@ -144,6 +199,19 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                 </Badge>
               )}
             </div>
+            {!isEngineer && task.site_service?.worker_type && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Badge variant="secondary" className="text-xs font-normal">
+                  {WORKER_TYPE_LABELS[task.site_service.worker_type]}
+                </Badge>
+                {task.site_service.worker_type === 'subcontractor' && task.site_service.subcontractor && (
+                  <Badge variant="outline" className="gap-1 text-xs font-normal">
+                    <HardHat className="h-3 w-3" />
+                    {task.site_service.subcontractor.name}
+                  </Badge>
+                )}
+              </div>
+            )}
             {!isEngineer && task.assigned_engineer && (
               <p className="text-sm">
                 <span className="text-muted-foreground">Engineer: </span>
@@ -151,6 +219,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
               </p>
             )}
           </div>
+          <AssignControl task={task} className="mt-4" />
           {(isEngineer || profile.role === 'admin') && task.status !== 'completed' && task.status !== 'cancelled' && (
             <Button asChild className="w-full mt-4" size="sm">
               <Link href={`/dashboard/tasks/${task.id}`}>
@@ -245,6 +314,30 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     })
   }
 
+  // Group tasks by each service's area (for non-route engineer/CDO work).
+  const groupByArea = (list: TaskWithDetails[]) => {
+    const groups = new Map<string, { name: string; tasks: TaskWithDetails[] }>()
+    for (const task of list) {
+      const area = (task.site_service as { area?: Area | null } | undefined)?.area
+      const key = area?.id ?? 'unassigned'
+      const name = area?.name ?? 'No area assigned'
+      if (!groups.has(key)) groups.set(key, { name, tasks: [] })
+      groups.get(key)!.tasks.push(task)
+    }
+    for (const group of groups.values()) {
+      group.tasks.sort((a, b) => {
+        const sa = a.site_service?.site as Site | undefined
+        const sb = b.site_service?.site as Site | undefined
+        return (sa?.name ?? '').localeCompare(sb?.name ?? '')
+      })
+    }
+    return Array.from(groups.values()).sort((a, b) => {
+      if (a.name === 'No area assigned') return 1
+      if (b.name === 'No area assigned') return -1
+      return a.name.localeCompare(b.name)
+    })
+  }
+
   const EmptyState = ({ icon: Icon, label }: { icon: typeof ClipboardCheck; label: string }) => (
     <Card>
       <CardContent className="flex flex-col items-center justify-center py-12">
@@ -267,13 +360,15 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
         </div>
       )
     }
-    if (viewMode === 'route') {
+    if (viewMode === 'route' || viewMode === 'area') {
+      const groups = viewMode === 'route' ? groupByRoute(list) : groupByArea(list)
+      const GroupIcon = viewMode === 'route' ? RouteIcon : MapPinned
       return (
         <div className="space-y-6">
-          {groupByRoute(list).map((group) => (
+          {groups.map((group) => (
             <div key={group.name} className="space-y-2">
               <div className="flex items-center gap-2">
-                <RouteIcon className="h-4 w-4 text-muted-foreground" />
+                <GroupIcon className="h-4 w-4 text-muted-foreground" />
                 <h3 className="text-sm font-semibold">{group.name}</h3>
                 <Badge variant="secondary" className="text-xs">
                   {group.tasks.length}
@@ -285,8 +380,9 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                     <span className="w-6 shrink-0 text-right text-xs font-medium text-muted-foreground">
                       {idx + 1}.
                     </span>
-                    <div className="flex-1">
+                    <div className="flex-1 space-y-1.5">
                       <TaskRow task={task} />
+                      <AssignControl task={task} className="pl-1" />
                     </div>
                   </div>
                 ))}
@@ -312,6 +408,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
           { mode: 'grid' as const, icon: LayoutGrid, label: 'Grid' },
           { mode: 'list' as const, icon: ListIcon, label: 'List' },
           { mode: 'route' as const, icon: RouteIcon, label: 'By route' },
+          { mode: 'area' as const, icon: MapPinned, label: 'By area' },
         ]
       ).map(({ mode, icon: Icon, label }) => (
         <Button

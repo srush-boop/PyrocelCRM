@@ -52,11 +52,11 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-xl border bg-white p-1.5">
+          <div className="mx-auto mb-4 flex h-40 w-40 items-center justify-center rounded-xl border bg-white p-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/images/pyrocel-logo.png" alt="Pyrocel logo" className="h-full w-full object-contain" />
           </div>
-          <CardTitle className="text-2xl font-bold">Pyrocel Fire &amp; Security</CardTitle>
+          <CardTitle className="text-2xl font-bold">PYROCEL Ltd</CardTitle>
           <CardDescription>
             Service &amp; Compliance Management
           </CardDescription>

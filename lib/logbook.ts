@@ -56,3 +56,57 @@ export function getLogbookEntryMeta(type: LogbookEntryType): LogbookEntryTypeMet
 export function logbookEntryLabel(type: LogbookEntryType): string {
   return getLogbookEntryMeta(type).label
 }
+
+// Fire safety "systems" used to group/filter log book records so an occupier
+// can quickly find everything relating to a particular asset type.
+export type LogbookSystemId =
+  | 'fire_alarm'
+  | 'emergency_lighting'
+  | 'extinguishers'
+  | 'dampers'
+  | 'fire_drill'
+  | 'general'
+
+export interface LogbookSystemMeta {
+  id: LogbookSystemId
+  label: string
+}
+
+export const LOGBOOK_SYSTEMS: LogbookSystemMeta[] = [
+  { id: 'fire_alarm', label: 'Fire alarm' },
+  { id: 'emergency_lighting', label: 'Emergency lighting' },
+  { id: 'extinguishers', label: 'Fire extinguishers' },
+  { id: 'dampers', label: 'Fire & smoke dampers' },
+  { id: 'fire_drill', label: 'Fire drills' },
+  { id: 'general', label: 'General' },
+]
+
+export function getLogbookSystemMeta(id: LogbookSystemId): LogbookSystemMeta {
+  return LOGBOOK_SYSTEMS.find((s) => s.id === id) ?? LOGBOOK_SYSTEMS[LOGBOOK_SYSTEMS.length - 1]
+}
+
+/** Map an occupier/staff entry type to its fire safety system. */
+export function systemForEntryType(type: LogbookEntryType): LogbookSystemId {
+  switch (type) {
+    case 'weekly_alarm_test':
+    case 'false_alarm':
+      return 'fire_alarm'
+    case 'monthly_emergency_light_test':
+      return 'emergency_lighting'
+    case 'fire_drill':
+      return 'fire_drill'
+    default:
+      return 'general'
+  }
+}
+
+/** Infer the fire safety system from a (freeform) professional service name. */
+export function systemForServiceName(name: string): LogbookSystemId {
+  const n = name.toLowerCase()
+  if (n.includes('extinguisher')) return 'extinguishers'
+  if (n.includes('damper')) return 'dampers'
+  if (n.includes('emergency') || n.includes('light')) return 'emergency_lighting'
+  if (n.includes('alarm') || n.includes('detection') || n.includes('fire alarm')) return 'fire_alarm'
+  if (n.includes('drill') || n.includes('evacuat')) return 'fire_drill'
+  return 'general'
+}

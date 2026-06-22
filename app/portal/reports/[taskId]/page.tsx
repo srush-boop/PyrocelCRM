@@ -15,6 +15,7 @@ import type {
   Damper,
   ExtinguisherInspection,
   Extinguisher,
+  CompanyInfo,
 } from '@/lib/types/database'
 
 interface PageProps {
@@ -46,6 +47,13 @@ export default async function PortalReportPage({ params }: PageProps) {
   const serviceTypeId = task.site_service?.service_type_id
   const serviceName = task.site_service?.service_type?.name
 
+  const { data: companyData } = await supabase
+    .from('company_info')
+    .select('*')
+    .limit(1)
+    .maybeSingle()
+  const companyInfo = (companyData as CompanyInfo | null) ?? null
+
   const backLink = (
     <Link
       href="/portal"
@@ -76,6 +84,7 @@ export default async function PortalReportPage({ params }: PageProps) {
           inspections={(inspectionsData || []) as (DamperInspection & { damper: Damper | null })[]}
           template={(templateData as ReportTemplate | null) ?? null}
           referenceNumber={resultData?.reference_number ?? null}
+          companyInfo={companyInfo}
         />
       </div>
     )
@@ -103,6 +112,7 @@ export default async function PortalReportPage({ params }: PageProps) {
           }
           template={(templateData as ReportTemplate | null) ?? null}
           referenceNumber={resultData?.reference_number ?? null}
+          companyInfo={companyInfo}
         />
       </div>
     )
@@ -121,6 +131,7 @@ export default async function PortalReportPage({ params }: PageProps) {
         task={task as TaskWithDetails}
         result={(resultData as TaskResult | null) ?? null}
         template={(templateData as ReportTemplate | null) ?? null}
+        companyInfo={companyInfo}
       />
     </div>
   )

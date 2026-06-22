@@ -1,8 +1,8 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -46,9 +46,19 @@ export function ClientsTable({ clients, sitesByClient = {} }: ClientsTableProps)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [editClient, setEditClient] = useState<Client | null>(null)
   const [addOpen, setAddOpen] = useState(false)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const searchParams = useSearchParams()
+  const focusedClientId = searchParams.get('client')
+  const [expandedId, setExpandedId] = useState<string | null>(focusedClientId)
   const router = useRouter()
   const supabase = createClient()
+  const focusedRowRef = useRef<HTMLTableRowElement | null>(null)
+
+  // When deep-linked from a site (?client=<id>), expand and scroll to that client.
+  useEffect(() => {
+    if (!focusedClientId) return
+    setExpandedId(focusedClientId)
+    focusedRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [focusedClientId])
 
   const filteredClients = clients.filter((client) =>
     client.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -111,7 +121,12 @@ export function ClientsTable({ clients, sitesByClient = {} }: ClientsTableProps)
                 return (
                   <React.Fragment key={client.id}>
                     <TableRow
-                      className="cursor-pointer"
+                      ref={client.id === focusedClientId ? focusedRowRef : undefined}
+                      className={
+                        client.id === focusedClientId
+                          ? 'cursor-pointer bg-primary/5'
+                          : 'cursor-pointer'
+                      }
                       onClick={() => setExpandedId(isExpanded ? null : client.id)}
                     >
                       <TableCell>

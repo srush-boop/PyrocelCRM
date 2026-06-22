@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { ClientsTable } from '@/components/dashboard/clients/clients-table'
@@ -46,10 +47,12 @@ export default async function ClientsPage() {
         </p>
       </div>
 
-      <ClientsTable
-        clients={(clients || []) as Client[]}
-        sitesByClient={sitesByClient}
-      />
+      <Suspense fallback={null}>
+        <ClientsTable
+          clients={(clients || []) as Client[]}
+          sitesByClient={sitesByClient}
+        />
+      </Suspense>
     </div>
   )
 }

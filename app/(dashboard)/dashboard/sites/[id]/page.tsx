@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { ArrowLeft, MapPin, Phone, Mail, Building2, Radio } from 'lucide-react'
+import { ArrowLeft, MapPin, Phone, Mail, Building2, Radio, Building, User, ExternalLink } from 'lucide-react'
 import { EditSiteButton } from '@/components/dashboard/sites/edit-site-button'
 import { SiteServicesManager } from '@/components/dashboard/sites/site-services-manager'
+import { SiteAssetsTab, type SiteAsset } from '@/components/dashboard/sites/site-assets-tab'
 import { SiteReports } from '@/components/dashboard/sites/site-reports'
 import { SiteLogbook } from '@/components/dashboard/sites/site-logbook'
 import { SiteDocuments } from '@/components/dashboard/sites/site-documents'
@@ -67,7 +68,8 @@ export default async function SiteDetailPage({ params }: PageProps) {
     .from('sites')
     .select(`
       *,
-      route:routes(*)
+      route:routes(*),
+      client:clients(*)
     `)
     .eq('id', id)
     .single()
@@ -243,6 +245,33 @@ export default async function SiteDetailPage({ params }: PageProps) {
   const siteDocuments = await getOwnerDocuments('site', id)
   const canManageDocuments = ['admin', 'office'].includes((profile as Profile).role)
 
+  // The client this site belongs to (joined above), if any.
+  const siteClient = (site as Site & { client: Client | null }).client
+
+  // Asset registers applicable to this site, surfaced under a single "Assets" tab.
+  const assetTabs: SiteAsset[] = [
+    showDamperRegister && {
+      value: 'dampers',
+      label: 'Dampers',
+      content: <DamperRegister siteId={id} siteName={site.name} dampers={dampers} />,
+    },
+    showMcpRegister && {
+      value: 'fire-alarm',
+      label: 'Fire Alarm',
+      content: <McpRegister siteId={id} mcps={mcps} />,
+    },
+    showEmergencyLightRegister && {
+      value: 'emergency-lighting',
+      label: 'Emergency Lighting',
+      content: <EmergencyLightRegister siteId={id} lights={emergencyLights} />,
+    },
+    showExtinguisherRegister && {
+      value: 'extinguishers',
+      label: 'Extinguishers',
+      content: <ExtinguisherRegister siteId={id} siteName={site.name} extinguishers={extinguishers} />,
+    },
+  ].filter(Boolean) as SiteAsset[]
+
   return (
     <div className="space-y-6">
       <div className="flex items-start gap-4">
@@ -270,13 +299,8 @@ export default async function SiteDetailPage({ params }: PageProps) {
       <Tabs defaultValue="overview" className="gap-6">
         <TabsList className="h-auto flex-wrap justify-start">
           <TabsTrigger value="overview" className="flex-none">Overview</TabsTrigger>
-          {showDamperRegister && <TabsTrigger value="dampers" className="flex-none">Dampers</TabsTrigger>}
-          {showMcpRegister && <TabsTrigger value="fire-alarm" className="flex-none">Fire Alarm</TabsTrigger>}
-          {showEmergencyLightRegister && (
-            <TabsTrigger value="emergency-lighting" className="flex-none">Emergency Lighting</TabsTrigger>
-          )}
-          {showExtinguisherRegister && (
-            <TabsTrigger value="extinguishers" className="flex-none">Extinguishers</TabsTrigger>
+          {assetTabs.length > 0 && (
+            <TabsTrigger value="assets" className="flex-none">Assets</TabsTrigger>
           )}
           <TabsTrigger value="logbook" className="flex-none">Log Book</TabsTrigger>
           <TabsTrigger value="documents" className="flex-none">Documents</TabsTrigger>
@@ -285,6 +309,57 @@ export default async function SiteDetailPage({ params }: PageProps) {
 
         <TabsContent value="overview" className="mt-0">
           <div className="grid gap-6 md:grid-cols-2">
+        {siteClient && (
+          <Card className="md:col-span-2">
+            <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+              <CardTitle className="flex items-center gap-2">
+                <Building className="h-5 w-5" />
+                Client
+              </CardTitle>
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/dashboard/clients?client=${siteClient.id}`}>
+                  View client
+                  <ExternalLink className="h-4 w-4" />
+                </Link>
+              </Button>
+            </CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-2">
+              <div className="text-sm font-medium">{siteClient.name}</div>
+              <div className="grid gap-2 sm:col-start-1">
+                {siteClient.contact_name && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span>{siteClient.contact_name}</span>
+                  </div>
+                )}
+                {siteClient.contact_phone && (
+                  <a
+                    href={`tel:${siteClient.contact_phone}`}
+                    className="flex items-center gap-2 text-sm text-primary hover:underline"
+                  >
+                    <Phone className="h-4 w-4" />
+                    {siteClient.contact_phone}
+                  </a>
+                )}
+                {siteClient.contact_email && (
+                  <a
+                    href={`mailto:${siteClient.contact_email}`}
+                    className="flex items-center gap-2 text-sm text-primary hover:underline"
+                  >
+                    <Mail className="h-4 w-4" />
+                    {siteClient.contact_email}
+                  </a>
+                )}
+              </div>
+              {siteClient.address && (
+                <div className="flex items-start gap-2 text-sm text-muted-foreground sm:row-start-2">
+                  <MapPin className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>{siteClient.address}</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -400,27 +475,9 @@ export default async function SiteDetailPage({ params }: PageProps) {
           </div>
         </TabsContent>
 
-        {showDamperRegister && (
-          <TabsContent value="dampers" className="mt-0">
-            <DamperRegister siteId={id} siteName={site.name} dampers={dampers} />
-          </TabsContent>
-        )}
-
-        {showMcpRegister && (
-          <TabsContent value="fire-alarm" className="mt-0">
-            <McpRegister siteId={id} mcps={mcps} />
-          </TabsContent>
-        )}
-
-        {showEmergencyLightRegister && (
-          <TabsContent value="emergency-lighting" className="mt-0">
-            <EmergencyLightRegister siteId={id} lights={emergencyLights} />
-          </TabsContent>
-        )}
-
-        {showExtinguisherRegister && (
-          <TabsContent value="extinguishers" className="mt-0">
-            <ExtinguisherRegister siteId={id} siteName={site.name} extinguishers={extinguishers} />
+        {assetTabs.length > 0 && (
+          <TabsContent value="assets" className="mt-0">
+            <SiteAssetsTab assets={assetTabs} />
           </TabsContent>
         )}
 

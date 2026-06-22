@@ -18,6 +18,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Loader2 } from 'lucide-react'
 import type { ServiceType, WorkerType } from '@/lib/types/database'
 import { WORKER_TYPE_LABELS } from '@/lib/assignment'
+import { ServiceColorPicker } from './service-color-picker'
+import { PYROCEL_RED } from '@/lib/service-colors'
 import {
   Select,
   SelectContent,
@@ -42,6 +44,7 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
     default_worker_type: (serviceType.default_worker_type || 'cdo') as WorkerType,
     defects_to_email: serviceType.defects_to_email || '',
     status: (serviceType.status || 'live') as 'live' | 'dead',
+    color: serviceType.color || PYROCEL_RED,
   })
   const router = useRouter()
   const supabase = createClient()
@@ -66,6 +69,7 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
         default_worker_type: formData.default_worker_type,
         defects_to_email: formData.defects_to_email.trim() || null,
         status: formData.status,
+        color: formData.color,
       })
       .eq('id', serviceType.id)
 
@@ -108,6 +112,10 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               />
             </div>
+            <ServiceColorPicker
+              value={formData.color}
+              onChange={(color) => setFormData({ ...formData, color })}
+            />
             <div className="grid grid-cols-2 gap-2">
               <div className="grid gap-2">
                 <Label htmlFor="frequency-value">Frequency Value *</Label>

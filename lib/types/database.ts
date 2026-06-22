@@ -409,6 +409,30 @@ export interface ReportTemplate {
   updated_at?: string
 }
 
+export interface CompanyInfo {
+  id: string
+  name: string
+  address: string | null
+  phone: string | null
+  email: string | null
+  website: string | null
+  registration_number: string | null
+  vat_number: string | null
+  logo_url: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface Branch {
+  id: string
+  name: string
+  address: string | null
+  phone: string | null
+  email: string | null
+  created_at?: string
+  updated_at?: string
+}
+
 // Extended types for dashboard views
 export interface TaskWithDetails extends Task {
   site_service: SiteService & {

@@ -5,6 +5,7 @@ import type {
   TaskWithDetails,
   TaskResult,
   ReportTemplate,
+  CompanyInfo,
 } from '@/lib/types/database'
 
 interface PageProps {
@@ -41,13 +42,14 @@ export default async function ServiceReportPage({ params }: PageProps) {
 
   const serviceTypeId = task.site_service?.service_type_id
 
-  const [{ data: resultData }, { data: templateData }] = await Promise.all([
+  const [{ data: resultData }, { data: templateData }, { data: companyData }] = await Promise.all([
     supabase.from('task_results').select('*').eq('task_id', taskId).maybeSingle(),
     supabase
       .from('report_templates')
       .select('*')
       .eq('service_type_id', serviceTypeId)
       .maybeSingle(),
+    supabase.from('company_info').select('*').limit(1).maybeSingle(),
   ])
 
   return (
@@ -55,6 +57,7 @@ export default async function ServiceReportPage({ params }: PageProps) {
       task={task as TaskWithDetails}
       result={(resultData as TaskResult | null) ?? null}
       template={(templateData as ReportTemplate | null) ?? null}
+      companyInfo={(companyData as CompanyInfo | null) ?? null}
     />
   )
 }

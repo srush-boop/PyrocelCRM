@@ -41,7 +41,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Plus, BellRing, Loader2, MoreHorizontal, Pencil, Trash2, Camera, X, MapPin } from 'lucide-react'
+import { Plus, BellRing, Loader2, MoreHorizontal, Pencil, Trash2, Camera, X, MapPin, ImageIcon } from 'lucide-react'
 import { MCP_RESULT_VARIANT, TEST_KEY_TYPES, generateMcpUrn } from '@/lib/mcps'
 import type { Mcp } from '@/lib/types/database'
 
@@ -58,6 +58,7 @@ const emptyForm = {
   test_key_type: '',
   notes: '',
   photos: [] as string[],
+  asset_image_url: '' as string,
 }
 
 export function McpRegister({ siteId, mcps }: McpRegisterProps) {
@@ -67,6 +68,7 @@ export function McpRegister({ siteId, mcps }: McpRegisterProps) {
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [uploadingAsset, setUploadingAsset] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
@@ -97,6 +99,7 @@ export function McpRegister({ siteId, mcps }: McpRegisterProps) {
       test_key_type: mcp.test_key_type || '',
       notes: mcp.notes || '',
       photos: mcp.photos || [],
+      asset_image_url: mcp.asset_image_url || '',
     })
     setDialogOpen(true)
   }
@@ -124,6 +127,23 @@ export function McpRegister({ siteId, mcps }: McpRegisterProps) {
     setForm((prev) => ({ ...prev, photos: prev.photos.filter((p) => p !== url) }))
   }
 
+  const handleAssetImage = async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    setUploadingAsset(true)
+    const file = files[0]
+    const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')
+    const path = `${siteId}/asset/${Date.now()}-${safeName}`
+    const { error } = await supabase.storage.from('mcp-photos').upload(path, file, { upsert: false })
+    if (error) {
+      console.log('[v0] MCP asset image upload error:', error.message)
+      setUploadingAsset(false)
+      return
+    }
+    const { data } = supabase.storage.from('mcp-photos').getPublicUrl(path)
+    setUploadingAsset(false)
+    setForm((prev) => ({ ...prev, asset_image_url: data.publicUrl }))
+  }
+
   const handleSave = async () => {
     setSaving(true)
     if (editing) {
@@ -136,6 +156,7 @@ export function McpRegister({ siteId, mcps }: McpRegisterProps) {
           test_key_type: form.test_key_type || null,
           notes: form.notes || null,
           photos: form.photos,
+          asset_image_url: form.asset_image_url || null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', editing.id)
@@ -149,6 +170,7 @@ export function McpRegister({ siteId, mcps }: McpRegisterProps) {
         test_key_type: form.test_key_type || null,
         notes: form.notes || null,
         photos: form.photos,
+        asset_image_url: form.asset_image_url || null,
       })
     }
     setSaving(false)
@@ -326,6 +348,57 @@ export function McpRegister({ siteId, mcps }: McpRegisterProps) {
               />
             </div>
 
+            {/* Asset image — the call point device itself */}
+            <div className="grid gap-2 sm:col-span-2">
+              <Label className="flex items-center gap-1.5">
+                <ImageIcon className="h-4 w-4" />
+                Call Point Image
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                A photo of the call point device itself. Shown to engineers during inspection to
+                help identify the correct unit.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {form.asset_image_url ? (
+                  <div className="relative h-28 w-28 overflow-hidden rounded-md border">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={form.asset_image_url || '/placeholder.svg'}
+                      alt="Manual call point asset"
+                      className="h-full w-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, asset_image_url: '' }))}
+                      className="absolute right-0.5 top-0.5 rounded-full bg-background/80 p-0.5"
+                      aria-label="Remove asset image"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex h-28 w-28 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed text-muted-foreground hover:bg-muted">
+                    {uploadingAsset ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <>
+                        <Camera className="h-5 w-5" />
+                        <span className="text-[10px]">Add image</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      disabled={uploadingAsset}
+                      onChange={(e) => handleAssetImage(e.target.files)}
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+
             {/* Position photos */}
             <div className="grid gap-2 sm:col-span-2">
               <Label className="flex items-center gap-1.5">
@@ -376,7 +449,7 @@ export function McpRegister({ siteId, mcps }: McpRegisterProps) {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={saving || uploading}>
+            <Button onClick={handleSave} disabled={saving || uploading || uploadingAsset}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {editing ? 'Save changes' : 'Add call point'}
             </Button>

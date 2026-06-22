@@ -279,6 +279,7 @@ export interface Mcp {
   test_key_type: string | null
   notes: string | null
   photos: string[]
+  asset_image_url: string | null
   created_at: string
   updated_at: string
   site?: Site

@@ -134,8 +134,7 @@ export function RoutePlannerDialog({
             Manage route sites
           </DialogTitle>
           <DialogDescription>
-            Add sites to the {routeName} route and set the order engineers should visit them. This
-            order is used in the schedule&apos;s &quot;By route&quot; view.
+            {`Add sites to the ${routeName} route and set the order engineers should visit them. This order is used in the schedule's "By route" view.`}
           </DialogDescription>
         </DialogHeader>
 

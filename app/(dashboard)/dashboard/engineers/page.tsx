@@ -22,6 +22,7 @@ export default async function EngineersPage() {
   const { data: users } = await supabase
     .from('profiles')
     .select('*')
+    .neq('role', 'client')
     .order('full_name')
 
   return (

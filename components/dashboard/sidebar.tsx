@@ -13,7 +13,15 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
 } from '@/components/ui/sidebar'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import {
   LayoutDashboard,
   Building2,
@@ -29,45 +37,69 @@ import {
   FireExtinguisher,
   MapPinned,
   HardHat,
+  KeyRound,
+  FolderOpen,
+  Boxes,
+  Lightbulb,
+  ChevronRight,
 } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
+import type { LucideIcon } from 'lucide-react'
 
 interface DashboardSidebarProps {
   profile: Profile
 }
 
-const adminNavItems = [
+type NavItem = {
+  title: string
+  href?: string
+  icon: LucideIcon
+  children?: { title: string; href: string; icon: LucideIcon }[]
+}
+
+const assetsNavItem: NavItem = {
+  title: 'Assets',
+  icon: Boxes,
+  children: [
+    { title: 'Dampers', href: '/dashboard/dampers', icon: Wind },
+    { title: 'Extinguishers', href: '/dashboard/extinguishers', icon: FireExtinguisher },
+    { title: 'Emergency Lights', href: '/dashboard/emergency-lights', icon: Lightbulb },
+  ],
+}
+
+const adminNavItems: NavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { title: 'Clients', href: '/dashboard/clients', icon: Building },
   { title: 'Sites', href: '/dashboard/sites', icon: Building2 },
-  { title: 'Dampers', href: '/dashboard/dampers', icon: Wind },
-  { title: 'Extinguishers', href: '/dashboard/extinguishers', icon: FireExtinguisher },
+  assetsNavItem,
   { title: 'Routes', href: '/dashboard/routes', icon: Route },
   { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
   { title: 'Users', href: '/dashboard/engineers', icon: Users },
+  { title: 'Client Logins', href: '/dashboard/client-logins', icon: KeyRound },
   { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
   { title: 'Service Types', href: '/dashboard/service-types', icon: Wrench },
   { title: 'Checklists', href: '/dashboard/checklists', icon: ClipboardList },
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
   { title: 'Reports', href: '/dashboard/reports', icon: FileText },
+  { title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
 ]
 
-const engineerNavItems = [
+const engineerNavItems: NavItem[] = [
   { title: 'My Tasks', href: '/dashboard', icon: LayoutDashboard },
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
 ]
 
-const officeNavItems = [
+const officeNavItems: NavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { title: 'Clients', href: '/dashboard/clients', icon: Building },
   { title: 'Sites', href: '/dashboard/sites', icon: Building2 },
-  { title: 'Dampers', href: '/dashboard/dampers', icon: Wind },
-  { title: 'Extinguishers', href: '/dashboard/extinguishers', icon: FireExtinguisher },
+  assetsNavItem,
   { title: 'Routes', href: '/dashboard/routes', icon: Route },
   { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
   { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
   { title: 'Reports', href: '/dashboard/reports', icon: FileText },
+  { title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
 ]
 
 export function DashboardSidebar({ profile }: DashboardSidebarProps) {
@@ -102,16 +134,49 @@ export function DashboardSidebar({ profile }: DashboardSidebarProps) {
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={pathname === item.href}>
-                    <Link href={item.href}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {navItems.map((item) =>
+                item.children ? (
+                  <Collapsible
+                    key={item.title}
+                    asChild
+                    defaultOpen={item.children.some((child) => pathname === child.href)}
+                    className="group/collapsible"
+                  >
+                    <SidebarMenuItem>
+                      <CollapsibleTrigger asChild>
+                        <SidebarMenuButton>
+                          <item.icon className="h-4 w-4" />
+                          <span>{item.title}</span>
+                          <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                        </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <SidebarMenuSub>
+                          {item.children.map((child) => (
+                            <SidebarMenuSubItem key={child.href}>
+                              <SidebarMenuSubButton asChild isActive={pathname === child.href}>
+                                <Link href={child.href}>
+                                  <child.icon className="h-4 w-4" />
+                                  <span>{child.title}</span>
+                                </Link>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
+                        </SidebarMenuSub>
+                      </CollapsibleContent>
+                    </SidebarMenuItem>
+                  </Collapsible>
+                ) : (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton asChild isActive={pathname === item.href}>
+                      <Link href={item.href!}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ),
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

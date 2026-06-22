@@ -71,6 +71,7 @@ const roleColors: Record<UserRole, string> = {
   admin: 'bg-primary text-primary-foreground',
   engineer: 'bg-accent text-accent-foreground',
   office: 'bg-secondary text-secondary-foreground',
+  client: 'bg-muted text-muted-foreground',
 }
 
 export function EngineersTable({ users }: EngineersTableProps) {

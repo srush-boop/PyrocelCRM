@@ -1,7 +1,7 @@
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { LogOut, User } from 'lucide-react'
+import { LogOut, User, ArrowLeft } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 
 interface DashboardHeaderProps {
@@ -23,7 +23,11 @@ interface DashboardHeaderProps {
 
 export function DashboardHeader({ profile }: DashboardHeaderProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const supabase = createClient()
+
+  // The dashboard root is the top-level page, so it has nowhere to go "back" to.
+  const showBack = pathname !== '/dashboard'
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -44,6 +48,17 @@ export function DashboardHeader({ profile }: DashboardHeaderProps) {
     <header className="flex h-16 items-center gap-4 border-b border-border bg-background px-6">
       <SidebarTrigger className="-ml-2" />
       <Separator orientation="vertical" className="h-6" />
+      {showBack && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => router.back()}
+          className="gap-2"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </Button>
+      )}
       <div className="flex-1" />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

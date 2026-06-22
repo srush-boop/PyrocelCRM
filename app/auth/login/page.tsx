@@ -24,7 +24,7 @@ export default function LoginPage() {
     setError(null)
     setLoading(true)
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
@@ -33,7 +33,17 @@ export default function LoginPage() {
       setError(error.message)
       setLoading(false)
     } else {
-      router.push('/dashboard')
+      // Route client logins to the read-only portal, staff to the dashboard.
+      let destination = '/dashboard'
+      if (data.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', data.user.id)
+          .single()
+        if (profile?.role === 'client') destination = '/portal'
+      }
+      router.push(destination)
       router.refresh()
     }
   }
@@ -42,11 +52,11 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-xl border bg-white p-1.5">
+          <div className="mx-auto mb-4 flex h-40 w-40 items-center justify-center rounded-xl border bg-white p-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/images/pyrocel-logo.png" alt="Pyrocel logo" className="h-full w-full object-contain" />
           </div>
-          <CardTitle className="text-2xl font-bold">Pyrocel Fire &amp; Security</CardTitle>
+          <CardTitle className="text-2xl font-bold">PYROCEL Ltd</CardTitle>
           <CardDescription>
             Service &amp; Compliance Management
           </CardDescription>
@@ -91,13 +101,7 @@ export default function LoginPage() {
               )}
             </Button>
           </form>
-          <div className="mt-4 text-center text-sm text-muted-foreground">
-            Don&apos;t have an account?{' '}
-            <Link href="/auth/sign-up" className="text-primary hover:underline">
-              Sign up
-            </Link>
-          </div>
-          <div className="mt-2 text-center text-xs text-muted-foreground">
+          <div className="mt-4 text-center text-xs text-muted-foreground">
             Setting up for the first time?{' '}
             <Link href="/auth/create-admin" className="text-primary hover:underline">
               Create administrator account

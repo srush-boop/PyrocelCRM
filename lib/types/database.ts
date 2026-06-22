@@ -1,6 +1,6 @@
 // Database types for PyrocelCRM
 
-export type UserRole = 'admin' | 'engineer' | 'office'
+export type UserRole = 'admin' | 'engineer' | 'office' | 'client'
 
 // Who performs a service. Independent of how the work is routed/assigned.
 export type WorkerType = 'cdo' | 'engineer' | 'subcontractor'
@@ -46,10 +46,26 @@ export interface Profile {
   full_name: string | null
   role: UserRole
   status: 'active' | 'inactive'
+  client_id: string | null
   invited_at: string | null
   accepted_at: string | null
   created_at: string
   updated_at: string
+}
+
+// A site a client login is permitted to view (join row).
+export interface ClientSiteAccess {
+  id: string
+  profile_id: string
+  site_id: string
+  client_id: string
+  created_at: string
+}
+
+// A client login row enriched for the management table.
+export interface ClientLogin extends Profile {
+  client_name: string | null
+  site_ids: string[]
 }
 
 export interface ServiceType {
@@ -101,6 +117,7 @@ export interface Site {
   id: string
   name: string
   address: string
+  postcode: string | null
   contact_name: string | null
   contact_email: string | null
   contact_phone: string | null
@@ -120,9 +137,30 @@ export interface Site {
   updated_at: string
   route?: Route
   client?: Client
-}
+  }
 
-export interface SiteService {
+  export type LogbookEntryType =
+    | 'weekly_alarm_test'
+    | 'monthly_emergency_light_test'
+    | 'fire_drill'
+    | 'false_alarm'
+    | 'fault_defect'
+    | 'note'
+
+  export interface LogbookEntry {
+    id: string
+    site_id: string
+    entry_type: LogbookEntryType
+    entry_date: string
+    title: string | null
+    details: string | null
+    performed_by: string | null
+    source: 'occupier' | 'staff'
+    created_by: string | null
+    created_at: string
+  }
+
+  export interface SiteService {
   id: string
   site_id: string
   service_type_id: string
@@ -152,6 +190,33 @@ export interface SiteService {
   area?: Area | null
   subcontractor?: Subcontractor | null
   assigned_engineer?: Profile
+}
+
+// Document store: folders + files attached to a client, site, or a site's service.
+export type DocumentOwnerType = 'client' | 'site' | 'site_service'
+
+export interface DocumentFolder {
+  id: string
+  owner_type: DocumentOwnerType
+  owner_id: string
+  parent_id: string | null
+  name: string
+  created_by: string | null
+  created_at: string
+}
+
+export interface DocumentFile {
+  id: string
+  owner_type: DocumentOwnerType
+  owner_id: string
+  folder_id: string | null
+  name: string
+  blob_pathname: string
+  blob_url: string
+  content_type: string | null
+  size_bytes: number | null
+  uploaded_by: string | null
+  created_at: string
 }
 
 export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled'

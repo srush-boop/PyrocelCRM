@@ -4,7 +4,9 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ArrowLeft, MapPin, Phone, Mail, Building2, Radio } from 'lucide-react'
+import { EditSiteButton } from '@/components/dashboard/sites/edit-site-button'
 import { SiteServicesManager } from '@/components/dashboard/sites/site-services-manager'
 import { SiteReports } from '@/components/dashboard/sites/site-reports'
 import { SiteLogbook } from '@/components/dashboard/sites/site-logbook'
@@ -23,6 +25,7 @@ import { REMOTE_MONITORING_LABELS } from '@/lib/sites'
 import type {
   Profile,
   Site,
+  Client,
   Route,
   Area,
   Subcontractor,
@@ -73,7 +76,7 @@ export default async function SiteDetailPage({ params }: PageProps) {
     notFound()
   }
 
-  const [siteServicesResult, serviceTypesResult, engineersResult, routesResult, areasResult, subcontractorsResult] = await Promise.all([
+  const [siteServicesResult, serviceTypesResult, engineersResult, routesResult, areasResult, subcontractorsResult, clientsResult] = await Promise.all([
     supabase
       .from('site_services')
       .select(`
@@ -94,6 +97,7 @@ export default async function SiteDetailPage({ params }: PageProps) {
     supabase.from('routes').select('*').order('name'),
     supabase.from('areas').select('*').order('name'),
     supabase.from('subcontractors').select('*').eq('status', 'active').order('name'),
+    supabase.from('clients').select('*').order('name'),
   ])
 
   const siteServices = (siteServicesResult.data || []) as (SiteService & { service_type: ServiceType })[]
@@ -102,6 +106,7 @@ export default async function SiteDetailPage({ params }: PageProps) {
   const routes = (routesResult.data || []) as Route[]
   const areas = (areasResult.data || []) as Area[]
   const subcontractors = (subcontractorsResult.data || []) as Subcontractor[]
+  const clients = (clientsResult.data || []) as Client[]
 
   // Get tasks for this site's services
   const siteServiceIds = siteServices.map(ss => ss.id)
@@ -259,9 +264,27 @@ export default async function SiteDetailPage({ params }: PageProps) {
           </div>
           <h1 className="text-2xl font-bold">{site.name}</h1>
         </div>
+        <EditSiteButton site={site as Site & { route: Route | null }} clients={clients} />
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <Tabs defaultValue="overview" className="gap-6">
+        <TabsList className="h-auto flex-wrap justify-start">
+          <TabsTrigger value="overview" className="flex-none">Overview</TabsTrigger>
+          {showDamperRegister && <TabsTrigger value="dampers" className="flex-none">Dampers</TabsTrigger>}
+          {showMcpRegister && <TabsTrigger value="fire-alarm" className="flex-none">Fire Alarm</TabsTrigger>}
+          {showEmergencyLightRegister && (
+            <TabsTrigger value="emergency-lighting" className="flex-none">Emergency Lighting</TabsTrigger>
+          )}
+          {showExtinguisherRegister && (
+            <TabsTrigger value="extinguishers" className="flex-none">Extinguishers</TabsTrigger>
+          )}
+          <TabsTrigger value="logbook" className="flex-none">Log Book</TabsTrigger>
+          <TabsTrigger value="documents" className="flex-none">Documents</TabsTrigger>
+          <TabsTrigger value="reports" className="flex-none">Reports</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="mt-0">
+          <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -374,44 +397,62 @@ export default async function SiteDetailPage({ params }: PageProps) {
           tasks={tasks}
           siteStatus={(site as Site).status}
         />
-      </div>
+          </div>
+        </TabsContent>
 
-      {showDamperRegister && (
-        <DamperRegister siteId={id} siteName={site.name} dampers={dampers} />
-      )}
+        {showDamperRegister && (
+          <TabsContent value="dampers" className="mt-0">
+            <DamperRegister siteId={id} siteName={site.name} dampers={dampers} />
+          </TabsContent>
+        )}
 
-      {showMcpRegister && <McpRegister siteId={id} mcps={mcps} />}
+        {showMcpRegister && (
+          <TabsContent value="fire-alarm" className="mt-0">
+            <McpRegister siteId={id} mcps={mcps} />
+          </TabsContent>
+        )}
 
-      {showEmergencyLightRegister && (
-        <EmergencyLightRegister siteId={id} lights={emergencyLights} />
-      )}
+        {showEmergencyLightRegister && (
+          <TabsContent value="emergency-lighting" className="mt-0">
+            <EmergencyLightRegister siteId={id} lights={emergencyLights} />
+          </TabsContent>
+        )}
 
-      {showExtinguisherRegister && (
-        <ExtinguisherRegister siteId={id} siteName={site.name} extinguishers={extinguishers} />
-      )}
+        {showExtinguisherRegister && (
+          <TabsContent value="extinguishers" className="mt-0">
+            <ExtinguisherRegister siteId={id} siteName={site.name} extinguishers={extinguishers} />
+          </TabsContent>
+        )}
 
-      <SiteLogbook
-        siteId={id}
-        siteName={site.name}
-        siteAddress={site.address}
-        postcode={(site as Site).postcode}
-        reports={logbookReports}
-        entries={logbookEntries}
-      />
+        <TabsContent value="logbook" className="mt-0">
+          <SiteLogbook
+            siteId={id}
+            siteName={site.name}
+            siteAddress={site.address}
+            postcode={(site as Site).postcode}
+            reports={logbookReports}
+            entries={logbookEntries}
+          />
+        </TabsContent>
 
-      <SiteDocuments
-        siteId={id}
-        folders={siteDocuments.folders}
-        files={siteDocuments.files}
-        canManage={canManageDocuments}
-      />
+        <TabsContent value="documents" className="mt-0">
+          <SiteDocuments
+            siteId={id}
+            folders={siteDocuments.folders}
+            files={siteDocuments.files}
+            canManage={canManageDocuments}
+          />
+        </TabsContent>
 
-      <SiteReports
-        siteName={site.name}
-        siteAddress={site.address}
-        completedTasks={completedTasks}
-        reportingEmails={(site as Site).reporting_emails || []}
-      />
+        <TabsContent value="reports" className="mt-0">
+          <SiteReports
+            siteName={site.name}
+            siteAddress={site.address}
+            completedTasks={completedTasks}
+            reportingEmails={(site as Site).reporting_emails || []}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

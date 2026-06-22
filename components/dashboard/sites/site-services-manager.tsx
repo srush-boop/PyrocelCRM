@@ -40,6 +40,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
+import { describeTolerance } from '@/lib/kpi'
 import type { ServiceType, SiteService, Profile, Task, Route, Area, Subcontractor, WorkerType } from '@/lib/types/database'
 import {
   WORKER_TYPE_LABELS,
@@ -510,7 +511,16 @@ export function SiteServicesManager({
                     Default: Every {st.default_frequency_value} {st.default_frequency_unit}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Tolerance: {st.default_deadline_tolerance_days} days
+                    Regulatory:{' '}
+                    {describeTolerance({
+                      value: st.regulatory_tolerance_value ?? st.default_deadline_tolerance_days ?? 0,
+                      unit: st.regulatory_tolerance_unit ?? 'days',
+                    })}{' '}
+                    · Client:{' '}
+                    {describeTolerance({
+                      value: st.client_tolerance_value ?? st.default_deadline_tolerance_days ?? 0,
+                      unit: st.client_tolerance_unit ?? 'days',
+                    })}
                   </p>
                   {st.description && (
                     <p className="text-xs text-muted-foreground mt-1">{st.description}</p>

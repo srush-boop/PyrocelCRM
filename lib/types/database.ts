@@ -5,6 +5,9 @@ export type UserRole = 'admin' | 'engineer' | 'office' | 'client'
 // Who performs a service. Independent of how the work is routed/assigned.
 export type WorkerType = 'cdo' | 'engineer' | 'subcontractor'
 
+// Unit for a compliance tolerance window.
+export type ToleranceUnit = 'days' | 'months'
+
 // An operational/geographic area with one responsible worker (CDO or engineer).
 export interface Area {
   id: string
@@ -76,6 +79,12 @@ export interface ServiceType {
   default_frequency_value: number
   default_frequency_unit: 'weeks' | 'months'
   default_deadline_tolerance_days: number
+  // Two-tier compliance tolerances (value + unit). Regulatory = legal baseline,
+  // client = the (usually tighter) target shared with clients.
+  regulatory_tolerance_value: number
+  regulatory_tolerance_unit: ToleranceUnit
+  client_tolerance_value: number
+  client_tolerance_unit: ToleranceUnit
   color?: string | null
   icon?: string | null
   defects_to_email: string | null

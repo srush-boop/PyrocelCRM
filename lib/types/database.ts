@@ -251,6 +251,76 @@ export interface DamperInspection {
   inspector?: Profile | null
 }
 
+// Fire Extinguisher Servicing types (BS 5306-3)
+
+export type ExtinguisherType =
+  | 'water'
+  | 'foam'
+  | 'co2'
+  | 'powder'
+  | 'wet_chemical'
+  | 'water_mist'
+export type ExtinguisherResult = 'pass' | 'fail' | 'remedial' | 'na'
+export type ExtinguisherCondition = 'good' | 'fair' | 'poor'
+export type ExtinguisherServiceLevel = 'basic' | 'extended' | 'overhaul' | 'recharge'
+export type ExtinguisherPhotoCategory =
+  | 'as_found'
+  | 'gauge'
+  | 'label'
+  | 'additional'
+
+export type ExtinguisherPhotoCategories = Record<ExtinguisherPhotoCategory, string[]>
+
+export interface Extinguisher {
+  id: string
+  site_id: string
+  urn: string
+  reference: string | null
+  floor: string | null
+  location: string | null
+  extinguisher_type: ExtinguisherType
+  capacity: string | null
+  serial_number: string | null
+  manufacture_date: string | null
+  commissioned_date: string | null
+  notes: string | null
+  latest_result: ExtinguisherResult | null
+  last_inspected_date: string | null
+  created_at: string
+  updated_at: string
+  site?: Site
+  inspections?: ExtinguisherInspection[]
+}
+
+export interface ExtinguisherInspection {
+  id: string
+  extinguisher_id: string
+  task_id: string | null
+  inspected_by: string | null
+  inspection_date: string
+  accessible: boolean
+  access_notes: string | null
+  service_level: ExtinguisherServiceLevel
+  correct_location: boolean | null
+  signage_present: boolean | null
+  seal_pin_intact: boolean | null
+  pressure_gauge_ok: boolean | null
+  weight_ok: boolean | null
+  body_condition_ok: boolean | null
+  hose_horn_ok: boolean | null
+  label_legible: boolean | null
+  mounting_secure: boolean | null
+  condition: ExtinguisherCondition | null
+  overall_result: ExtinguisherResult
+  remedial_action: string | null
+  comments: string | null
+  photos: string[]
+  photo_categories: ExtinguisherPhotoCategories | null
+  created_at: string
+  extinguisher?: Extinguisher
+  inspector?: Profile | null
+}
+
 export interface ReportTemplate {
   id: string
   service_type_id: string

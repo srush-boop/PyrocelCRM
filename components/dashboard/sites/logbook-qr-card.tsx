@@ -49,12 +49,14 @@ export function LogbookQrCard({ siteId, siteName, siteAddress, postcode }: Logbo
       )}
 
       {/* Printable poster */}
-      <div className="logbook-poster mx-auto flex max-w-sm flex-col items-center gap-3 rounded-lg border border-border bg-card p-6 text-center">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <div className="logbook-poster mx-auto flex max-w-sm flex-col items-center gap-4 rounded-lg border border-border bg-card p-6 text-center">
+        <h2 className="text-3xl font-extrabold uppercase leading-none tracking-tight text-balance">
           Fire Safety Log Book
-        </p>
-        <h3 className="text-lg font-bold leading-tight text-balance">{siteName}</h3>
-        <p className="text-xs text-muted-foreground">{siteAddress}</p>
+        </h2>
+        <div className="space-y-0.5">
+          <h3 className="text-base font-bold leading-tight text-balance">{siteName}</h3>
+          <p className="text-xs text-muted-foreground">{siteAddress}</p>
+        </div>
         {qrDataUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -67,8 +69,9 @@ export function LogbookQrCard({ siteId, siteName, siteAddress, postcode }: Logbo
         )}
         <div className="space-y-1">
           <p className="text-sm font-medium">Scan with your phone camera</p>
-          <p className="text-xs text-muted-foreground">
-            Enter the site postcode to view records and log routine checks.
+          <p className="text-xs text-muted-foreground text-balance">
+            Holds this building&apos;s fire safety records &mdash; service reports, routine alarm and
+            emergency lighting checks, fire drills and faults.
           </p>
         </div>
       </div>

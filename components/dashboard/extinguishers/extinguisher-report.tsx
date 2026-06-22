@@ -411,14 +411,14 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
                             {urls.map((url, idx) => (
                               <div
                                 key={url}
-                                className="avoid-break overflow-hidden rounded-md border bg-muted"
+                                className="avoid-break relative aspect-[4/3] w-full overflow-hidden rounded-md border bg-muted"
                               >
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                   src={url || '/placeholder.svg'}
                                   alt={`${insp.extinguisher?.urn || 'Extinguisher'} — ${cat.label} ${idx + 1}`}
                                   crossOrigin="anonymous"
-                                  className="aspect-[4/3] h-full w-full object-cover"
+                                  className="absolute inset-0 h-full w-full object-cover"
                                 />
                               </div>
                             ))}

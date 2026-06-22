@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateUK } from '@/lib/utils'
-import { isDamperService } from '@/lib/dampers'
-import { isExtinguisherService } from '@/lib/extinguishers'
 import { sendEmail } from '@/lib/email/send-email'
 import {
   generateClientPassEmail,
@@ -70,10 +68,11 @@ export async function POST(request: NextRequest) {
     const engineer = task.assigned_engineer
     const overallStatus = taskResult.overall_status as 'pass' | 'fail' | 'partial'
 
-    // Build the "Open report" link. Auto-route to the damper or service report
-    // page based on the service type. Prefer an explicit NEXT_PUBLIC_APP_URL,
-    // then fall back to Vercel's deployment URL, then the incoming request
-    // origin — so the link is always present regardless of env config.
+    // Build the "Open report" link. This points at the public, token-based
+    // report route (/r/<public_token>) so recipients can open the report
+    // straight from the email without needing to log in. Prefer an explicit
+    // NEXT_PUBLIC_APP_URL, then fall back to Vercel's deployment URL, then the
+    // incoming request origin — so the link is always present regardless of env config.
     const vercelUrl =
       process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL
     const baseUrl = (
@@ -81,12 +80,8 @@ export async function POST(request: NextRequest) {
       (vercelUrl ? `https://${vercelUrl}` : '') ||
       request.nextUrl.origin
     ).replace(/\/$/, '')
-    const reportPath = isDamperService(serviceType?.name)
-      ? `/dashboard/dampers/report/${taskId}`
-      : isExtinguisherService(serviceType?.name)
-      ? `/dashboard/extinguishers/report/${taskId}`
-      : `/dashboard/reports/${taskId}`
-    const reportUrl = baseUrl ? `${baseUrl}${reportPath}` : undefined
+    const reportUrl =
+      baseUrl && task.public_token ? `${baseUrl}/r/${task.public_token}` : undefined
     if (!baseUrl) {
       console.warn('[v0] Unable to determine base URL — "Open report" link omitted from email.')
     }

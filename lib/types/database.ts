@@ -230,11 +230,12 @@ export interface Task {
   started_at: string | null
   completed_at: string | null
   notes: string | null
+  public_token: string
   created_at: string
   updated_at: string
   site_service?: SiteService
   assigned_engineer?: Profile | null
-}
+  }
 
 export interface ChecklistResult {
   item_id: string

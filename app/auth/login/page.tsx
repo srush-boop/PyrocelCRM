@@ -101,13 +101,7 @@ export default function LoginPage() {
               )}
             </Button>
           </form>
-          <div className="mt-4 text-center text-sm text-muted-foreground">
-            Don&apos;t have an account?{' '}
-            <Link href="/auth/sign-up" className="text-primary hover:underline">
-              Sign up
-            </Link>
-          </div>
-          <div className="mt-2 text-center text-xs text-muted-foreground">
+          <div className="mt-4 text-center text-xs text-muted-foreground">
             Setting up for the first time?{' '}
             <Link href="/auth/create-admin" className="text-primary hover:underline">
               Create administrator account

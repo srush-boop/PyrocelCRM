@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import Link from 'next/link'
 import {
   PieChart,
@@ -102,11 +102,6 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
   }, [inspections])
 
   const photoCount = photoGroups.reduce((sum, g) => sum + g.count, 0)
-
-  useEffect(() => {
-    const t = setTimeout(() => window.print(), 600)
-    return () => clearTimeout(t)
-  }, [])
 
   const completedDate = task.completed_at || task.scheduled_date
 

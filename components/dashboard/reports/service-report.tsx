@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import Link from 'next/link'
 import {
   PieChart,
@@ -74,11 +74,6 @@ export function ServiceReport({ task, result, template }: ServiceReportProps) {
       ].filter((d) => d.value > 0),
     [stats],
   )
-
-  useEffect(() => {
-    const t = setTimeout(() => window.print(), 600)
-    return () => clearTimeout(t)
-  }, [])
 
   const completedDate = task.completed_at || task.scheduled_date
   const status = result?.overall_status || 'pending'

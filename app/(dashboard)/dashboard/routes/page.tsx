@@ -30,17 +30,50 @@ export default async function RoutesPage() {
       `)
       .order('name'),
     supabase.from('profiles').select('*').eq('role', 'engineer').order('full_name'),
-    supabase.from('sites').select('id, name, route_id, route_position'),
+    supabase
+      .from('sites')
+      .select(`
+        id, name, route_id, route_position,
+        services:site_services(
+          id, route_id,
+          service_type:service_types(name)
+        )
+      `),
   ])
 
   const routes = (routesResult.data || []) as (Route & { assigned_engineer: Profile | null })[]
   const engineers = (engineersResult.data || []) as Profile[]
-  const sites = (sitesResult.data || []) as PlannerSite[]
 
-  // Count sites per route
+  type ServiceTypeRel = { name: string } | { name: string }[] | null
+  type RawSite = {
+    id: string
+    name: string
+    route_id: string | null
+    route_position: number | null
+    services: { id: string; route_id: string | null; service_type: ServiceTypeRel }[] | null
+  }
+
+  const serviceTypeName = (rel: ServiceTypeRel): string =>
+    (Array.isArray(rel) ? rel[0]?.name : rel?.name) ?? 'Service'
+
+  // Normalise into the planner shape: each site carries its services so routing
+  // can be managed per service rather than per site.
+  const sites: PlannerSite[] = ((sitesResult.data || []) as unknown as RawSite[]).map((site) => ({
+    id: site.id,
+    name: site.name,
+    route_id: site.route_id,
+    route_position: site.route_position,
+    services: (site.services || []).map((svc) => ({
+      id: svc.id,
+      route_id: svc.route_id,
+      name: serviceTypeName(svc.service_type),
+    })),
+  }))
+
+  // A site is "on" a route when at least one of its services is on that route.
   const routesWithSiteCounts = routes.map((route) => ({
     ...route,
-    siteCount: sites.filter((site) => site.route_id === route.id).length,
+    siteCount: sites.filter((site) => site.services.some((svc) => svc.route_id === route.id)).length,
   }))
 
   return (

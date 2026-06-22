@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateUK } from '@/lib/utils'
 import { isDamperService } from '@/lib/dampers'
+import { isExtinguisherService } from '@/lib/extinguishers'
 import { sendEmail } from '@/lib/email/send-email'
 import {
   generateClientPassEmail,
@@ -82,6 +83,8 @@ export async function POST(request: NextRequest) {
     ).replace(/\/$/, '')
     const reportPath = isDamperService(serviceType?.name)
       ? `/dashboard/dampers/report/${taskId}`
+      : isExtinguisherService(serviceType?.name)
+      ? `/dashboard/extinguishers/report/${taskId}`
       : `/dashboard/reports/${taskId}`
     const reportUrl = baseUrl ? `${baseUrl}${reportPath}` : undefined
     if (!baseUrl) {

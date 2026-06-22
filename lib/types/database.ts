@@ -2,6 +2,32 @@
 
 export type UserRole = 'admin' | 'engineer' | 'office'
 
+// Who performs a service. Independent of how the work is routed/assigned.
+export type WorkerType = 'cdo' | 'engineer' | 'subcontractor'
+
+// An operational/geographic area with one responsible worker (CDO or engineer).
+export interface Area {
+  id: string
+  name: string
+  description: string | null
+  assigned_engineer_id: string | null
+  created_at: string
+  updated_at: string
+  assigned_engineer?: Profile | null
+}
+
+export interface Subcontractor {
+  id: string
+  name: string
+  contact_name: string | null
+  contact_email: string | null
+  contact_phone: string | null
+  notes: string | null
+  status: 'active' | 'inactive'
+  created_at: string
+  updated_at: string
+}
+
 export interface Client {
   id: string
   name: string
@@ -37,6 +63,7 @@ export interface ServiceType {
   color?: string | null
   icon?: string | null
   defects_to_email: string | null
+  default_worker_type: WorkerType
   status: 'live' | 'dead'
   created_at: string
 }
@@ -85,6 +112,9 @@ export interface Site {
   reporting_emails: string[]
   has_remote_monitoring: boolean
   remote_monitoring_type: RemoteMonitoringType | null
+  monitoring_station_name: string | null
+  monitoring_station_phone: string | null
+  monitoring_station_url: string | null
   route_position: number | null
   created_at: string
   updated_at: string
@@ -102,7 +132,13 @@ export interface SiteService {
   last_service_date: string | null
   next_service_date: string | null
   deadline_tolerance_days: number
+  // Who performs the work (CDO / Engineer / Sub-contractor).
+  worker_type: WorkerType
+  // How the work is routed. Any of these may be set depending on worker_type;
+  // a directly-assigned engineer always overrides route/area resolution.
   route_id: string | null
+  area_id: string | null
+  subcontractor_id: string | null
   assigned_engineer_id: string | null
   reporting_emails: string[]
   defects_to_email: string | null
@@ -113,6 +149,8 @@ export interface SiteService {
   site?: Site
   service_type?: ServiceType
   route?: Route
+  area?: Area | null
+  subcontractor?: Subcontractor | null
   assigned_engineer?: Profile
 }
 
@@ -214,6 +252,76 @@ export interface DamperInspection {
   inspector?: Profile | null
 }
 
+// Fire Extinguisher Servicing types (BS 5306-3)
+
+export type ExtinguisherType =
+  | 'water'
+  | 'foam'
+  | 'co2'
+  | 'powder'
+  | 'wet_chemical'
+  | 'water_mist'
+export type ExtinguisherResult = 'pass' | 'fail' | 'remedial' | 'na'
+export type ExtinguisherCondition = 'good' | 'fair' | 'poor'
+export type ExtinguisherServiceLevel = 'basic' | 'extended' | 'overhaul' | 'recharge'
+export type ExtinguisherPhotoCategory =
+  | 'as_found'
+  | 'gauge'
+  | 'label'
+  | 'additional'
+
+export type ExtinguisherPhotoCategories = Record<ExtinguisherPhotoCategory, string[]>
+
+export interface Extinguisher {
+  id: string
+  site_id: string
+  urn: string
+  reference: string | null
+  floor: string | null
+  location: string | null
+  extinguisher_type: ExtinguisherType
+  capacity: string | null
+  serial_number: string | null
+  manufacture_date: string | null
+  commissioned_date: string | null
+  notes: string | null
+  latest_result: ExtinguisherResult | null
+  last_inspected_date: string | null
+  created_at: string
+  updated_at: string
+  site?: Site
+  inspections?: ExtinguisherInspection[]
+}
+
+export interface ExtinguisherInspection {
+  id: string
+  extinguisher_id: string
+  task_id: string | null
+  inspected_by: string | null
+  inspection_date: string
+  accessible: boolean
+  access_notes: string | null
+  service_level: ExtinguisherServiceLevel
+  correct_location: boolean | null
+  signage_present: boolean | null
+  seal_pin_intact: boolean | null
+  pressure_gauge_ok: boolean | null
+  weight_ok: boolean | null
+  body_condition_ok: boolean | null
+  hose_horn_ok: boolean | null
+  label_legible: boolean | null
+  mounting_secure: boolean | null
+  condition: ExtinguisherCondition | null
+  overall_result: ExtinguisherResult
+  remedial_action: string | null
+  comments: string | null
+  photos: string[]
+  photo_categories: ExtinguisherPhotoCategories | null
+  created_at: string
+  extinguisher?: Extinguisher
+  inspector?: Profile | null
+}
+
 export interface ReportTemplate {
   id: string
   service_type_id: string
@@ -241,6 +349,9 @@ export interface TaskWithDetails extends Task {
   site_service: SiteService & {
     site: Site
     service_type: ServiceType
+    route?: Route | null
+    area?: Area | null
+    subcontractor?: Subcontractor | null
   }
   assigned_engineer: Profile | null
   task_result?: TaskResult
@@ -277,6 +388,7 @@ export interface Mcp {
   test_key_type: string | null
   notes: string | null
   photos: string[]
+  asset_image_url: string | null
   created_at: string
   updated_at: string
   site?: Site

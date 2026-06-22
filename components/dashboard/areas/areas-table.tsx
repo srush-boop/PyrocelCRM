@@ -30,35 +30,31 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Input } from '@/components/ui/input'
-import { MoreHorizontal, Pencil, Trash2, Search, Route as RouteIcon, Building2, MapPin } from 'lucide-react'
-import { EditRouteDialog } from './edit-route-dialog'
-import { RoutePlannerDialog, type PlannerSite } from './route-planner-dialog'
-import type { Route, Profile } from '@/lib/types/database'
+import { MoreHorizontal, Pencil, Trash2, Search, MapPinned, Wrench } from 'lucide-react'
+import { EditAreaDialog } from './edit-area-dialog'
+import type { Area, Profile } from '@/lib/types/database'
 
-interface RoutesTableProps {
-  routes: (Route & { assigned_engineer: Profile | null; siteCount: number })[]
-  engineers: Profile[]
-  sites: PlannerSite[]
+interface AreasTableProps {
+  areas: (Area & { assigned_engineer: Profile | null; serviceCount: number })[]
+  workers: Profile[]
 }
 
-export function RoutesTable({ routes, engineers, sites }: RoutesTableProps) {
+export function AreasTable({ areas, workers }: AreasTableProps) {
   const [search, setSearch] = useState('')
   const [deleteId, setDeleteId] = useState<string | null>(null)
-  const [editRoute, setEditRoute] = useState<(Route & { assigned_engineer: Profile | null }) | null>(null)
-  const [planRoute, setPlanRoute] = useState<(Route & { siteCount: number }) | null>(null)
+  const [editArea, setEditArea] = useState<(Area & { assigned_engineer: Profile | null }) | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
-  const filteredRoutes = routes.filter(
-    (route) =>
-      route.name.toLowerCase().includes(search.toLowerCase()) ||
-      route.assigned_engineer?.full_name?.toLowerCase().includes(search.toLowerCase())
+  const filteredAreas = areas.filter(
+    (area) =>
+      area.name.toLowerCase().includes(search.toLowerCase()) ||
+      area.assigned_engineer?.full_name?.toLowerCase().includes(search.toLowerCase())
   )
 
   const handleDelete = async () => {
     if (!deleteId) return
-    
-    await supabase.from('routes').delete().eq('id', deleteId)
+    await supabase.from('areas').delete().eq('id', deleteId)
     setDeleteId(null)
     router.refresh()
   }
@@ -69,7 +65,7 @@ export function RoutesTable({ routes, engineers, sites }: RoutesTableProps) {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search routes..."
+            placeholder="Search areas..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -81,34 +77,34 @@ export function RoutesTable({ routes, engineers, sites }: RoutesTableProps) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Route Name</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead>Assigned Engineer</TableHead>
-              <TableHead>Sites</TableHead>
+              <TableHead>Area Name</TableHead>
+              <TableHead className="hidden md:table-cell">Description</TableHead>
+              <TableHead>Assigned Worker</TableHead>
+              <TableHead>Services</TableHead>
               <TableHead className="w-[70px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredRoutes.length === 0 ? (
+            {filteredAreas.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="h-24 text-center">
                   <div className="flex flex-col items-center justify-center">
-                    <RouteIcon className="h-8 w-8 text-muted-foreground/50 mb-2" />
-                    <p className="text-muted-foreground">No routes found</p>
+                    <MapPinned className="h-8 w-8 text-muted-foreground/50 mb-2" />
+                    <p className="text-muted-foreground">No areas found</p>
                   </div>
                 </TableCell>
               </TableRow>
             ) : (
-              filteredRoutes.map((route) => (
-                <TableRow key={route.id}>
-                  <TableCell className="font-medium">{route.name}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {route.description || '-'}
+              filteredAreas.map((area) => (
+                <TableRow key={area.id}>
+                  <TableCell className="font-medium">{area.name}</TableCell>
+                  <TableCell className="hidden max-w-[280px] truncate text-muted-foreground md:table-cell">
+                    {area.description || '-'}
                   </TableCell>
                   <TableCell>
-                    {route.assigned_engineer ? (
+                    {area.assigned_engineer ? (
                       <Badge variant="secondary">
-                        {route.assigned_engineer.full_name || route.assigned_engineer.email}
+                        {area.assigned_engineer.full_name || area.assigned_engineer.email}
                       </Badge>
                     ) : (
                       <span className="text-muted-foreground text-sm">Unassigned</span>
@@ -116,8 +112,8 @@ export function RoutesTable({ routes, engineers, sites }: RoutesTableProps) {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
-                      <Building2 className="h-4 w-4 text-muted-foreground" />
-                      <span>{route.siteCount}</span>
+                      <Wrench className="h-4 w-4 text-muted-foreground" />
+                      <span>{area.serviceCount}</span>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -128,16 +124,12 @@ export function RoutesTable({ routes, engineers, sites }: RoutesTableProps) {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => setEditRoute(route)}>
+                        <DropdownMenuItem onClick={() => setEditArea(area)}>
                           <Pencil className="mr-2 h-4 w-4" />
                           Edit
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setPlanRoute(route)}>
-                          <MapPin className="mr-2 h-4 w-4" />
-                          Manage services
-                        </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={() => setDeleteId(route.id)}
+                          onClick={() => setDeleteId(area.id)}
                           className="text-destructive"
                         >
                           <Trash2 className="mr-2 h-4 w-4" />
@@ -156,10 +148,10 @@ export function RoutesTable({ routes, engineers, sites }: RoutesTableProps) {
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Route</AlertDialogTitle>
+            <AlertDialogTitle>Delete Area</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this route? Sites assigned to this route
-              will become unassigned.
+              Are you sure you want to delete this area? Services assigned to this area will
+              become unassigned.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -171,22 +163,12 @@ export function RoutesTable({ routes, engineers, sites }: RoutesTableProps) {
         </AlertDialogContent>
       </AlertDialog>
 
-      {editRoute && (
-        <EditRouteDialog
-          route={editRoute}
-          engineers={engineers}
-          open={!!editRoute}
-          onOpenChange={() => setEditRoute(null)}
-        />
-      )}
-
-      {planRoute && (
-        <RoutePlannerDialog
-          routeId={planRoute.id}
-          routeName={planRoute.name}
-          sites={sites}
-          open={!!planRoute}
-          onOpenChange={() => setPlanRoute(null)}
+      {editArea && (
+        <EditAreaDialog
+          area={editArea}
+          workers={workers}
+          open={!!editArea}
+          onOpenChange={() => setEditArea(null)}
         />
       )}
     </div>

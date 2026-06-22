@@ -4,9 +4,11 @@ import { TaskExecution } from '@/components/dashboard/tasks/task-execution'
 import { DamperTaskExecution } from '@/components/dashboard/dampers/damper-task-execution'
 import { McpTaskExecution } from '@/components/dashboard/mcps/mcp-task-execution'
 import { EmergencyLightTaskExecution } from '@/components/dashboard/emergency-lights/emergency-light-task-execution'
+import { ExtinguisherTaskExecution } from '@/components/dashboard/extinguishers/extinguisher-task-execution'
 import { isDamperService } from '@/lib/dampers'
 import { isFireAlarmService } from '@/lib/mcps'
 import { isEmergencyLightService } from '@/lib/emergency-lights'
+import { isExtinguisherService } from '@/lib/extinguishers'
 import type {
   Profile,
   TaskWithDetails,
@@ -17,6 +19,8 @@ import type {
   McpInspection,
   EmergencyLight,
   EmergencyLightInspection,
+  Extinguisher,
+  ExtinguisherInspection,
 } from '@/lib/types/database'
 
 interface PageProps {
@@ -76,6 +80,24 @@ export default async function TaskPage({ params }: PageProps) {
         profile={profile as Profile}
         dampers={(dampersData || []) as Damper[]}
         existingInspections={(inspectionsData || []) as DamperInspection[]}
+      />
+    )
+  }
+
+  // Fire extinguisher servicing tasks use a dedicated per-asset flow
+  if (isExtinguisherService(task.site_service?.service_type?.name)) {
+    const siteId = task.site_service?.site?.id ?? task.site_service?.site_id
+    const [{ data: extinguishersData }, { data: inspectionsData }] = await Promise.all([
+      supabase.from('extinguishers').select('*').eq('site_id', siteId).order('reference', { ascending: true }),
+      supabase.from('extinguisher_inspections').select('*').eq('task_id', id),
+    ])
+
+    return (
+      <ExtinguisherTaskExecution
+        task={task as TaskWithDetails}
+        profile={profile as Profile}
+        extinguishers={(extinguishersData || []) as Extinguisher[]}
+        existingInspections={(inspectionsData || []) as ExtinguisherInspection[]}
       />
     )
   }

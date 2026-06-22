@@ -31,10 +31,20 @@ import {
 } from '@/components/ui/dialog'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Calendar } from '@/components/ui/calendar'
-import { Mail, AlertCircle, CheckCircle, Search, Filter, CalendarIcon, X, Send } from 'lucide-react'
+import { Mail, AlertCircle, CheckCircle, Search, Filter, CalendarIcon, X, Send, Eye } from 'lucide-react'
+import Link from 'next/link'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { formatDateUK, cn } from '@/lib/utils'
+import { isDamperService } from '@/lib/dampers'
+import { isExtinguisherService } from '@/lib/extinguishers'
+
+/** Resolve the correct report viewer path for a service type. */
+function reportPath(serviceName: string, taskId: string): string {
+  if (isDamperService(serviceName)) return `/dashboard/dampers/report/${taskId}`
+  if (isExtinguisherService(serviceName)) return `/dashboard/extinguishers/report/${taskId}`
+  return `/dashboard/reports/${taskId}`
+}
 
 interface TaskReport {
   id: string
@@ -64,10 +74,11 @@ export default function ReportsPage() {
   const supabase = createClient()
   const [reports, setReports] = useState<TaskReport[]>([])
   const [loading, setLoading] = useState(true)
-  const [sendingEmail, setSendingEmail] = useState<string | null>(null)
 
   // Multi-select + bulk email
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  // When set, the email dialog targets a single report instead of the bulk selection
+  const [singleReport, setSingleReport] = useState<TaskReport | null>(null)
   const [emailDialogOpen, setEmailDialogOpen] = useState(false)
   const [recipientMode, setRecipientMode] = useState<'default' | 'alternate'>('default')
   const [alternateEmails, setAlternateEmails] = useState<string[]>([])
@@ -234,28 +245,6 @@ export default function ReportsPage() {
     selectedEngineer !== 'all' || selectedServiceType !== 'all' || selectedStatus !== 'all' || 
     emailStatus !== 'all' || dateFrom || dateTo
 
-  const resendEmail = async (report: TaskReport) => {
-    try {
-      setSendingEmail(report.id)
-
-      const response = await fetch('/api/send-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId: report.taskId, resend: true }),
-      })
-
-      if (!response.ok) throw new Error('Failed to send email')
-
-      toast.success('Email sent successfully')
-      loadReports()
-    } catch (error) {
-      console.error('Error sending email:', error)
-      toast.error('Failed to send email')
-    } finally {
-      setSendingEmail(null)
-    }
-  }
-
   const toggleOne = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev)
@@ -278,6 +267,16 @@ export default function ReportsPage() {
   }
 
   const openEmailDialog = () => {
+    setSingleReport(null)
+    setRecipientMode('default')
+    setAlternateEmails([])
+    setNewAlternateEmail('')
+    setBulkResult(null)
+    setEmailDialogOpen(true)
+  }
+
+  const openResendDialog = (report: TaskReport) => {
+    setSingleReport(report)
     setRecipientMode('default')
     setAlternateEmails([])
     setNewAlternateEmail('')
@@ -286,7 +285,7 @@ export default function ReportsPage() {
   }
 
   const handleBulkSend = async () => {
-    const selected = reports.filter((r) => selectedIds.has(r.id))
+    const selected = singleReport ? [singleReport] : reports.filter((r) => selectedIds.has(r.id))
     if (selected.length === 0) return
     if (recipientMode === 'alternate' && alternateEmails.length === 0) {
       toast.error('Add at least one alternate email address')
@@ -540,13 +539,13 @@ export default function ReportsPage() {
                     />
                   </TableHead>
                   <TableHead>Reference</TableHead>
-                  <TableHead>Client</TableHead>
+                  <TableHead className="hidden xl:table-cell">Client</TableHead>
                   <TableHead>Site</TableHead>
                   <TableHead>Service</TableHead>
-                  <TableHead>Engineer</TableHead>
+                  <TableHead className="hidden lg:table-cell">Engineer</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Email Sent</TableHead>
-                  <TableHead>Date</TableHead>
+                  <TableHead className="hidden xl:table-cell">Email Sent</TableHead>
+                  <TableHead className="hidden lg:table-cell">Date</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -577,16 +576,16 @@ export default function ReportsPage() {
                         />
                       </TableCell>
                       <TableCell className="font-mono text-xs font-medium">{report.referenceNumber}</TableCell>
-                      <TableCell>{report.clientName || <span className="text-muted-foreground">-</span>}</TableCell>
+                      <TableCell className="hidden xl:table-cell">{report.clientName || <span className="text-muted-foreground">-</span>}</TableCell>
                       <TableCell className="font-medium">{report.siteName}</TableCell>
                       <TableCell>{report.serviceName}</TableCell>
-                      <TableCell>{report.engineerName}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{report.engineerName}</TableCell>
                       <TableCell>
                         <Badge variant={report.overallStatus === 'pass' ? 'default' : 'destructive'}>
                           {report.overallStatus === 'pass' ? 'Pass' : report.overallStatus === 'fail' ? 'Fail' : 'Partial'}
                         </Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden xl:table-cell">
                         {report.emailSentAt ? (
                           <div className="flex items-center gap-2">
                             <CheckCircle className="h-4 w-4 text-green-600" />
@@ -601,22 +600,32 @@ export default function ReportsPage() {
                           </span>
                         )}
                       </TableCell>
-                      <TableCell className="text-sm">
+                      <TableCell className="hidden text-sm lg:table-cell">
                         {report.completedAt 
                           ? formatDateUK(report.completedAt)
                           : formatDateUK(report.createdAt)}
                       </TableCell>
                       <TableCell>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => resendEmail(report)}
-                          disabled={sendingEmail === report.id}
-                          className="gap-2"
-                        >
-                          <Mail className="h-4 w-4" />
-                          {sendingEmail === report.id ? 'Sending...' : 'Resend'}
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button size="sm" variant="outline" asChild className="gap-2">
+                            <Link
+                              href={reportPath(report.serviceName, report.taskId)}
+                              target="_blank"
+                            >
+                              <Eye className="h-4 w-4" />
+                              View
+                            </Link>
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openResendDialog(report)}
+                            className="gap-2"
+                          >
+                            <Mail className="h-4 w-4" />
+                            Resend
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -627,14 +636,21 @@ export default function ReportsPage() {
         </CardContent>
       </Card>
 
-      {/* Bulk email dialog with optional alternate recipients */}
-      <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+      {/* Email dialog (single resend or bulk) with optional alternate recipients */}
+      <Dialog
+        open={emailDialogOpen}
+        onOpenChange={(open) => {
+          setEmailDialogOpen(open)
+          if (!open) setSingleReport(null)
+        }}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Email Reports</DialogTitle>
+            <DialogTitle>{singleReport ? 'Resend Report' : 'Email Reports'}</DialogTitle>
             <DialogDescription>
-              Send {selectedIds.size} selected report{selectedIds.size === 1 ? '' : 's'} to their
-              recipients, or to an alternate email address.
+              {singleReport
+                ? `Resend report ${singleReport.referenceNumber} to its recipients, or to an alternate email address.`
+                : `Send ${selectedIds.size} selected report${selectedIds.size === 1 ? '' : 's'} to their recipients, or to an alternate email address.`}
             </DialogDescription>
           </DialogHeader>
 
@@ -726,7 +742,11 @@ export default function ReportsPage() {
                 </Button>
                 <Button onClick={handleBulkSend} disabled={bulkSending} className="gap-2">
                   <Mail className="h-4 w-4" />
-                  {bulkSending ? 'Sending...' : `Send ${selectedIds.size} report${selectedIds.size === 1 ? '' : 's'}`}
+                  {bulkSending
+                    ? 'Sending...'
+                    : singleReport
+                    ? 'Send report'
+                    : `Send ${selectedIds.size} report${selectedIds.size === 1 ? '' : 's'}`}
                 </Button>
               </>
             )}

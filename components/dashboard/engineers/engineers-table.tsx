@@ -227,8 +227,8 @@ export function EngineersTable({ users }: EngineersTableProps) {
               <TableHead>Email</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Invited</TableHead>
-              <TableHead>Accepted</TableHead>
+              <TableHead className="hidden lg:table-cell">Invited</TableHead>
+              <TableHead className="hidden lg:table-cell">Accepted</TableHead>
               <TableHead className="w-[70px]"></TableHead>
             </TableRow>
           </TableHeader>
@@ -271,10 +271,10 @@ export function EngineersTable({ users }: EngineersTableProps) {
                       <span className="text-muted-foreground">-</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-muted-foreground">
+                  <TableCell className="hidden text-muted-foreground lg:table-cell">
                     {user.invited_at ? formatDateUK(user.invited_at) : '-'}
                   </TableCell>
-                  <TableCell className="text-muted-foreground">
+                  <TableCell className="hidden text-muted-foreground lg:table-cell">
                     {user.accepted_at ? formatDateUK(user.accepted_at) : '-'}
                   </TableCell>
                   <TableCell>

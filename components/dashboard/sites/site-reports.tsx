@@ -35,11 +35,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { FileText, Send, Eye, Loader2, CheckCircle, XCircle, AlertCircle, Mail, X, Search, CalendarIcon, FlameKindling } from 'lucide-react'
+import { FileText, Send, Eye, Loader2, CheckCircle, XCircle, AlertCircle, Mail, X, Search, CalendarIcon, FlameKindling, FireExtinguisher } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { formatDateUK, cn } from '@/lib/utils'
 import { isDamperService } from '@/lib/dampers'
+import { isExtinguisherService } from '@/lib/extinguishers'
 import type { Task, TaskResult, SiteService, ServiceType, Profile } from '@/lib/types/database'
 
 interface CompletedTask extends Task {
@@ -373,6 +374,13 @@ export function SiteReports({ siteName, siteAddress, completedTasks, reportingEm
                           <Link href={`/dashboard/dampers/report/${task.id}`} target="_blank">
                             <FlameKindling className="h-4 w-4 mr-1" />
                             Damper Report
+                          </Link>
+                        </Button>
+                      ) : isExtinguisherService(task.site_service?.service_type?.name) ? (
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link href={`/dashboard/extinguishers/report/${task.id}`} target="_blank">
+                            <FireExtinguisher className="h-4 w-4 mr-1" />
+                            Extinguisher Report
                           </Link>
                         </Button>
                       ) : (

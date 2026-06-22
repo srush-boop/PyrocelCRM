@@ -10,14 +10,18 @@ import { SiteReports } from '@/components/dashboard/sites/site-reports'
 import { DamperRegister } from '@/components/dashboard/dampers/damper-register'
 import { McpRegister } from '@/components/dashboard/mcps/mcp-register'
 import { EmergencyLightRegister } from '@/components/dashboard/emergency-lights/emergency-light-register'
+import { ExtinguisherRegister } from '@/components/dashboard/extinguishers/extinguisher-register'
 import { isDamperService } from '@/lib/dampers'
 import { isFireAlarmService } from '@/lib/mcps'
 import { isEmergencyLightService } from '@/lib/emergency-lights'
+import { isExtinguisherService } from '@/lib/extinguishers'
 import { REMOTE_MONITORING_LABELS } from '@/lib/sites'
 import type {
   Profile,
   Site,
   Route,
+  Area,
+  Subcontractor,
   ServiceType,
   SiteService,
   Task,
@@ -27,6 +31,7 @@ import type {
   McpInspection,
   EmergencyLight,
   EmergencyLightInspection,
+  Extinguisher,
 } from '@/lib/types/database'
 
 interface PageProps {
@@ -63,13 +68,15 @@ export default async function SiteDetailPage({ params }: PageProps) {
     notFound()
   }
 
-  const [siteServicesResult, serviceTypesResult, engineersResult, routesResult] = await Promise.all([
+  const [siteServicesResult, serviceTypesResult, engineersResult, routesResult, areasResult, subcontractorsResult] = await Promise.all([
     supabase
       .from('site_services')
       .select(`
         *,
         service_type:service_types(*),
         route:routes(*),
+        area:areas(*),
+        subcontractor:subcontractors(*),
         assigned_engineer:profiles(*)
       `)
       .eq('site_id', id),
@@ -80,12 +87,16 @@ export default async function SiteDetailPage({ params }: PageProps) {
       .eq('role', 'engineer')
       .order('full_name'),
     supabase.from('routes').select('*').order('name'),
+    supabase.from('areas').select('*').order('name'),
+    supabase.from('subcontractors').select('*').eq('status', 'active').order('name'),
   ])
 
   const siteServices = (siteServicesResult.data || []) as (SiteService & { service_type: ServiceType })[]
   const serviceTypes = (serviceTypesResult.data || []) as ServiceType[]
   const engineers = (engineersResult.data || []) as Profile[]
   const routes = (routesResult.data || []) as Route[]
+  const areas = (areasResult.data || []) as Area[]
+  const subcontractors = (subcontractorsResult.data || []) as Subcontractor[]
 
   // Get tasks for this site's services
   const siteServiceIds = siteServices.map(ss => ss.id)
@@ -183,6 +194,16 @@ export default async function SiteDetailPage({ params }: PageProps) {
   })
   const showEmergencyLightRegister = hasEmergencyLightService || emergencyLights.length > 0
 
+  // Extinguisher register: shown when the site has the extinguisher service or any extinguishers
+  const hasExtinguisherService = siteServices.some((ss) => isExtinguisherService(ss.service_type?.name))
+  const { data: extinguishersData } = await supabase
+    .from('extinguishers')
+    .select('*')
+    .eq('site_id', id)
+    .order('reference', { ascending: true })
+  const extinguishers = (extinguishersData || []) as Extinguisher[]
+  const showExtinguisherRegister = hasExtinguisherService || extinguishers.length > 0
+
   return (
     <div className="space-y-6">
       <div className="flex items-start gap-4">
@@ -249,16 +270,55 @@ export default async function SiteDetailPage({ params }: PageProps) {
                 </div>
               </div>
             )}
-            <div className="flex items-center gap-2 text-sm pt-2 border-t">
-              <Radio className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className="text-muted-foreground">Remote Monitoring: </span>
-              {(site as Site).has_remote_monitoring ? (
-                <Badge variant="secondary" className="text-xs">
-                  {REMOTE_MONITORING_LABELS[(site as Site).remote_monitoring_type ?? 'fire']}
-                </Badge>
-              ) : (
-                <span>None</span>
-              )}
+            <div className="pt-2 border-t">
+              <div className="flex items-center gap-2 text-sm">
+                <Radio className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="text-muted-foreground">Remote Monitoring: </span>
+                {(site as Site).has_remote_monitoring ? (
+                  <Badge variant="secondary" className="text-xs">
+                    {REMOTE_MONITORING_LABELS[(site as Site).remote_monitoring_type ?? 'fire']}
+                  </Badge>
+                ) : (
+                  <span>None</span>
+                )}
+              </div>
+              {(site as Site).has_remote_monitoring &&
+                ((site as Site).monitoring_station_name ||
+                  (site as Site).monitoring_station_phone ||
+                  (site as Site).monitoring_station_url) && (
+                  <div className="mt-2 ml-6 grid gap-1 text-sm">
+                    {(site as Site).monitoring_station_name && (
+                      <div>
+                        <span className="text-muted-foreground">Station: </span>
+                        {(site as Site).monitoring_station_name}
+                      </div>
+                    )}
+                    {(site as Site).monitoring_station_phone && (
+                      <div>
+                        <span className="text-muted-foreground">Phone: </span>
+                        <a
+                          href={`tel:${(site as Site).monitoring_station_phone}`}
+                          className="text-primary hover:underline"
+                        >
+                          {(site as Site).monitoring_station_phone}
+                        </a>
+                      </div>
+                    )}
+                    {(site as Site).monitoring_station_url && (
+                      <div className="truncate">
+                        <span className="text-muted-foreground">Portal: </span>
+                        <a
+                          href={(site as Site).monitoring_station_url ?? '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          {(site as Site).monitoring_station_url}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
             </div>
             {site.notes && (
               <div className="text-sm pt-2 border-t">
@@ -275,6 +335,8 @@ export default async function SiteDetailPage({ params }: PageProps) {
           availableServiceTypes={availableServiceTypes}
           engineers={engineers}
           routes={routes}
+          areas={areas}
+          subcontractors={subcontractors}
           tasks={tasks}
           siteStatus={(site as Site).status}
         />
@@ -288,6 +350,10 @@ export default async function SiteDetailPage({ params }: PageProps) {
 
       {showEmergencyLightRegister && (
         <EmergencyLightRegister siteId={id} lights={emergencyLights} />
+      )}
+
+      {showExtinguisherRegister && (
+        <ExtinguisherRegister siteId={id} siteName={site.name} extinguishers={extinguishers} />
       )}
 
       <SiteReports

@@ -150,12 +150,12 @@ export function SitesTable({ sites, routes, clients }: SitesTableProps) {
           <TableHeader>
             <TableRow>
               <TableHead>Site Name</TableHead>
-              <TableHead>CASH ID</TableHead>
+              <TableHead className="hidden xl:table-cell">CASH ID</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Client</TableHead>
-              <TableHead>Address</TableHead>
-              <TableHead>Contact</TableHead>
-              <TableHead>Route</TableHead>
+              <TableHead className="hidden md:table-cell">Address</TableHead>
+              <TableHead className="hidden lg:table-cell">Contact</TableHead>
+              <TableHead className="hidden lg:table-cell">Route</TableHead>
               <TableHead className="w-[70px]"></TableHead>
             </TableRow>
           </TableHeader>
@@ -180,7 +180,7 @@ export function SitesTable({ sites, routes, clients }: SitesTableProps) {
                       {site.name}
                     </Link>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden xl:table-cell">
                     <span className="text-sm font-mono text-muted-foreground">
                       {site.site_id_cash || '-'}
                     </span>
@@ -197,10 +197,10 @@ export function SitesTable({ sites, routes, clients }: SitesTableProps) {
                       <span className="text-muted-foreground text-sm">-</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-muted-foreground">
+                  <TableCell className="hidden max-w-[220px] truncate text-muted-foreground md:table-cell">
                     {site.address}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden lg:table-cell">
                     <div className="text-sm">
                       {site.contact_name && <p>{site.contact_name}</p>}
                       {site.contact_email && (
@@ -208,7 +208,7 @@ export function SitesTable({ sites, routes, clients }: SitesTableProps) {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden lg:table-cell">
                     {site.route ? (
                       <Badge variant="secondary">{site.route.name}</Badge>
                     ) : (
@@ -265,7 +265,6 @@ export function SitesTable({ sites, routes, clients }: SitesTableProps) {
       {editSite && (
         <EditSiteDialog
           site={editSite}
-          routes={routes}
           clients={clients}
           open={!!editSite}
           onOpenChange={() => setEditSite(null)}

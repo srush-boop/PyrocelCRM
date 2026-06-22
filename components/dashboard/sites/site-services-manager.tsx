@@ -35,12 +35,18 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Plus, Trash2, Wrench, Loader2, Calendar as CalendarIcon, Edit2, Clock, X, MapPin, User } from 'lucide-react'
+import { Plus, Trash2, Wrench, Loader2, Calendar as CalendarIcon, Edit2, Clock, X, MapPin, MapPinned, User, HardHat } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
-import type { ServiceType, SiteService, Profile, Task, Route } from '@/lib/types/database'
+import type { ServiceType, SiteService, Profile, Task, Route, Area, Subcontractor, WorkerType } from '@/lib/types/database'
+import {
+  WORKER_TYPE_LABELS,
+  allowedMethodsForWorker,
+  resolveAssignedEngineerId,
+  type AssignmentMethod,
+} from '@/lib/assignment'
 
 const NONE_VALUE = '__none__'
 
@@ -50,6 +56,8 @@ interface SiteServicesManagerProps {
   availableServiceTypes: ServiceType[]
   engineers?: Profile[]
   routes?: Route[]
+  areas?: Area[]
+  subcontractors?: Subcontractor[]
   tasks?: Task[]
   siteStatus?: 'live' | 'dead'
 }
@@ -60,6 +68,8 @@ export function SiteServicesManager({
   availableServiceTypes,
   engineers = [],
   routes = [],
+  areas = [],
+  subcontractors = [],
   tasks = [],
   siteStatus = 'live',
 }: SiteServicesManagerProps) {
@@ -74,8 +84,12 @@ export function SiteServicesManager({
   const [editFrequencyValue, setEditFrequencyValue] = useState<number>(12)
   const [editFrequencyUnit, setEditFrequencyUnit] = useState<'weeks' | 'months'>('months')
   const [editToleranceDays, setEditToleranceDays] = useState<number>(7)
+  const [editWorkerType, setEditWorkerType] = useState<WorkerType>('cdo')
+  const [editMethod, setEditMethod] = useState<AssignmentMethod>('route')
   const [editRouteId, setEditRouteId] = useState<string>(NONE_VALUE)
+  const [editAreaId, setEditAreaId] = useState<string>(NONE_VALUE)
   const [editEngineerId, setEditEngineerId] = useState<string>(NONE_VALUE)
+  const [editSubcontractorId, setEditSubcontractorId] = useState<string>(NONE_VALUE)
   const [editNextServiceDate, setEditNextServiceDate] = useState<Date | undefined>(undefined)
   const [editReportingEmails, setEditReportingEmails] = useState<string[]>([])
   const [editDefectsToEmail, setEditDefectsToEmail] = useState('')
@@ -115,6 +129,7 @@ export function SiteServicesManager({
         service_type_id: serviceTypeId,
         frequency_value: serviceType?.default_frequency_value ?? 12,
         frequency_unit: serviceType?.default_frequency_unit ?? 'months',
+        worker_type: serviceType?.default_worker_type ?? 'cdo',
         // Live sites get their first visit scheduled on the chosen date
         next_service_date: isDead ? null : visitDateStr,
       }
@@ -148,8 +163,20 @@ export function SiteServicesManager({
     setEditFrequencyValue(ss.frequency_value)
     setEditFrequencyUnit(ss.frequency_unit)
     setEditToleranceDays(ss.deadline_tolerance_days)
+    const workerType = (ss.worker_type as WorkerType) || 'cdo'
+    setEditWorkerType(workerType)
     setEditRouteId(ss.route_id || NONE_VALUE)
+    setEditAreaId(ss.area_id || NONE_VALUE)
     setEditEngineerId(ss.assigned_engineer_id || NONE_VALUE)
+    setEditSubcontractorId(ss.subcontractor_id || NONE_VALUE)
+    // Derive the current assignment method from whichever vector is set.
+    let method: AssignmentMethod
+    if (workerType === 'subcontractor') method = 'subcontractor'
+    else if (ss.assigned_engineer_id) method = 'direct'
+    else if (ss.route_id) method = 'route'
+    else if (ss.area_id) method = 'area'
+    else method = allowedMethodsForWorker(workerType)[0]
+    setEditMethod(method)
     setEditNextServiceDate(ss.next_service_date ? new Date(ss.next_service_date) : undefined)
     setEditReportingEmails(Array.isArray(ss.reporting_emails) ? ss.reporting_emails : [])
     setEditDefectsToEmail(ss.defects_to_email || '')
@@ -169,9 +196,13 @@ export function SiteServicesManager({
     if (!editingId) return
     setSavingEdit(true)
 
-    // A service may be assigned to a route, OR directly to an engineer with no route.
-    const routeId = editRouteId === NONE_VALUE ? null : editRouteId
-    const engineerId = editEngineerId === NONE_VALUE ? null : editEngineerId
+    // Only the assignment vector matching the selected method is kept; the
+    // others are cleared so resolution stays unambiguous.
+    const routeId = editMethod === 'route' && editRouteId !== NONE_VALUE ? editRouteId : null
+    const areaId = editMethod === 'area' && editAreaId !== NONE_VALUE ? editAreaId : null
+    const engineerId = editMethod === 'direct' && editEngineerId !== NONE_VALUE ? editEngineerId : null
+    const subcontractorId =
+      editMethod === 'subcontractor' && editSubcontractorId !== NONE_VALUE ? editSubcontractorId : null
 
     await supabase
       .from('site_services')
@@ -179,8 +210,11 @@ export function SiteServicesManager({
         frequency_value: editFrequencyValue,
         frequency_unit: editFrequencyUnit,
         deadline_tolerance_days: editToleranceDays,
+        worker_type: editWorkerType,
         route_id: routeId,
+        area_id: areaId,
         assigned_engineer_id: engineerId,
+        subcontractor_id: subcontractorId,
         next_service_date: editNextServiceDate
           ? format(editNextServiceDate, 'yyyy-MM-dd')
           : null,
@@ -190,15 +224,19 @@ export function SiteServicesManager({
       })
       .eq('id', editingId)
 
-    // Resolve the effective engineer for this service: a directly-assigned
-    // engineer takes priority, otherwise fall back to the assigned route's
-    // engineer. Propagate it to existing pending tasks so the engineer can
-    // actually see their assigned work (engineers query tasks by
-    // assigned_engineer_id, which is null on auto-generated tasks).
-    const routeEngineerId = routeId
-      ? routes.find((r) => r.id === routeId)?.assigned_engineer_id ?? null
-      : null
-    const effectiveEngineerId = engineerId ?? routeEngineerId
+    // Resolve the effective engineer for this service (direct → route → area)
+    // and propagate it to existing pending tasks so the worker can actually see
+    // their assigned work (engineers query tasks by assigned_engineer_id, which
+    // is null on auto-generated tasks). Sub-contracted work resolves to null.
+    const effectiveEngineerId = resolveAssignedEngineerId({
+      worker_type: editWorkerType,
+      assigned_engineer_id: engineerId,
+      route_id: routeId,
+      area_id: areaId,
+      subcontractor_id: subcontractorId,
+      route: routeId ? routes.find((r) => r.id === routeId) ?? null : null,
+      area: areaId ? areas.find((a) => a.id === areaId) ?? null : null,
+    })
 
     await supabase
       .from('tasks')
@@ -276,8 +314,11 @@ export function SiteServicesManager({
             <div className="space-y-3">
               {siteServices.map((ss) => {
                 const pendingTasks = getServiceTaskCount(ss.id)
+                const workerType = (ss.worker_type as WorkerType) || 'cdo'
                 const route = ss.route
+                const area = ss.area
                 const engineer = ss.assigned_engineer
+                const subcontractor = ss.subcontractor
                 const serviceEmails = Array.isArray(ss.reporting_emails) ? ss.reporting_emails : []
                 return (
                   <div
@@ -323,15 +364,28 @@ export function SiteServicesManager({
                         )}
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                        {route ? (
+                        <Badge variant="secondary" className="text-xs font-normal">
+                          {WORKER_TYPE_LABELS[workerType]}
+                        </Badge>
+                        {workerType === 'subcontractor' ? (
                           <Badge variant="outline" className="gap-1 text-xs font-normal">
-                            <MapPin className="h-3 w-3" />
-                            {route.name}
+                            <HardHat className="h-3 w-3" />
+                            {subcontractor?.name || 'Unassigned sub-contractor'}
                           </Badge>
                         ) : engineer ? (
                           <Badge variant="outline" className="gap-1 text-xs font-normal">
                             <User className="h-3 w-3" />
                             {engineer.full_name || engineer.email}
+                          </Badge>
+                        ) : route ? (
+                          <Badge variant="outline" className="gap-1 text-xs font-normal">
+                            <MapPin className="h-3 w-3" />
+                            {route.name}
+                          </Badge>
+                        ) : area ? (
+                          <Badge variant="outline" className="gap-1 text-xs font-normal">
+                            <MapPinned className="h-3 w-3" />
+                            {area.name}
                           </Badge>
                         ) : (
                           <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
@@ -690,56 +744,158 @@ export function SiteServicesManager({
               </div>
             </div>
 
-            <div className="grid gap-2">
-              <Label>Route</Label>
+            <div className="grid gap-2 rounded-md border p-3">
+              <Label>Who performs this service</Label>
               <Select
-                value={editRouteId}
+                value={editWorkerType}
                 onValueChange={(value) => {
-                  setEditRouteId(value)
-                  // Assigning to a route clears the direct engineer assignment
-                  if (value !== NONE_VALUE) setEditEngineerId(NONE_VALUE)
+                  const wt = value as WorkerType
+                  setEditWorkerType(wt)
+                  // Reset the assignment method to the first valid option for
+                  // the new worker type, and clear the vectors.
+                  const nextMethod = allowedMethodsForWorker(wt)[0]
+                  setEditMethod(nextMethod)
+                  setEditRouteId(NONE_VALUE)
+                  setEditAreaId(NONE_VALUE)
+                  setEditEngineerId(NONE_VALUE)
+                  setEditSubcontractorId(NONE_VALUE)
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="No route" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NONE_VALUE}>No route</SelectItem>
-                  {routes.map((route) => (
-                    <SelectItem key={route.id} value={route.id}>
-                      {route.name}
+                  {(['cdo', 'engineer', 'subcontractor'] as WorkerType[]).map((wt) => (
+                    <SelectItem key={wt} value={wt}>
+                      {WORKER_TYPE_LABELS[wt]}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </div>
 
-            <div className="grid gap-2">
-              <Label>Engineer (no route)</Label>
-              <Select
-                value={editEngineerId}
-                onValueChange={(value) => {
-                  setEditEngineerId(value)
-                  // Assigning directly to an engineer clears the route
-                  if (value !== NONE_VALUE) setEditRouteId(NONE_VALUE)
-                }}
-                disabled={editRouteId !== NONE_VALUE}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="No engineer" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE_VALUE}>No engineer</SelectItem>
-                  {engineers.map((engineer) => (
-                    <SelectItem key={engineer.id} value={engineer.id}>
-                      {engineer.full_name || engineer.email}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Assign this service to a route, or directly to an engineer with no route.
-              </p>
+              {editWorkerType !== 'subcontractor' && (
+                <div className="grid gap-2 pt-1">
+                  <Label>How it is assigned</Label>
+                  <Select
+                    value={editMethod}
+                    onValueChange={(value) => {
+                      const m = value as AssignmentMethod
+                      setEditMethod(m)
+                      // Clear vectors not relevant to the chosen method.
+                      if (m !== 'route') setEditRouteId(NONE_VALUE)
+                      if (m !== 'area') setEditAreaId(NONE_VALUE)
+                      if (m !== 'direct') setEditEngineerId(NONE_VALUE)
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allowedMethodsForWorker(editWorkerType).map((m) => (
+                        <SelectItem key={m} value={m}>
+                          {m === 'route'
+                            ? 'By route'
+                            : m === 'area'
+                            ? 'By area'
+                            : m === 'direct'
+                            ? 'Direct to a person'
+                            : 'Unassigned (open)'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {editWorkerType !== 'subcontractor' && editMethod === 'route' && (
+                <div className="grid gap-2 pt-1">
+                  <Label>Route</Label>
+                  <Select value={editRouteId} onValueChange={setEditRouteId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a route" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NONE_VALUE}>No route</SelectItem>
+                      {routes.map((route) => (
+                        <SelectItem key={route.id} value={route.id}>
+                          {route.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {editWorkerType !== 'subcontractor' && editMethod === 'area' && (
+                <div className="grid gap-2 pt-1">
+                  <Label>Area</Label>
+                  <Select value={editAreaId} onValueChange={setEditAreaId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select an area" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NONE_VALUE}>No area</SelectItem>
+                      {areas.map((area) => (
+                        <SelectItem key={area.id} value={area.id}>
+                          {area.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Work flows to the worker assigned to this area.
+                  </p>
+                </div>
+              )}
+
+              {editWorkerType !== 'subcontractor' && editMethod === 'direct' && (
+                <div className="grid gap-2 pt-1">
+                  <Label>Person</Label>
+                  <Select value={editEngineerId} onValueChange={setEditEngineerId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a person" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NONE_VALUE}>No person</SelectItem>
+                      {engineers.map((engineer) => (
+                        <SelectItem key={engineer.id} value={engineer.id}>
+                          {engineer.full_name || engineer.email}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {editWorkerType !== 'subcontractor' && editMethod === 'unassigned' && (
+                <p className="text-xs text-muted-foreground pt-1">
+                  This service will be left open. Generated tasks appear in the schedule&apos;s
+                  Unassigned filter where they can be picked up and assigned.
+                </p>
+              )}
+
+              {editWorkerType === 'subcontractor' && (
+                <div className="grid gap-2 pt-1">
+                  <Label>Sub-contractor</Label>
+                  <Select value={editSubcontractorId} onValueChange={setEditSubcontractorId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a sub-contractor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NONE_VALUE}>Unassigned sub-contractor</SelectItem>
+                      {subcontractors.map((sub) => (
+                        <SelectItem key={sub.id} value={sub.id}>
+                          {sub.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Sub-contracted work is tracked for completion but is not assigned to an
+                    internal engineer.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="grid gap-2">

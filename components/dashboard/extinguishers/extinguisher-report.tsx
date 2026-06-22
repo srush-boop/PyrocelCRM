@@ -18,28 +18,40 @@ import { Button } from '@/components/ui/button'
 import { ArrowLeft, Printer, CheckCircle2, XCircle, AlertTriangle, MinusCircle } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { getServiceIcon } from '@/lib/service-icons'
-import { RESULT_COLORS, RESULT_LABELS, PHOTO_CATEGORIES, emptyPhotoCategories } from '@/lib/dampers'
-import { CHECK_ITEMS } from './damper-inspection-card'
-import type { TaskWithDetails, DamperInspection, Damper, ReportTemplate, DamperResult } from '@/lib/types/database'
+import {
+  RESULT_COLORS,
+  RESULT_LABELS,
+  PHOTO_CATEGORIES,
+  emptyPhotoCategories,
+  EXTINGUISHER_TYPE_LABELS,
+} from '@/lib/extinguishers'
+import { CHECK_ITEMS } from './extinguisher-inspection-card'
+import type {
+  TaskWithDetails,
+  ExtinguisherInspection,
+  Extinguisher,
+  ReportTemplate,
+  ExtinguisherResult,
+} from '@/lib/types/database'
 
-interface DamperReportProps {
+interface ExtinguisherReportProps {
   task: TaskWithDetails
-  inspections: (DamperInspection & { damper: Damper | null })[]
+  inspections: (ExtinguisherInspection & { extinguisher: Extinguisher | null })[]
   template: ReportTemplate | null
   referenceNumber?: string | null
 }
 
-export function DamperReport({ task, inspections, template, referenceNumber }: DamperReportProps) {
+export function ExtinguisherReport({ task, inspections, template, referenceNumber }: ExtinguisherReportProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
   const engineer = task.assigned_engineer
   const headerColor = template?.header_color || '#c8102e'
-  const companyName = template?.company_name || 'Pyrocel Ltd'
+  const companyName = template?.company_name || 'Pyrocel Fire & Security'
   const sections = template?.sections || {}
   const ServiceIcon = getServiceIcon(serviceType?.name)
 
   const stats = useMemo(() => {
-    const counts: Record<DamperResult, number> = { pass: 0, fail: 0, remedial: 0, na: 0 }
+    const counts: Record<ExtinguisherResult, number> = { pass: 0, fail: 0, remedial: 0, na: 0 }
     for (const insp of inspections) counts[insp.overall_result]++
     const tested = inspections.length
     const assessed = counts.pass + counts.fail + counts.remedial
@@ -49,7 +61,7 @@ export function DamperReport({ task, inspections, template, referenceNumber }: D
 
   const pieData = useMemo(
     () =>
-      (['pass', 'remedial', 'fail', 'na'] as DamperResult[])
+      (['pass', 'remedial', 'fail', 'na'] as ExtinguisherResult[])
         .map((r) => ({ name: RESULT_LABELS[r], key: r, value: stats[r] }))
         .filter((d) => d.value > 0),
     [stats],
@@ -58,7 +70,7 @@ export function DamperReport({ task, inspections, template, referenceNumber }: D
   const byFloor = useMemo(() => {
     const map = new Map<string, { floor: string; pass: number; remedial: number; fail: number; na: number }>()
     for (const insp of inspections) {
-      const floor = insp.damper?.floor || 'Unspecified'
+      const floor = insp.extinguisher?.floor || 'Unspecified'
       const row = map.get(floor) || { floor, pass: 0, remedial: 0, fail: 0, na: 0 }
       row[insp.overall_result]++
       map.set(floor, row)
@@ -89,13 +101,7 @@ export function DamperReport({ task, inspections, template, referenceNumber }: D
       .filter((g) => g.count > 0)
   }, [inspections])
 
-  // Per-inspection photo lookup so each damper's checklist can render its
-  // photo evidence alongside it.
-  const photosByInsp = useMemo(() => {
-    const map = new Map<string, { cats: ReturnType<typeof emptyPhotoCategories>; count: number }>()
-    for (const g of photoGroups) map.set(g.insp.id, { cats: g.cats, count: g.count })
-    return map
-  }, [photoGroups])
+  const photoCount = photoGroups.reduce((sum, g) => sum + g.count, 0)
 
   useEffect(() => {
     const t = setTimeout(() => window.print(), 600)
@@ -109,7 +115,7 @@ export function DamperReport({ task, inspections, template, referenceNumber }: D
       {/* Action bar */}
       <div className="mb-6 flex items-center justify-between print:hidden">
         <Button variant="ghost" size="sm" asChild>
-          <Link href={site ? `/dashboard/sites/${site.id}` : '/dashboard/dampers'}>
+          <Link href={site ? `/dashboard/sites/${site.id}` : '/dashboard/extinguishers'}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back
           </Link>
@@ -147,8 +153,8 @@ export function DamperReport({ task, inspections, template, referenceNumber }: D
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right">
-              <p className="text-sm font-semibold uppercase tracking-wide">Inspection Report</p>
-              <p className="text-xs text-white/80">Fire &amp; Smoke Dampers</p>
+              <p className="text-sm font-semibold uppercase tracking-wide">Service Report</p>
+              <p className="text-xs text-white/80">Fire Extinguishers</p>
               {referenceNumber && (
                 <p className="mt-1 font-mono text-sm font-bold">{referenceNumber}</p>
               )}
@@ -161,11 +167,11 @@ export function DamperReport({ task, inspections, template, referenceNumber }: D
 
         {/* Meta */}
         <section className="mb-8 grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
-          <Meta label="Inspection Reference" value={referenceNumber} />
+          <Meta label="Service Reference" value={referenceNumber} />
           <Meta label="Report Date" value={formatDateUK(completedDate)} />
           <Meta label="Site" value={site?.name} />
           <Meta label="Address" value={site?.address} />
-          <Meta label="Inspected By" value={engineer?.full_name || engineer?.email} />
+          <Meta label="Serviced By" value={engineer?.full_name || engineer?.email} />
           <Meta label="Service" value={serviceType?.name} />
           {sections.standards && <Meta label="Standards" value={sections.standards} />}
         </section>
@@ -175,7 +181,7 @@ export function DamperReport({ task, inspections, template, referenceNumber }: D
           Executive Summary
         </h2>
         <div className="mb-8 grid grid-cols-3 gap-3 sm:grid-cols-6">
-          <Stat label="Tested" value={stats.tested} />
+          <Stat label="Serviced" value={stats.tested} />
           <Stat label="Pass" value={stats.pass} color="#16a34a" icon={<CheckCircle2 className="h-4 w-4" />} />
           <Stat label="Remedial" value={stats.remedial} color="#d97706" icon={<AlertTriangle className="h-4 w-4" />} />
           <Stat label="Fail" value={stats.fail} color="#dc2626" icon={<XCircle className="h-4 w-4" />} />
@@ -201,7 +207,7 @@ export function DamperReport({ task, inspections, template, referenceNumber }: D
                     label={(entry) => `${entry.value}`}
                   >
                     {pieData.map((d) => (
-                      <Cell key={d.key} fill={RESULT_COLORS[d.key as DamperResult]} />
+                      <Cell key={d.key} fill={RESULT_COLORS[d.key as ExtinguisherResult]} />
                     ))}
                   </Pie>
                   <Tooltip />
@@ -247,8 +253,8 @@ export function DamperReport({ task, inspections, template, referenceNumber }: D
                   style={{ borderLeftColor: RESULT_COLORS[insp.overall_result] }}
                 >
                   <p className="font-medium">
-                    <span className="font-mono">{insp.damper?.urn}</span>
-                    {insp.damper?.location ? ` — ${insp.damper.location}` : ''}
+                    <span className="font-mono">{insp.extinguisher?.urn}</span>
+                    {insp.extinguisher?.location ? ` — ${insp.extinguisher.location}` : ''}
                   </p>
                   <p className="text-muted-foreground">
                     {insp.remedial_action || 'Remedial work required (no detail provided).'}
@@ -259,8 +265,7 @@ export function DamperReport({ task, inspections, template, referenceNumber }: D
           </section>
         )}
 
-        {/* Detailed results — table may span multiple pages, so the section
-            itself must not be break-inside: avoid (that would clip rows). */}
+        {/* Detailed results */}
         <section className="mb-8">
           <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
             Detailed Results
@@ -280,11 +285,13 @@ export function DamperReport({ task, inspections, template, referenceNumber }: D
               <tbody>
                 {inspections.map((insp) => (
                   <tr key={insp.id} className="border-t">
-                    <td className="px-3 py-2 font-mono">{insp.damper?.urn || '-'}</td>
-                    <td className="px-3 py-2">{insp.damper?.location || '-'}</td>
-                    <td className="px-3 py-2">{insp.damper?.floor || '-'}</td>
-                    <td className="px-3 py-2 capitalize">
-                      {insp.damper?.damper_type?.replace('_', '/') || '-'}
+                    <td className="px-3 py-2 font-mono">{insp.extinguisher?.urn || '-'}</td>
+                    <td className="px-3 py-2">{insp.extinguisher?.location || '-'}</td>
+                    <td className="px-3 py-2">{insp.extinguisher?.floor || '-'}</td>
+                    <td className="px-3 py-2">
+                      {insp.extinguisher
+                        ? EXTINGUISHER_TYPE_LABELS[insp.extinguisher.extinguisher_type]
+                        : '-'}
                     </td>
                     <td className="px-3 py-2 text-center">{insp.accessible ? 'Yes' : 'No'}</td>
                     <td className="px-3 py-2">
@@ -300,7 +307,7 @@ export function DamperReport({ task, inspections, template, referenceNumber }: D
                 {inspections.length === 0 && (
                   <tr>
                     <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
-                      No inspections recorded for this task.
+                      No services recorded for this task.
                     </td>
                   </tr>
                 )}
@@ -309,120 +316,128 @@ export function DamperReport({ task, inspections, template, referenceNumber }: D
           </div>
         </section>
 
-        {/* Per-damper inspection details: checklist alongside photo evidence */}
+        {/* Per-extinguisher service checklist */}
         {inspections.length > 0 && (
           <section className="mb-8">
             <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
-              Inspection Details
+              Service Checklist
             </h2>
             <div className="space-y-4">
-              {inspections.map((insp) => {
-                const photos = photosByInsp.get(insp.id)
-                return (
-                  <div key={insp.id} className="avoid-break rounded-md border p-4">
-                    <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
-                      <span className="font-mono font-semibold">{insp.damper?.urn || '-'}</span>
-                      {insp.damper?.location && (
-                        <span className="text-muted-foreground">{insp.damper.location}</span>
+              {inspections.map((insp) => (
+                <div key={insp.id} className="avoid-break rounded-md border p-4">
+                  <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+                    <span className="font-mono font-semibold">{insp.extinguisher?.urn || '-'}</span>
+                    {insp.extinguisher?.location && (
+                      <span className="text-muted-foreground">{insp.extinguisher.location}</span>
+                    )}
+                    {insp.extinguisher?.floor && (
+                      <span className="text-muted-foreground">· {insp.extinguisher.floor}</span>
+                    )}
+                    <span
+                      className="ml-auto inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
+                      style={{ backgroundColor: RESULT_COLORS[insp.overall_result] }}
+                    >
+                      {RESULT_LABELS[insp.overall_result]}
+                    </span>
+                  </div>
+
+                  {insp.accessible ? (
+                    <div className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+                      {CHECK_ITEMS.map((item) => (
+                        <CheckRow
+                          key={item.key}
+                          label={item.label}
+                          value={insp[item.key as keyof ExtinguisherInspection] as boolean | null}
+                        />
+                      ))}
+                      {insp.condition && (
+                        <div className="flex items-center justify-between gap-3 border-t py-1 text-xs sm:col-span-2">
+                          <span className="text-muted-foreground">Overall condition</span>
+                          <span className="font-medium capitalize">{insp.condition}</span>
+                        </div>
                       )}
-                      {insp.damper?.floor && (
-                        <span className="text-muted-foreground">· {insp.damper.floor}</span>
-                      )}
-                      <span
-                        className="ml-auto inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
-                        style={{ backgroundColor: RESULT_COLORS[insp.overall_result] }}
-                      >
-                        {RESULT_LABELS[insp.overall_result]}
-                      </span>
                     </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Not accessible for service.
+                      {insp.access_notes ? ` ${insp.access_notes}` : ''}
+                    </p>
+                  )}
 
-                    <div className="grid gap-x-6 gap-y-4 md:grid-cols-2">
-                      {/* Checklist results */}
-                      <div>
-                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Checklist Results
-                        </p>
-                        {insp.accessible ? (
-                          <div className="grid gap-y-1.5">
-                            {CHECK_ITEMS.map((item) => (
-                              <CheckRow
-                                key={item.key}
-                                label={item.label}
-                                value={insp[item.key as keyof DamperInspection] as boolean | null}
-                              />
-                            ))}
-                            {insp.condition && (
-                              <div className="flex items-center justify-between gap-3 border-t py-1 text-xs">
-                                <span className="text-muted-foreground">Overall condition</span>
-                                <span className="font-medium capitalize">{insp.condition}</span>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">
-                            Not accessible for testing.
-                            {insp.access_notes ? ` ${insp.access_notes}` : ''}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Photo evidence */}
-                      <div>
-                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Photo Evidence{photos ? ` (${photos.count})` : ''}
-                        </p>
-                        {photos ? (
-                          <div className="space-y-3">
-                            {PHOTO_CATEGORIES.map((cat) => {
-                              const urls = photos.cats[cat.key]
-                              if (!urls || urls.length === 0) return null
-                              return (
-                                <div key={cat.key} className="avoid-break">
-                                  <p className="mb-1.5 text-[11px] font-semibold text-muted-foreground">
-                                    {cat.label}
-                                  </p>
-                                  <div className="grid grid-cols-2 gap-2">
-                                    {urls.map((url, idx) => (
-                                      <div
-                                        key={url}
-                                        className="avoid-break relative aspect-[4/3] w-full overflow-hidden rounded-md border bg-muted"
-                                      >
-                                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                                        <img
-                                          src={url || '/placeholder.svg'}
-                                          alt={`${insp.damper?.urn || 'Damper'} — ${cat.label} ${idx + 1}`}
-                                          crossOrigin="anonymous"
-                                          className="absolute inset-0 h-full w-full object-cover"
-                                        />
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">No photos recorded.</p>
-                        )}
-                      </div>
-                    </div>
-
-                    {(insp.overall_result === 'fail' || insp.overall_result === 'remedial') &&
-                      insp.remedial_action && (
-                        <p className="mt-3 border-t pt-2 text-xs">
-                          <span className="font-semibold">Remedial: </span>
-                          {insp.remedial_action}
-                        </p>
-                      )}
-                    {insp.comments && (
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        <span className="font-semibold">Notes: </span>
-                        {insp.comments}
+                  {(insp.overall_result === 'fail' || insp.overall_result === 'remedial') &&
+                    insp.remedial_action && (
+                      <p className="mt-2 border-t pt-2 text-xs">
+                        <span className="font-semibold">Remedial: </span>
+                        {insp.remedial_action}
                       </p>
                     )}
+                  {insp.comments && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      <span className="font-semibold">Notes: </span>
+                      {insp.comments}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Photographic evidence */}
+        {photoGroups.length > 0 && (
+          <section className="mb-8">
+            <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
+              Photographic Evidence ({photoCount})
+            </h2>
+            <div className="space-y-6">
+              {photoGroups.map(({ insp, cats }) => (
+                <div key={insp.id} className="avoid-break rounded-md border p-3">
+                  <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+                    <span className="font-mono font-semibold">{insp.extinguisher?.urn || '-'}</span>
+                    {insp.extinguisher?.location && (
+                      <span className="text-muted-foreground">{insp.extinguisher.location}</span>
+                    )}
+                    {insp.extinguisher?.floor && (
+                      <span className="text-muted-foreground">· {insp.extinguisher.floor}</span>
+                    )}
+                    <span
+                      className="ml-auto inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
+                      style={{ backgroundColor: RESULT_COLORS[insp.overall_result] }}
+                    >
+                      {RESULT_LABELS[insp.overall_result]}
+                    </span>
                   </div>
-                )
-              })}
+                  <div className="space-y-3">
+                    {PHOTO_CATEGORIES.map((cat) => {
+                      const urls = cats[cat.key]
+                      if (!urls || urls.length === 0) return null
+                      return (
+                        <div key={cat.key} className="avoid-break">
+                          <p className="mb-1.5 text-xs font-semibold text-muted-foreground">
+                            {cat.label}
+                          </p>
+                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                            {urls.map((url, idx) => (
+                              <div
+                                key={url}
+                                className="avoid-break relative aspect-[4/3] w-full overflow-hidden rounded-md border bg-muted"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={url || '/placeholder.svg'}
+                                  alt={`${insp.extinguisher?.urn || 'Extinguisher'} — ${cat.label} ${idx + 1}`}
+                                  crossOrigin="anonymous"
+                                  className="absolute inset-0 h-full w-full object-cover"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           </section>
         )}

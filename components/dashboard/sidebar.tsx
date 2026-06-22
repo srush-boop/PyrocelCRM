@@ -26,6 +26,8 @@ import {
   Calendar,
   FileText,
   Wind,
+  MapPinned,
+  HardHat,
 } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 
@@ -39,7 +41,9 @@ const adminNavItems = [
   { title: 'Sites', href: '/dashboard/sites', icon: Building2 },
   { title: 'Dampers', href: '/dashboard/dampers', icon: Wind },
   { title: 'Routes', href: '/dashboard/routes', icon: Route },
+  { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
   { title: 'Engineers', href: '/dashboard/engineers', icon: Users },
+  { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
   { title: 'Service Types', href: '/dashboard/service-types', icon: Wrench },
   { title: 'Checklists', href: '/dashboard/checklists', icon: ClipboardList },
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
@@ -57,6 +61,8 @@ const officeNavItems = [
   { title: 'Sites', href: '/dashboard/sites', icon: Building2 },
   { title: 'Dampers', href: '/dashboard/dampers', icon: Wind },
   { title: 'Routes', href: '/dashboard/routes', icon: Route },
+  { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
+  { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
   { title: 'Reports', href: '/dashboard/reports', icon: FileText },
 ]

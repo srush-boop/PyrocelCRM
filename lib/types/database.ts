@@ -2,6 +2,32 @@
 
 export type UserRole = 'admin' | 'engineer' | 'office'
 
+// Who performs a service. Independent of how the work is routed/assigned.
+export type WorkerType = 'cdo' | 'engineer' | 'subcontractor'
+
+// An operational/geographic area with one responsible worker (CDO or engineer).
+export interface Area {
+  id: string
+  name: string
+  description: string | null
+  assigned_engineer_id: string | null
+  created_at: string
+  updated_at: string
+  assigned_engineer?: Profile | null
+}
+
+export interface Subcontractor {
+  id: string
+  name: string
+  contact_name: string | null
+  contact_email: string | null
+  contact_phone: string | null
+  notes: string | null
+  status: 'active' | 'inactive'
+  created_at: string
+  updated_at: string
+}
+
 export interface Client {
   id: string
   name: string
@@ -37,6 +63,7 @@ export interface ServiceType {
   color?: string | null
   icon?: string | null
   defects_to_email: string | null
+  default_worker_type: WorkerType
   created_at: string
 }
 
@@ -104,7 +131,13 @@ export interface SiteService {
   last_service_date: string | null
   next_service_date: string | null
   deadline_tolerance_days: number
+  // Who performs the work (CDO / Engineer / Sub-contractor).
+  worker_type: WorkerType
+  // How the work is routed. Any of these may be set depending on worker_type;
+  // a directly-assigned engineer always overrides route/area resolution.
   route_id: string | null
+  area_id: string | null
+  subcontractor_id: string | null
   assigned_engineer_id: string | null
   reporting_emails: string[]
   defects_to_email: string | null
@@ -115,6 +148,8 @@ export interface SiteService {
   site?: Site
   service_type?: ServiceType
   route?: Route
+  area?: Area | null
+  subcontractor?: Subcontractor | null
   assigned_engineer?: Profile
 }
 
@@ -243,6 +278,9 @@ export interface TaskWithDetails extends Task {
   site_service: SiteService & {
     site: Site
     service_type: ServiceType
+    route?: Route | null
+    area?: Area | null
+    subcontractor?: Subcontractor | null
   }
   assigned_engineer: Profile | null
   task_result?: TaskResult

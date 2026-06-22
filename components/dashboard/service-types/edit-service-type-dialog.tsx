@@ -16,7 +16,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Loader2 } from 'lucide-react'
-import type { ServiceType } from '@/lib/types/database'
+import type { ServiceType, WorkerType } from '@/lib/types/database'
+import { WORKER_TYPE_LABELS } from '@/lib/assignment'
 import {
   Select,
   SelectContent,
@@ -38,6 +39,7 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
     description: serviceType.description || '',
     default_frequency_value: serviceType.default_frequency_value ?? serviceType.default_frequency_months ?? 12,
     default_frequency_unit: (serviceType.default_frequency_unit || 'months') as 'weeks' | 'months',
+    default_worker_type: (serviceType.default_worker_type || 'cdo') as WorkerType,
     defects_to_email: serviceType.defects_to_email || '',
   })
   const router = useRouter()
@@ -60,6 +62,7 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
         default_frequency_months: frequencyInMonths,
         default_frequency_value: formData.default_frequency_value,
         default_frequency_unit: formData.default_frequency_unit,
+        default_worker_type: formData.default_worker_type,
         defects_to_email: formData.defects_to_email.trim() || null,
       })
       .eq('id', serviceType.id)
@@ -132,6 +135,29 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="default-worker-type">Default delivered by</Label>
+              <Select
+                value={formData.default_worker_type}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, default_worker_type: value as WorkerType })
+                }
+              >
+                <SelectTrigger id="default-worker-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(['cdo', 'engineer', 'subcontractor'] as WorkerType[]).map((wt) => (
+                    <SelectItem key={wt} value={wt}>
+                      {WORKER_TYPE_LABELS[wt]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Who usually performs this service. Sets the default when added to a site.
+              </p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="defects-to-email">Defects to</Label>

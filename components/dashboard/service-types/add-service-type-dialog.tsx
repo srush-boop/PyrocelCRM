@@ -24,6 +24,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import type { WorkerType } from '@/lib/types/database'
+import { WORKER_TYPE_LABELS } from '@/lib/assignment'
 
 export function AddServiceTypeDialog() {
   const [open, setOpen] = useState(false)
@@ -33,6 +35,7 @@ export function AddServiceTypeDialog() {
     description: '',
     default_frequency_value: 12,
     default_frequency_unit: 'months' as 'weeks' | 'months',
+    default_worker_type: 'cdo' as WorkerType,
     defects_to_email: '',
   })
   const router = useRouter()
@@ -53,6 +56,7 @@ export function AddServiceTypeDialog() {
       default_frequency_months: frequencyInMonths,
       default_frequency_value: formData.default_frequency_value,
       default_frequency_unit: formData.default_frequency_unit,
+      default_worker_type: formData.default_worker_type,
       defects_to_email: formData.defects_to_email.trim() || null,
     })
 
@@ -68,6 +72,7 @@ export function AddServiceTypeDialog() {
         description: '',
         default_frequency_value: 12,
         default_frequency_unit: 'months',
+        default_worker_type: 'cdo',
         defects_to_email: '',
       })
       router.refresh()
@@ -138,6 +143,30 @@ export function AddServiceTypeDialog() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="default-worker-type">Default delivered by</Label>
+              <Select
+                value={formData.default_worker_type}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, default_worker_type: value as WorkerType })
+                }
+              >
+                <SelectTrigger id="default-worker-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(['cdo', 'engineer', 'subcontractor'] as WorkerType[]).map((wt) => (
+                    <SelectItem key={wt} value={wt}>
+                      {WORKER_TYPE_LABELS[wt]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Who usually performs this service. Sets the default when added to a site; can be
+                overridden per site.
+              </p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="defects-to-email">Defects to</Label>

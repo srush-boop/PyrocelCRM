@@ -18,6 +18,8 @@ import type {
   Profile,
   Site,
   Route,
+  Area,
+  Subcontractor,
   ServiceType,
   SiteService,
   Task,
@@ -63,13 +65,15 @@ export default async function SiteDetailPage({ params }: PageProps) {
     notFound()
   }
 
-  const [siteServicesResult, serviceTypesResult, engineersResult, routesResult] = await Promise.all([
+  const [siteServicesResult, serviceTypesResult, engineersResult, routesResult, areasResult, subcontractorsResult] = await Promise.all([
     supabase
       .from('site_services')
       .select(`
         *,
         service_type:service_types(*),
         route:routes(*),
+        area:areas(*),
+        subcontractor:subcontractors(*),
         assigned_engineer:profiles(*)
       `)
       .eq('site_id', id),
@@ -80,12 +84,16 @@ export default async function SiteDetailPage({ params }: PageProps) {
       .eq('role', 'engineer')
       .order('full_name'),
     supabase.from('routes').select('*').order('name'),
+    supabase.from('areas').select('*').order('name'),
+    supabase.from('subcontractors').select('*').eq('status', 'active').order('name'),
   ])
 
   const siteServices = (siteServicesResult.data || []) as (SiteService & { service_type: ServiceType })[]
   const serviceTypes = (serviceTypesResult.data || []) as ServiceType[]
   const engineers = (engineersResult.data || []) as Profile[]
   const routes = (routesResult.data || []) as Route[]
+  const areas = (areasResult.data || []) as Area[]
+  const subcontractors = (subcontractorsResult.data || []) as Subcontractor[]
 
   // Get tasks for this site's services
   const siteServiceIds = siteServices.map(ss => ss.id)
@@ -314,6 +322,8 @@ export default async function SiteDetailPage({ params }: PageProps) {
           availableServiceTypes={availableServiceTypes}
           engineers={engineers}
           routes={routes}
+          areas={areas}
+          subcontractors={subcontractors}
           tasks={tasks}
           siteStatus={(site as Site).status}
         />

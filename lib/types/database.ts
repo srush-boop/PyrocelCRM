@@ -84,6 +84,9 @@ export interface Site {
   reporting_emails: string[]
   has_remote_monitoring: boolean
   remote_monitoring_type: RemoteMonitoringType | null
+  monitoring_station_name: string | null
+  monitoring_station_phone: string | null
+  monitoring_station_url: string | null
   route_position: number | null
   created_at: string
   updated_at: string

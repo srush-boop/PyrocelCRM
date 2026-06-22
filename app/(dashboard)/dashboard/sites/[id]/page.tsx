@@ -249,16 +249,55 @@ export default async function SiteDetailPage({ params }: PageProps) {
                 </div>
               </div>
             )}
-            <div className="flex items-center gap-2 text-sm pt-2 border-t">
-              <Radio className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className="text-muted-foreground">Remote Monitoring: </span>
-              {(site as Site).has_remote_monitoring ? (
-                <Badge variant="secondary" className="text-xs">
-                  {REMOTE_MONITORING_LABELS[(site as Site).remote_monitoring_type ?? 'fire']}
-                </Badge>
-              ) : (
-                <span>None</span>
-              )}
+            <div className="pt-2 border-t">
+              <div className="flex items-center gap-2 text-sm">
+                <Radio className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="text-muted-foreground">Remote Monitoring: </span>
+                {(site as Site).has_remote_monitoring ? (
+                  <Badge variant="secondary" className="text-xs">
+                    {REMOTE_MONITORING_LABELS[(site as Site).remote_monitoring_type ?? 'fire']}
+                  </Badge>
+                ) : (
+                  <span>None</span>
+                )}
+              </div>
+              {(site as Site).has_remote_monitoring &&
+                ((site as Site).monitoring_station_name ||
+                  (site as Site).monitoring_station_phone ||
+                  (site as Site).monitoring_station_url) && (
+                  <div className="mt-2 ml-6 grid gap-1 text-sm">
+                    {(site as Site).monitoring_station_name && (
+                      <div>
+                        <span className="text-muted-foreground">Station: </span>
+                        {(site as Site).monitoring_station_name}
+                      </div>
+                    )}
+                    {(site as Site).monitoring_station_phone && (
+                      <div>
+                        <span className="text-muted-foreground">Phone: </span>
+                        <a
+                          href={`tel:${(site as Site).monitoring_station_phone}`}
+                          className="text-primary hover:underline"
+                        >
+                          {(site as Site).monitoring_station_phone}
+                        </a>
+                      </div>
+                    )}
+                    {(site as Site).monitoring_station_url && (
+                      <div className="truncate">
+                        <span className="text-muted-foreground">Portal: </span>
+                        <a
+                          href={(site as Site).monitoring_station_url ?? '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          {(site as Site).monitoring_station_url}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
             </div>
             {site.notes && (
               <div className="text-sm pt-2 border-t">

@@ -53,6 +53,9 @@ export function EditSiteDialog({ site, routes, clients, open, onOpenChange }: Ed
       | 'fire'
       | 'fire_and_fault'
       | 'fault',
+    monitoring_station_name: site.monitoring_station_name || '',
+    monitoring_station_phone: site.monitoring_station_phone || '',
+    monitoring_station_url: site.monitoring_station_url || '',
   })
   const [reportingEmails, setReportingEmails] = useState<string[]>(site.reporting_emails || [])
   const [newReportingEmail, setNewReportingEmail] = useState('')
@@ -90,6 +93,15 @@ export function EditSiteDialog({ site, routes, clients, open, onOpenChange }: Ed
         client_id: formData.client_id || null,
         remote_monitoring_type: formData.has_remote_monitoring
           ? formData.remote_monitoring_type || null
+          : null,
+        monitoring_station_name: formData.has_remote_monitoring
+          ? formData.monitoring_station_name.trim() || null
+          : null,
+        monitoring_station_phone: formData.has_remote_monitoring
+          ? formData.monitoring_station_phone.trim() || null
+          : null,
+        monitoring_station_url: formData.has_remote_monitoring
+          ? formData.monitoring_station_url.trim() || null
           : null,
         reporting_emails: reportingEmails,
         updated_at: new Date().toISOString(),
@@ -287,26 +299,63 @@ export function EditSiteDialog({ site, routes, clients, open, onOpenChange }: Ed
                 />
               </div>
               {formData.has_remote_monitoring && (
-                <div className="mt-4 grid gap-2">
-                  <Label htmlFor="remote_monitoring_type">Monitoring Type</Label>
-                  <Select
-                    value={formData.remote_monitoring_type}
-                    onValueChange={(value) =>
-                      setFormData({
-                        ...formData,
-                        remote_monitoring_type: value as 'fire' | 'fire_and_fault' | 'fault',
-                      })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select what is monitored" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="fire">Fire</SelectItem>
-                      <SelectItem value="fire_and_fault">Fire and Fault</SelectItem>
-                      <SelectItem value="fault">Fault only</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="mt-4 grid gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="remote_monitoring_type">Monitoring Type</Label>
+                    <Select
+                      value={formData.remote_monitoring_type}
+                      onValueChange={(value) =>
+                        setFormData({
+                          ...formData,
+                          remote_monitoring_type: value as 'fire' | 'fire_and_fault' | 'fault',
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select what is monitored" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="fire">Fire</SelectItem>
+                        <SelectItem value="fire_and_fault">Fire and Fault</SelectItem>
+                        <SelectItem value="fault">Fault only</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="monitoring_station_name">Monitoring Station Name</Label>
+                    <Input
+                      id="monitoring_station_name"
+                      value={formData.monitoring_station_name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, monitoring_station_name: e.target.value })
+                      }
+                      placeholder="e.g., ABC Alarm Receiving Centre"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="monitoring_station_phone">Station Phone</Label>
+                    <Input
+                      id="monitoring_station_phone"
+                      type="tel"
+                      value={formData.monitoring_station_phone}
+                      onChange={(e) =>
+                        setFormData({ ...formData, monitoring_station_phone: e.target.value })
+                      }
+                      placeholder="e.g., 0800 123 4567"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="monitoring_station_url">Station Website / Portal URL</Label>
+                    <Input
+                      id="monitoring_station_url"
+                      type="url"
+                      value={formData.monitoring_station_url}
+                      onChange={(e) =>
+                        setFormData({ ...formData, monitoring_station_url: e.target.value })
+                      }
+                      placeholder="https://..."
+                    />
+                  </div>
                 </div>
               )}
             </div>

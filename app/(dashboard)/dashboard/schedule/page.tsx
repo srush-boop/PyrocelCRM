@@ -62,9 +62,9 @@ export default async function SchedulePage() {
 
     sites = (sitesResult.data || []) as Site[]
     engineers = (engineersResult.data || []) as Profile[]
-    // Dead sites are paused: do not allow scheduling new tasks for them
+    // Dead sites and dead service types are paused: do not allow scheduling new tasks for them
     siteServices = ((siteServicesResult.data || []) as (SiteService & { site: Site; service_type: ServiceType })[])
-      .filter((ss) => ss.site?.status !== 'dead')
+      .filter((ss) => ss.site?.status !== 'dead' && ss.service_type?.status !== 'dead')
   }
 
   return (

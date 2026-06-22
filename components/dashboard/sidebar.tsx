@@ -44,7 +44,7 @@ const adminNavItems = [
   { title: 'Extinguishers', href: '/dashboard/extinguishers', icon: FireExtinguisher },
   { title: 'Routes', href: '/dashboard/routes', icon: Route },
   { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
-  { title: 'Engineers', href: '/dashboard/engineers', icon: Users },
+  { title: 'Users', href: '/dashboard/engineers', icon: Users },
   { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
   { title: 'Service Types', href: '/dashboard/service-types', icon: Wrench },
   { title: 'Checklists', href: '/dashboard/checklists', icon: ClipboardList },

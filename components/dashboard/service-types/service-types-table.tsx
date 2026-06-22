@@ -12,6 +12,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -57,6 +58,7 @@ export function ServiceTypesTable({ serviceTypes }: ServiceTypesTableProps) {
           <TableHeader>
             <TableRow>
               <TableHead>Service Name</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead>Description</TableHead>
               <TableHead>Default Frequency</TableHead>
               <TableHead className="w-[70px]"></TableHead>
@@ -65,7 +67,7 @@ export function ServiceTypesTable({ serviceTypes }: ServiceTypesTableProps) {
           <TableBody>
             {serviceTypes.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="h-24 text-center">
+                <TableCell colSpan={5} className="h-24 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <Wrench className="h-8 w-8 text-muted-foreground/50 mb-2" />
                     <p className="text-muted-foreground">No service types found</p>
@@ -76,6 +78,11 @@ export function ServiceTypesTable({ serviceTypes }: ServiceTypesTableProps) {
               serviceTypes.map((serviceType) => (
                 <TableRow key={serviceType.id}>
                   <TableCell className="font-medium">{serviceType.name}</TableCell>
+                  <TableCell>
+                    <Badge variant={(serviceType.status || 'live') === 'live' ? 'default' : 'destructive'}>
+                      {serviceType.status || 'live'}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="text-muted-foreground">
                     {serviceType.description || '-'}
                   </TableCell>

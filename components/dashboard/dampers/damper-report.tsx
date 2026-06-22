@@ -33,7 +33,7 @@ export function DamperReport({ task, inspections, template, referenceNumber }: D
   const serviceType = task.site_service?.service_type
   const engineer = task.assigned_engineer
   const headerColor = template?.header_color || '#c8102e'
-  const companyName = template?.company_name || 'Pyrocel Fire & Security'
+  const companyName = template?.company_name || 'Pyrocel Ltd'
   const sections = template?.sections || {}
 
   const stats = useMemo(() => {
@@ -87,7 +87,13 @@ export function DamperReport({ task, inspections, template, referenceNumber }: D
       .filter((g) => g.count > 0)
   }, [inspections])
 
-  const photoCount = photoGroups.reduce((sum, g) => sum + g.count, 0)
+  // Per-inspection photo lookup so each damper's checklist can render its
+  // photo evidence alongside it.
+  const photosByInsp = useMemo(() => {
+    const map = new Map<string, { cats: ReturnType<typeof emptyPhotoCategories>; count: number }>()
+    for (const g of photoGroups) map.set(g.insp.id, { cats: g.cats, count: g.count })
+    return map
+  }, [photoGroups])
 
   useEffect(() => {
     const t = setTimeout(() => window.print(), 600)
@@ -294,128 +300,120 @@ export function DamperReport({ task, inspections, template, referenceNumber }: D
           </div>
         </section>
 
-        {/* Per-damper inspection checklist */}
+        {/* Per-damper inspection details: checklist alongside photo evidence */}
         {inspections.length > 0 && (
           <section className="mb-8">
             <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
-              Inspection Checklist
+              Inspection Details
             </h2>
             <div className="space-y-4">
-              {inspections.map((insp) => (
-                <div key={insp.id} className="avoid-break rounded-md border p-4">
-                  <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
-                    <span className="font-mono font-semibold">{insp.damper?.urn || '-'}</span>
-                    {insp.damper?.location && (
-                      <span className="text-muted-foreground">{insp.damper.location}</span>
-                    )}
-                    {insp.damper?.floor && (
-                      <span className="text-muted-foreground">· {insp.damper.floor}</span>
-                    )}
-                    <span
-                      className="ml-auto inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
-                      style={{ backgroundColor: RESULT_COLORS[insp.overall_result] }}
-                    >
-                      {RESULT_LABELS[insp.overall_result]}
-                    </span>
-                  </div>
-
-                  {insp.accessible ? (
-                    <div className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
-                      {CHECK_ITEMS.map((item) => (
-                        <CheckRow
-                          key={item.key}
-                          label={item.label}
-                          value={insp[item.key as keyof DamperInspection] as boolean | null}
-                        />
-                      ))}
-                      {insp.condition && (
-                        <div className="flex items-center justify-between gap-3 border-t py-1 text-xs sm:col-span-2">
-                          <span className="text-muted-foreground">Overall condition</span>
-                          <span className="font-medium capitalize">{insp.condition}</span>
-                        </div>
+              {inspections.map((insp) => {
+                const photos = photosByInsp.get(insp.id)
+                return (
+                  <div key={insp.id} className="avoid-break rounded-md border p-4">
+                    <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+                      <span className="font-mono font-semibold">{insp.damper?.urn || '-'}</span>
+                      {insp.damper?.location && (
+                        <span className="text-muted-foreground">{insp.damper.location}</span>
                       )}
+                      {insp.damper?.floor && (
+                        <span className="text-muted-foreground">· {insp.damper.floor}</span>
+                      )}
+                      <span
+                        className="ml-auto inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
+                        style={{ backgroundColor: RESULT_COLORS[insp.overall_result] }}
+                      >
+                        {RESULT_LABELS[insp.overall_result]}
+                      </span>
                     </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      Not accessible for testing.
-                      {insp.access_notes ? ` ${insp.access_notes}` : ''}
-                    </p>
-                  )}
 
-                  {(insp.overall_result === 'fail' || insp.overall_result === 'remedial') &&
-                    insp.remedial_action && (
-                      <p className="mt-2 border-t pt-2 text-xs">
-                        <span className="font-semibold">Remedial: </span>
-                        {insp.remedial_action}
+                    <div className="grid gap-x-6 gap-y-4 md:grid-cols-2">
+                      {/* Checklist results */}
+                      <div>
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Checklist Results
+                        </p>
+                        {insp.accessible ? (
+                          <div className="grid gap-y-1.5">
+                            {CHECK_ITEMS.map((item) => (
+                              <CheckRow
+                                key={item.key}
+                                label={item.label}
+                                value={insp[item.key as keyof DamperInspection] as boolean | null}
+                              />
+                            ))}
+                            {insp.condition && (
+                              <div className="flex items-center justify-between gap-3 border-t py-1 text-xs">
+                                <span className="text-muted-foreground">Overall condition</span>
+                                <span className="font-medium capitalize">{insp.condition}</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            Not accessible for testing.
+                            {insp.access_notes ? ` ${insp.access_notes}` : ''}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Photo evidence */}
+                      <div>
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Photo Evidence{photos ? ` (${photos.count})` : ''}
+                        </p>
+                        {photos ? (
+                          <div className="space-y-3">
+                            {PHOTO_CATEGORIES.map((cat) => {
+                              const urls = photos.cats[cat.key]
+                              if (!urls || urls.length === 0) return null
+                              return (
+                                <div key={cat.key} className="avoid-break">
+                                  <p className="mb-1.5 text-[11px] font-semibold text-muted-foreground">
+                                    {cat.label}
+                                  </p>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    {urls.map((url, idx) => (
+                                      <div
+                                        key={url}
+                                        className="avoid-break relative aspect-[4/3] w-full overflow-hidden rounded-md border bg-muted"
+                                      >
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img
+                                          src={url || '/placeholder.svg'}
+                                          alt={`${insp.damper?.urn || 'Damper'} — ${cat.label} ${idx + 1}`}
+                                          crossOrigin="anonymous"
+                                          className="absolute inset-0 h-full w-full object-cover"
+                                        />
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">No photos recorded.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {(insp.overall_result === 'fail' || insp.overall_result === 'remedial') &&
+                      insp.remedial_action && (
+                        <p className="mt-3 border-t pt-2 text-xs">
+                          <span className="font-semibold">Remedial: </span>
+                          {insp.remedial_action}
+                        </p>
+                      )}
+                    {insp.comments && (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        <span className="font-semibold">Notes: </span>
+                        {insp.comments}
                       </p>
                     )}
-                  {insp.comments && (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      <span className="font-semibold">Notes: </span>
-                      {insp.comments}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Photographic evidence */}
-        {photoGroups.length > 0 && (
-          <section className="mb-8">
-            <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
-              Photographic Evidence ({photoCount})
-            </h2>
-            <div className="space-y-6">
-              {photoGroups.map(({ insp, cats }) => (
-                <div key={insp.id} className="avoid-break rounded-md border p-3">
-                  <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
-                    <span className="font-mono font-semibold">{insp.damper?.urn || '-'}</span>
-                    {insp.damper?.location && (
-                      <span className="text-muted-foreground">{insp.damper.location}</span>
-                    )}
-                    {insp.damper?.floor && (
-                      <span className="text-muted-foreground">· {insp.damper.floor}</span>
-                    )}
-                    <span
-                      className="ml-auto inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
-                      style={{ backgroundColor: RESULT_COLORS[insp.overall_result] }}
-                    >
-                      {RESULT_LABELS[insp.overall_result]}
-                    </span>
                   </div>
-                  <div className="space-y-3">
-                    {PHOTO_CATEGORIES.map((cat) => {
-                      const urls = cats[cat.key]
-                      if (!urls || urls.length === 0) return null
-                      return (
-                        <div key={cat.key} className="avoid-break">
-                          <p className="mb-1.5 text-xs font-semibold text-muted-foreground">
-                            {cat.label}
-                          </p>
-                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                            {urls.map((url, idx) => (
-                              <div
-                                key={url}
-                                className="avoid-break overflow-hidden rounded-md border bg-muted"
-                              >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={url || '/placeholder.svg'}
-                                  alt={`${insp.damper?.urn || 'Damper'} — ${cat.label} ${idx + 1}`}
-                                  crossOrigin="anonymous"
-                                  className="aspect-[4/3] h-full w-full object-cover"
-                                />
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </section>
         )}

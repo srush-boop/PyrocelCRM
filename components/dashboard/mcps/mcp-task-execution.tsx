@@ -20,6 +20,15 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import {
   ArrowLeft,
   MapPin,
   Calendar,
@@ -32,10 +41,12 @@ import {
   BellRing,
   ArrowRight,
   History,
+  Plus,
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
-import { McpInspectionCard, type McpInspectionState } from './mcp-inspection-card'
+import { generateMcpUrn, TEST_KEY_TYPES } from '@/lib/mcps'
+import { McpInspectionCard, type McpInspectionState, type CheckValue } from './mcp-inspection-card'
 import type { Profile, TaskWithDetails, Mcp, McpInspection } from '@/lib/types/database'
 
 interface McpTaskExecutionProps {
@@ -50,12 +61,13 @@ interface McpTaskExecutionProps {
 }
 
 function blankState(): McpInspectionState {
-  return { result: 'pass', comments: '', photos: [], touched: false }
+  return { result: 'pass', checklist: {}, comments: '', photos: [], touched: false }
 }
 
 function stateFromInspection(insp: McpInspection): McpInspectionState {
   return {
     result: insp.result,
+    checklist: (insp.checklist as Record<string, CheckValue>) || {},
     comments: insp.comments || '',
     photos: insp.photos || [],
     touched: true,
@@ -81,6 +93,19 @@ export function McpTaskExecution({
   const router = useRouter()
   const supabase = createClient()
 
+  // Engineers can register new call points during the test, so keep a local
+  // copy of the register that we can append to without losing in-progress state.
+  const [mcpList, setMcpList] = useState<Mcp[]>(mcps)
+  const [addOpen, setAddOpen] = useState(false)
+  const [addSaving, setAddSaving] = useState(false)
+  const [addForm, setAddForm] = useState({
+    map_reference: '',
+    floor: '',
+    location: '',
+    test_key_type: '',
+    notes: '',
+  })
+
   const [states, setStates] = useState<Record<string, McpInspectionState>>(() => {
     const map: Record<string, McpInspectionState> = {}
     for (const mcp of mcps) {
@@ -92,6 +117,34 @@ export function McpTaskExecution({
 
   const canEdit = status !== 'completed' && status !== 'cancelled'
 
+  const handleAddMcp = async () => {
+    setAddSaving(true)
+    const { data, error } = await supabase
+      .from('mcps')
+      .insert({
+        site_id: site?.id,
+        urn: generateMcpUrn(),
+        map_reference: addForm.map_reference || null,
+        floor: addForm.floor || null,
+        location: addForm.location || null,
+        test_key_type: addForm.test_key_type || null,
+        notes: addForm.notes || null,
+        photos: [],
+      })
+      .select()
+      .single()
+    setAddSaving(false)
+    if (error || !data) {
+      console.log('[v0] Add call point error:', error?.message)
+      return
+    }
+    const newMcp = data as Mcp
+    setMcpList((prev) => [...prev, newMcp])
+    setStates((prev) => ({ ...prev, [newMcp.id]: blankState() }))
+    setAddForm({ map_reference: '', floor: '', location: '', test_key_type: '', notes: '' })
+    setAddOpen(false)
+  }
+
   const summary = useMemo(() => {
     const values = Object.values(states)
     const tested = values.filter((s) => s.touched).length
@@ -99,10 +152,10 @@ export function McpTaskExecution({
     const failed = values.filter((s) => s.touched && s.result === 'fail').length
     const remedial = values.filter((s) => s.touched && s.result === 'remedial').length
     const na = values.filter((s) => s.touched && s.result === 'na').length
-    return { total: mcps.length, tested, passed, failed, remedial, na }
-  }, [states, mcps.length])
+    return { total: mcpList.length, tested, passed, failed, remedial, na }
+  }, [states, mcpList.length])
 
-  const filtered = mcps.filter((m) => {
+  const filtered = mcpList.filter((m) => {
     const q = search.toLowerCase()
     return (
       (m.urn || '').toLowerCase().includes(q) ||
@@ -115,12 +168,12 @@ export function McpTaskExecution({
   // Weekly rotation: the call point tested last week, and the one due next
   // (the next item in the ordered register, wrapping back to the start).
   const { lastTestedMcp, nextMcp } = useMemo(() => {
-    if (mcps.length === 0) return { lastTestedMcp: null, nextMcp: null }
-    const lastIdx = lastTestedMcpId ? mcps.findIndex((m) => m.id === lastTestedMcpId) : -1
-    const last = lastIdx >= 0 ? mcps[lastIdx] : null
-    const next = mcps[(lastIdx + 1) % mcps.length]
+    if (mcpList.length === 0) return { lastTestedMcp: null, nextMcp: null }
+    const lastIdx = lastTestedMcpId ? mcpList.findIndex((m) => m.id === lastTestedMcpId) : -1
+    const last = lastIdx >= 0 ? mcpList[lastIdx] : null
+    const next = mcpList[(lastIdx + 1) % mcpList.length]
     return { lastTestedMcp: last, nextMcp: next }
-  }, [mcps, lastTestedMcpId])
+  }, [mcpList, lastTestedMcpId])
 
   const describeMcp = (m: Mcp) =>
     [m.map_reference ? `Map ${m.map_reference}` : null, m.location, m.floor]
@@ -142,7 +195,7 @@ export function McpTaskExecution({
 
   const buildRows = () => {
     const today = new Date().toISOString().split('T')[0]
-    return mcps
+    return mcpList
       .filter((m) => states[m.id].touched)
       .map((m) => {
         const s = states[m.id]
@@ -152,6 +205,7 @@ export function McpTaskExecution({
           inspector_id: profile.id,
           inspection_date: today,
           result: s.result,
+          checklist: s.checklist,
           comments: s.comments || null,
           photos: s.photos,
         }
@@ -224,15 +278,17 @@ export function McpTaskExecution({
       .update({ last_service_date: today })
       .eq('id', task.site_service_id)
 
-    // Generate next recurring task if site live
+    // Generate next recurring task if both the site and service type are live
     const { data: ss } = await supabase
       .from('site_services')
-      .select('frequency_value, frequency_unit, anchor_next_to_schedule, site:sites!inner(status)')
+      .select('frequency_value, frequency_unit, anchor_next_to_schedule, site:sites!inner(status), service_type:service_types!inner(status)')
       .eq('id', task.site_service_id)
       .single()
     const siteRel = (ss as { site?: { status?: string } | { status?: string }[] } | null)?.site
     const siteStatus = Array.isArray(siteRel) ? siteRel[0]?.status : siteRel?.status
-    if (ss && siteStatus === 'live') {
+    const serviceRel = (ss as { service_type?: { status?: string } | { status?: string }[] } | null)?.service_type
+    const serviceStatus = Array.isArray(serviceRel) ? serviceRel[0]?.status : serviceRel?.status
+    if (ss && siteStatus === 'live' && serviceStatus !== 'dead') {
       const nextDateStr = toDateString(
         computeNextScheduledDate(ss, { completedAt, scheduledDate: task.scheduled_date }),
       )
@@ -302,7 +358,7 @@ export function McpTaskExecution({
         </CardContent>
       </Card>
 
-      {mcps.length > 0 && nextMcp && (
+      {mcpList.length > 0 && nextMcp && (
         <Card className="border-primary/40 bg-primary/5">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -366,26 +422,40 @@ export function McpTaskExecution({
             </CardContent>
           </Card>
 
-          {mcps.length === 0 ? (
+          {mcpList.length === 0 ? (
             <Card>
-              <CardContent className="py-8 text-center text-muted-foreground">
-                No manual call points are registered for this site yet. Add them on the{' '}
-                <Link href={`/dashboard/sites/${site?.id}`} className="text-primary hover:underline">
-                  site page
-                </Link>{' '}
-                first.
+              <CardContent className="flex flex-col items-center gap-4 py-8 text-center text-muted-foreground">
+                <p>No manual call points are registered for this site yet.</p>
+                {canEdit && (
+                  <Button onClick={() => setAddOpen(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add a call point
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ) : (
             <div className="space-y-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search call points…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-9"
-                />
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search call points…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                {canEdit && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setAddOpen(true)}
+                    className="shrink-0 bg-transparent"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add call point
+                  </Button>
+                )}
               </div>
               {filtered.map((mcp) => (
                 <div
@@ -414,7 +484,7 @@ export function McpTaskExecution({
         </>
       )}
 
-      {status === 'in_progress' && canEdit && mcps.length > 0 && (
+      {status === 'in_progress' && canEdit && mcpList.length > 0 && (
         <div className="fixed bottom-0 left-0 right-0 flex gap-2 border-t bg-background p-4 md:relative md:border-0 md:p-0">
           <Button variant="outline" onClick={handleSave} disabled={saving} className="flex-1">
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
@@ -437,6 +507,82 @@ export function McpTaskExecution({
           </div>
         </div>
       )}
+
+      {/* Add call point — lets engineers register a call point found on site */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Call Point</DialogTitle>
+            <DialogDescription>
+              A unique URN will be generated automatically for this call point.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="add-map-ref">Map reference</Label>
+                <Input
+                  id="add-map-ref"
+                  value={addForm.map_reference}
+                  onChange={(e) => setAddForm({ ...addForm, map_reference: e.target.value })}
+                  placeholder="e.g. MCP-3"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="add-floor">Floor</Label>
+                <Input
+                  id="add-floor"
+                  value={addForm.floor}
+                  onChange={(e) => setAddForm({ ...addForm, floor: e.target.value })}
+                  placeholder="e.g. Ground"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="add-location">Location</Label>
+              <Input
+                id="add-location"
+                value={addForm.location}
+                onChange={(e) => setAddForm({ ...addForm, location: e.target.value })}
+                placeholder="e.g. Main entrance lobby"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="add-test-key">Test key type</Label>
+              <Input
+                id="add-test-key"
+                list="mcp-test-key-types"
+                value={addForm.test_key_type}
+                onChange={(e) => setAddForm({ ...addForm, test_key_type: e.target.value })}
+                placeholder="e.g. Standard reset key"
+              />
+              <datalist id="mcp-test-key-types">
+                {TEST_KEY_TYPES.map((t) => (
+                  <option key={t} value={t} />
+                ))}
+              </datalist>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="add-notes">Notes</Label>
+              <Input
+                id="add-notes"
+                value={addForm.notes}
+                onChange={(e) => setAddForm({ ...addForm, notes: e.target.value })}
+                placeholder="Optional"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddOpen(false)} disabled={addSaving}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddMcp} disabled={addSaving}>
+              {addSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+              Add call point
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={showSubmit} onOpenChange={setShowSubmit}>
         <AlertDialogContent>

@@ -64,6 +64,7 @@ export interface ServiceType {
   icon?: string | null
   defects_to_email: string | null
   default_worker_type: WorkerType
+  status: 'live' | 'dead'
   created_at: string
 }
 
@@ -403,6 +404,7 @@ export interface McpInspection {
   inspector_id: string | null
   inspection_date: string
   result: McpResult
+  checklist?: Record<string, 'pass' | 'fail' | 'na'>
   comments: string | null
   photos: string[]
   created_at: string

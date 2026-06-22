@@ -19,12 +19,16 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import { ChevronDown, Camera, Loader2, X, CircleDashed } from 'lucide-react'
+import { ChevronDown, Camera, Loader2, X, CircleDashed, Check, Minus } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { MCP_CHECKLIST } from '@/lib/mcps'
 import type { Mcp, McpResult } from '@/lib/types/database'
+
+export type CheckValue = 'pass' | 'fail' | 'na'
 
 export interface McpInspectionState {
   result: McpResult
+  checklist: Record<string, CheckValue>
   comments: string
   photos: string[]
   touched: boolean
@@ -43,6 +47,17 @@ export function McpInspectionCard({ mcp, state, disabled = false, onChange }: Mc
   const supabase = createClient()
 
   const set = (patch: Partial<McpInspectionState>) => onChange({ ...state, ...patch, touched: true })
+
+  // Toggle an individual checklist item. If any item is failed, the overall
+  // result is bumped to at least "remedial" so defect comments/photos apply.
+  const setCheck = (itemId: string, value: CheckValue) => {
+    const checklist = { ...state.checklist, [itemId]: value }
+    const anyFail = Object.values(checklist).some((v) => v === 'fail')
+    let result = state.result
+    if (anyFail && result === 'pass') result = 'remedial'
+    if (!anyFail && result === 'remedial') result = 'pass'
+    onChange({ ...state, checklist, result, touched: true })
+  }
 
   const handlePhotos = async (files: FileList | null) => {
     if (!files || files.length === 0) return
@@ -162,8 +177,53 @@ export function McpInspectionCard({ mcp, state, disabled = false, onChange }: Mc
           </div>
         )}
 
+        {/* Per-call-point checklist */}
         <div className="grid gap-2">
-          <Label>Test result</Label>
+          <Label className="text-sm font-semibold">Test checklist</Label>
+          <div className="divide-y rounded-md border">
+            {MCP_CHECKLIST.map((item) => {
+              const value = state.checklist[item.id]
+              return (
+                <div key={item.id} className="flex items-center justify-between gap-3 p-2.5">
+                  <span className="text-sm">{item.label}</span>
+                  <div className="flex shrink-0 gap-1">
+                    {(['pass', 'fail', 'na'] as CheckValue[]).map((opt) => {
+                      const active = value === opt
+                      return (
+                        <button
+                          key={opt}
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => setCheck(item.id, opt)}
+                          aria-pressed={active}
+                          aria-label={`${item.label}: ${opt}`}
+                          className={cn(
+                            'flex h-8 min-w-11 items-center justify-center rounded-md border px-2 text-xs font-medium transition-colors',
+                            opt === 'pass' &&
+                              active &&
+                              'border-primary bg-primary text-primary-foreground',
+                            opt === 'fail' &&
+                              active &&
+                              'border-destructive bg-destructive text-destructive-foreground',
+                            opt === 'na' && active && 'border-foreground bg-foreground text-background',
+                            !active && 'bg-background text-muted-foreground hover:bg-muted',
+                          )}
+                        >
+                          {opt === 'pass' && <Check className="h-3.5 w-3.5" />}
+                          {opt === 'fail' && <X className="h-3.5 w-3.5" />}
+                          {opt === 'na' && <Minus className="h-3.5 w-3.5" />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="grid gap-2">
+          <Label>Overall result</Label>
           <Select
             value={state.result}
             disabled={disabled}

@@ -213,21 +213,24 @@ export function TaskExecution({
       })
       .eq('id', task.site_service_id)
 
-    // Generate next recurring task if site is live
+    // Generate next recurring task if both the site and service type are live
     const { data: siteServiceData } = await supabase
       .from('site_services')
       .select(`
         frequency_value,
         frequency_unit,
         anchor_next_to_schedule,
-        site:sites!inner(id, status)
+        site:sites!inner(id, status),
+        service_type:service_types!inner(id, status)
       `)
       .eq('id', task.site_service_id)
       .single()
 
     const siteRel = (siteServiceData as { site?: { status?: string } | { status?: string }[] } | null)?.site
     const siteStatus = Array.isArray(siteRel) ? siteRel[0]?.status : siteRel?.status
-    if (siteServiceData && siteStatus === 'live') {
+    const serviceRel = (siteServiceData as { service_type?: { status?: string } | { status?: string }[] } | null)?.service_type
+    const serviceStatus = Array.isArray(serviceRel) ? serviceRel[0]?.status : serviceRel?.status
+    if (siteServiceData && siteStatus === 'live' && serviceStatus !== 'dead') {
       // Calculate next scheduled date based on frequency + anchor preference
       const nextDate = computeNextScheduledDate(siteServiceData, {
         completedAt,

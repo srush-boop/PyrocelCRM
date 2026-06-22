@@ -84,6 +84,17 @@ export function DamperInspectionCard({
 
   const set = (patch: Partial<InspectionState>) => onChange({ ...state, ...patch, touched: true })
 
+  // Toggle a checklist item. If any item is failed, default the overall result
+  // to "fail"; if none are failed, revert an auto-set "fail" back to "pass".
+  const setCheck = (field: keyof InspectionState, value: boolean) => {
+    const next = { ...state, [field]: value }
+    const anyFail = CHECK_ITEMS.some((i) => next[i.key] === false)
+    let overall_result = state.overall_result
+    if (anyFail) overall_result = 'fail'
+    else if (state.overall_result === 'fail') overall_result = 'pass'
+    onChange({ ...next, overall_result, touched: true })
+  }
+
   // Tick every checklist item as satisfactory and mark the overall result as pass.
   const passAllChecks = () => {
     const allPassed = Object.fromEntries(CHECK_ITEMS.map((i) => [i.key, true]))
@@ -162,7 +173,7 @@ export function DamperInspectionCard({
           size="sm"
           variant={value === true ? 'default' : 'outline'}
           disabled={disabled}
-          onClick={() => set({ [field]: true } as Partial<InspectionState>)}
+          onClick={() => setCheck(field, true)}
           className={cn('h-8 px-3', value === true && 'bg-green-600 hover:bg-green-700')}
         >
           <CheckCircle2 className="h-4 w-4" />
@@ -172,7 +183,7 @@ export function DamperInspectionCard({
           size="sm"
           variant={value === false ? 'default' : 'outline'}
           disabled={disabled}
-          onClick={() => set({ [field]: false } as Partial<InspectionState>)}
+          onClick={() => setCheck(field, false)}
           className={cn('h-8 px-3', value === false && 'bg-destructive hover:bg-destructive/90')}
         >
           <XCircle className="h-4 w-4" />

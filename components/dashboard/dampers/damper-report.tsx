@@ -21,22 +21,25 @@ import { getServiceIcon } from '@/lib/service-icons'
 import { PYROCEL_RED } from '@/lib/service-colors'
 import { RESULT_COLORS, RESULT_LABELS, PHOTO_CATEGORIES, emptyPhotoCategories } from '@/lib/dampers'
 import { CHECK_ITEMS } from './damper-inspection-card'
-import type { TaskWithDetails, DamperInspection, Damper, ReportTemplate, DamperResult } from '@/lib/types/database'
+import type { TaskWithDetails, DamperInspection, Damper, ReportTemplate, DamperResult, CompanyInfo } from '@/lib/types/database'
 
 interface DamperReportProps {
   task: TaskWithDetails
   inspections: (DamperInspection & { damper: Damper | null })[]
   template: ReportTemplate | null
   referenceNumber?: string | null
+  companyInfo?: CompanyInfo | null
 }
 
-export function DamperReport({ task, inspections, template, referenceNumber }: DamperReportProps) {
+export function DamperReport({ task, inspections, template, referenceNumber, companyInfo }: DamperReportProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
   const engineer = task.assigned_engineer
   const headerColor = serviceType?.color || template?.header_color || PYROCEL_RED
-  const companyName = template?.company_name || 'Pyrocel Ltd'
+  const companyName = companyInfo?.name || template?.company_name || 'Pyrocel Ltd'
   const sections = template?.sections || {}
+  // Company address on the report header comes from central Company Information.
+  const companyAddress = companyInfo?.address || sections.company_address || null
   const ServiceIcon = getServiceIcon(serviceType?.name)
 
   const stats = useMemo(() => {
@@ -136,9 +139,9 @@ export function DamperReport({ task, inspections, template, referenceNumber }: D
               <p className="text-xl font-extrabold uppercase tracking-wide leading-tight">
                 {companyName}
               </p>
-              {sections.company_address && (
-                <p className="text-xs text-white/80">{sections.company_address}</p>
-              )}
+                {companyAddress && (
+                  <p className="text-xs text-white/80">{companyAddress}</p>
+                )}
             </div>
           </div>
           <div className="flex items-center gap-3">

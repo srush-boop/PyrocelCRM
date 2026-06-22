@@ -7,6 +7,7 @@ import type {
   DamperInspection,
   Damper,
   ReportTemplate,
+  CompanyInfo,
 } from '@/lib/types/database'
 
 interface PageProps {
@@ -43,7 +44,7 @@ export default async function DamperReportPage({ params }: PageProps) {
 
   const serviceTypeId = task.site_service?.service_type_id
 
-  const [{ data: inspectionsData }, { data: templateData }, { data: resultData }] =
+  const [{ data: inspectionsData }, { data: templateData }, { data: resultData }, { data: companyData }] =
     await Promise.all([
       supabase
         .from('damper_inspections')
@@ -52,6 +53,7 @@ export default async function DamperReportPage({ params }: PageProps) {
         .order('inspection_date', { ascending: false }),
       supabase.from('report_templates').select('*').eq('service_type_id', serviceTypeId).maybeSingle(),
       supabase.from('task_results').select('reference_number').eq('task_id', taskId).maybeSingle(),
+      supabase.from('company_info').select('*').limit(1).maybeSingle(),
     ])
 
   const inspections = (inspectionsData || []) as (DamperInspection & { damper: Damper | null })[]
@@ -62,6 +64,7 @@ export default async function DamperReportPage({ params }: PageProps) {
       inspections={inspections}
       template={(templateData as ReportTemplate | null) ?? null}
       referenceNumber={resultData?.reference_number ?? null}
+      companyInfo={(companyData as CompanyInfo | null) ?? null}
     />
   )
 }

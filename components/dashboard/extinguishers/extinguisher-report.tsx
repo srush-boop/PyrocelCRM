@@ -33,6 +33,7 @@ import type {
   Extinguisher,
   ReportTemplate,
   ExtinguisherResult,
+  CompanyInfo,
 } from '@/lib/types/database'
 
 interface ExtinguisherReportProps {
@@ -40,15 +41,18 @@ interface ExtinguisherReportProps {
   inspections: (ExtinguisherInspection & { extinguisher: Extinguisher | null })[]
   template: ReportTemplate | null
   referenceNumber?: string | null
+  companyInfo?: CompanyInfo | null
 }
 
-export function ExtinguisherReport({ task, inspections, template, referenceNumber }: ExtinguisherReportProps) {
+export function ExtinguisherReport({ task, inspections, template, referenceNumber, companyInfo }: ExtinguisherReportProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
   const engineer = task.assigned_engineer
   const headerColor = serviceType?.color || template?.header_color || PYROCEL_RED
-  const companyName = template?.company_name || 'Pyrocel Ltd'
+  const companyName = companyInfo?.name || template?.company_name || 'Pyrocel Ltd'
   const sections = template?.sections || {}
+  // Company address on the report header comes from central Company Information.
+  const companyAddress = companyInfo?.address || sections.company_address || null
   const ServiceIcon = getServiceIcon(serviceType?.name)
 
   const stats = useMemo(() => {
@@ -142,9 +146,9 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
               <p className="text-xl font-extrabold uppercase tracking-wide leading-tight">
                 {companyName}
               </p>
-              {sections.company_address && (
-                <p className="text-xs text-white/80">{sections.company_address}</p>
-              )}
+                {companyAddress && (
+                  <p className="text-xs text-white/80">{companyAddress}</p>
+                )}
             </div>
           </div>
           <div className="flex items-center gap-3">

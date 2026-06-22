@@ -20,12 +20,13 @@ import {
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { getServiceIcon } from '@/lib/service-icons'
-import type { TaskWithDetails, TaskResult, ReportTemplate } from '@/lib/types/database'
+import type { TaskWithDetails, TaskResult, ReportTemplate, CompanyInfo } from '@/lib/types/database'
 
 interface ServiceReportProps {
   task: TaskWithDetails
   result: TaskResult | null
   template: ReportTemplate | null
+  companyInfo?: CompanyInfo | null
 }
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
@@ -35,15 +36,17 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
   pending: { label: 'Pending', color: '#6b7280' },
 }
 
-export function ServiceReport({ task, result, template }: ServiceReportProps) {
+export function ServiceReport({ task, result, template, companyInfo }: ServiceReportProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
   const engineer = task.assigned_engineer
   // Header colour is driven by the service type's own colour, falling back to the template/default
   const headerColor =
     serviceType?.color || template?.header_color || '#0f172a'
-  const companyName = template?.company_name || 'Pyrocel Ltd'
+  const companyName = companyInfo?.name || template?.company_name || 'Pyrocel Ltd'
   const sections = template?.sections || {}
+  // Company address on the report header comes from central Company Information.
+  const companyAddress = companyInfo?.address || sections.company_address || null
   const ServiceIcon = getServiceIcon(serviceType?.name)
 
   const checklist = result?.checklist_results || []
@@ -115,8 +118,8 @@ export function ServiceReport({ task, result, template }: ServiceReportProps) {
               <p className="text-xl font-extrabold uppercase tracking-wide leading-tight">
                 {companyName}
               </p>
-              {sections.company_address && (
-                <p className="text-xs text-white/80">{sections.company_address}</p>
+              {companyAddress && (
+                <p className="text-xs text-white/80">{companyAddress}</p>
               )}
             </div>
           </div>

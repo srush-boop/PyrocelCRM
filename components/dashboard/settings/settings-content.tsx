@@ -8,16 +8,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { User, Lock, LogOut, Loader2 } from 'lucide-react'
+import { User, Lock, LogOut, Loader2, Building2 } from 'lucide-react'
 import type { User as AuthUser } from '@supabase/supabase-js'
-import type { Profile } from '@/lib/types/database'
+import type { Profile, CompanyInfo, Branch } from '@/lib/types/database'
+import { CompanySettings } from './company-settings'
 
 interface SettingsContentProps {
   user: AuthUser
   profile: Profile
+  company: CompanyInfo | null
+  branches: Branch[]
 }
 
-export function SettingsContent({ user, profile }: SettingsContentProps) {
+export function SettingsContent({ user, profile, company, branches }: SettingsContentProps) {
+  const isAdmin = profile.role === 'admin'
   const [fullName, setFullName] = useState(profile.full_name || '')
   const [loadingProfile, setLoadingProfile] = useState(false)
   const [loadingPassword, setLoadingPassword] = useState(false)
@@ -96,6 +100,12 @@ export function SettingsContent({ user, profile }: SettingsContentProps) {
           <Lock className="h-4 w-4" />
           Password
         </TabsTrigger>
+        {isAdmin && (
+          <TabsTrigger value="company" className="gap-2">
+            <Building2 className="h-4 w-4" />
+            Company
+          </TabsTrigger>
+        )}
       </TabsList>
 
       <TabsContent value="account" className="space-y-4">
@@ -211,6 +221,12 @@ export function SettingsContent({ user, profile }: SettingsContentProps) {
           </CardContent>
         </Card>
       </TabsContent>
+
+      {isAdmin && (
+        <TabsContent value="company" className="space-y-4">
+          <CompanySettings company={company} branches={branches} />
+        </TabsContent>
+      )}
 
       <Card>
         <CardHeader>

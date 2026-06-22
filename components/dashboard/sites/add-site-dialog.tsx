@@ -38,6 +38,7 @@ export function AddSiteDialog({ clients }: AddSiteDialogProps) {
   const [formData, setFormData] = useState({
     name: '',
     address: '',
+    postcode: '',
     contact_name: '',
     contact_email: '',
     contact_phone: '',
@@ -105,6 +106,7 @@ export function AddSiteDialog({ clients }: AddSiteDialogProps) {
       setFormData({
         name: '',
         address: '',
+        postcode: '',
         contact_name: '',
         contact_email: '',
         contact_phone: '',
@@ -160,6 +162,18 @@ export function AddSiteDialog({ clients }: AddSiteDialogProps) {
                 placeholder="Full site address"
                 required
               />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="postcode">Postcode</Label>
+              <Input
+                id="postcode"
+                value={formData.postcode}
+                onChange={(e) => setFormData({ ...formData, postcode: e.target.value })}
+                placeholder="e.g., AB12 3CD"
+              />
+              <p className="text-xs text-muted-foreground">
+                Used as the access code for the site&apos;s QR fire safety log book.
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">

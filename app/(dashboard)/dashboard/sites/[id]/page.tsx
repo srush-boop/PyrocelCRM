@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge'
 import { ArrowLeft, MapPin, Phone, Mail, Building2, Radio } from 'lucide-react'
 import { SiteServicesManager } from '@/components/dashboard/sites/site-services-manager'
 import { SiteReports } from '@/components/dashboard/sites/site-reports'
+import { SiteLogbook } from '@/components/dashboard/sites/site-logbook'
+import type { ReportTimelineItem } from '@/components/logbook/logbook-timeline'
 import { DamperRegister } from '@/components/dashboard/dampers/damper-register'
 import { McpRegister } from '@/components/dashboard/mcps/mcp-register'
 import { EmergencyLightRegister } from '@/components/dashboard/emergency-lights/emergency-light-register'
@@ -32,6 +34,7 @@ import type {
   EmergencyLight,
   EmergencyLightInspection,
   Extinguisher,
+  LogbookEntry,
 } from '@/lib/types/database'
 
 interface PageProps {
@@ -204,6 +207,31 @@ export default async function SiteDetailPage({ params }: PageProps) {
   const extinguishers = (extinguishersData || []) as Extinguisher[]
   const showExtinguisherRegister = hasExtinguisherService || extinguishers.length > 0
 
+  // Log book: manual entries + professional service reports merged into one timeline.
+  const { data: logbookData } = await supabase
+    .from('logbook_entries')
+    .select('*')
+    .eq('site_id', id)
+    .order('entry_date', { ascending: false })
+  const logbookEntries = (logbookData || []) as LogbookEntry[]
+
+  const logbookReports: ReportTimelineItem[] = completedTasks.map((task) => {
+    const serviceName = task.site_service?.service_type?.name || 'Service'
+    const reportHref = isDamperService(serviceName)
+      ? `/dashboard/dampers/report/${task.id}`
+      : isExtinguisherService(serviceName)
+        ? `/dashboard/extinguishers/report/${task.id}`
+        : `/dashboard/reports/${task.id}`
+    return {
+      id: task.id,
+      date: (task.completed_at || task.scheduled_date) as string,
+      serviceName,
+      engineerName: task.assigned_engineer?.full_name ?? null,
+      status: (task.task_result?.overall_status as ReportTimelineItem['status']) ?? null,
+      href: reportHref,
+    }
+  })
+
   return (
     <div className="space-y-6">
       <div className="flex items-start gap-4">
@@ -355,6 +383,15 @@ export default async function SiteDetailPage({ params }: PageProps) {
       {showExtinguisherRegister && (
         <ExtinguisherRegister siteId={id} siteName={site.name} extinguishers={extinguishers} />
       )}
+
+      <SiteLogbook
+        siteId={id}
+        siteName={site.name}
+        siteAddress={site.address}
+        postcode={(site as Site).postcode}
+        reports={logbookReports}
+        entries={logbookEntries}
+      />
 
       <SiteReports
         siteName={site.name}

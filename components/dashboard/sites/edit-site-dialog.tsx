@@ -39,6 +39,7 @@ export function EditSiteDialog({ site, clients, open, onOpenChange }: EditSiteDi
   const [formData, setFormData] = useState({
     name: site.name,
     address: site.address,
+    postcode: site.postcode || '',
     contact_name: site.contact_name || '',
     contact_email: site.contact_email || '',
     contact_phone: site.contact_phone || '',
@@ -142,6 +143,18 @@ export function EditSiteDialog({ site, clients, open, onOpenChange }: EditSiteDi
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                 required
               />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="postcode">Postcode</Label>
+              <Input
+                id="postcode"
+                value={formData.postcode}
+                onChange={(e) => setFormData({ ...formData, postcode: e.target.value })}
+                placeholder="e.g., AB12 3CD"
+              />
+              <p className="text-xs text-muted-foreground">
+                Used as the access code for the site&apos;s QR fire safety log book.
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">

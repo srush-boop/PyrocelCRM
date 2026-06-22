@@ -117,6 +117,7 @@ export interface Site {
   id: string
   name: string
   address: string
+  postcode: string | null
   contact_name: string | null
   contact_email: string | null
   contact_phone: string | null
@@ -136,9 +137,30 @@ export interface Site {
   updated_at: string
   route?: Route
   client?: Client
-}
+  }
 
-export interface SiteService {
+  export type LogbookEntryType =
+    | 'weekly_alarm_test'
+    | 'monthly_emergency_light_test'
+    | 'fire_drill'
+    | 'false_alarm'
+    | 'fault_defect'
+    | 'note'
+
+  export interface LogbookEntry {
+    id: string
+    site_id: string
+    entry_type: LogbookEntryType
+    entry_date: string
+    title: string | null
+    details: string | null
+    performed_by: string | null
+    source: 'occupier' | 'staff'
+    created_by: string | null
+    created_at: string
+  }
+
+  export interface SiteService {
   id: string
   site_id: string
   service_type_id: string

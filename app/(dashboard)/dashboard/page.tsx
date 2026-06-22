@@ -72,46 +72,54 @@ export default async function DashboardPage() {
 
       {isAdminOrOffice && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Sites</CardTitle>
-              <Building2 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{sitesCount.count || 0}</div>
-              <p className="text-xs text-muted-foreground">Active client sites</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Routes</CardTitle>
-              <Route className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{routesCount.count || 0}</div>
-              <p className="text-xs text-muted-foreground">Geographic areas</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Tasks</CardTitle>
-              <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{pendingTasks.count || 0}</div>
-              <p className="text-xs text-muted-foreground">Awaiting completion</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Completed</CardTitle>
-              <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{completedTasks.count || 0}</div>
-              <p className="text-xs text-muted-foreground">Tasks completed</p>
-            </CardContent>
-          </Card>
+          <Link href="/dashboard/sites" className="rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <Card className="h-full transition-colors hover:border-primary/50 hover:bg-accent/40">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Sites</CardTitle>
+                <Building2 className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{sitesCount.count || 0}</div>
+                <p className="text-xs text-muted-foreground">Active client sites</p>
+              </CardContent>
+            </Card>
+          </Link>
+          <Link href="/dashboard/routes" className="rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <Card className="h-full transition-colors hover:border-primary/50 hover:bg-accent/40">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Routes</CardTitle>
+                <Route className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{routesCount.count || 0}</div>
+                <p className="text-xs text-muted-foreground">Geographic areas</p>
+              </CardContent>
+            </Card>
+          </Link>
+          <Link href="/dashboard/schedule" className="rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <Card className="h-full transition-colors hover:border-primary/50 hover:bg-accent/40">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Pending Tasks</CardTitle>
+                <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{pendingTasks.count || 0}</div>
+                <p className="text-xs text-muted-foreground">Awaiting completion</p>
+              </CardContent>
+            </Card>
+          </Link>
+          <Link href="/dashboard/reports" className="rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <Card className="h-full transition-colors hover:border-primary/50 hover:bg-accent/40">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Completed</CardTitle>
+                <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{completedTasks.count || 0}</div>
+                <p className="text-xs text-muted-foreground">Tasks completed</p>
+              </CardContent>
+            </Card>
+          </Link>
         </div>
       )}
 
@@ -131,9 +139,10 @@ export default async function DashboardPage() {
           {recentTasks && recentTasks.length > 0 ? (
             <div className="space-y-4">
               {recentTasks.map((task) => (
-                <div
+                <Link
                   key={task.id}
-                  className="flex items-center justify-between rounded-lg border p-4"
+                  href={`/dashboard/tasks/${task.id}`}
+                  className="flex items-center justify-between rounded-lg border p-4 transition-colors hover:border-primary/50 hover:bg-accent/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <div className="space-y-1">
                     <p className="font-medium">
@@ -154,15 +163,13 @@ export default async function DashboardPage() {
                       {formatDateUK(task.scheduled_date)}
                     </span>
                     {(profile as Profile).role === 'engineer' && (
-                      <Button size="sm" asChild>
-                        <Link href={`/dashboard/tasks/${task.id}`}>
-                          <ClipboardCheck className="mr-2 h-4 w-4" />
-                          Start
-                        </Link>
-                      </Button>
+                      <span className="inline-flex items-center text-sm font-medium text-primary">
+                        <ClipboardCheck className="mr-2 h-4 w-4" />
+                        Start
+                      </span>
                     )}
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           ) : (

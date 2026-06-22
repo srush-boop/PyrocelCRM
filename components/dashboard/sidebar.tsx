@@ -26,6 +26,7 @@ import {
   Calendar,
   FileText,
   Wind,
+  FireExtinguisher,
   MapPinned,
   HardHat,
 } from 'lucide-react'
@@ -40,6 +41,7 @@ const adminNavItems = [
   { title: 'Clients', href: '/dashboard/clients', icon: Building },
   { title: 'Sites', href: '/dashboard/sites', icon: Building2 },
   { title: 'Dampers', href: '/dashboard/dampers', icon: Wind },
+  { title: 'Extinguishers', href: '/dashboard/extinguishers', icon: FireExtinguisher },
   { title: 'Routes', href: '/dashboard/routes', icon: Route },
   { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
   { title: 'Engineers', href: '/dashboard/engineers', icon: Users },
@@ -60,6 +62,7 @@ const officeNavItems = [
   { title: 'Clients', href: '/dashboard/clients', icon: Building },
   { title: 'Sites', href: '/dashboard/sites', icon: Building2 },
   { title: 'Dampers', href: '/dashboard/dampers', icon: Wind },
+  { title: 'Extinguishers', href: '/dashboard/extinguishers', icon: FireExtinguisher },
   { title: 'Routes', href: '/dashboard/routes', icon: Route },
   { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
   { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },

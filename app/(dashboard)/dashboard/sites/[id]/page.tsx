@@ -10,9 +10,11 @@ import { SiteReports } from '@/components/dashboard/sites/site-reports'
 import { DamperRegister } from '@/components/dashboard/dampers/damper-register'
 import { McpRegister } from '@/components/dashboard/mcps/mcp-register'
 import { EmergencyLightRegister } from '@/components/dashboard/emergency-lights/emergency-light-register'
+import { ExtinguisherRegister } from '@/components/dashboard/extinguishers/extinguisher-register'
 import { isDamperService } from '@/lib/dampers'
 import { isFireAlarmService } from '@/lib/mcps'
 import { isEmergencyLightService } from '@/lib/emergency-lights'
+import { isExtinguisherService } from '@/lib/extinguishers'
 import { REMOTE_MONITORING_LABELS } from '@/lib/sites'
 import type {
   Profile,
@@ -29,6 +31,7 @@ import type {
   McpInspection,
   EmergencyLight,
   EmergencyLightInspection,
+  Extinguisher,
 } from '@/lib/types/database'
 
 interface PageProps {
@@ -191,6 +194,16 @@ export default async function SiteDetailPage({ params }: PageProps) {
   })
   const showEmergencyLightRegister = hasEmergencyLightService || emergencyLights.length > 0
 
+  // Extinguisher register: shown when the site has the extinguisher service or any extinguishers
+  const hasExtinguisherService = siteServices.some((ss) => isExtinguisherService(ss.service_type?.name))
+  const { data: extinguishersData } = await supabase
+    .from('extinguishers')
+    .select('*')
+    .eq('site_id', id)
+    .order('reference', { ascending: true })
+  const extinguishers = (extinguishersData || []) as Extinguisher[]
+  const showExtinguisherRegister = hasExtinguisherService || extinguishers.length > 0
+
   return (
     <div className="space-y-6">
       <div className="flex items-start gap-4">
@@ -337,6 +350,10 @@ export default async function SiteDetailPage({ params }: PageProps) {
 
       {showEmergencyLightRegister && (
         <EmergencyLightRegister siteId={id} lights={emergencyLights} />
+      )}
+
+      {showExtinguisherRegister && (
+        <ExtinguisherRegister siteId={id} siteName={site.name} extinguishers={extinguishers} />
       )}
 
       <SiteReports

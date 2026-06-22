@@ -581,7 +581,16 @@ export default function ReportsPage() {
                       <TableCell>{report.serviceName}</TableCell>
                       <TableCell className="hidden lg:table-cell">{report.engineerName}</TableCell>
                       <TableCell>
-                        <Badge variant={report.overallStatus === 'pass' ? 'default' : 'destructive'}>
+                        <Badge
+                          variant={report.overallStatus === 'fail' ? 'destructive' : 'default'}
+                          className={
+                            report.overallStatus === 'pass'
+                              ? 'bg-green-600 text-white hover:bg-green-600/90'
+                              : report.overallStatus === 'partial'
+                              ? 'bg-amber-500 text-white hover:bg-amber-500/90'
+                              : undefined
+                          }
+                        >
                           {report.overallStatus === 'pass' ? 'Pass' : report.overallStatus === 'fail' ? 'Fail' : 'Partial'}
                         </Badge>
                       </TableCell>

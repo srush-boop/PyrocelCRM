@@ -17,6 +17,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, Printer, CheckCircle2, XCircle, AlertTriangle, MinusCircle } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
+import { getServiceIcon } from '@/lib/service-icons'
 import {
   RESULT_COLORS,
   RESULT_LABELS,
@@ -47,6 +48,7 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
   const headerColor = template?.header_color || '#c8102e'
   const companyName = template?.company_name || 'Pyrocel Fire & Security'
   const sections = template?.sections || {}
+  const ServiceIcon = getServiceIcon(serviceType?.name)
 
   const stats = useMemo(() => {
     const counts: Record<ExtinguisherResult, number> = { pass: 0, fail: 0, remedial: 0, na: 0 }
@@ -141,18 +143,25 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
               />
             </div>
             <div>
-              <p className="text-lg font-bold leading-tight">{companyName}</p>
+              <p className="text-xl font-extrabold uppercase tracking-wide leading-tight">
+                {companyName}
+              </p>
               {sections.company_address && (
                 <p className="text-xs text-white/80">{sections.company_address}</p>
               )}
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-sm font-semibold uppercase tracking-wide">Service Report</p>
-            <p className="text-xs text-white/80">Fire Extinguishers</p>
-            {referenceNumber && (
-              <p className="mt-1 font-mono text-sm font-bold">{referenceNumber}</p>
-            )}
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className="text-sm font-semibold uppercase tracking-wide">Service Report</p>
+              <p className="text-xs text-white/80">Fire Extinguishers</p>
+              {referenceNumber && (
+                <p className="mt-1 font-mono text-sm font-bold">{referenceNumber}</p>
+              )}
+            </div>
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white/15 ring-1 ring-white/25">
+              <ServiceIcon className="h-6 w-6" aria-hidden="true" />
+            </div>
           </div>
         </header>
 

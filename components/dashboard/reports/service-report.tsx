@@ -19,6 +19,7 @@ import {
   MinusCircle,
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
+import { getServiceIcon } from '@/lib/service-icons'
 import type { TaskWithDetails, TaskResult, ReportTemplate } from '@/lib/types/database'
 
 interface ServiceReportProps {
@@ -43,6 +44,7 @@ export function ServiceReport({ task, result, template }: ServiceReportProps) {
     serviceType?.color || template?.header_color || '#0f172a'
   const companyName = template?.company_name || 'Pyrocel Ltd'
   const sections = template?.sections || {}
+  const ServiceIcon = getServiceIcon(serviceType?.name)
 
   const checklist = result?.checklist_results || []
 
@@ -115,18 +117,25 @@ export function ServiceReport({ task, result, template }: ServiceReportProps) {
               />
             </div>
             <div>
-              <p className="text-lg font-bold leading-tight">{companyName}</p>
+              <p className="text-xl font-extrabold uppercase tracking-wide leading-tight">
+                {companyName}
+              </p>
               {sections.company_address && (
                 <p className="text-xs text-white/80">{sections.company_address}</p>
               )}
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-sm font-semibold uppercase tracking-wide">Service Report</p>
-            <p className="text-xs text-white/80">{serviceType?.name}</p>
-            {result?.reference_number && (
-              <p className="mt-1 font-mono text-sm font-bold">{result.reference_number}</p>
-            )}
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className="text-sm font-semibold uppercase tracking-wide">Service Report</p>
+              <p className="text-xs text-white/80">{serviceType?.name}</p>
+              {result?.reference_number && (
+                <p className="mt-1 font-mono text-sm font-bold">{result.reference_number}</p>
+              )}
+            </div>
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white/15 ring-1 ring-white/25">
+              <ServiceIcon className="h-6 w-6" aria-hidden="true" />
+            </div>
           </div>
         </header>
 

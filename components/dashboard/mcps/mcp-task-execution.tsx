@@ -42,10 +42,11 @@ import {
   ArrowRight,
   History,
   Plus,
+  CheckCheck,
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
-import { generateMcpUrn, TEST_KEY_TYPES } from '@/lib/mcps'
+import { generateMcpUrn, TEST_KEY_TYPES, MCP_CHECKLIST } from '@/lib/mcps'
 import { McpInspectionCard, type McpInspectionState, type CheckValue } from './mcp-inspection-card'
 import type { Profile, TaskWithDetails, Mcp, McpInspection } from '@/lib/types/database'
 
@@ -90,6 +91,7 @@ export function McpTaskExecution({
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [showSubmit, setShowSubmit] = useState(false)
+  const [showPassAll, setShowPassAll] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -191,6 +193,29 @@ export function McpTaskExecution({
       .eq('id', task.id)
     setStatus('in_progress')
     router.refresh()
+  }
+
+  // Task-level shortcut: mark every call point on the register as fully passed.
+  // Useful when a whole site's test is clean; individual call points can still
+  // be edited afterwards.
+  const passAllMcps = () => {
+    setStates((prev) => {
+      const next: Record<string, McpInspectionState> = {}
+      for (const mcp of mcpList) {
+        const checklist: Record<string, CheckValue> = {}
+        for (const item of MCP_CHECKLIST) checklist[item.id] = 'pass'
+        const existing = prev[mcp.id]
+        next[mcp.id] = {
+          result: 'pass',
+          checklist,
+          comments: existing?.comments ?? '',
+          photos: existing?.photos ?? [],
+          touched: true,
+        }
+      }
+      return next
+    })
+    setShowPassAll(false)
   }
 
   const buildRows = () => {
@@ -447,14 +472,24 @@ export function McpTaskExecution({
                   />
                 </div>
                 {canEdit && (
-                  <Button
-                    variant="outline"
-                    onClick={() => setAddOpen(true)}
-                    className="shrink-0 bg-transparent"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add call point
-                  </Button>
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowPassAll(true)}
+                      className="shrink-0 bg-transparent"
+                    >
+                      <CheckCheck className="mr-2 h-4 w-4" />
+                      Mark all passed
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setAddOpen(true)}
+                      className="shrink-0 bg-transparent"
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add call point
+                    </Button>
+                  </>
                 )}
               </div>
               {filtered.map((mcp) => (
@@ -600,6 +635,24 @@ export function McpTaskExecution({
               {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Complete Test
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showPassAll} onOpenChange={setShowPassAll}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark all call points passed?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This sets every checklist item to pass and the result to pass for all{' '}
+              {summary.total} call point{summary.total === 1 ? '' : 's'} on the register,
+              overwriting any results already entered. You can still adjust individual call
+              points afterwards.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={passAllMcps}>Mark all passed</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

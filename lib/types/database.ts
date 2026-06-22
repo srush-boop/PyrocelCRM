@@ -5,6 +5,9 @@ export type UserRole = 'admin' | 'engineer' | 'office' | 'client'
 // Who performs a service. Independent of how the work is routed/assigned.
 export type WorkerType = 'cdo' | 'engineer' | 'subcontractor'
 
+// Unit for a compliance tolerance window.
+export type ToleranceUnit = 'days' | 'months'
+
 // An operational/geographic area with one responsible worker (CDO or engineer).
 export interface Area {
   id: string
@@ -76,6 +79,12 @@ export interface ServiceType {
   default_frequency_value: number
   default_frequency_unit: 'weeks' | 'months'
   default_deadline_tolerance_days: number
+  // Two-tier compliance tolerances (value + unit). Regulatory = legal baseline,
+  // client = the (usually tighter) target shared with clients.
+  regulatory_tolerance_value: number
+  regulatory_tolerance_unit: ToleranceUnit
+  client_tolerance_value: number
+  client_tolerance_unit: ToleranceUnit
   color?: string | null
   icon?: string | null
   defects_to_email: string | null
@@ -146,6 +155,10 @@ export interface Site {
     | 'false_alarm'
     | 'fault_defect'
     | 'note'
+    | 'fire_door_check'
+    | 'firefighting_equipment_check'
+    | 'staff_training'
+    | 'frs_visit'
 
   export interface LogbookEntry {
     id: string
@@ -160,6 +173,32 @@ export interface Site {
     created_at: string
   }
 
+  export interface EmergencyContact {
+    name: string
+    role: string
+    phone: string
+  }
+
+  export interface SiteBuildingInfo {
+    site_id: string
+    responsible_person_name: string | null
+    responsible_person_role: string | null
+    responsible_person_phone: string | null
+    responsible_person_email: string | null
+    competent_person_name: string | null
+    competent_person_company: string | null
+    competent_person_phone: string | null
+    competent_person_email: string | null
+    fra_location: string | null
+    fra_last_date: string | null
+    fra_next_date: string | null
+    fra_assessor: string | null
+    fra_notes: string | null
+    emergency_contacts: EmergencyContact[]
+    updated_at: string
+    updated_by: string | null
+  }
+
   export interface SiteService {
   id: string
   site_id: string
@@ -170,6 +209,10 @@ export interface Site {
   last_service_date: string | null
   next_service_date: string | null
   deadline_tolerance_days: number
+  // Optional client KPI override for this site/service. NULL = inherit the
+  // service type's regulatory KPI as the client default.
+  client_tolerance_value: number | null
+  client_tolerance_unit: ToleranceUnit | null
   // Who performs the work (CDO / Engineer / Sub-contractor).
   worker_type: WorkerType
   // How the work is routed. Any of these may be set depending on worker_type;
@@ -230,11 +273,12 @@ export interface Task {
   started_at: string | null
   completed_at: string | null
   notes: string | null
+  public_token: string
   created_at: string
   updated_at: string
   site_service?: SiteService
   assigned_engineer?: Profile | null
-}
+  }
 
 export interface ChecklistResult {
   item_id: string

@@ -24,9 +24,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { WorkerType } from '@/lib/types/database'
+import type { WorkerType, ToleranceUnit } from '@/lib/types/database'
 import { WORKER_TYPE_LABELS } from '@/lib/assignment'
 import { ServiceColorPicker } from './service-color-picker'
+import { ToleranceFields } from './tolerance-fields'
 import { PYROCEL_RED } from '@/lib/service-colors'
 
 export function AddServiceTypeDialog() {
@@ -40,6 +41,8 @@ export function AddServiceTypeDialog() {
     default_worker_type: 'cdo' as WorkerType,
     defects_to_email: '',
     color: PYROCEL_RED,
+    regulatory_tolerance_value: 0,
+    regulatory_tolerance_unit: 'months' as ToleranceUnit,
   })
   const router = useRouter()
   const supabase = createClient()
@@ -62,6 +65,12 @@ export function AddServiceTypeDialog() {
       default_worker_type: formData.default_worker_type,
       defects_to_email: formData.defects_to_email.trim() || null,
       color: formData.color,
+      regulatory_tolerance_value: formData.regulatory_tolerance_value,
+      regulatory_tolerance_unit: formData.regulatory_tolerance_unit,
+      // Client tier defaults to the regulatory standard; tighter client KPIs are
+      // set per site/service. Keep the legacy default columns in sync as the fallback.
+      client_tolerance_value: formData.regulatory_tolerance_value,
+      client_tolerance_unit: formData.regulatory_tolerance_unit,
     })
 
     setLoading(false)
@@ -79,6 +88,8 @@ export function AddServiceTypeDialog() {
         default_worker_type: 'cdo',
         defects_to_email: '',
         color: PYROCEL_RED,
+        regulatory_tolerance_value: 0,
+        regulatory_tolerance_unit: 'months',
       })
       router.refresh()
     }
@@ -153,6 +164,13 @@ export function AddServiceTypeDialog() {
                 </Select>
               </div>
             </div>
+            <ToleranceFields
+              value={{
+                regulatory_tolerance_value: formData.regulatory_tolerance_value,
+                regulatory_tolerance_unit: formData.regulatory_tolerance_unit,
+              }}
+              onChange={(t) => setFormData({ ...formData, ...t })}
+            />
             <div className="grid gap-2">
               <Label htmlFor="default-worker-type">Default delivered by</Label>
               <Select

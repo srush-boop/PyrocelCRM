@@ -41,6 +41,7 @@ import {
   FolderOpen,
   Boxes,
   Lightbulb,
+  Gauge,
   ChevronRight,
 } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
@@ -81,6 +82,7 @@ const adminNavItems: NavItem[] = [
   { title: 'Checklists', href: '/dashboard/checklists', icon: ClipboardList },
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
   { title: 'Reports', href: '/dashboard/reports', icon: FileText },
+  { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
 ]
 
@@ -99,6 +101,7 @@ const officeNavItems: NavItem[] = [
   { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
   { title: 'Reports', href: '/dashboard/reports', icon: FileText },
+  { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
 ]
 

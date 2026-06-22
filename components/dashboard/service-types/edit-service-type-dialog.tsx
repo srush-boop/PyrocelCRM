@@ -16,9 +16,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Loader2 } from 'lucide-react'
-import type { ServiceType, WorkerType } from '@/lib/types/database'
+import type { ServiceType, WorkerType, ToleranceUnit } from '@/lib/types/database'
 import { WORKER_TYPE_LABELS } from '@/lib/assignment'
 import { ServiceColorPicker } from './service-color-picker'
+import { ToleranceFields } from './tolerance-fields'
 import { PYROCEL_RED } from '@/lib/service-colors'
 import {
   Select,
@@ -45,6 +46,8 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
     defects_to_email: serviceType.defects_to_email || '',
     status: (serviceType.status || 'live') as 'live' | 'dead',
     color: serviceType.color || PYROCEL_RED,
+    regulatory_tolerance_value: serviceType.regulatory_tolerance_value ?? 0,
+    regulatory_tolerance_unit: (serviceType.regulatory_tolerance_unit || 'days') as ToleranceUnit,
   })
   const router = useRouter()
   const supabase = createClient()
@@ -70,6 +73,12 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
         defects_to_email: formData.defects_to_email.trim() || null,
         status: formData.status,
         color: formData.color,
+        regulatory_tolerance_value: formData.regulatory_tolerance_value,
+        regulatory_tolerance_unit: formData.regulatory_tolerance_unit,
+        // Keep the legacy service-type client default in step with regulatory;
+        // tighter client KPIs live per site/service.
+        client_tolerance_value: formData.regulatory_tolerance_value,
+        client_tolerance_unit: formData.regulatory_tolerance_unit,
       })
       .eq('id', serviceType.id)
 
@@ -146,6 +155,13 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
                 </Select>
               </div>
             </div>
+            <ToleranceFields
+              value={{
+                regulatory_tolerance_value: formData.regulatory_tolerance_value,
+                regulatory_tolerance_unit: formData.regulatory_tolerance_unit,
+              }}
+              onChange={(t) => setFormData({ ...formData, ...t })}
+            />
             <div className="grid gap-2">
               <Label htmlFor="default-worker-type">Default delivered by</Label>
               <Select

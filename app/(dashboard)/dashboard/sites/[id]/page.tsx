@@ -41,6 +41,7 @@ import type {
   EmergencyLightInspection,
   Extinguisher,
   LogbookEntry,
+  SiteBuildingInfo,
 } from '@/lib/types/database'
 
 interface PageProps {
@@ -223,6 +224,14 @@ export default async function SiteDetailPage({ params }: PageProps) {
     .eq('site_id', id)
     .order('entry_date', { ascending: false })
   const logbookEntries = (logbookData || []) as LogbookEntry[]
+
+  // General building information (responsible persons, FRA, emergency contacts).
+  const { data: buildingInfoData } = await supabase
+    .from('site_building_info')
+    .select('*')
+    .eq('site_id', id)
+    .maybeSingle()
+  const buildingInfo = (buildingInfoData as SiteBuildingInfo | null) ?? null
 
   const logbookReports: ReportTimelineItem[] = completedTasks.map((task) => {
     const serviceName = task.site_service?.service_type?.name || 'Service'
@@ -487,9 +496,10 @@ export default async function SiteDetailPage({ params }: PageProps) {
             siteName={site.name}
             siteAddress={site.address}
             postcode={(site as Site).postcode}
-            reports={logbookReports}
-            entries={logbookEntries}
-          />
+                reports={logbookReports}
+                entries={logbookEntries}
+                buildingInfo={buildingInfo}
+              />
         </TabsContent>
 
         <TabsContent value="documents" className="mt-0">

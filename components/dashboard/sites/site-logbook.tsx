@@ -7,8 +7,9 @@ import { BookOpen } from 'lucide-react'
 import { LogbookTimeline, type ReportTimelineItem } from '@/components/logbook/logbook-timeline'
 import { LogbookEntryForm, type LogbookEntryFormValues } from '@/components/logbook/logbook-entry-form'
 import { LogbookQrCard } from '@/components/dashboard/sites/logbook-qr-card'
+import { BuildingInfoForm } from '@/components/dashboard/sites/building-info-form'
 import { addStaffLogbookEntry } from '@/app/(dashboard)/dashboard/sites/[id]/logbook-actions'
-import type { LogbookEntry } from '@/lib/types/database'
+import type { LogbookEntry, SiteBuildingInfo } from '@/lib/types/database'
 
 interface SiteLogbookProps {
   siteId: string
@@ -17,6 +18,7 @@ interface SiteLogbookProps {
   postcode: string | null
   reports: ReportTimelineItem[]
   entries: LogbookEntry[]
+  buildingInfo: SiteBuildingInfo | null
 }
 
 export function SiteLogbook({
@@ -26,6 +28,7 @@ export function SiteLogbook({
   postcode,
   reports,
   entries,
+  buildingInfo,
 }: SiteLogbookProps) {
   const router = useRouter()
 
@@ -52,12 +55,17 @@ export function SiteLogbook({
         <Tabs defaultValue="timeline" className="w-full">
           <TabsList>
             <TabsTrigger value="timeline">Records</TabsTrigger>
+            <TabsTrigger value="building">Building info</TabsTrigger>
             <TabsTrigger value="add">Add entry</TabsTrigger>
             <TabsTrigger value="qr">QR poster</TabsTrigger>
           </TabsList>
 
           <TabsContent value="timeline" className="mt-4">
             <LogbookTimeline reports={reports} entries={entries} />
+          </TabsContent>
+
+          <TabsContent value="building" className="mt-4">
+            <BuildingInfoForm siteId={siteId} info={buildingInfo} />
           </TabsContent>
 
           <TabsContent value="add" className="mt-4 max-w-2xl">

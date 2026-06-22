@@ -155,6 +155,10 @@ export interface Site {
     | 'false_alarm'
     | 'fault_defect'
     | 'note'
+    | 'fire_door_check'
+    | 'firefighting_equipment_check'
+    | 'staff_training'
+    | 'frs_visit'
 
   export interface LogbookEntry {
     id: string
@@ -167,6 +171,32 @@ export interface Site {
     source: 'occupier' | 'staff'
     created_by: string | null
     created_at: string
+  }
+
+  export interface EmergencyContact {
+    name: string
+    role: string
+    phone: string
+  }
+
+  export interface SiteBuildingInfo {
+    site_id: string
+    responsible_person_name: string | null
+    responsible_person_role: string | null
+    responsible_person_phone: string | null
+    responsible_person_email: string | null
+    competent_person_name: string | null
+    competent_person_company: string | null
+    competent_person_phone: string | null
+    competent_person_email: string | null
+    fra_location: string | null
+    fra_last_date: string | null
+    fra_next_date: string | null
+    fra_assessor: string | null
+    fra_notes: string | null
+    emergency_contacts: EmergencyContact[]
+    updated_at: string
+    updated_by: string | null
   }
 
   export interface SiteService {

@@ -134,7 +134,7 @@ export function RoutesTable({ routes, engineers, sites }: RoutesTableProps) {
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setPlanRoute(route)}>
                           <MapPin className="mr-2 h-4 w-4" />
-                          Manage sites
+                          Manage services
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => setDeleteId(route.id)}

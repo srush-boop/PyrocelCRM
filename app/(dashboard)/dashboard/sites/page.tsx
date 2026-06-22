@@ -46,7 +46,7 @@ export default async function SitesPage() {
             Manage client sites and their service schedules
           </p>
         </div>
-        <AddSiteDialog routes={routes} clients={clients} />
+        <AddSiteDialog clients={clients} />
       </div>
 
       <SitesTable sites={sites} routes={routes} clients={clients} />

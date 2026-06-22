@@ -216,12 +216,12 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     )
   }
 
-  // Group tasks by their site's route, ordered by route position then name.
+  // Group tasks by each service's own route (a site can have some services on
+  // a route and others not), ordered by the site's planned position then name.
   const groupByRoute = (list: TaskWithDetails[]) => {
     const groups = new Map<string, { name: string; tasks: TaskWithDetails[] }>()
     for (const task of list) {
-      const site = task.site_service?.site as (Site & { route?: Route | null }) | undefined
-      const route = site?.route
+      const route = (task.site_service as { route?: Route | null } | undefined)?.route
       const key = route?.id ?? 'unassigned'
       const name = route?.name ?? 'No route assigned'
       if (!groups.has(key)) groups.set(key, { name, tasks: [] })

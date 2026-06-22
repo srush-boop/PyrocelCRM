@@ -26,14 +26,13 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Plus, Loader2, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import type { Route, Client } from '@/lib/types/database'
+import type { Client } from '@/lib/types/database'
 
 interface AddSiteDialogProps {
-  routes: Route[]
   clients: Client[]
 }
 
-export function AddSiteDialog({ routes, clients }: AddSiteDialogProps) {
+export function AddSiteDialog({ clients }: AddSiteDialogProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
@@ -42,7 +41,6 @@ export function AddSiteDialog({ routes, clients }: AddSiteDialogProps) {
     contact_name: '',
     contact_email: '',
     contact_phone: '',
-    route_id: '',
     client_id: '',
     site_id_cash: '',
     status: 'live' as 'live' | 'dead',
@@ -83,7 +81,6 @@ export function AddSiteDialog({ routes, clients }: AddSiteDialogProps) {
 
     const { error: insertError } = await supabase.from('sites').insert({
       ...formData,
-      route_id: formData.route_id || null,
       client_id: formData.client_id || null,
       remote_monitoring_type: formData.has_remote_monitoring
         ? formData.remote_monitoring_type || null
@@ -111,7 +108,6 @@ export function AddSiteDialog({ routes, clients }: AddSiteDialogProps) {
         contact_name: '',
         contact_email: '',
         contact_phone: '',
-        route_id: '',
         client_id: '',
         site_id_cash: '',
         status: 'live',
@@ -195,48 +191,28 @@ export function AddSiteDialog({ routes, clients }: AddSiteDialogProps) {
                 placeholder="contact@example.com"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="client">
-                  Client {formData.status === 'live' && <span className="text-destructive">*</span>}
-                </Label>
-                <Select
-                  value={formData.client_id}
-                  onValueChange={(value) => {
-                    setFormData({ ...formData, client_id: value })
-                    setError(null)
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select client (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clients.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="route">Route</Label>
-                <Select
-                  value={formData.route_id}
-                  onValueChange={(value) => setFormData({ ...formData, route_id: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select route (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {routes.map((route) => (
-                      <SelectItem key={route.id} value={route.id}>
-                        {route.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="grid gap-2">
+              <Label htmlFor="client">
+                Client {formData.status === 'live' && <span className="text-destructive">*</span>}
+              </Label>
+              <Select
+                value={formData.client_id}
+                onValueChange={(value) => {
+                  setFormData({ ...formData, client_id: value })
+                  setError(null)
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select client (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {clients.map((client) => (
+                    <SelectItem key={client.id} value={client.id}>
+                      {client.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">

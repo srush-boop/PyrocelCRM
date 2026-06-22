@@ -265,7 +265,6 @@ export function SitesTable({ sites, routes, clients }: SitesTableProps) {
       {editSite && (
         <EditSiteDialog
           site={editSite}
-          routes={routes}
           clients={clients}
           open={!!editSite}
           onOpenChange={() => setEditSite(null)}

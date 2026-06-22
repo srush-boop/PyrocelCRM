@@ -29,13 +29,12 @@ import type { Site, Route, Client } from '@/lib/types/database'
 
 interface EditSiteDialogProps {
   site: Site & { route: Route | null; client?: Client | null }
-  routes: Route[]
   clients: Client[]
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-export function EditSiteDialog({ site, routes, clients, open, onOpenChange }: EditSiteDialogProps) {
+export function EditSiteDialog({ site, clients, open, onOpenChange }: EditSiteDialogProps) {
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: site.name,
@@ -43,7 +42,6 @@ export function EditSiteDialog({ site, routes, clients, open, onOpenChange }: Ed
     contact_name: site.contact_name || '',
     contact_email: site.contact_email || '',
     contact_phone: site.contact_phone || '',
-    route_id: site.route_id || '',
     client_id: site.client_id || '',
     status: site.status || 'live',
     notes: site.notes || '',
@@ -89,7 +87,6 @@ export function EditSiteDialog({ site, routes, clients, open, onOpenChange }: Ed
       .from('sites')
       .update({
         ...formData,
-        route_id: formData.route_id || null,
         client_id: formData.client_id || null,
         remote_monitoring_type: formData.has_remote_monitoring
           ? formData.remote_monitoring_type || null
@@ -173,48 +170,28 @@ export function EditSiteDialog({ site, routes, clients, open, onOpenChange }: Ed
                 onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="client">
-                  Client {formData.status === 'live' && <span className="text-destructive">*</span>}
-                </Label>
-                <Select
-                  value={formData.client_id}
-                  onValueChange={(value) => {
-                    setFormData({ ...formData, client_id: value })
-                    setError(null)
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select client (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clients.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="route">Route</Label>
-                <Select
-                  value={formData.route_id}
-                  onValueChange={(value) => setFormData({ ...formData, route_id: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select route (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {routes.map((route) => (
-                      <SelectItem key={route.id} value={route.id}>
-                        {route.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="grid gap-2">
+              <Label htmlFor="client">
+                Client {formData.status === 'live' && <span className="text-destructive">*</span>}
+              </Label>
+              <Select
+                value={formData.client_id}
+                onValueChange={(value) => {
+                  setFormData({ ...formData, client_id: value })
+                  setError(null)
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select client (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {clients.map((client) => (
+                    <SelectItem key={client.id} value={client.id}>
+                      {client.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="status">Site Status</Label>

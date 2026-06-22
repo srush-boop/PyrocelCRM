@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { ArrowLeft, Printer, CheckCircle2, XCircle, AlertTriangle, MinusCircle } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { getServiceIcon } from '@/lib/service-icons'
+import { PYROCEL_RED } from '@/lib/service-colors'
 import {
   RESULT_COLORS,
   RESULT_LABELS,
@@ -45,8 +46,8 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
   const engineer = task.assigned_engineer
-  const headerColor = template?.header_color || '#c8102e'
-  const companyName = template?.company_name || 'Pyrocel Fire & Security'
+  const headerColor = serviceType?.color || template?.header_color || PYROCEL_RED
+  const companyName = template?.company_name || 'Pyrocel Ltd'
   const sections = template?.sections || {}
   const ServiceIcon = getServiceIcon(serviceType?.name)
 

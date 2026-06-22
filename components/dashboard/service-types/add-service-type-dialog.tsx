@@ -26,6 +26,8 @@ import {
 } from '@/components/ui/select'
 import type { WorkerType } from '@/lib/types/database'
 import { WORKER_TYPE_LABELS } from '@/lib/assignment'
+import { ServiceColorPicker } from './service-color-picker'
+import { PYROCEL_RED } from '@/lib/service-colors'
 
 export function AddServiceTypeDialog() {
   const [open, setOpen] = useState(false)
@@ -37,6 +39,7 @@ export function AddServiceTypeDialog() {
     default_frequency_unit: 'months' as 'weeks' | 'months',
     default_worker_type: 'cdo' as WorkerType,
     defects_to_email: '',
+    color: PYROCEL_RED,
   })
   const router = useRouter()
   const supabase = createClient()
@@ -58,6 +61,7 @@ export function AddServiceTypeDialog() {
       default_frequency_unit: formData.default_frequency_unit,
       default_worker_type: formData.default_worker_type,
       defects_to_email: formData.defects_to_email.trim() || null,
+      color: formData.color,
     })
 
     setLoading(false)
@@ -74,6 +78,7 @@ export function AddServiceTypeDialog() {
         default_frequency_unit: 'months',
         default_worker_type: 'cdo',
         defects_to_email: '',
+        color: PYROCEL_RED,
       })
       router.refresh()
     }
@@ -115,6 +120,10 @@ export function AddServiceTypeDialog() {
                 placeholder="Describe the service"
               />
             </div>
+            <ServiceColorPicker
+              value={formData.color}
+              onChange={(color) => setFormData({ ...formData, color })}
+            />
             <div className="grid grid-cols-2 gap-2">
               <div className="grid gap-2">
                 <Label htmlFor="frequency-value">Frequency Value *</Label>

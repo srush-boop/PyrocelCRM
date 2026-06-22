@@ -1,6 +1,8 @@
 import * as React from 'react'
 
-const MOBILE_BREAKPOINT = 768
+// 1024px so tablets/iPads in portrait (768-1023px) use the collapsible
+// off-canvas sidebar instead of the docked sidebar, giving content full width.
+const MOBILE_BREAKPOINT = 1024
 
 export function useIsMobile() {
   const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined)

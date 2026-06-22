@@ -43,8 +43,6 @@ export function AddServiceTypeDialog() {
     color: PYROCEL_RED,
     regulatory_tolerance_value: 0,
     regulatory_tolerance_unit: 'months' as ToleranceUnit,
-    client_tolerance_value: 0,
-    client_tolerance_unit: 'months' as ToleranceUnit,
   })
   const router = useRouter()
   const supabase = createClient()
@@ -69,8 +67,10 @@ export function AddServiceTypeDialog() {
       color: formData.color,
       regulatory_tolerance_value: formData.regulatory_tolerance_value,
       regulatory_tolerance_unit: formData.regulatory_tolerance_unit,
-      client_tolerance_value: formData.client_tolerance_value,
-      client_tolerance_unit: formData.client_tolerance_unit,
+      // Client tier defaults to the regulatory standard; tighter client KPIs are
+      // set per site/service. Keep the legacy default columns in sync as the fallback.
+      client_tolerance_value: formData.regulatory_tolerance_value,
+      client_tolerance_unit: formData.regulatory_tolerance_unit,
     })
 
     setLoading(false)
@@ -90,8 +90,6 @@ export function AddServiceTypeDialog() {
         color: PYROCEL_RED,
         regulatory_tolerance_value: 0,
         regulatory_tolerance_unit: 'months',
-        client_tolerance_value: 0,
-        client_tolerance_unit: 'months',
       })
       router.refresh()
     }
@@ -170,8 +168,6 @@ export function AddServiceTypeDialog() {
               value={{
                 regulatory_tolerance_value: formData.regulatory_tolerance_value,
                 regulatory_tolerance_unit: formData.regulatory_tolerance_unit,
-                client_tolerance_value: formData.client_tolerance_value,
-                client_tolerance_unit: formData.client_tolerance_unit,
               }}
               onChange={(t) => setFormData({ ...formData, ...t })}
             />

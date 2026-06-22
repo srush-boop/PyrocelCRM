@@ -48,8 +48,6 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
     color: serviceType.color || PYROCEL_RED,
     regulatory_tolerance_value: serviceType.regulatory_tolerance_value ?? 0,
     regulatory_tolerance_unit: (serviceType.regulatory_tolerance_unit || 'days') as ToleranceUnit,
-    client_tolerance_value: serviceType.client_tolerance_value ?? 0,
-    client_tolerance_unit: (serviceType.client_tolerance_unit || 'days') as ToleranceUnit,
   })
   const router = useRouter()
   const supabase = createClient()
@@ -77,8 +75,10 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
         color: formData.color,
         regulatory_tolerance_value: formData.regulatory_tolerance_value,
         regulatory_tolerance_unit: formData.regulatory_tolerance_unit,
-        client_tolerance_value: formData.client_tolerance_value,
-        client_tolerance_unit: formData.client_tolerance_unit,
+        // Keep the legacy service-type client default in step with regulatory;
+        // tighter client KPIs live per site/service.
+        client_tolerance_value: formData.regulatory_tolerance_value,
+        client_tolerance_unit: formData.regulatory_tolerance_unit,
       })
       .eq('id', serviceType.id)
 
@@ -159,8 +159,6 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
               value={{
                 regulatory_tolerance_value: formData.regulatory_tolerance_value,
                 regulatory_tolerance_unit: formData.regulatory_tolerance_unit,
-                client_tolerance_value: formData.client_tolerance_value,
-                client_tolerance_unit: formData.client_tolerance_unit,
               }}
               onChange={(t) => setFormData({ ...formData, ...t })}
             />

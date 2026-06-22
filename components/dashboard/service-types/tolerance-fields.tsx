@@ -15,8 +15,6 @@ import type { ToleranceUnit } from '@/lib/types/database'
 export interface ToleranceFieldsValue {
   regulatory_tolerance_value: number
   regulatory_tolerance_unit: ToleranceUnit
-  client_tolerance_value: number
-  client_tolerance_unit: ToleranceUnit
 }
 
 interface ToleranceFieldsProps {
@@ -24,17 +22,18 @@ interface ToleranceFieldsProps {
   onChange: (next: ToleranceFieldsValue) => void
 }
 
-// Shared editor for the two compliance tolerances (regulatory + client) on a
-// service type. Used by both the add and edit dialogs.
+// Editor for the regulatory KPI on a service type. This is the legal/standards
+// baseline and the default the client tier inherits. Tighter client KPIs are
+// set per site/service in the site's service setup, not here.
 export function ToleranceFields({ value, onChange }: ToleranceFieldsProps) {
   return (
     <div className="grid gap-3 rounded-lg border border-border p-3">
       <div>
-        <h4 className="text-sm font-medium">Compliance tolerance</h4>
+        <h4 className="text-sm font-medium">Regulatory KPI (default)</h4>
         <p className="text-xs text-muted-foreground">
           How far from the due date a service can be completed and still count as compliant.
           Use months for calendar windows (0 = within the due month) or days (0 = the exact
-          day).
+          day). Clients inherit this standard unless a tighter client KPI is set per site.
         </p>
       </div>
 
@@ -46,16 +45,6 @@ export function ToleranceFields({ value, onChange }: ToleranceFieldsProps) {
         numberValue={value.regulatory_tolerance_value}
         onValueChange={(v) => onChange({ ...value, regulatory_tolerance_value: v })}
         onUnitChange={(u) => onChange({ ...value, regulatory_tolerance_unit: u })}
-      />
-
-      <ToleranceRow
-        idPrefix="client"
-        label="Client KPI"
-        hint="The (usually tighter) target shared with clients."
-        unit={value.client_tolerance_unit}
-        numberValue={value.client_tolerance_value}
-        onValueChange={(v) => onChange({ ...value, client_tolerance_value: v })}
-        onUnitChange={(u) => onChange({ ...value, client_tolerance_unit: u })}
       />
     </div>
   )

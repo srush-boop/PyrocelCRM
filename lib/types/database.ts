@@ -209,6 +209,10 @@ export interface Site {
   last_service_date: string | null
   next_service_date: string | null
   deadline_tolerance_days: number
+  // Optional client KPI override for this site/service. NULL = inherit the
+  // service type's regulatory KPI as the client default.
+  client_tolerance_value: number | null
+  client_tolerance_unit: ToleranceUnit | null
   // Who performs the work (CDO / Engineer / Sub-contractor).
   worker_type: WorkerType
   // How the work is routed. Any of these may be set depending on worker_type;

@@ -196,13 +196,14 @@ export function AddSiteDialog({ clients }: AddSiteDialogProps) {
               </div>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="contact_email">Contact Email</Label>
+              <Label htmlFor="contact_email">Contact Email *</Label>
               <Input
                 id="contact_email"
                 type="email"
                 value={formData.contact_email}
                 onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
                 placeholder="contact@example.com"
+                required
               />
             </div>
             <div className="grid gap-2">

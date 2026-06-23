@@ -39,7 +39,6 @@ import {
   HardHat,
   KeyRound,
   FolderOpen,
-  Boxes,
   Lightbulb,
   Gauge,
   ChevronRight,
@@ -59,10 +58,13 @@ type NavItem = {
   children?: { title: string; href: string; icon: LucideIcon }[]
 }
 
-const assetsNavItem: NavItem = {
-  title: 'Assets',
-  icon: Boxes,
+// Sites now acts as a parent grouping its asset registers (dampers,
+// extinguishers, emergency lights) alongside the sites list itself.
+const sitesNavItem: NavItem = {
+  title: 'Sites',
+  icon: Building2,
   children: [
+    { title: 'All Sites', href: '/dashboard/sites', icon: Building2 },
     { title: 'Dampers', href: '/dashboard/dampers', icon: Wind },
     { title: 'Extinguishers', href: '/dashboard/extinguishers', icon: FireExtinguisher },
     { title: 'Emergency Lights', href: '/dashboard/emergency-lights', icon: Lightbulb },
@@ -72,8 +74,7 @@ const assetsNavItem: NavItem = {
 const adminNavItems: NavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { title: 'Clients', href: '/dashboard/clients', icon: Building },
-  { title: 'Sites', href: '/dashboard/sites', icon: Building2 },
-  assetsNavItem,
+  sitesNavItem,
   { title: 'Routes', href: '/dashboard/routes', icon: Route },
   { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
   { title: 'Users', href: '/dashboard/engineers', icon: Users },
@@ -94,8 +95,7 @@ const engineerNavItems: NavItem[] = [
 const officeNavItems: NavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { title: 'Clients', href: '/dashboard/clients', icon: Building },
-  { title: 'Sites', href: '/dashboard/sites', icon: Building2 },
-  assetsNavItem,
+  sitesNavItem,
   { title: 'Routes', href: '/dashboard/routes', icon: Route },
   { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
   { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },

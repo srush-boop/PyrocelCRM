@@ -6,7 +6,7 @@ import type {
   Profile,
   Quote,
   QuoteLineItem,
-  QuoteSection,
+  QuoteSystem,
 } from '@/lib/types/database'
 
 export const metadata = { title: 'Quote | Pyrocel' }
@@ -35,8 +35,8 @@ export default async function QuotePrintPage({
     .single()
   if (!quote) notFound()
 
-  const [{ data: sections }, { data: lines }, { data: company }] = await Promise.all([
-    supabase.from('quote_sections').select('*').eq('quote_id', id).order('position'),
+  const [{ data: systems }, { data: lines }, { data: company }] = await Promise.all([
+    supabase.from('quote_systems').select('*').eq('quote_id', id).order('position'),
     supabase.from('quote_line_items').select('*').eq('quote_id', id).order('position'),
     supabase.from('company_info').select('*').limit(1).maybeSingle(),
   ])
@@ -45,7 +45,7 @@ export default async function QuotePrintPage({
     <div className="min-h-screen bg-muted/40 p-4 sm:p-8 print:bg-white print:p-0">
       <QuoteDocument
         quote={quote as Quote}
-        sections={(sections ?? []) as QuoteSection[]}
+        systems={(systems ?? []) as QuoteSystem[]}
         lines={(lines ?? []) as QuoteLineItem[]}
         company={(company ?? null) as CompanyInfo | null}
         backHref={`/dashboard/sales/${id}`}

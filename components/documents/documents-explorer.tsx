@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Building, Building2, Wrench, Search, ChevronLeft } from 'lucide-react'
+import { Building, Building2, Wrench, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -161,34 +161,28 @@ export function DocumentsExplorer({
           No {TAB_META[tab].label.toLowerCase()} found.
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <Card className="divide-y">
           {filtered.map((item) => {
             const Icon = TAB_META[tab].icon
             return (
-              <Card
+              <button
                 key={item.id}
-                role="button"
-                tabIndex={0}
+                type="button"
                 onClick={() => selectOwner(item.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    selectOwner(item.id)
-                  }
-                }}
-                className="flex cursor-pointer items-center gap-3 p-4 transition-colors hover:bg-muted/50"
+                className="flex w-full cursor-pointer items-center gap-3 p-3 text-left transition-colors hover:bg-muted/50"
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <Icon className="h-5 w-5" />
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Icon className="h-4 w-4" />
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">{item.label}</p>
                   <p className="truncate text-sm text-muted-foreground">{item.sub}</p>
                 </div>
-              </Card>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              </button>
             )
           })}
-        </div>
+        </Card>
       )}
     </div>
   )

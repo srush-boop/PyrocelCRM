@@ -14,7 +14,7 @@ import type {
   SystemSpecTemplate,
   WorkTypeField,
   QuoteDesignCategory,
-  ServiceType,
+  SystemType,
   Site,
 } from '@/lib/types/database'
 
@@ -51,7 +51,7 @@ export default async function QuoteDetailPage({
     { data: lines },
     { data: clients },
     { data: sites },
-    { data: serviceTypes },
+    { data: systemTypes },
     { data: catalogue },
     { data: specTemplates },
     { data: workTypeFields },
@@ -63,7 +63,7 @@ export default async function QuoteDetailPage({
     supabase.from('quote_line_items').select('*').eq('quote_id', id).order('position'),
     supabase.from('clients').select('id, name').order('name'),
     supabase.from('sites').select('id, name, client_id').order('name'),
-    supabase.from('service_types').select('id, name, code').eq('status', 'live').order('name'),
+    supabase.from('system_types').select('*').eq('active', true).order('name'),
     supabase.from('quote_catalogue_items').select('*').eq('active', true).order('name'),
     supabase.from('system_spec_templates').select('*').eq('active', true),
     supabase.from('work_type_fields').select('*').eq('active', true).order('position'),
@@ -100,7 +100,7 @@ export default async function QuoteDetailPage({
       <QuoteBuilder
         clients={(clients ?? []) as Client[]}
         sites={(sites ?? []) as Site[]}
-        serviceTypes={(serviceTypes ?? []) as ServiceType[]}
+        systemTypes={(systemTypes ?? []) as SystemType[]}
         catalogue={(catalogue ?? []) as QuoteCatalogueItem[]}
         specTemplates={(specTemplates ?? []) as SystemSpecTemplate[]}
         workTypeFields={(workTypeFields ?? []) as WorkTypeField[]}

@@ -8,6 +8,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ArrowLeft, MapPin, Phone, Mail, Building2, Radio, Building, User, ExternalLink } from 'lucide-react'
 import { EditSiteButton } from '@/components/dashboard/sites/edit-site-button'
 import { SiteServicesManager } from '@/components/dashboard/sites/site-services-manager'
+import { SiteSystemsManager } from '@/components/dashboard/sites/site-systems-manager'
 import { SiteAssetsTab, type SiteAsset } from '@/components/dashboard/sites/site-assets-tab'
 import { SiteReports } from '@/components/dashboard/sites/site-reports'
 import { SiteLogbook } from '@/components/dashboard/sites/site-logbook'
@@ -32,6 +33,8 @@ import type {
   Subcontractor,
   ServiceType,
   SiteService,
+  SiteSystem,
+  SystemType,
   Task,
   TaskResult,
   Damper,
@@ -79,7 +82,7 @@ export default async function SiteDetailPage({ params }: PageProps) {
     notFound()
   }
 
-  const [siteServicesResult, serviceTypesResult, engineersResult, routesResult, areasResult, subcontractorsResult, clientsResult] = await Promise.all([
+  const [siteServicesResult, serviceTypesResult, engineersResult, routesResult, areasResult, subcontractorsResult, clientsResult, siteSystemsResult, systemTypesResult] = await Promise.all([
     supabase
       .from('site_services')
       .select(`
@@ -101,6 +104,8 @@ export default async function SiteDetailPage({ params }: PageProps) {
     supabase.from('areas').select('*').order('name'),
     supabase.from('subcontractors').select('*').eq('status', 'active').order('name'),
     supabase.from('clients').select('*').order('name'),
+    supabase.from('site_systems').select('*').eq('site_id', id).order('position').order('name'),
+    supabase.from('system_types').select('*').eq('active', true).order('name'),
   ])
 
   const siteServices = (siteServicesResult.data || []) as (SiteService & { service_type: ServiceType })[]
@@ -110,6 +115,8 @@ export default async function SiteDetailPage({ params }: PageProps) {
   const areas = (areasResult.data || []) as Area[]
   const subcontractors = (subcontractorsResult.data || []) as Subcontractor[]
   const clients = (clientsResult.data || []) as Client[]
+  const siteSystems = (siteSystemsResult.data || []) as SiteSystem[]
+  const systemTypes = (systemTypesResult.data || []) as SystemType[]
 
   // Get tasks for this site's services
   const siteServiceIds = siteServices.map(ss => ss.id)
@@ -308,6 +315,7 @@ export default async function SiteDetailPage({ params }: PageProps) {
       <Tabs defaultValue="overview" className="gap-6">
         <TabsList className="h-auto flex-wrap justify-start">
           <TabsTrigger value="overview" className="flex-none">Overview</TabsTrigger>
+          <TabsTrigger value="systems" className="flex-none">Systems</TabsTrigger>
           {assetTabs.length > 0 && (
             <TabsTrigger value="assets" className="flex-none">Assets</TabsTrigger>
           )}
@@ -488,6 +496,15 @@ export default async function SiteDetailPage({ params }: PageProps) {
           siteStatus={(site as Site).status}
         />
           </div>
+        </TabsContent>
+
+        <TabsContent value="systems" className="mt-0">
+          <SiteSystemsManager
+            siteId={id}
+            siteSystems={siteSystems}
+            siteServices={siteServices}
+            systemTypes={systemTypes}
+          />
         </TabsContent>
 
         {assetTabs.length > 0 && (

@@ -44,6 +44,7 @@ export function EditSiteDialog({ site, clients, open, onOpenChange }: EditSiteDi
     contact_email: site.contact_email || '',
     contact_phone: site.contact_phone || '',
     client_id: site.client_id || '',
+    uprn: site.uprn || '',
     status: site.status || 'live',
     notes: site.notes || '',
     has_remote_monitoring: site.has_remote_monitoring ?? false,
@@ -155,6 +156,16 @@ export function EditSiteDialog({ site, clients, open, onOpenChange }: EditSiteDi
               <p className="text-xs text-muted-foreground">
                 Used as the access code for the site&apos;s QR fire safety log book.
               </p>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="uprn">UPRN</Label>
+              <Input
+                id="uprn"
+                value={formData.uprn}
+                onChange={(e) => setFormData({ ...formData, uprn: e.target.value })}
+                placeholder="Unique Property Reference Number"
+                inputMode="numeric"
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">

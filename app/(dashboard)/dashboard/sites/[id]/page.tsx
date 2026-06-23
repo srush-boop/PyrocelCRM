@@ -381,6 +381,12 @@ export default async function SiteDetailPage({ params }: PageProps) {
               <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
               <span>{site.address}</span>
             </div>
+            {(site as Site).uprn && (
+              <div className="text-sm">
+                <span className="text-muted-foreground">UPRN: </span>
+                {(site as Site).uprn}
+              </div>
+            )}
             {site.contact_name && (
               <div className="text-sm">
                 <span className="text-muted-foreground">Contact: </span>

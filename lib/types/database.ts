@@ -133,6 +133,8 @@ export interface Site {
   route_id: string | null
   client_id: string | null
   site_id_cash: string | null
+  // Unique Property Reference Number (UK national property identifier).
+  uprn: string | null
   status: 'live' | 'dead'
   notes: string | null
   reporting_emails: string[]

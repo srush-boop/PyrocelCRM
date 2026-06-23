@@ -44,6 +44,7 @@ export function AddSiteDialog({ clients }: AddSiteDialogProps) {
     contact_phone: '',
     client_id: '',
     site_id_cash: '',
+    uprn: '',
     status: 'live' as 'live' | 'dead',
     notes: '',
     has_remote_monitoring: false,
@@ -112,6 +113,7 @@ export function AddSiteDialog({ clients }: AddSiteDialogProps) {
         contact_phone: '',
         client_id: '',
         site_id_cash: '',
+        uprn: '',
         status: 'live',
         notes: '',
         has_remote_monitoring: false,
@@ -235,25 +237,35 @@ export function AddSiteDialog({ clients }: AddSiteDialogProps) {
                 <Input
                   id="site_id_cash"
                   value={formData.site_id_cash}
-                  onChange={(e) => setFormData({ ...formData, site_id_cash: e.target.value })}
-                  placeholder="CASH site ID"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="status">Status</Label>
-                <Select
-                  value={formData.status}
-                  onValueChange={(value) => setFormData({ ...formData, status: value as 'live' | 'dead' })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="live">Live</SelectItem>
-                    <SelectItem value="dead">Dead</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                onChange={(e) => setFormData({ ...formData, site_id_cash: e.target.value })}
+                placeholder="CASH site ID"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="uprn">UPRN</Label>
+              <Input
+                id="uprn"
+                value={formData.uprn}
+                onChange={(e) => setFormData({ ...formData, uprn: e.target.value })}
+                placeholder="Unique Property Reference Number"
+                inputMode="numeric"
+              />
+            </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="status">Status</Label>
+              <Select
+                value={formData.status}
+                onValueChange={(value) => setFormData({ ...formData, status: value as 'live' | 'dead' })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="live">Live</SelectItem>
+                  <SelectItem value="dead">Dead</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="reporting_email">Reporting Email Addresses</Label>

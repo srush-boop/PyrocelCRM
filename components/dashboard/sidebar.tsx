@@ -43,6 +43,8 @@ import {
   Gauge,
   ChevronRight,
   HelpCircle,
+  ReceiptText,
+  BookOpen,
 } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 import type { LucideIcon } from 'lucide-react'
@@ -94,6 +96,16 @@ const officeServiceManagementNavItem: NavItem = {
   ],
 }
 
+// Sales groups quoting and the reusable line-item catalogue.
+const salesNavItem: NavItem = {
+  title: 'Sales',
+  icon: ReceiptText,
+  children: [
+    { title: 'Quotes', href: '/dashboard/sales', icon: ReceiptText },
+    { title: 'Catalogue', href: '/dashboard/sales/catalogue', icon: BookOpen },
+  ],
+}
+
 const adminNavItems: NavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { title: 'Clients', href: '/dashboard/clients', icon: Building },
@@ -103,6 +115,7 @@ const adminNavItems: NavItem[] = [
   { title: 'Users', href: '/dashboard/engineers', icon: Users },
   { title: 'Client Logins', href: '/dashboard/client-logins', icon: KeyRound },
   { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
+  salesNavItem,
   { title: 'Reports', href: '/dashboard/reports', icon: FileText },
   { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
@@ -119,6 +132,7 @@ const officeNavItems: NavItem[] = [
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
   officeServiceManagementNavItem,
   { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
+  salesNavItem,
   { title: 'Reports', href: '/dashboard/reports', icon: FileText },
   { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },

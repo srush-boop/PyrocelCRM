@@ -10,6 +10,7 @@ import type {
   WorkTypeField,
   QuoteDesignCategory,
   SystemType,
+  AssetType,
   Site,
 } from '@/lib/types/database'
 
@@ -31,6 +32,8 @@ export default async function NewQuotePage() {
     { data: clients },
     { data: sites },
     { data: systemTypes },
+    { data: assetTypes },
+    { data: ppmEngineerCost },
     { data: catalogue },
     { data: specTemplates },
     { data: workTypeFields },
@@ -40,12 +43,21 @@ export default async function NewQuotePage() {
     supabase.from('clients').select('id, name').order('name'),
     supabase.from('sites').select('id, name, client_id').order('name'),
     supabase.from('system_types').select('*').eq('active', true).order('name'),
+    supabase.from('asset_types').select('*').eq('active', true).order('position').order('name'),
+    supabase
+      .from('direct_costs')
+      .select('hourly_cost_pence')
+      .ilike('role', '%PPM%')
+      .limit(1)
+      .maybeSingle(),
     supabase.from('quote_catalogue_items').select('*').eq('active', true).order('name'),
     supabase.from('system_spec_templates').select('*').eq('active', true),
     supabase.from('work_type_fields').select('*').eq('active', true).order('position'),
     supabase.from('quote_design_categories').select('*').eq('active', true).order('name'),
     supabase.from('quote_bank_values').select('*'),
   ])
+
+  const defaultHourlyCostPence = (ppmEngineerCost as { hourly_cost_pence: number } | null)?.hourly_cost_pence ?? 0
 
   return (
     <div className="space-y-6">
@@ -58,6 +70,8 @@ export default async function NewQuotePage() {
         clients={(clients ?? []) as Client[]}
         sites={(sites ?? []) as Site[]}
         systemTypes={(systemTypes ?? []) as SystemType[]}
+        assetTypes={(assetTypes ?? []) as AssetType[]}
+        defaultHourlyCostPence={defaultHourlyCostPence}
         catalogue={(catalogue ?? []) as QuoteCatalogueItem[]}
         specTemplates={(specTemplates ?? []) as SystemSpecTemplate[]}
         workTypeFields={(workTypeFields ?? []) as WorkTypeField[]}

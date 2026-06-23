@@ -15,6 +15,8 @@ import type {
   WorkTypeField,
   QuoteDesignCategory,
   SystemType,
+  AssetType,
+  QuoteSystemPpm,
   Site,
 } from '@/lib/types/database'
 
@@ -52,6 +54,9 @@ export default async function QuoteDetailPage({
     { data: clients },
     { data: sites },
     { data: systemTypes },
+    { data: assetTypes },
+    { data: ppmRows },
+    { data: ppmEngineerCost },
     { data: catalogue },
     { data: specTemplates },
     { data: workTypeFields },
@@ -64,6 +69,17 @@ export default async function QuoteDetailPage({
     supabase.from('clients').select('id, name').order('name'),
     supabase.from('sites').select('id, name, client_id').order('name'),
     supabase.from('system_types').select('*').eq('active', true).order('name'),
+    supabase.from('asset_types').select('*').eq('active', true).order('position').order('name'),
+    supabase
+      .from('quote_system_ppm')
+      .select('*, quote_systems!inner(quote_id)')
+      .eq('quote_systems.quote_id', id),
+    supabase
+      .from('direct_costs')
+      .select('hourly_cost_pence')
+      .ilike('role', '%PPM%')
+      .limit(1)
+      .maybeSingle(),
     supabase.from('quote_catalogue_items').select('*').eq('active', true).order('name'),
     supabase.from('system_spec_templates').select('*').eq('active', true),
     supabase.from('work_type_fields').select('*').eq('active', true).order('position'),
@@ -75,6 +91,8 @@ export default async function QuoteDetailPage({
       .or(`id.eq.${masterId},master_quote_id.eq.${masterId}`)
       .order('revision'),
   ])
+
+  const defaultHourlyCostPence = (ppmEngineerCost as { hourly_cost_pence: number } | null)?.hourly_cost_pence ?? 0
 
   const editable = typedQuote.status === 'draft'
 
@@ -101,6 +119,8 @@ export default async function QuoteDetailPage({
         clients={(clients ?? []) as Client[]}
         sites={(sites ?? []) as Site[]}
         systemTypes={(systemTypes ?? []) as SystemType[]}
+        assetTypes={(assetTypes ?? []) as AssetType[]}
+        defaultHourlyCostPence={defaultHourlyCostPence}
         catalogue={(catalogue ?? []) as QuoteCatalogueItem[]}
         specTemplates={(specTemplates ?? []) as SystemSpecTemplate[]}
         workTypeFields={(workTypeFields ?? []) as WorkTypeField[]}
@@ -109,6 +129,7 @@ export default async function QuoteDetailPage({
         quote={typedQuote}
         initialSystems={(systems ?? []) as QuoteSystem[]}
         initialLines={(lines ?? []) as QuoteLineItem[]}
+        initialPpm={(ppmRows ?? []) as QuoteSystemPpm[]}
         readOnly={!editable}
       />
     </div>

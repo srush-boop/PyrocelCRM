@@ -291,7 +291,9 @@ export interface ChecklistResult {
   notes?: string
 }
 
-export type TaskResultStatus = 'pending' | 'pass' | 'fail' | 'partial'
+// 'no_access' is used when an engineer attended but could not gain access to
+// the site. It is a distinct outcome and is NOT treated as a failure.
+export type TaskResultStatus = 'pending' | 'pass' | 'fail' | 'partial' | 'no_access'
 
 export interface TaskResult {
   id: string

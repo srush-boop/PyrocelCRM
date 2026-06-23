@@ -14,7 +14,7 @@ export interface EmailData {
   siteName: string
   serviceType: string
   completedDate: string
-  overallStatus: 'pass' | 'fail' | 'partial'
+  overallStatus: 'pass' | 'fail' | 'partial' | 'no_access'
   checklist: ChecklistItem[]
   engineerName: string
   engineerNotes?: string
@@ -197,6 +197,78 @@ export const generateClientFailEmail = (data: EmailData): { subject: string; htm
   `
   return {
     subject: `Attention Required: ${data.serviceType} at ${data.siteName}${data.referenceNumber ? ` (Ref ${data.referenceNumber})` : ''}`,
+    html
+  }
+}
+
+// Sent when the engineer attended but could not gain access to the site. This
+// is deliberately neutral — it is not a failure or a defect notice, it simply
+// informs the client that the visit could not be completed and will be
+// re-attended.
+export const generateClientNoAccessEmail = (data: EmailData): { subject: string; html: string } => {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: ${BRAND.charcoal}; color: white; padding: 24px 20px; text-align: center; border-radius: 5px; }
+          .brand { font-size: 22px; font-weight: bold; letter-spacing: 1px; margin: 0 0 4px; }
+          .content { padding: 20px; background: #f9f9f9; margin: 20px 0; border-radius: 5px; }
+          .footer { text-align: center; color: #666; font-size: 12px; }
+          .stamp { background: #d97706; color: white; padding: 10px 20px; border-radius: 5px; display: inline-block; font-weight: bold; }
+          .notice { background: #fef3c7; border: 1px solid #fde68a; color: #92400e; padding: 12px; border-radius: 5px; margin: 20px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <p class="brand">PYROCEL</p>
+            <h1 style="margin: 0; font-size: 18px;">Visit Could Not Be Completed</h1>
+          </div>
+
+          <div class="content">
+            <p>Dear ${data.clientName},</p>
+
+            <div class="notice">
+              <strong>No access:</strong> Our engineer attended ${data.siteName} for the scheduled
+              ${data.serviceType} but was unable to gain access to carry out the service.
+            </div>
+
+            <h3>Visit Details</h3>
+            <ul>
+              ${data.referenceNumber ? `<li><strong>Reference:</strong> ${data.referenceNumber}</li>` : ''}
+              <li><strong>Site:</strong> ${data.siteName}</li>
+              <li><strong>Service Type:</strong> ${data.serviceType}</li>
+              <li><strong>Attended Date:</strong> ${data.completedDate}</li>
+              <li><strong>Engineer:</strong> ${data.engineerName}</li>
+            </ul>
+
+            <div class="stamp">NO ACCESS — SERVICE NOT CARRIED OUT</div>
+
+            ${data.engineerNotes ? `
+              <h3>Engineer Notes</h3>
+              <p>${data.engineerNotes}</p>
+            ` : ''}
+
+            ${reportButton(data.reportUrl)}
+
+            <h3>Next Steps</h3>
+            <p>Please contact us to arrange access so we can re-attend and complete the service. This visit has not been recorded as a service failure.</p>
+
+            <p>Best regards,<br/>The Pyrocel Team</p>
+          </div>
+
+          <div class="footer">
+            <p>This is an automated report from Pyrocel. Please do not reply to this email.</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `
+  return {
+    subject: `No Access: ${data.serviceType} at ${data.siteName}${data.referenceNumber ? ` (Ref ${data.referenceNumber})` : ''}`,
     html
   }
 }

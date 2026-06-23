@@ -379,6 +379,7 @@ export default function ReportsPage() {
                 <SelectItem value="pass">Pass</SelectItem>
                 <SelectItem value="fail">Fail</SelectItem>
                 <SelectItem value="partial">Partial</SelectItem>
+                <SelectItem value="no_access">No Access</SelectItem>
               </SelectContent>
             </Select>
 
@@ -586,12 +587,18 @@ export default function ReportsPage() {
                           className={
                             report.overallStatus === 'pass'
                               ? 'bg-green-600 text-white hover:bg-green-600/90'
-                              : report.overallStatus === 'partial'
+                              : report.overallStatus === 'partial' || report.overallStatus === 'no_access'
                               ? 'bg-amber-500 text-white hover:bg-amber-500/90'
                               : undefined
                           }
                         >
-                          {report.overallStatus === 'pass' ? 'Pass' : report.overallStatus === 'fail' ? 'Fail' : 'Partial'}
+                          {report.overallStatus === 'pass'
+                            ? 'Pass'
+                            : report.overallStatus === 'fail'
+                            ? 'Fail'
+                            : report.overallStatus === 'no_access'
+                            ? 'No Access'
+                            : 'Partial'}
                         </Badge>
                       </TableCell>
                       <TableCell className="hidden xl:table-cell">

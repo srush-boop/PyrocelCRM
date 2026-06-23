@@ -43,6 +43,7 @@ import {
   Lightbulb,
   Gauge,
   ChevronRight,
+  HelpCircle,
 } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 import type { LucideIcon } from 'lucide-react'
@@ -185,6 +186,14 @@ export function DashboardSidebar({ profile }: DashboardSidebarProps) {
       </SidebarContent>
       <SidebarFooter className="border-t border-sidebar-border p-4">
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname === '/dashboard/help'}>
+              <Link href="/dashboard/help">
+                <HelpCircle className="h-4 w-4" />
+                <span>Help</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname === '/dashboard/settings'}>
               <Link href="/dashboard/settings">

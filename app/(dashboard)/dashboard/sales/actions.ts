@@ -20,6 +20,27 @@ export interface QuoteLineInput {
   unit_price_pence: number
 }
 
+export interface QuotePpmInput {
+  num_visits: number
+  round_trip_miles: number
+  mileage_rate_pence: number
+  travel_minutes_per_visit: number
+  hourly_cost_pence: number
+  download_required: boolean
+  download_minutes_per_visit: number
+  access_minutes_per_visit: number
+  remote_monitored: boolean
+  remote_minutes_per_visit: number
+  out_of_hours: boolean
+  ooh_uplift_percent: number
+  margin_percent: number
+  computed_cost_pence: number
+  computed_price_pence: number
+  assets: unknown[]
+  visits: unknown[]
+  notes: string | null
+}
+
 export interface QuoteSystemInput {
   system_type_id?: string | null
   system_name: string
@@ -36,6 +57,7 @@ export interface QuoteSystemInput {
   survey_by?: string | null
   survey_date?: string | null
   lines: QuoteLineInput[]
+  ppm?: QuotePpmInput | null
 }
 
 export interface QuoteInput {
@@ -144,6 +166,33 @@ async function persistSystems(
     if (rows.length > 0) {
       const { error: lineErr } = await supabase.from('quote_line_items').insert(rows)
       if (lineErr) return 'Could not save quote line items.'
+    }
+
+    // Persist the PPM calculator breakdown for this system, if present.
+    if (system.ppm) {
+      const p = system.ppm
+      const { error: ppmErr } = await supabase.from('quote_system_ppm').insert({
+        quote_system_id: systemId,
+        num_visits: Math.max(0, Math.round(p.num_visits) || 0),
+        round_trip_miles: p.round_trip_miles || 0,
+        mileage_rate_pence: Math.round(p.mileage_rate_pence) || 0,
+        travel_minutes_per_visit: p.travel_minutes_per_visit || 0,
+        hourly_cost_pence: Math.round(p.hourly_cost_pence) || 0,
+        download_required: !!p.download_required,
+        download_minutes_per_visit: p.download_minutes_per_visit || 0,
+        access_minutes_per_visit: p.access_minutes_per_visit || 0,
+        remote_monitored: !!p.remote_monitored,
+        remote_minutes_per_visit: p.remote_minutes_per_visit || 0,
+        out_of_hours: !!p.out_of_hours,
+        ooh_uplift_percent: p.ooh_uplift_percent || 0,
+        margin_percent: p.margin_percent || 0,
+        computed_cost_pence: Math.round(p.computed_cost_pence) || 0,
+        computed_price_pence: Math.round(p.computed_price_pence) || 0,
+        assets: p.assets ?? [],
+        visits: p.visits ?? [],
+        notes: p.notes || null,
+      })
+      if (ppmErr) return 'Could not save the PPM calculation.'
     }
   }
   return null

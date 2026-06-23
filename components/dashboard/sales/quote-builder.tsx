@@ -25,8 +25,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Trash2, GripVertical, BookOpen, Save, FileDown, TrendingUp } from 'lucide-react'
+import { Plus, Trash2, GripVertical, BookOpen, Save, FileDown, TrendingUp, Calculator } from 'lucide-react'
 import { toast } from 'sonner'
+import { PpmCalculatorDialog, type PpmDraft } from '@/components/dashboard/sales/ppm-calculator-dialog'
 import {
   computeQuoteTotals,
   computeBankStats,
@@ -48,6 +49,8 @@ import type {
   WorkTypeField,
   QuoteDesignCategory,
   SystemType,
+  AssetType,
+  QuoteSystemPpm,
   Site,
 } from '@/lib/types/database'
 import { saveQuote, type QuoteInput } from '@/app/(dashboard)/dashboard/sales/actions'
@@ -81,6 +84,8 @@ interface EditSystem {
   survey_by: string
   survey_date: string
   lines: EditLine[]
+  // Saved PPM calculator breakdown for this system, if one has been applied.
+  ppm: PpmDraft | null
 }
 
 const uid = () =>
@@ -119,6 +124,32 @@ function blankSystem(index: number): EditSystem {
     survey_by: '',
     survey_date: '',
     lines: [blankLine()],
+    ppm: null,
+  }
+}
+
+// Convert a saved PPM row into the editable draft shape used by the dialog.
+function ppmToDraft(p: QuoteSystemPpm | null): PpmDraft | null {
+  if (!p) return null
+  return {
+    num_visits: p.num_visits,
+    round_trip_miles: p.round_trip_miles,
+    mileage_rate_pence: p.mileage_rate_pence,
+    travel_minutes_per_visit: p.travel_minutes_per_visit,
+    hourly_cost_pence: p.hourly_cost_pence,
+    download_required: p.download_required,
+    download_minutes_per_visit: p.download_minutes_per_visit,
+    access_minutes_per_visit: p.access_minutes_per_visit,
+    remote_monitored: p.remote_monitored,
+    remote_minutes_per_visit: p.remote_minutes_per_visit,
+    out_of_hours: p.out_of_hours,
+    ooh_uplift_percent: p.ooh_uplift_percent,
+    margin_percent: p.margin_percent,
+    computed_cost_pence: p.computed_cost_pence,
+    computed_price_pence: p.computed_price_pence,
+    assets: p.assets ?? [],
+    visits: p.visits ?? [],
+    notes: p.notes,
   }
 }
 
@@ -126,6 +157,8 @@ interface QuoteBuilderProps {
   clients: Client[]
   sites: Site[]
   systemTypes: SystemType[]
+  assetTypes: AssetType[]
+  defaultHourlyCostPence: number
   catalogue: QuoteCatalogueItem[]
   specTemplates: SystemSpecTemplate[]
   workTypeFields: WorkTypeField[]
@@ -134,6 +167,7 @@ interface QuoteBuilderProps {
   quote?: Quote
   initialSystems?: QuoteSystem[]
   initialLines?: QuoteLineItem[]
+  initialPpm?: QuoteSystemPpm[]
   readOnly?: boolean
 }
 
@@ -141,6 +175,8 @@ export function QuoteBuilder({
   clients,
   sites,
   systemTypes,
+  assetTypes,
+  defaultHourlyCostPence,
   catalogue,
   specTemplates,
   workTypeFields,
@@ -149,6 +185,7 @@ export function QuoteBuilder({
   quote,
   initialSystems,
   initialLines,
+  initialPpm,
   readOnly = false,
 }: QuoteBuilderProps) {
   const router = useRouter()
@@ -209,6 +246,7 @@ export function QuoteBuilder({
               unit: l.unit ?? '',
               unitPrice: penceToPounds(l.unit_price_pence),
             })),
+          ppm: ppmToDraft((initialPpm ?? []).find((p) => p.quote_system_id === s.id) ?? null),
         }))
     }
     return [blankSystem(1)]
@@ -264,6 +302,32 @@ export function QuoteBuilder({
       ),
     )
   }
+  // Apply a PPM calculation: store the breakdown on the system and replace any
+  // previous PPM line with a single priced "Annual PPM" line at the computed price.
+  function applyPpm(systemKey: string, draft: PpmDraft) {
+    setSystems((prev) =>
+      prev.map((s) => {
+        if (s.key !== systemKey) return s
+        const ppmLine: EditLine = {
+          key: uid(),
+          description: `Annual PPM — ${s.system_name}`.trim(),
+          detail: `${draft.num_visits} visit${draft.num_visits === 1 ? '' : 's'} per year`,
+          service_type_id: null,
+          catalogue_item_id: null,
+          quantity: '1',
+          unit: 'year',
+          unitPrice: penceToPounds(draft.computed_price_pence),
+        }
+        // Drop a previously-applied PPM line (same description) before re-adding.
+        const otherLines = s.lines.filter(
+          (l) => !l.description.startsWith('Annual PPM —') && l.description.trim() !== '',
+        )
+        return { ...s, ppm: draft, lines: [...otherLines, ppmLine] }
+      }),
+    )
+    toast.success('PPM price applied to system')
+  }
+
   function addCatalogueLine(systemKey: string, item: QuoteCatalogueItem) {
     addLine(systemKey, {
       key: uid(),
@@ -310,6 +374,7 @@ export function QuoteBuilder({
         survey_carried_out: s.survey_carried_out,
         survey_by: s.survey_carried_out ? s.survey_by || null : null,
         survey_date: s.survey_carried_out ? s.survey_date || null : null,
+        ppm: s.ppm,
         lines: s.lines
           .filter((l) => l.description.trim())
           .map((l) => ({
@@ -486,6 +551,8 @@ export function QuoteBuilder({
           readOnly={readOnly}
           isPending={isPending}
           systemTypes={systemTypes}
+          assetTypes={assetTypes}
+          defaultHourlyCostPence={defaultHourlyCostPence}
           catalogue={catalogue}
           specTemplates={specTemplates}
           workTypeFields={workTypeFields}
@@ -497,6 +564,7 @@ export function QuoteBuilder({
           onAddCatalogueLine={(item) => addCatalogueLine(system.key, item)}
           onUpdateLine={(lineKey, patch) => updateLine(system.key, lineKey, patch)}
           onRemoveLine={(lineKey) => removeLine(system.key, lineKey)}
+          onApplyPpm={(draft) => applyPpm(system.key, draft)}
         />
       ))}
 
@@ -608,6 +676,8 @@ interface SystemCardProps {
   readOnly: boolean
   isPending: boolean
   systemTypes: SystemType[]
+  assetTypes: AssetType[]
+  defaultHourlyCostPence: number
   catalogue: QuoteCatalogueItem[]
   specTemplates: SystemSpecTemplate[]
   workTypeFields: WorkTypeField[]
@@ -619,6 +689,7 @@ interface SystemCardProps {
   onAddCatalogueLine: (item: QuoteCatalogueItem) => void
   onUpdateLine: (lineKey: string, patch: Partial<EditLine>) => void
   onRemoveLine: (lineKey: string) => void
+  onApplyPpm: (draft: PpmDraft) => void
 }
 
 function SystemCard({
@@ -627,6 +698,8 @@ function SystemCard({
   readOnly,
   isPending,
   systemTypes,
+  assetTypes,
+  defaultHourlyCostPence,
   catalogue,
   specTemplates,
   workTypeFields,
@@ -638,8 +711,19 @@ function SystemCard({
   onAddCatalogueLine,
   onUpdateLine,
   onRemoveLine,
+  onApplyPpm,
 }: SystemCardProps) {
   const disabled = readOnly || isPending
+  const [ppmOpen, setPpmOpen] = useState(false)
+
+  // Asset types belonging to this system's system type (for the PPM calculator).
+  const systemAssetTypes = useMemo(
+    () =>
+      system.system_type_id
+        ? assetTypes.filter((a) => a.system_type_id === system.system_type_id && a.active)
+        : [],
+    [assetTypes, system.system_type_id],
+  )
 
   const systemTotalPence = system.lines.reduce(
     (sum, l) => sum + Math.round((Number.parseFloat(l.quantity) || 0) * poundsToPence(l.unitPrice)),
@@ -1124,6 +1208,15 @@ function SystemCard({
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPpmOpen(true)}
+                  disabled={isPending}
+                >
+                  <Calculator className="mr-2 h-4 w-4" />
+                  {system.ppm ? 'Edit PPM price' : 'PPM calculator'}
+                </Button>
               </div>
               <div className="text-sm text-muted-foreground">
                 System total:{' '}
@@ -1134,6 +1227,17 @@ function SystemCard({
             </div>
           )}
         </div>
+
+        <PpmCalculatorDialog
+          open={ppmOpen}
+          onOpenChange={setPpmOpen}
+          systemName={system.system_name}
+          assetTypes={systemAssetTypes}
+          defaultHourlyCostPence={defaultHourlyCostPence}
+          existingDraft={system.ppm}
+          disabled={disabled}
+          onApply={onApplyPpm}
+        />
       </CardContent>
     </Card>
   )

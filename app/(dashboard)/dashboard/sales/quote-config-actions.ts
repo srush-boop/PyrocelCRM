@@ -58,6 +58,43 @@ export async function deleteSystemType(id: string): Promise<Result> {
   return { ok: true }
 }
 
+// ---------- Asset types (PPM calculator library) ----------
+export async function saveAssetType(input: {
+  id?: string
+  system_type_id: string | null
+  name: string
+  description: string
+  default_minutes: number
+}): Promise<Result> {
+  const { supabase, error } = await requireStaff()
+  if (!supabase) return { ok: false, error }
+
+  const payload = {
+    system_type_id: input.system_type_id || null,
+    name: input.name.trim(),
+    description: input.description || null,
+    default_minutes: Number.isFinite(input.default_minutes) ? input.default_minutes : 0,
+  }
+
+  const query = input.id
+    ? supabase.from('asset_types').update(payload).eq('id', input.id)
+    : supabase.from('asset_types').insert(payload)
+
+  const { error: dbError } = await query
+  if (dbError) return { ok: false, error: dbError.message }
+  revalidatePath('/dashboard/sales/asset-types')
+  return { ok: true }
+}
+
+export async function deleteAssetType(id: string): Promise<Result> {
+  const { supabase, error } = await requireStaff()
+  if (!supabase) return { ok: false, error }
+  const { error: dbError } = await supabase.from('asset_types').delete().eq('id', id)
+  if (dbError) return { ok: false, error: dbError.message }
+  revalidatePath('/dashboard/sales/asset-types')
+  return { ok: true }
+}
+
 // ---------- Spec templates ----------
 export async function saveSpecTemplate(input: {
   id?: string

@@ -781,6 +781,64 @@ export interface QuoteDesignCategory {
   updated_at: string
 }
 
+// Admin-managed library of asset types that can appear on a system, grouped by
+// system type. Each carries a default test time (minutes) used by the PPM
+// service-contract calculator.
+export interface AssetType {
+  id: string
+  system_type_id: string | null
+  name: string
+  description: string | null
+  default_minutes: number
+  active: boolean
+  position: number
+  created_at: string
+  updated_at: string
+  system_type?: SystemType | null
+}
+
+// A single asset row inside a PPM calculation snapshot.
+export interface PpmAssetRow {
+  // Optional reference back to the asset_types library row it came from.
+  asset_type_id: string | null
+  name: string
+  minutes: number
+  quantity: number
+}
+
+// A single visit inside a PPM calculation snapshot. coverage_percent is the
+// share of assets tested on this visit (e.g. 100 on visit 1, 25 on visit 2).
+export interface PpmVisitRow {
+  label: string
+  coverage_percent: number
+}
+
+// Saved PPM service-contract calculator breakdown, 1:1 with a quote system.
+export interface QuoteSystemPpm {
+  id: string
+  quote_system_id: string
+  num_visits: number
+  round_trip_miles: number
+  mileage_rate_pence: number
+  travel_minutes_per_visit: number
+  hourly_cost_pence: number
+  download_required: boolean
+  download_minutes_per_visit: number
+  access_minutes_per_visit: number
+  remote_monitored: boolean
+  remote_minutes_per_visit: number
+  out_of_hours: boolean
+  ooh_uplift_percent: number
+  margin_percent: number
+  computed_cost_pence: number
+  computed_price_pence: number
+  assets: PpmAssetRow[]
+  visits: PpmVisitRow[]
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
 // A single row of the quote_bank_values view (historical system values for
 // benchmarking, filtered to sent/accepted quotes).
 export interface QuoteBankValue {

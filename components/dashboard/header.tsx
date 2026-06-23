@@ -46,7 +46,7 @@ export function DashboardHeader({ profile }: DashboardHeaderProps) {
     : profile.email.slice(0, 2).toUpperCase()
 
   return (
-    <header className="flex h-16 items-center gap-4 border-b border-border bg-background px-6">
+    <header data-dashboard-header className="flex h-16 items-center gap-4 border-b border-border bg-background px-6">
       <SidebarTrigger className="-ml-2" />
       <Separator orientation="vertical" className="h-6" />
       {showBack && (

@@ -39,7 +39,6 @@ import {
   HardHat,
   KeyRound,
   FolderOpen,
-  Boxes,
   Lightbulb,
   Gauge,
   ChevronRight,
@@ -59,29 +58,51 @@ type NavItem = {
   children?: { title: string; href: string; icon: LucideIcon }[]
 }
 
-const assetsNavItem: NavItem = {
-  title: 'Assets',
-  icon: Boxes,
+// Sites now acts as a parent grouping its asset registers (dampers,
+// extinguishers, emergency lights) alongside the sites list itself.
+const sitesNavItem: NavItem = {
+  title: 'Sites',
+  icon: Building2,
   children: [
+    { title: 'All Sites', href: '/dashboard/sites', icon: Building2 },
     { title: 'Dampers', href: '/dashboard/dampers', icon: Wind },
     { title: 'Extinguishers', href: '/dashboard/extinguishers', icon: FireExtinguisher },
     { title: 'Emergency Lights', href: '/dashboard/emergency-lights', icon: Lightbulb },
   ],
 }
 
+// Service Management groups the operational setup of how services are
+// delivered: routes, areas, service types and their checklists.
+const adminServiceManagementNavItem: NavItem = {
+  title: 'Service Management',
+  icon: Wrench,
+  children: [
+    { title: 'Routes', href: '/dashboard/routes', icon: Route },
+    { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
+    { title: 'Service Types', href: '/dashboard/service-types', icon: Wrench },
+    { title: 'Checklists', href: '/dashboard/checklists', icon: ClipboardList },
+  ],
+}
+
+// Office users only have access to routes and areas within service management.
+const officeServiceManagementNavItem: NavItem = {
+  title: 'Service Management',
+  icon: Wrench,
+  children: [
+    { title: 'Routes', href: '/dashboard/routes', icon: Route },
+    { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
+  ],
+}
+
 const adminNavItems: NavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { title: 'Clients', href: '/dashboard/clients', icon: Building },
-  { title: 'Sites', href: '/dashboard/sites', icon: Building2 },
-  assetsNavItem,
-  { title: 'Routes', href: '/dashboard/routes', icon: Route },
-  { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
+  sitesNavItem,
+  { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
+  adminServiceManagementNavItem,
   { title: 'Users', href: '/dashboard/engineers', icon: Users },
   { title: 'Client Logins', href: '/dashboard/client-logins', icon: KeyRound },
   { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
-  { title: 'Service Types', href: '/dashboard/service-types', icon: Wrench },
-  { title: 'Checklists', href: '/dashboard/checklists', icon: ClipboardList },
-  { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
   { title: 'Reports', href: '/dashboard/reports', icon: FileText },
   { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
@@ -94,12 +115,10 @@ const engineerNavItems: NavItem[] = [
 const officeNavItems: NavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { title: 'Clients', href: '/dashboard/clients', icon: Building },
-  { title: 'Sites', href: '/dashboard/sites', icon: Building2 },
-  assetsNavItem,
-  { title: 'Routes', href: '/dashboard/routes', icon: Route },
-  { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
-  { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
+  sitesNavItem,
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
+  officeServiceManagementNavItem,
+  { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
   { title: 'Reports', href: '/dashboard/reports', icon: FileText },
   { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },

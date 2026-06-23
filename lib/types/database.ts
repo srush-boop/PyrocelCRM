@@ -674,6 +674,19 @@ export interface QuoteWithDetails extends Quote {
   line_items: QuoteLineItem[]
 }
 
+// Direct labour cost per role (hourly), used to underpin estimates.
+// Money stored as integer pence.
+export interface DirectCost {
+  id: string
+  role: string
+  hourly_cost_pence: number
+  notes: string | null
+  active: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
 // Uploaded products spreadsheet (stored privately in Vercel Blob). Importing
 // a sheet seeds/updates the quote catalogue used to build estimates & specs.
 export interface ProductSheet {

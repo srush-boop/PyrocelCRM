@@ -45,6 +45,7 @@ import {
   HelpCircle,
   ReceiptText,
   BookOpen,
+  Coins,
 } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 import type { LucideIcon } from 'lucide-react'
@@ -103,6 +104,7 @@ const salesNavItem: NavItem = {
   children: [
     { title: 'Quotes', href: '/dashboard/sales', icon: ReceiptText },
     { title: 'Catalogue', href: '/dashboard/sales/catalogue', icon: BookOpen },
+    { title: 'Direct Costs', href: '/dashboard/sales/direct-costs', icon: Coins },
   ],
 }
 

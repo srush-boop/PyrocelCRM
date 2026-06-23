@@ -47,7 +47,7 @@ import type {
   SystemSpecTemplate,
   WorkTypeField,
   QuoteDesignCategory,
-  ServiceType,
+  SystemType,
   Site,
 } from '@/lib/types/database'
 import { saveQuote, type QuoteInput } from '@/app/(dashboard)/dashboard/sales/actions'
@@ -66,7 +66,7 @@ interface EditLine {
 
 interface EditSystem {
   key: string
-  service_type_id: string | null
+  system_type_id: string | null
   system_name: string
   system_code: string | null
   work_type: string
@@ -104,7 +104,7 @@ function blankLine(): EditLine {
 function blankSystem(index: number): EditSystem {
   return {
     key: uid(),
-    service_type_id: null,
+    system_type_id: null,
     system_name: `System ${index}`,
     system_code: null,
     work_type: 'SO',
@@ -125,7 +125,7 @@ function blankSystem(index: number): EditSystem {
 interface QuoteBuilderProps {
   clients: Client[]
   sites: Site[]
-  serviceTypes: ServiceType[]
+  systemTypes: SystemType[]
   catalogue: QuoteCatalogueItem[]
   specTemplates: SystemSpecTemplate[]
   workTypeFields: WorkTypeField[]
@@ -140,7 +140,7 @@ interface QuoteBuilderProps {
 export function QuoteBuilder({
   clients,
   sites,
-  serviceTypes,
+  systemTypes,
   catalogue,
   specTemplates,
   workTypeFields,
@@ -182,7 +182,7 @@ export function QuoteBuilder({
         .sort((a, b) => a.position - b.position)
         .map((s) => ({
           key: s.id,
-          service_type_id: s.service_type_id,
+          system_type_id: s.system_type_id,
           system_name: s.system_name,
           system_code: s.system_code,
           work_type: s.work_type,
@@ -296,7 +296,7 @@ export function QuoteBuilder({
       discount_pence: poundsToPence(discount),
       valid_until: validUntil || null,
       systems: systems.map((s) => ({
-        service_type_id: s.service_type_id,
+        system_type_id: s.system_type_id,
         system_name: s.system_name,
         system_code: s.system_code,
         work_type: s.work_type,
@@ -485,7 +485,7 @@ export function QuoteBuilder({
           canRemove={systems.length > 1}
           readOnly={readOnly}
           isPending={isPending}
-          serviceTypes={serviceTypes}
+          systemTypes={systemTypes}
           catalogue={catalogue}
           specTemplates={specTemplates}
           workTypeFields={workTypeFields}
@@ -607,7 +607,7 @@ interface SystemCardProps {
   canRemove: boolean
   readOnly: boolean
   isPending: boolean
-  serviceTypes: ServiceType[]
+  systemTypes: SystemType[]
   catalogue: QuoteCatalogueItem[]
   specTemplates: SystemSpecTemplate[]
   workTypeFields: WorkTypeField[]
@@ -626,7 +626,7 @@ function SystemCard({
   canRemove,
   readOnly,
   isPending,
-  serviceTypes,
+  systemTypes,
   catalogue,
   specTemplates,
   workTypeFields,
@@ -655,13 +655,13 @@ function SystemCard({
     [workTypeFields, system.work_type],
   )
 
-  // Spec template matching this service type + work type.
+  // Spec template matching this system type + work type.
   const matchingTemplate = useMemo(
     () =>
       specTemplates.find(
-        (t) => t.service_type_id === system.service_type_id && t.work_type === system.work_type && t.active,
+        (t) => t.system_type_id === system.system_type_id && t.work_type === system.work_type && t.active,
       ),
-    [specTemplates, system.service_type_id, system.work_type],
+    [specTemplates, system.system_type_id, system.work_type],
   )
 
   // Quote-bank hint for this system code + work type.
@@ -674,12 +674,12 @@ function SystemCard({
     return computeBankStats(matches.map((m) => m.subtotal_pence))
   }, [bankValues, system.system_code, system.work_type])
 
-  function handleServiceType(value: string) {
-    const st = serviceTypes.find((s) => s.id === value)
+  function handleSystemType(value: string) {
+    const st = systemTypes.find((s) => s.id === value)
     onUpdate({
-      service_type_id: value,
+      system_type_id: value,
       system_code: st?.code ?? null,
-      // Default the system name to the service type name if still blank/default.
+      // Default the system name to the system type name if still blank/default.
       system_name:
         !system.system_name || system.system_name.startsWith('System ')
           ? st?.name ?? system.system_name
@@ -717,17 +717,17 @@ function SystemCard({
           <div className="grid flex-1 gap-3">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="grid gap-1.5">
-                <Label>System (service type)</Label>
+                <Label>System type</Label>
                 <Select
-                  value={system.service_type_id ?? ''}
-                  onValueChange={handleServiceType}
+                  value={system.system_type_id ?? ''}
+                  onValueChange={handleSystemType}
                   disabled={disabled}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a system" />
+                    <SelectValue placeholder="Select a system type" />
                   </SelectTrigger>
                   <SelectContent>
-                    {serviceTypes.map((st) => (
+                    {systemTypes.map((st) => (
                       <SelectItem key={st.id} value={st.id}>
                         {st.name}
                         {st.code ? ` (${st.code})` : ''}

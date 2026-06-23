@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Loader2 } from 'lucide-react'
-import type { ServiceType, WorkerType, ToleranceUnit } from '@/lib/types/database'
+import type { ServiceType, WorkerType, ToleranceUnit, SystemType } from '@/lib/types/database'
 import { WORKER_TYPE_LABELS } from '@/lib/assignment'
 import { ServiceColorPicker } from './service-color-picker'
 import { ToleranceFields } from './tolerance-fields'
@@ -31,15 +31,16 @@ import {
 
 interface EditServiceTypeDialogProps {
   serviceType: ServiceType
+  systemTypes: SystemType[]
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditServiceTypeDialogProps) {
+export function EditServiceTypeDialog({ serviceType, systemTypes, open, onOpenChange }: EditServiceTypeDialogProps) {
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: serviceType.name,
-    code: serviceType.code || '',
+    system_type_id: serviceType.system_type_id || '',
     description: serviceType.description || '',
     default_frequency_value: serviceType.default_frequency_value ?? serviceType.default_frequency_months ?? 12,
     default_frequency_unit: (serviceType.default_frequency_unit || 'months') as 'weeks' | 'months',
@@ -66,7 +67,7 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
       .from('service_types')
       .update({
         name: formData.name,
-        code: formData.code.trim().toUpperCase() || null,
+        system_type_id: formData.system_type_id || null,
         description: formData.description || null,
         default_frequency_months: frequencyInMonths,
         default_frequency_value: formData.default_frequency_value,
@@ -116,16 +117,25 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="code">System Code</Label>
-              <Input
-                id="code"
-                value={formData.code}
-                onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                placeholder="e.g. FA, CCTV, AC"
-                maxLength={12}
-              />
+              <Label htmlFor="system-type">System Type</Label>
+              <Select
+                value={formData.system_type_id}
+                onValueChange={(value) => setFormData({ ...formData, system_type_id: value })}
+              >
+                <SelectTrigger id="system-type">
+                  <SelectValue placeholder="Select a system type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {systemTypes.map((st) => (
+                    <SelectItem key={st.id} value={st.id}>
+                      {st.code ? `${st.code} — ${st.name}` : st.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <p className="text-xs text-muted-foreground">
-                Short code used to identify this system in quotes and to query quote-bank values.
+                The system this service belongs to (e.g. Fire Alarm). The queryable code lives on the
+                system type.
               </p>
             </div>
             <div className="grid gap-2">

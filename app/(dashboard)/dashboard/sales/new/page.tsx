@@ -9,7 +9,7 @@ import type {
   SystemSpecTemplate,
   WorkTypeField,
   QuoteDesignCategory,
-  ServiceType,
+  SystemType,
   Site,
 } from '@/lib/types/database'
 

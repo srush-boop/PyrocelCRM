@@ -71,12 +71,28 @@ export interface ClientLogin extends Profile {
   site_ids: string[]
 }
 
+// A top-level system category (e.g. Fire Alarm = FA, CCTV). Carries the short
+// queryable code used to identify a system in quotes and drive analytics.
+// Service types sit underneath a system type.
+export interface SystemType {
+  id: string
+  name: string
+  code: string | null
+  description: string | null
+  color: string | null
+  status: 'live' | 'dead'
+  active: boolean
+  position: number
+  created_at: string
+  updated_at: string
+}
+
 export interface ServiceType {
   id: string
   name: string
-  // Short queryable code (e.g. FA, CCTV, AC) used to identify a system in
-  // quotes and to drive quote-bank analytics.
-  code?: string | null
+  // Parent system type (e.g. Fire Alarm). The queryable code lives on the
+  // system type now, not here.
+  system_type_id: string | null
   description: string | null
   default_frequency_months?: number // Legacy field
   default_frequency_value: number
@@ -94,6 +110,7 @@ export interface ServiceType {
   default_worker_type: WorkerType
   status: 'live' | 'dead'
   created_at: string
+  system_type?: SystemType | null
 }
 
 export interface ChecklistItem {
@@ -204,9 +221,29 @@ export interface Site {
     updated_by: string | null
   }
 
+  // A per-site system instance (e.g. "Fire Alarm — Gent panel"). Services are
+  // nested underneath a site system.
+  export interface SiteSystem {
+    id: string
+    site_id: string
+    system_type_id: string | null
+    name: string
+    description: string | null
+    location: string | null
+    install_date: string | null
+    active: boolean
+    position: number
+    created_at: string
+    updated_at: string
+    site?: Site
+    system_type?: SystemType | null
+    site_services?: SiteService[]
+  }
+
   export interface SiteService {
   id: string
   site_id: string
+  site_system_id: string | null
   service_type_id: string
   frequency_months?: number // Legacy field
   frequency_value: number
@@ -233,6 +270,7 @@ export interface Site {
   anchor_next_to_schedule: boolean
   created_at: string
   site?: Site
+  site_system?: SiteSystem | null
   service_type?: ServiceType
   route?: Route
   area?: Area | null
@@ -604,6 +642,7 @@ export interface QuoteCatalogueItem {
   description: string | null
   category: string | null
   service_type_id: string | null
+  system_type_id: string | null
   default_unit: string | null
   default_unit_price_pence: number
   active: boolean
@@ -611,6 +650,7 @@ export interface QuoteCatalogueItem {
   created_at: string
   updated_at: string
   service_type?: ServiceType | null
+  system_type?: SystemType | null
 }
 
 export interface QuoteLineItem {
@@ -629,13 +669,14 @@ export interface QuoteLineItem {
   created_at: string
 }
 
-// A "system" within a quote, based on a service type. Carries a queryable
-// code (snapshot of the service type code), a work-type code, an editable
+// A "system" within a quote, based on a system type. Carries a queryable
+// code (snapshot of the system type code), a work-type code, an editable
 // specification (pre-filled from a template), conditional "IF" answers, and
 // design/survey metadata.
 export interface QuoteSystem {
   id: string
   quote_id: string
+  system_type_id: string | null
   service_type_id: string | null
   system_name: string
   system_code: string | null
@@ -700,18 +741,18 @@ export interface QuoteWithDetails extends Quote {
   line_items: QuoteLineItem[]
 }
 
-// Editable master specification keyed by service type x work type. Pre-fills
+// Editable master specification keyed by system type x work type. Pre-fills
 // a system's specification when it is added to a quote.
 export interface SystemSpecTemplate {
   id: string
-  service_type_id: string | null
+  system_type_id: string | null
   work_type: string
   specification: string | null
   active: boolean
   created_by: string | null
   created_at: string
   updated_at: string
-  service_type?: ServiceType | null
+  system_type?: SystemType | null
 }
 
 // Admin-managed conditional "IF" field definition shown on a system based on

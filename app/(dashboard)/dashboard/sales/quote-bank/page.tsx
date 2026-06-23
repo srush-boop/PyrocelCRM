@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { QuoteBankExplorer } from '@/components/dashboard/sales/quote-bank-explorer'
-import type { Profile, QuoteBankValue, ServiceType } from '@/lib/types/database'
+import type { Profile, QuoteBankValue, SystemType } from '@/lib/types/database'
 
 export const metadata = { title: 'Quote Bank | Pyrocel' }
 
@@ -17,9 +17,9 @@ export default async function QuoteBankPage() {
     redirect('/dashboard')
   }
 
-  const [{ data: values }, { data: serviceTypes }] = await Promise.all([
+  const [{ data: values }, { data: systemTypes }] = await Promise.all([
     supabase.from('quote_bank_values').select('*').order('created_at', { ascending: false }),
-    supabase.from('service_types').select('id, name, code').order('name'),
+    supabase.from('system_types').select('id, name, code').order('name'),
   ])
 
   return (
@@ -34,7 +34,7 @@ export default async function QuoteBankPage() {
 
       <QuoteBankExplorer
         values={(values ?? []) as QuoteBankValue[]}
-        serviceTypes={(serviceTypes ?? []) as ServiceType[]}
+        systemTypes={(systemTypes ?? []) as SystemType[]}
       />
     </div>
   )

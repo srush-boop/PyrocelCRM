@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { SpecTemplatesManager } from '@/components/dashboard/sales/spec-templates-manager'
-import type { Profile, ServiceType, SystemSpecTemplate } from '@/lib/types/database'
+import type { Profile, SystemType, SystemSpecTemplate } from '@/lib/types/database'
 
 export const metadata = { title: 'Spec Templates | Pyrocel' }
 
@@ -17,8 +17,8 @@ export default async function SpecTemplatesPage() {
     redirect('/dashboard')
   }
 
-  const [{ data: serviceTypes }, { data: templates }] = await Promise.all([
-    supabase.from('service_types').select('id, name, code').eq('status', 'live').order('name'),
+  const [{ data: systemTypes }, { data: templates }] = await Promise.all([
+    supabase.from('system_types').select('*').eq('active', true).order('name'),
     supabase.from('system_spec_templates').select('*'),
   ])
 
@@ -27,12 +27,12 @@ export default async function SpecTemplatesPage() {
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold tracking-tight">Specification Templates</h1>
         <p className="text-muted-foreground">
-          Master specifications keyed by system (service type) and type of work. These pre-fill a
+          Master specifications keyed by system type and type of work. These pre-fill a
           system&apos;s specification when it is added to a quote, and remain editable per quote.
         </p>
       </div>
       <SpecTemplatesManager
-        serviceTypes={(serviceTypes ?? []) as ServiceType[]}
+        systemTypes={(systemTypes ?? []) as SystemType[]}
         templates={(templates ?? []) as SystemSpecTemplate[]}
       />
     </div>

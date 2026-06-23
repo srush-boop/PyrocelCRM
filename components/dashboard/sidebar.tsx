@@ -50,6 +50,7 @@ import {
   FileText as FileTextIcon,
   SlidersHorizontal,
   PencilRuler,
+  Layers,
 } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 import type { LucideIcon } from 'lucide-react'
@@ -110,6 +111,7 @@ const salesNavItem: NavItem = {
     { title: 'Quote Bank', href: '/dashboard/sales/quote-bank', icon: Landmark },
     { title: 'Catalogue', href: '/dashboard/sales/catalogue', icon: BookOpen },
     { title: 'Direct Costs', href: '/dashboard/sales/direct-costs', icon: Coins },
+    { title: 'System Types', href: '/dashboard/sales/system-types', icon: Layers },
     { title: 'Spec Templates', href: '/dashboard/sales/spec-templates', icon: FileTextIcon },
     { title: 'Work-type Fields', href: '/dashboard/sales/work-type-fields', icon: SlidersHorizontal },
     { title: 'Design Categories', href: '/dashboard/sales/design-categories', icon: PencilRuler },

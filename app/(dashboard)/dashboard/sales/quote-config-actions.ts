@@ -19,10 +19,49 @@ async function requireStaff() {
   return { supabase, error: null }
 }
 
+// ---------- System types ----------
+export async function saveSystemType(input: {
+  id?: string
+  name: string
+  code: string
+  description: string
+  color: string
+}): Promise<Result> {
+  const { supabase, error } = await requireStaff()
+  if (!supabase) return { ok: false, error }
+
+  const payload = {
+    name: input.name,
+    code: input.code.trim().toUpperCase() || null,
+    description: input.description || null,
+    color: input.color || null,
+  }
+
+  const query = input.id
+    ? supabase.from('system_types').update(payload).eq('id', input.id)
+    : supabase.from('system_types').insert(payload)
+
+  const { error: dbError } = await query
+  if (dbError) return { ok: false, error: dbError.message }
+  revalidatePath('/dashboard/sales/system-types')
+  revalidatePath('/dashboard/service-types')
+  return { ok: true }
+}
+
+export async function deleteSystemType(id: string): Promise<Result> {
+  const { supabase, error } = await requireStaff()
+  if (!supabase) return { ok: false, error }
+  const { error: dbError } = await supabase.from('system_types').delete().eq('id', id)
+  if (dbError) return { ok: false, error: dbError.message }
+  revalidatePath('/dashboard/sales/system-types')
+  revalidatePath('/dashboard/service-types')
+  return { ok: true }
+}
+
 // ---------- Spec templates ----------
 export async function saveSpecTemplate(input: {
   id?: string
-  service_type_id: string
+  system_type_id: string
   work_type: string
   specification: string
 }): Promise<Result> {
@@ -30,15 +69,15 @@ export async function saveSpecTemplate(input: {
   if (!supabase) return { ok: false, error }
 
   const payload = {
-    service_type_id: input.service_type_id,
+    system_type_id: input.system_type_id,
     work_type: input.work_type,
     specification: input.specification || null,
   }
 
-  // Upsert on (service_type_id, work_type) so there is one template per combo.
+  // Upsert on (system_type_id, work_type) so there is one template per combo.
   const { error: dbError } = await supabase
     .from('system_spec_templates')
-    .upsert(payload, { onConflict: 'service_type_id,work_type' })
+    .upsert(payload, { onConflict: 'system_type_id,work_type' })
 
   if (dbError) return { ok: false, error: dbError.message }
   revalidatePath('/dashboard/sales/spec-templates')

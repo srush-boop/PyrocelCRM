@@ -21,7 +21,7 @@ export interface QuoteLineInput {
 }
 
 export interface QuoteSystemInput {
-  service_type_id?: string | null
+  system_type_id?: string | null
   system_name: string
   system_code?: string | null
   work_type: string
@@ -117,7 +117,7 @@ async function persistSystems(
       .from('quote_systems')
       .insert({
         quote_id: quoteId,
-        service_type_id: system.service_type_id || null,
+        system_type_id: system.system_type_id || null,
         system_name: system.system_name?.trim() || 'System',
         system_code: system.system_code?.trim() || null,
         work_type: VALID_WORK_TYPES.has(system.work_type) ? system.work_type : 'OTH',
@@ -336,7 +336,7 @@ async function copySystems(
       .from('quote_systems')
       .insert({
         quote_id: toQuoteId,
-        service_type_id: s.service_type_id,
+        system_type_id: s.system_type_id,
         system_name: s.system_name,
         system_code: s.system_code,
         work_type: s.work_type,

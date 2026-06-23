@@ -28,16 +28,16 @@ import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { formatPence, workTypeLabel, computeBankStats, WORK_TYPES } from '@/lib/sales'
 import { formatDateUK } from '@/lib/utils'
-import type { QuoteBankValue, ServiceType } from '@/lib/types/database'
+import type { QuoteBankValue, SystemType } from '@/lib/types/database'
 
 const ALL = '__all__'
 
 export function QuoteBankExplorer({
   values,
-  serviceTypes,
+  systemTypes,
 }: {
   values: QuoteBankValue[]
-  serviceTypes: ServiceType[]
+  systemTypes: SystemType[]
 }) {
   const [systemCode, setSystemCode] = useState<string>(ALL)
   const [workType, setWorkType] = useState<string>(ALL)
@@ -45,15 +45,15 @@ export function QuoteBankExplorer({
   // Distinct system codes that actually appear in the bank, paired with a name.
   const codeOptions = useMemo(() => {
     const map = new Map<string, string>()
-    for (const st of serviceTypes) {
+    for (const st of systemTypes) {
       if (st.code) map.set(st.code, st.name)
     }
-    // Include any codes present in the data but not in current service types.
+    // Include any codes present in the data but not in current system types.
     for (const v of values) {
       if (v.system_code && !map.has(v.system_code)) map.set(v.system_code, v.system_name)
     }
     return Array.from(map.entries()).map(([code, name]) => ({ code, name }))
-  }, [serviceTypes, values])
+  }, [systemTypes, values])
 
   const filtered = useMemo(() => {
     return values.filter((v) => {

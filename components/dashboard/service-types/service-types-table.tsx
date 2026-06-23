@@ -31,13 +31,14 @@ import {
 } from '@/components/ui/alert-dialog'
 import { MoreHorizontal, Pencil, Trash2, Wrench } from 'lucide-react'
 import { EditServiceTypeDialog } from './edit-service-type-dialog'
-import type { ServiceType } from '@/lib/types/database'
+import type { ServiceType, SystemType } from '@/lib/types/database'
 
 interface ServiceTypesTableProps {
   serviceTypes: ServiceType[]
+  systemTypes: SystemType[]
 }
 
-export function ServiceTypesTable({ serviceTypes }: ServiceTypesTableProps) {
+export function ServiceTypesTable({ serviceTypes, systemTypes }: ServiceTypesTableProps) {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [editServiceType, setEditServiceType] = useState<ServiceType | null>(null)
   const router = useRouter()
@@ -58,7 +59,7 @@ export function ServiceTypesTable({ serviceTypes }: ServiceTypesTableProps) {
           <TableHeader>
             <TableRow>
               <TableHead>Service Name</TableHead>
-              <TableHead>Code</TableHead>
+              <TableHead>System</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Description</TableHead>
               <TableHead>Default Frequency</TableHead>
@@ -80,8 +81,12 @@ export function ServiceTypesTable({ serviceTypes }: ServiceTypesTableProps) {
                 <TableRow key={serviceType.id}>
                   <TableCell className="font-medium">{serviceType.name}</TableCell>
                   <TableCell>
-                    {serviceType.code ? (
-                      <Badge variant="outline" className="font-mono">{serviceType.code}</Badge>
+                    {serviceType.system_type ? (
+                      <Badge variant="outline" className="font-mono">
+                        {serviceType.system_type.code
+                          ? `${serviceType.system_type.code} — ${serviceType.system_type.name}`
+                          : serviceType.system_type.name}
+                      </Badge>
                     ) : (
                       <span className="text-muted-foreground">-</span>
                     )}
@@ -147,6 +152,7 @@ export function ServiceTypesTable({ serviceTypes }: ServiceTypesTableProps) {
       {editServiceType && (
         <EditServiceTypeDialog
           serviceType={editServiceType}
+          systemTypes={systemTypes}
           open={!!editServiceType}
           onOpenChange={() => setEditServiceType(null)}
         />

@@ -17,30 +17,30 @@ import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { saveSpecTemplate } from '@/app/(dashboard)/dashboard/sales/quote-config-actions'
 import { WORK_TYPES, workTypeLabel } from '@/lib/sales'
-import type { ServiceType, SystemSpecTemplate } from '@/lib/types/database'
+import type { SystemType, SystemSpecTemplate } from '@/lib/types/database'
 
 export function SpecTemplatesManager({
-  serviceTypes,
+  systemTypes,
   templates,
 }: {
-  serviceTypes: ServiceType[]
+  systemTypes: SystemType[]
   templates: SystemSpecTemplate[]
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
-  const [serviceTypeId, setServiceTypeId] = useState<string>(serviceTypes[0]?.id ?? '')
+  const [systemTypeId, setSystemTypeId] = useState<string>(systemTypes[0]?.id ?? '')
   const [workType, setWorkType] = useState<string>(WORK_TYPES[0].code)
 
-  // Map of existing template specs keyed by `${serviceTypeId}:${workType}`.
+  // Map of existing template specs keyed by `${systemTypeId}:${workType}`.
   const templateMap = useMemo(() => {
     const map = new Map<string, SystemSpecTemplate>()
     for (const t of templates) {
-      if (t.service_type_id) map.set(`${t.service_type_id}:${t.work_type}`, t)
+      if (t.system_type_id) map.set(`${t.system_type_id}:${t.work_type}`, t)
     }
     return map
   }, [templates])
 
-  const currentKey = `${serviceTypeId}:${workType}`
+  const currentKey = `${systemTypeId}:${workType}`
   const existing = templateMap.get(currentKey)
   const [spec, setSpec] = useState<string>(existing?.specification ?? '')
   // Track which key the textarea reflects so switching selectors reloads it.
@@ -51,13 +51,13 @@ export function SpecTemplatesManager({
   }
 
   function handleSave() {
-    if (!serviceTypeId) {
-      toast.error('Select a system first')
+    if (!systemTypeId) {
+      toast.error('Select a system type first')
       return
     }
     startTransition(async () => {
       const res = await saveSpecTemplate({
-        service_type_id: serviceTypeId,
+        system_type_id: systemTypeId,
         work_type: workType,
         specification: spec,
       })
@@ -70,11 +70,11 @@ export function SpecTemplatesManager({
     })
   }
 
-  if (serviceTypes.length === 0) {
+  if (systemTypes.length === 0) {
     return (
       <Card>
         <CardContent className="py-12 text-center text-muted-foreground">
-          No live service types. Add a service type (with a code) first.
+          No system types yet. Add a system type (with a code) first.
         </CardContent>
       </Card>
     )
@@ -88,13 +88,13 @@ export function SpecTemplatesManager({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-2">
-            <Label>System (service type)</Label>
-            <Select value={serviceTypeId} onValueChange={setServiceTypeId}>
+            <Label>System type</Label>
+            <Select value={systemTypeId} onValueChange={setSystemTypeId}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {serviceTypes.map((st) => (
+                {systemTypes.map((st) => (
                   <SelectItem key={st.id} value={st.id}>
                     {st.code ? `${st.code} — ${st.name}` : st.name}
                   </SelectItem>

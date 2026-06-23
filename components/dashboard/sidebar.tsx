@@ -87,7 +87,6 @@ const adminNavItems: NavItem[] = [
 ]
 
 const engineerNavItems: NavItem[] = [
-  { title: 'My Tasks', href: '/dashboard', icon: LayoutDashboard },
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
 ]
 

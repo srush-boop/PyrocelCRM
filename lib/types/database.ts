@@ -133,6 +133,8 @@ export interface Site {
   route_id: string | null
   client_id: string | null
   site_id_cash: string | null
+  // Unique Property Reference Number (UK national property identifier).
+  uprn: string | null
   status: 'live' | 'dead'
   notes: string | null
   reporting_emails: string[]
@@ -289,7 +291,9 @@ export interface ChecklistResult {
   notes?: string
 }
 
-export type TaskResultStatus = 'pending' | 'pass' | 'fail' | 'partial'
+// 'no_access' is used when an engineer attended but could not gain access to
+// the site. It is a distinct outcome and is NOT treated as a failure.
+export type TaskResultStatus = 'pending' | 'pass' | 'fail' | 'partial' | 'no_access'
 
 export interface TaskResult {
   id: string

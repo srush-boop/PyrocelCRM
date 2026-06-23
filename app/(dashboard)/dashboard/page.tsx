@@ -23,6 +23,10 @@ export default async function DashboardPage() {
 
   if (!profile) redirect('/auth/login')
 
+  // Engineers use the Schedule as their single work view — the old "My Tasks"
+  // dashboard was a strict subset of it, so send them straight there.
+  if ((profile as Profile).role === 'engineer') redirect('/dashboard/schedule')
+
   // Fetch dashboard stats
   const [sitesCount, routesCount, pendingTasks, completedTasks] = await Promise.all([
     supabase.from('sites').select('id', { count: 'exact', head: true }),

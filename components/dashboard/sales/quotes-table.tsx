@@ -38,12 +38,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Search, MoreHorizontal, Copy, Trash2, BookOpen, FileText } from 'lucide-react'
+import { Plus, Search, MoreHorizontal, GitBranch, Trash2, BookOpen, FileText } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn, formatDateUK } from '@/lib/utils'
 import { formatPence, quoteTypeLabel, QUOTE_STATUS_META, QUOTE_TYPES } from '@/lib/sales'
 import type { Quote, QuoteStatus } from '@/lib/types/database'
-import { deleteQuote, duplicateQuote } from '@/app/(dashboard)/dashboard/sales/actions'
+import { deleteQuote, createRevision } from '@/app/(dashboard)/dashboard/sales/actions'
 
 export function QuotesTable({ quotes }: { quotes: Quote[] }) {
   const router = useRouter()
@@ -64,19 +64,20 @@ export function QuotesTable({ quotes }: { quotes: Quote[] }) {
       return (
         quote.title.toLowerCase().includes(q) ||
         (quote.quote_number ?? '').toLowerCase().includes(q) ||
+        (quote.reference ?? '').toLowerCase().includes(q) ||
         target.toLowerCase().includes(q)
       )
     })
   }, [quotes, search, status, type])
 
-  function handleDuplicate(id: string) {
+  function handleRevision(id: string) {
     startTransition(async () => {
-      const res = await duplicateQuote(id)
+      const res = await createRevision(id)
       if (res.ok && res.id) {
-        toast.success('Quote duplicated')
+        toast.success('New revision created')
         router.push(`/dashboard/sales/${res.id}`)
       } else {
-        toast.error(res.error ?? 'Could not duplicate quote')
+        toast.error(res.error ?? 'Could not create revision')
       }
     })
   }
@@ -184,9 +185,21 @@ export function QuotesTable({ quotes }: { quotes: Quote[] }) {
                   onClick={() => router.push(`/dashboard/sales/${quote.id}`)}
                 >
                   <TableCell>
-                    <div className="font-medium">{quote.title}</div>
+                    <div className="flex items-center gap-1.5 font-medium">
+                      {quote.title}
+                      {quote.revision > 0 && (
+                        <Badge variant="outline" className="text-[10px]">
+                          Rev {quote.revision}
+                        </Badge>
+                      )}
+                      {quote.variant_label && (
+                        <Badge variant="outline" className="text-[10px]">
+                          {quote.variant_label}
+                        </Badge>
+                      )}
+                    </div>
                     <div className="text-xs text-muted-foreground">
-                      {quote.quote_number ?? 'Draft'}
+                      {quote.reference ?? quote.quote_number ?? 'Draft'}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -216,9 +229,9 @@ export function QuotesTable({ quotes }: { quotes: Quote[] }) {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleDuplicate(quote.id)} disabled={isPending}>
-                          <Copy className="mr-2 h-4 w-4" />
-                          Duplicate
+                        <DropdownMenuItem onClick={() => handleRevision(quote.id)} disabled={isPending}>
+                          <GitBranch className="mr-2 h-4 w-4" />
+                          New revision
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           className="text-destructive focus:text-destructive"

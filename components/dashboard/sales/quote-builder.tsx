@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
+import { Badge } from '@/components/ui/badge'
 import {
   Select,
   SelectContent,
@@ -23,15 +25,28 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Trash2, GripVertical, BookOpen, Save } from 'lucide-react'
+import { Plus, Trash2, GripVertical, BookOpen, Save, FileDown, TrendingUp } from 'lucide-react'
 import { toast } from 'sonner'
-import { computeQuoteTotals, formatPence, penceToPounds, poundsToPence, QUOTE_TYPES } from '@/lib/sales'
+import {
+  computeQuoteTotals,
+  computeBankStats,
+  formatPence,
+  penceToPounds,
+  poundsToPence,
+  QUOTE_TYPES,
+  WORK_TYPES,
+  DESIGNED_BY_OPTIONS,
+} from '@/lib/sales'
 import type {
   Client,
   Quote,
   QuoteCatalogueItem,
   QuoteLineItem,
-  QuoteSection,
+  QuoteSystem,
+  QuoteBankValue,
+  SystemSpecTemplate,
+  WorkTypeField,
+  QuoteDesignCategory,
   ServiceType,
   Site,
 } from '@/lib/types/database'
@@ -49,10 +64,22 @@ interface EditLine {
   unitPrice: string // pounds
 }
 
-interface EditSection {
+interface EditSystem {
   key: string
-  title: string
-  description: string
+  service_type_id: string | null
+  system_name: string
+  system_code: string | null
+  work_type: string
+  specification: string
+  conditional_values: Record<string, string | number | boolean>
+  design_category_id: string | null
+  design_overview: string
+  designed_by: string | null
+  designed_by_name: string
+  drawing_reference: string
+  survey_carried_out: boolean
+  survey_by: string
+  survey_date: string
   lines: EditLine[]
 }
 
@@ -74,13 +101,38 @@ function blankLine(): EditLine {
   }
 }
 
+function blankSystem(index: number): EditSystem {
+  return {
+    key: uid(),
+    service_type_id: null,
+    system_name: `System ${index}`,
+    system_code: null,
+    work_type: 'SO',
+    specification: '',
+    conditional_values: {},
+    design_category_id: null,
+    design_overview: '',
+    designed_by: 'pyrocel',
+    designed_by_name: '',
+    drawing_reference: '',
+    survey_carried_out: false,
+    survey_by: '',
+    survey_date: '',
+    lines: [blankLine()],
+  }
+}
+
 interface QuoteBuilderProps {
   clients: Client[]
   sites: Site[]
   serviceTypes: ServiceType[]
   catalogue: QuoteCatalogueItem[]
+  specTemplates: SystemSpecTemplate[]
+  workTypeFields: WorkTypeField[]
+  designCategories: QuoteDesignCategory[]
+  bankValues: QuoteBankValue[]
   quote?: Quote
-  initialSections?: QuoteSection[]
+  initialSystems?: QuoteSystem[]
   initialLines?: QuoteLineItem[]
   readOnly?: boolean
 }
@@ -90,8 +142,12 @@ export function QuoteBuilder({
   sites,
   serviceTypes,
   catalogue,
+  specTemplates,
+  workTypeFields,
+  designCategories,
+  bankValues,
   quote,
-  initialSections,
+  initialSystems,
   initialLines,
   readOnly = false,
 }: QuoteBuilderProps) {
@@ -118,29 +174,44 @@ export function QuoteBuilder({
   const [discount, setDiscount] = useState(penceToPounds(quote?.discount_pence ?? 0))
   const [validUntil, setValidUntil] = useState(quote?.valid_until ?? '')
 
-  // ----- Sections / lines state -----
-  const [sections, setSections] = useState<EditSection[]>(() => {
-    if (initialSections && initialSections.length > 0) {
-      return initialSections.map((s) => ({
-        key: s.id,
-        title: s.title,
-        description: s.description ?? '',
-        lines: (initialLines ?? [])
-          .filter((l) => l.section_id === s.id)
-          .sort((a, b) => a.position - b.position)
-          .map((l) => ({
-            key: l.id,
-            description: l.description,
-            detail: l.detail ?? '',
-            service_type_id: l.service_type_id,
-            catalogue_item_id: l.catalogue_item_id,
-            quantity: String(l.quantity),
-            unit: l.unit ?? '',
-            unitPrice: penceToPounds(l.unit_price_pence),
-          })),
-      }))
+  // ----- Systems / lines state -----
+  const [systems, setSystems] = useState<EditSystem[]>(() => {
+    if (initialSystems && initialSystems.length > 0) {
+      return initialSystems
+        .slice()
+        .sort((a, b) => a.position - b.position)
+        .map((s) => ({
+          key: s.id,
+          service_type_id: s.service_type_id,
+          system_name: s.system_name,
+          system_code: s.system_code,
+          work_type: s.work_type,
+          specification: s.specification ?? '',
+          conditional_values: s.conditional_values ?? {},
+          design_category_id: s.design_category_id,
+          design_overview: s.design_overview ?? '',
+          designed_by: s.designed_by ?? 'pyrocel',
+          designed_by_name: s.designed_by_name ?? '',
+          drawing_reference: s.drawing_reference ?? '',
+          survey_carried_out: s.survey_carried_out,
+          survey_by: s.survey_by ?? '',
+          survey_date: s.survey_date ?? '',
+          lines: (initialLines ?? [])
+            .filter((l) => l.system_id === s.id)
+            .sort((a, b) => a.position - b.position)
+            .map((l) => ({
+              key: l.id,
+              description: l.description,
+              detail: l.detail ?? '',
+              service_type_id: l.service_type_id,
+              catalogue_item_id: l.catalogue_item_id,
+              quantity: String(l.quantity),
+              unit: l.unit ?? '',
+              unitPrice: penceToPounds(l.unit_price_pence),
+            })),
+        }))
     }
-    return [{ key: uid(), title: 'Items', description: '', lines: [blankLine()] }]
+    return [blankSystem(1)]
   })
 
   const sitesForClient = useMemo(
@@ -150,7 +221,7 @@ export function QuoteBuilder({
 
   // ----- Live totals -----
   const totals = useMemo(() => {
-    const lines = sections.flatMap((s) =>
+    const lines = systems.flatMap((s) =>
       s.lines.map((l) => ({
         quantity: Number.parseFloat(l.quantity) || 0,
         unit_price_pence: poundsToPence(l.unitPrice),
@@ -160,46 +231,41 @@ export function QuoteBuilder({
       vatRate: Number.parseFloat(vatRate) || 0,
       discountPence: poundsToPence(discount),
     })
-  }, [sections, vatRate, discount])
+  }, [systems, vatRate, discount])
 
   // ----- Mutators -----
-  function updateSection(key: string, patch: Partial<EditSection>) {
-    setSections((prev) => prev.map((s) => (s.key === key ? { ...s, ...patch } : s)))
+  function updateSystem(key: string, patch: Partial<EditSystem>) {
+    setSystems((prev) => prev.map((s) => (s.key === key ? { ...s, ...patch } : s)))
   }
-  function addSection() {
-    setSections((prev) => [
-      ...prev,
-      { key: uid(), title: `Section ${prev.length + 1}`, description: '', lines: [blankLine()] },
-    ])
+  function addSystem() {
+    setSystems((prev) => [...prev, blankSystem(prev.length + 1)])
   }
-  function removeSection(key: string) {
-    setSections((prev) => prev.filter((s) => s.key !== key))
+  function removeSystem(key: string) {
+    setSystems((prev) => prev.filter((s) => s.key !== key))
   }
-  function addLine(sectionKey: string, line?: EditLine) {
-    setSections((prev) =>
-      prev.map((s) =>
-        s.key === sectionKey ? { ...s, lines: [...s.lines, line ?? blankLine()] } : s,
-      ),
+  function addLine(systemKey: string, line?: EditLine) {
+    setSystems((prev) =>
+      prev.map((s) => (s.key === systemKey ? { ...s, lines: [...s.lines, line ?? blankLine()] } : s)),
     )
   }
-  function updateLine(sectionKey: string, lineKey: string, patch: Partial<EditLine>) {
-    setSections((prev) =>
+  function updateLine(systemKey: string, lineKey: string, patch: Partial<EditLine>) {
+    setSystems((prev) =>
       prev.map((s) =>
-        s.key === sectionKey
+        s.key === systemKey
           ? { ...s, lines: s.lines.map((l) => (l.key === lineKey ? { ...l, ...patch } : l)) }
           : s,
       ),
     )
   }
-  function removeLine(sectionKey: string, lineKey: string) {
-    setSections((prev) =>
+  function removeLine(systemKey: string, lineKey: string) {
+    setSystems((prev) =>
       prev.map((s) =>
-        s.key === sectionKey ? { ...s, lines: s.lines.filter((l) => l.key !== lineKey) } : s,
+        s.key === systemKey ? { ...s, lines: s.lines.filter((l) => l.key !== lineKey) } : s,
       ),
     )
   }
-  function addCatalogueLine(sectionKey: string, item: QuoteCatalogueItem) {
-    addLine(sectionKey, {
+  function addCatalogueLine(systemKey: string, item: QuoteCatalogueItem) {
+    addLine(systemKey, {
       key: uid(),
       description: item.name,
       detail: item.description ?? '',
@@ -229,9 +295,21 @@ export function QuoteBuilder({
       vat_rate: Number.parseFloat(vatRate) || 0,
       discount_pence: poundsToPence(discount),
       valid_until: validUntil || null,
-      sections: sections.map((s) => ({
-        title: s.title,
-        description: s.description || null,
+      systems: systems.map((s) => ({
+        service_type_id: s.service_type_id,
+        system_name: s.system_name,
+        system_code: s.system_code,
+        work_type: s.work_type,
+        specification: s.specification || null,
+        conditional_values: s.conditional_values,
+        design_category_id: s.design_category_id,
+        design_overview: s.design_overview || null,
+        designed_by: s.designed_by,
+        designed_by_name: s.designed_by === 'other' ? s.designed_by_name || null : null,
+        drawing_reference: s.drawing_reference || null,
+        survey_carried_out: s.survey_carried_out,
+        survey_by: s.survey_carried_out ? s.survey_by || null : null,
+        survey_date: s.survey_carried_out ? s.survey_date || null : null,
         lines: s.lines
           .filter((l) => l.description.trim())
           .map((l) => ({
@@ -399,175 +477,33 @@ export function QuoteBuilder({
         </CardContent>
       </Card>
 
-      {/* ---------- Sections ---------- */}
-      {sections.map((section) => {
-        const sectionTotalPence = section.lines.reduce(
-          (sum, l) => sum + Math.round((Number.parseFloat(l.quantity) || 0) * poundsToPence(l.unitPrice)),
-          0,
-        )
-        return (
-          <Card key={section.key}>
-            <CardHeader className="gap-3">
-              <div className="flex items-start gap-2">
-                <GripVertical className="mt-2.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                <div className="grid flex-1 gap-2">
-                  <Input
-                    value={section.title}
-                    onChange={(e) => updateSection(section.key, { title: e.target.value })}
-                    placeholder="Section title (e.g. Supply, Installation, Commissioning)"
-                    className="font-medium"
-                    disabled={disabled}
-                  />
-                  <Input
-                    value={section.description}
-                    onChange={(e) => updateSection(section.key, { description: e.target.value })}
-                    placeholder="Optional section description"
-                    disabled={disabled}
-                  />
-                </div>
-                {!readOnly && sections.length > 1 && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 shrink-0 text-muted-foreground"
-                    onClick={() => removeSection(section.key)}
-                    disabled={isPending}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    <span className="sr-only">Remove section</span>
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {/* Line header (desktop) */}
-              <div className="hidden gap-2 px-1 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[1fr_70px_80px_110px_110px_36px]">
-                <span>Description</span>
-                <span className="text-right">Qty</span>
-                <span>Unit</span>
-                <span className="text-right">Unit price</span>
-                <span className="text-right">Total</span>
-                <span />
-              </div>
-
-              {section.lines.map((line) => {
-                const lineTotal = Math.round(
-                  (Number.parseFloat(line.quantity) || 0) * poundsToPence(line.unitPrice),
-                )
-                return (
-                  <div
-                    key={line.key}
-                    className="grid gap-2 rounded-md border p-2 sm:grid-cols-[1fr_70px_80px_110px_110px_36px] sm:items-start sm:border-0 sm:p-0"
-                  >
-                    <div className="grid gap-1.5">
-                      <Input
-                        value={line.description}
-                        onChange={(e) => updateLine(section.key, line.key, { description: e.target.value })}
-                        placeholder="Item description"
-                        disabled={disabled}
-                      />
-                      <Input
-                        value={line.detail}
-                        onChange={(e) => updateLine(section.key, line.key, { detail: e.target.value })}
-                        placeholder="Extra detail (optional)"
-                        className="text-xs"
-                        disabled={disabled}
-                      />
-                    </div>
-                    <Input
-                      inputMode="decimal"
-                      value={line.quantity}
-                      onChange={(e) => updateLine(section.key, line.key, { quantity: e.target.value })}
-                      className="text-right"
-                      aria-label="Quantity"
-                      disabled={disabled}
-                    />
-                    <Input
-                      value={line.unit}
-                      onChange={(e) => updateLine(section.key, line.key, { unit: e.target.value })}
-                      placeholder="each"
-                      aria-label="Unit"
-                      disabled={disabled}
-                    />
-                    <Input
-                      inputMode="decimal"
-                      value={line.unitPrice}
-                      onChange={(e) => updateLine(section.key, line.key, { unitPrice: e.target.value })}
-                      onBlur={(e) =>
-                        updateLine(section.key, line.key, { unitPrice: penceToPounds(poundsToPence(e.target.value)) })
-                      }
-                      className="text-right"
-                      aria-label="Unit price in pounds"
-                      disabled={disabled}
-                    />
-                    <div className="flex h-9 items-center justify-end text-sm font-medium tabular-nums">
-                      {formatPence(lineTotal)}
-                    </div>
-                    {!readOnly && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-9 w-9 text-muted-foreground"
-                        onClick={() => removeLine(section.key, line.key)}
-                        disabled={isPending}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        <span className="sr-only">Remove line</span>
-                      </Button>
-                    )}
-                  </div>
-                )
-              })}
-
-              {!readOnly && (
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" size="sm" onClick={() => addLine(section.key)} disabled={isPending}>
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add line
-                    </Button>
-                    {catalogue.length > 0 && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="outline" size="sm" disabled={isPending}>
-                            <BookOpen className="mr-2 h-4 w-4" />
-                            Add from catalogue
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="max-h-72 w-72 overflow-y-auto">
-                          <DropdownMenuLabel>Catalogue items</DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          {catalogue.map((item) => (
-                            <DropdownMenuItem key={item.id} onClick={() => addCatalogueLine(section.key, item)}>
-                              <div className="flex w-full items-center justify-between gap-2">
-                                <span className="truncate">{item.name}</span>
-                                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                                  {formatPence(item.default_unit_price_pence)}
-                                </span>
-                              </div>
-                            </DropdownMenuItem>
-                          ))}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    Section total:{' '}
-                    <span className="font-medium text-foreground tabular-nums">
-                      {formatPence(sectionTotalPence)}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )
-      })}
+      {/* ---------- Systems ---------- */}
+      {systems.map((system) => (
+        <SystemCard
+          key={system.key}
+          system={system}
+          canRemove={systems.length > 1}
+          readOnly={readOnly}
+          isPending={isPending}
+          serviceTypes={serviceTypes}
+          catalogue={catalogue}
+          specTemplates={specTemplates}
+          workTypeFields={workTypeFields}
+          designCategories={designCategories}
+          bankValues={bankValues}
+          onUpdate={(patch) => updateSystem(system.key, patch)}
+          onRemove={() => removeSystem(system.key)}
+          onAddLine={() => addLine(system.key)}
+          onAddCatalogueLine={(item) => addCatalogueLine(system.key, item)}
+          onUpdateLine={(lineKey, patch) => updateLine(system.key, lineKey, patch)}
+          onRemoveLine={(lineKey) => removeLine(system.key, lineKey)}
+        />
+      ))}
 
       {!readOnly && (
-        <Button variant="outline" onClick={addSection} disabled={isPending}>
+        <Button variant="outline" onClick={addSystem} disabled={isPending}>
           <Plus className="mr-2 h-4 w-4" />
-          Add section
+          Add system
         </Button>
       )}
 
@@ -660,5 +596,545 @@ export function QuoteBuilder({
         </div>
       )}
     </div>
+  )
+}
+
+// =====================================================================
+// System card
+// =====================================================================
+interface SystemCardProps {
+  system: EditSystem
+  canRemove: boolean
+  readOnly: boolean
+  isPending: boolean
+  serviceTypes: ServiceType[]
+  catalogue: QuoteCatalogueItem[]
+  specTemplates: SystemSpecTemplate[]
+  workTypeFields: WorkTypeField[]
+  designCategories: QuoteDesignCategory[]
+  bankValues: QuoteBankValue[]
+  onUpdate: (patch: Partial<EditSystem>) => void
+  onRemove: () => void
+  onAddLine: () => void
+  onAddCatalogueLine: (item: QuoteCatalogueItem) => void
+  onUpdateLine: (lineKey: string, patch: Partial<EditLine>) => void
+  onRemoveLine: (lineKey: string) => void
+}
+
+function SystemCard({
+  system,
+  canRemove,
+  readOnly,
+  isPending,
+  serviceTypes,
+  catalogue,
+  specTemplates,
+  workTypeFields,
+  designCategories,
+  bankValues,
+  onUpdate,
+  onRemove,
+  onAddLine,
+  onAddCatalogueLine,
+  onUpdateLine,
+  onRemoveLine,
+}: SystemCardProps) {
+  const disabled = readOnly || isPending
+
+  const systemTotalPence = system.lines.reduce(
+    (sum, l) => sum + Math.round((Number.parseFloat(l.quantity) || 0) * poundsToPence(l.unitPrice)),
+    0,
+  )
+
+  // Conditional fields that apply to the selected work type.
+  const conditionalFields = useMemo(
+    () =>
+      workTypeFields
+        .filter((f) => f.work_type === system.work_type && f.active)
+        .sort((a, b) => a.position - b.position),
+    [workTypeFields, system.work_type],
+  )
+
+  // Spec template matching this service type + work type.
+  const matchingTemplate = useMemo(
+    () =>
+      specTemplates.find(
+        (t) => t.service_type_id === system.service_type_id && t.work_type === system.work_type && t.active,
+      ),
+    [specTemplates, system.service_type_id, system.work_type],
+  )
+
+  // Quote-bank hint for this system code + work type.
+  const bankStats = useMemo(() => {
+    if (!system.system_code) return null
+    const matches = bankValues.filter(
+      (b) => b.system_code === system.system_code && b.work_type === system.work_type,
+    )
+    if (!matches.length) return null
+    return computeBankStats(matches.map((m) => m.subtotal_pence))
+  }, [bankValues, system.system_code, system.work_type])
+
+  function handleServiceType(value: string) {
+    const st = serviceTypes.find((s) => s.id === value)
+    onUpdate({
+      service_type_id: value,
+      system_code: st?.code ?? null,
+      // Default the system name to the service type name if still blank/default.
+      system_name:
+        !system.system_name || system.system_name.startsWith('System ')
+          ? st?.name ?? system.system_name
+          : system.system_name,
+    })
+  }
+
+  function importSpec() {
+    if (matchingTemplate?.specification) {
+      onUpdate({ specification: matchingTemplate.specification })
+      toast.success('Specification imported from template')
+    } else {
+      toast.error('No template for this system + work type yet')
+    }
+  }
+
+  function handleDesignCategory(value: string) {
+    const cat = designCategories.find((c) => c.id === value)
+    onUpdate({
+      design_category_id: value,
+      // Import overview if empty.
+      design_overview: system.design_overview?.trim() ? system.design_overview : cat?.overview ?? '',
+    })
+  }
+
+  function setConditional(key: string, value: string | number | boolean) {
+    onUpdate({ conditional_values: { ...system.conditional_values, [key]: value } })
+  }
+
+  return (
+    <Card>
+      <CardHeader className="gap-3">
+        <div className="flex items-start gap-2">
+          <GripVertical className="mt-2.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="grid flex-1 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label>System (service type)</Label>
+                <Select
+                  value={system.service_type_id ?? ''}
+                  onValueChange={handleServiceType}
+                  disabled={disabled}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a system" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {serviceTypes.map((st) => (
+                      <SelectItem key={st.id} value={st.id}>
+                        {st.name}
+                        {st.code ? ` (${st.code})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Type of work</Label>
+                <Select
+                  value={system.work_type}
+                  onValueChange={(v) => onUpdate({ work_type: v })}
+                  disabled={disabled}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {WORK_TYPES.map((w) => (
+                      <SelectItem key={w.code} value={w.code}>
+                        {w.label} ({w.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid gap-1.5">
+              <Label>System name</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  value={system.system_name}
+                  onChange={(e) => onUpdate({ system_name: e.target.value })}
+                  placeholder="e.g. Addressable fire alarm"
+                  className="font-medium"
+                  disabled={disabled}
+                />
+                {system.system_code && (
+                  <Badge variant="outline" className="shrink-0 font-mono">
+                    {system.system_code}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+          {!readOnly && canRemove && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0 text-muted-foreground"
+              onClick={onRemove}
+              disabled={isPending}
+            >
+              <Trash2 className="h-4 w-4" />
+              <span className="sr-only">Remove system</span>
+            </Button>
+          )}
+        </div>
+
+        {/* Quote bank hint */}
+        {bankStats && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs">
+            <span className="flex items-center gap-1.5 font-medium text-foreground">
+              <TrendingUp className="h-3.5 w-3.5" />
+              Quote bank ({system.system_code} / {system.work_type})
+            </span>
+            <span className="text-muted-foreground">
+              {bankStats.count} past {bankStats.count === 1 ? 'system' : 'systems'}
+            </span>
+            <span className="text-muted-foreground">
+              Avg <span className="font-medium text-foreground tabular-nums">{formatPence(bankStats.avgPence)}</span>
+            </span>
+            <span className="text-muted-foreground">
+              Range{' '}
+              <span className="font-medium text-foreground tabular-nums">
+                {formatPence(bankStats.minPence)}–{formatPence(bankStats.maxPence)}
+              </span>
+            </span>
+          </div>
+        )}
+      </CardHeader>
+
+      <CardContent className="space-y-5">
+        {/* ---- Specification ---- */}
+        <div className="grid gap-1.5">
+          <div className="flex items-center justify-between">
+            <Label>Specification</Label>
+            {!readOnly && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={importSpec}
+                disabled={disabled || !matchingTemplate}
+              >
+                <FileDown className="mr-1.5 h-3.5 w-3.5" />
+                Import from template
+              </Button>
+            )}
+          </div>
+          <Textarea
+            value={system.specification}
+            onChange={(e) => onUpdate({ specification: e.target.value })}
+            placeholder="The specification for this system. Import a master template above, then edit."
+            className="min-h-24"
+            disabled={disabled}
+          />
+        </div>
+
+        {/* ---- Conditional "IF" fields for the work type ---- */}
+        {conditionalFields.length > 0 && (
+          <div className="grid gap-3 rounded-md border bg-muted/20 p-3 sm:grid-cols-2">
+            <p className="sm:col-span-2 text-xs font-medium text-muted-foreground">
+              Additional details for {WORK_TYPES.find((w) => w.code === system.work_type)?.label}
+            </p>
+            {conditionalFields.map((f) => {
+              const val = system.conditional_values[f.field_key]
+              if (f.field_type === 'boolean') {
+                return (
+                  <div key={f.id} className="flex items-center justify-between gap-2 rounded-md border bg-background px-3 py-2">
+                    <Label htmlFor={`cf-${f.id}`} className="text-sm">{f.label}</Label>
+                    <Switch
+                      id={`cf-${f.id}`}
+                      checked={!!val}
+                      onCheckedChange={(c) => setConditional(f.field_key, c)}
+                      disabled={disabled}
+                    />
+                  </div>
+                )
+              }
+              if (f.field_type === 'select') {
+                return (
+                  <div key={f.id} className="grid gap-1.5">
+                    <Label>{f.label}</Label>
+                    <Select
+                      value={String(val ?? '')}
+                      onValueChange={(v) => setConditional(f.field_key, v)}
+                      disabled={disabled}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {f.options.map((opt) => (
+                          <SelectItem key={opt} value={opt}>
+                            {opt}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )
+              }
+              return (
+                <div key={f.id} className="grid gap-1.5">
+                  <Label>{f.label}</Label>
+                  <Input
+                    inputMode={f.field_type === 'number' ? 'decimal' : 'text'}
+                    value={String(val ?? '')}
+                    onChange={(e) =>
+                      setConditional(
+                        f.field_key,
+                        f.field_type === 'number' ? e.target.value : e.target.value,
+                      )
+                    }
+                    disabled={disabled}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* ---- Design & survey ---- */}
+        <div className="grid gap-3 rounded-md border p-3">
+          <p className="text-xs font-medium text-muted-foreground">Design &amp; survey</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-1.5">
+              <Label>Design category</Label>
+              <Select
+                value={system.design_category_id ?? ''}
+                onValueChange={handleDesignCategory}
+                disabled={disabled}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {designCategories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-1.5">
+              <Label>Drawing reference</Label>
+              <Input
+                value={system.drawing_reference}
+                onChange={(e) => onUpdate({ drawing_reference: e.target.value })}
+                placeholder="e.g. DWG-2026-014"
+                disabled={disabled}
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-1.5">
+            <Label>Design overview</Label>
+            <Textarea
+              value={system.design_overview}
+              onChange={(e) => onUpdate({ design_overview: e.target.value })}
+              placeholder="Imported from the design category, then editable."
+              disabled={disabled}
+            />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-1.5">
+              <Label>Designed by</Label>
+              <Select
+                value={system.designed_by ?? 'pyrocel'}
+                onValueChange={(v) => onUpdate({ designed_by: v })}
+                disabled={disabled}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DESIGNED_BY_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {system.designed_by === 'other' && (
+              <div className="grid gap-1.5">
+                <Label>Designer name</Label>
+                <Input
+                  value={system.designed_by_name}
+                  onChange={(e) => onUpdate({ designed_by_name: e.target.value })}
+                  placeholder="Who produced the design"
+                  disabled={disabled}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between gap-2 rounded-md border bg-background px-3 py-2">
+            <Label htmlFor={`survey-${system.key}`} className="text-sm">Survey carried out</Label>
+            <Switch
+              id={`survey-${system.key}`}
+              checked={system.survey_carried_out}
+              onCheckedChange={(c) => onUpdate({ survey_carried_out: c })}
+              disabled={disabled}
+            />
+          </div>
+          {system.survey_carried_out && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label>Survey by</Label>
+                <Input
+                  value={system.survey_by}
+                  onChange={(e) => onUpdate({ survey_by: e.target.value })}
+                  placeholder="Who carried out the survey"
+                  disabled={disabled}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Survey date</Label>
+                <Input
+                  type="date"
+                  value={system.survey_date}
+                  onChange={(e) => onUpdate({ survey_date: e.target.value })}
+                  disabled={disabled}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ---- Line items ---- */}
+        <div className="space-y-3">
+          <div className="hidden gap-2 px-1 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[1fr_70px_80px_110px_110px_36px]">
+            <span>Description</span>
+            <span className="text-right">Qty</span>
+            <span>Unit</span>
+            <span className="text-right">Unit price</span>
+            <span className="text-right">Total</span>
+            <span />
+          </div>
+
+          {system.lines.map((line) => {
+            const lineTotal = Math.round(
+              (Number.parseFloat(line.quantity) || 0) * poundsToPence(line.unitPrice),
+            )
+            return (
+              <div
+                key={line.key}
+                className="grid gap-2 rounded-md border p-2 sm:grid-cols-[1fr_70px_80px_110px_110px_36px] sm:items-start sm:border-0 sm:p-0"
+              >
+                <div className="grid gap-1.5">
+                  <Input
+                    value={line.description}
+                    onChange={(e) => onUpdateLine(line.key, { description: e.target.value })}
+                    placeholder="Item description"
+                    disabled={disabled}
+                  />
+                  <Input
+                    value={line.detail}
+                    onChange={(e) => onUpdateLine(line.key, { detail: e.target.value })}
+                    placeholder="Extra detail (optional)"
+                    className="text-xs"
+                    disabled={disabled}
+                  />
+                </div>
+                <Input
+                  inputMode="decimal"
+                  value={line.quantity}
+                  onChange={(e) => onUpdateLine(line.key, { quantity: e.target.value })}
+                  className="text-right"
+                  aria-label="Quantity"
+                  disabled={disabled}
+                />
+                <Input
+                  value={line.unit}
+                  onChange={(e) => onUpdateLine(line.key, { unit: e.target.value })}
+                  placeholder="each"
+                  aria-label="Unit"
+                  disabled={disabled}
+                />
+                <Input
+                  inputMode="decimal"
+                  value={line.unitPrice}
+                  onChange={(e) => onUpdateLine(line.key, { unitPrice: e.target.value })}
+                  onBlur={(e) =>
+                    onUpdateLine(line.key, { unitPrice: penceToPounds(poundsToPence(e.target.value)) })
+                  }
+                  className="text-right"
+                  aria-label="Unit price in pounds"
+                  disabled={disabled}
+                />
+                <div className="flex h-9 items-center justify-end text-sm font-medium tabular-nums">
+                  {formatPence(lineTotal)}
+                </div>
+                {!readOnly && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 text-muted-foreground"
+                    onClick={() => onRemoveLine(line.key)}
+                    disabled={isPending}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span className="sr-only">Remove line</span>
+                  </Button>
+                )}
+              </div>
+            )
+          })}
+
+          {!readOnly && (
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={onAddLine} disabled={isPending}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add line
+                </Button>
+                {catalogue.length > 0 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" disabled={isPending}>
+                        <BookOpen className="mr-2 h-4 w-4" />
+                        Add from catalogue
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="max-h-72 w-72 overflow-y-auto">
+                      <DropdownMenuLabel>Catalogue items</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {catalogue.map((item) => (
+                        <DropdownMenuItem key={item.id} onClick={() => onAddCatalogueLine(item)}>
+                          <div className="flex w-full items-center justify-between gap-2">
+                            <span className="truncate">{item.name}</span>
+                            <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                              {formatPence(item.default_unit_price_pence)}
+                            </span>
+                          </div>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                System total:{' '}
+                <span className="font-medium text-foreground tabular-nums">
+                  {formatPence(systemTotalPence)}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   )
 }

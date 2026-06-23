@@ -4,17 +4,23 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
-import { formatPence, quoteTypeLabel, QUOTE_STATUS_META } from '@/lib/sales'
+import {
+  formatPence,
+  quoteTypeLabel,
+  workTypeLabel,
+  designedByLabel,
+  QUOTE_STATUS_META,
+} from '@/lib/sales'
 import type {
   CompanyInfo,
   Quote,
   QuoteLineItem,
-  QuoteSection,
+  QuoteSystem,
 } from '@/lib/types/database'
 
 interface QuoteDocumentProps {
   quote: Quote
-  sections: QuoteSection[]
+  systems: QuoteSystem[]
   lines: QuoteLineItem[]
   company: CompanyInfo | null
   backHref?: string
@@ -22,7 +28,18 @@ interface QuoteDocumentProps {
 
 const HEADER_COLOR = '#0f172a'
 
-export function QuoteDocument({ quote, sections, lines, company, backHref }: QuoteDocumentProps) {
+// Humanise a conditional field key (e.g. "cable_type" -> "Cable type").
+function humanizeKey(key: string): string {
+  const s = key.replace(/[_-]+/g, ' ').trim()
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+function renderConditionalValue(value: string | number | boolean): string {
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  return String(value)
+}
+
+export function QuoteDocument({ quote, systems, lines, company, backHref }: QuoteDocumentProps) {
   const companyName = company?.name || 'Pyrocel Ltd'
   const recipientName = quote.client?.name || quote.prospect_name || 'Prospective client'
   const recipientContact = quote.client?.contact_name || quote.prospect_contact
@@ -76,7 +93,8 @@ export function QuoteDocument({ quote, sections, lines, company, backHref }: Quo
           </div>
           <div className="text-right">
             <p className="text-sm font-semibold uppercase tracking-wide">Quotation</p>
-            <p className="text-xs text-white/80">{quote.quote_number ?? 'Draft'}</p>
+            <p className="text-xs text-white/80">{quote.reference ?? quote.quote_number ?? 'Draft'}</p>
+            {quote.revision > 0 && <p className="text-xs text-white/80">Revision {quote.revision}</p>}
             <p className="mt-1 text-xs text-white/80">{quoteTypeLabel(quote.quote_type)}</p>
           </div>
         </header>
@@ -126,63 +144,136 @@ export function QuoteDocument({ quote, sections, lines, company, backHref }: Quo
           </p>
         )}
 
-        {/* Sections + line items */}
-        <div className="space-y-6">
-          {sections.map((section) => {
-            const sectionLines = lines
-              .filter((l) => l.section_id === section.id)
-              .sort((a, b) => a.position - b.position)
-            const sectionTotal = sectionLines.reduce((sum, l) => sum + l.line_total_pence, 0)
-            if (sectionLines.length === 0) return null
-            return (
-              <div key={section.id} className="break-inside-avoid">
-                <div className="mb-2 border-b pb-1">
-                  <h2 className="font-semibold">{section.title}</h2>
-                  {section.description && (
-                    <p className="text-sm text-muted-foreground">{section.description}</p>
+        {/* Systems + specification + line items */}
+        <div className="space-y-8">
+          {systems
+            .slice()
+            .sort((a, b) => a.position - b.position)
+            .map((system) => {
+              const systemLines = lines
+                .filter((l) => l.system_id === system.id)
+                .sort((a, b) => a.position - b.position)
+              const systemTotal = systemLines.reduce((sum, l) => sum + l.line_total_pence, 0)
+              const conditional = Object.entries(system.conditional_values ?? {})
+              return (
+                <div key={system.id} className="break-inside-avoid">
+                  <div className="mb-2 flex items-baseline justify-between gap-2 border-b pb-1">
+                    <h2 className="font-semibold">
+                      {system.system_name}
+                      {system.system_code ? (
+                        <span className="ml-2 font-mono text-xs text-muted-foreground">
+                          {system.system_code}
+                        </span>
+                      ) : null}
+                    </h2>
+                    <span className="text-xs text-muted-foreground">{workTypeLabel(system.work_type)}</span>
+                  </div>
+
+                  {system.specification && (
+                    <div className="mb-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Specification
+                      </p>
+                      <p className="whitespace-pre-line text-sm leading-relaxed">{system.specification}</p>
+                    </div>
+                  )}
+
+                  {/* Design & survey */}
+                  {(system.design_overview ||
+                    system.design_category_id ||
+                    system.drawing_reference ||
+                    system.designed_by ||
+                    system.survey_carried_out) && (
+                    <div className="mb-3 rounded-md bg-muted/40 p-3 text-sm">
+                      {system.design_overview && (
+                        <p className="mb-2 whitespace-pre-line leading-relaxed">{system.design_overview}</p>
+                      )}
+                      <dl className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+                        {system.designed_by && (
+                          <div className="flex gap-2">
+                            <dt className="text-muted-foreground">Designed by:</dt>
+                            <dd className="font-medium">
+                              {designedByLabel(system.designed_by, system.designed_by_name)}
+                            </dd>
+                          </div>
+                        )}
+                        {system.drawing_reference && (
+                          <div className="flex gap-2">
+                            <dt className="text-muted-foreground">Drawing ref:</dt>
+                            <dd className="font-medium">{system.drawing_reference}</dd>
+                          </div>
+                        )}
+                        <div className="flex gap-2">
+                          <dt className="text-muted-foreground">Survey:</dt>
+                          <dd className="font-medium">
+                            {system.survey_carried_out
+                              ? `Yes${system.survey_by ? ` — ${system.survey_by}` : ''}${
+                                  system.survey_date ? ` (${formatDateUK(system.survey_date)})` : ''
+                                }`
+                              : 'Not carried out'}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+                  )}
+
+                  {/* Conditional values */}
+                  {conditional.length > 0 && (
+                    <dl className="mb-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+                      {conditional.map(([key, value]) => (
+                        <div key={key} className="flex gap-2">
+                          <dt className="text-muted-foreground">{humanizeKey(key)}:</dt>
+                          <dd className="font-medium">{renderConditionalValue(value)}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
+
+                  {systemLines.length > 0 && (
+                    <>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                            <th className="py-1 font-medium">Description</th>
+                            <th className="py-1 text-right font-medium">Qty</th>
+                            <th className="py-1 text-right font-medium">Unit price</th>
+                            <th className="py-1 text-right font-medium">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {systemLines.map((line) => (
+                            <tr key={line.id} className="border-b border-dashed last:border-0">
+                              <td className="py-2 pr-4 align-top">
+                                <div className="font-medium">{line.description}</div>
+                                {line.detail && (
+                                  <div className="text-xs text-muted-foreground">{line.detail}</div>
+                                )}
+                              </td>
+                              <td className="py-2 text-right align-top tabular-nums">
+                                {line.quantity}
+                                {line.unit ? ` ${line.unit}` : ''}
+                              </td>
+                              <td className="py-2 text-right align-top tabular-nums">
+                                {formatPence(line.unit_price_pence, quote.currency)}
+                              </td>
+                              <td className="py-2 text-right align-top font-medium tabular-nums">
+                                {formatPence(line.line_total_pence, quote.currency)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <div className="mt-1 text-right text-sm text-muted-foreground">
+                        System total:{' '}
+                        <span className="font-medium text-foreground tabular-nums">
+                          {formatPence(systemTotal, quote.currency)}
+                        </span>
+                      </div>
+                    </>
                   )}
                 </div>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-                      <th className="py-1 font-medium">Description</th>
-                      <th className="py-1 text-right font-medium">Qty</th>
-                      <th className="py-1 text-right font-medium">Unit price</th>
-                      <th className="py-1 text-right font-medium">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sectionLines.map((line) => (
-                      <tr key={line.id} className="border-b border-dashed last:border-0">
-                        <td className="py-2 pr-4 align-top">
-                          <div className="font-medium">{line.description}</div>
-                          {line.detail && (
-                            <div className="text-xs text-muted-foreground">{line.detail}</div>
-                          )}
-                        </td>
-                        <td className="py-2 text-right align-top tabular-nums">
-                          {line.quantity}
-                          {line.unit ? ` ${line.unit}` : ''}
-                        </td>
-                        <td className="py-2 text-right align-top tabular-nums">
-                          {formatPence(line.unit_price_pence, quote.currency)}
-                        </td>
-                        <td className="py-2 text-right align-top font-medium tabular-nums">
-                          {formatPence(line.line_total_pence, quote.currency)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="mt-1 text-right text-sm text-muted-foreground">
-                  Section total:{' '}
-                  <span className="font-medium text-foreground tabular-nums">
-                    {formatPence(sectionTotal, quote.currency)}
-                  </span>
-                </div>
-              </div>
-            )
-          })}
+              )
+            })}
         </div>
 
         {/* Totals */}

@@ -29,6 +29,57 @@ export function quoteTypeLabel(value: string): string {
   return QUOTE_TYPES.find((t) => t.value === value)?.label ?? value
 }
 
+// --- Work types (per system) ------------------------------------------
+// Fixed coded list. The `code` is stored on each quote system and used for
+// quote-bank querying; it's intentionally short and stable. Conditional
+// "IF" fields are attached to these codes via the work_type_fields table.
+export interface WorkTypeDef {
+  code: string
+  label: string
+  description: string
+}
+
+export const WORK_TYPES: WorkTypeDef[] = [
+  { code: 'SO', label: 'Supply Only', description: 'Equipment supplied, no installation or commissioning.' },
+  { code: 'SC', label: 'Supply & Commission', description: 'Equipment supplied and commissioned.' },
+  { code: 'SIC', label: 'Supply, Install & Commission', description: 'Full turnkey: supply, installation and commissioning.' },
+  { code: 'REM', label: 'Remedial', description: 'Fault rectification and remedial actions.' },
+  { code: 'SVC', label: 'Service Contract', description: 'Recurring maintenance / service agreement.' },
+  { code: 'OTH', label: 'Other', description: 'Bespoke or one-off work.' },
+]
+
+export function workTypeLabel(code: string): string {
+  return WORK_TYPES.find((t) => t.code === code)?.label ?? code
+}
+
+// Who produced the design for a system.
+export const DESIGNED_BY_OPTIONS = [
+  { value: 'pyrocel', label: 'Pyrocel' },
+  { value: 'other', label: 'Other' },
+] as const
+
+export function designedByLabel(value: string | null, name?: string | null): string {
+  if (value === 'pyrocel') return 'Pyrocel'
+  if (value === 'other') return name?.trim() ? name : 'Other'
+  return '—'
+}
+
+// --- Quote bank stats --------------------------------------------------
+export interface QuoteBankStats {
+  count: number
+  minPence: number
+  avgPence: number
+  maxPence: number
+}
+
+export function computeBankStats(values: number[]): QuoteBankStats {
+  if (!values.length) return { count: 0, minPence: 0, avgPence: 0, maxPence: 0 }
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const avg = Math.round(values.reduce((s, v) => s + v, 0) / values.length)
+  return { count: values.length, minPence: min, avgPence: avg, maxPence: max }
+}
+
 // --- Status metadata ---------------------------------------------------
 export const QUOTE_STATUS_META: Record<
   QuoteStatus,

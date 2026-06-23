@@ -39,6 +39,7 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: serviceType.name,
+    code: serviceType.code || '',
     description: serviceType.description || '',
     default_frequency_value: serviceType.default_frequency_value ?? serviceType.default_frequency_months ?? 12,
     default_frequency_unit: (serviceType.default_frequency_unit || 'months') as 'weeks' | 'months',
@@ -65,6 +66,7 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
       .from('service_types')
       .update({
         name: formData.name,
+        code: formData.code.trim().toUpperCase() || null,
         description: formData.description || null,
         default_frequency_months: frequencyInMonths,
         default_frequency_value: formData.default_frequency_value,
@@ -112,6 +114,19 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
               />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="code">System Code</Label>
+              <Input
+                id="code"
+                value={formData.code}
+                onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                placeholder="e.g. FA, CCTV, AC"
+                maxLength={12}
+              />
+              <p className="text-xs text-muted-foreground">
+                Short code used to identify this system in quotes and to query quote-bank values.
+              </p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="description">Description</Label>

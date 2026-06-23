@@ -58,6 +58,7 @@ export function ServiceTypesTable({ serviceTypes }: ServiceTypesTableProps) {
           <TableHeader>
             <TableRow>
               <TableHead>Service Name</TableHead>
+              <TableHead>Code</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Description</TableHead>
               <TableHead>Default Frequency</TableHead>
@@ -67,7 +68,7 @@ export function ServiceTypesTable({ serviceTypes }: ServiceTypesTableProps) {
           <TableBody>
             {serviceTypes.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center">
+                <TableCell colSpan={6} className="h-24 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <Wrench className="h-8 w-8 text-muted-foreground/50 mb-2" />
                     <p className="text-muted-foreground">No service types found</p>
@@ -78,6 +79,13 @@ export function ServiceTypesTable({ serviceTypes }: ServiceTypesTableProps) {
               serviceTypes.map((serviceType) => (
                 <TableRow key={serviceType.id}>
                   <TableCell className="font-medium">{serviceType.name}</TableCell>
+                  <TableCell>
+                    {serviceType.code ? (
+                      <Badge variant="outline" className="font-mono">{serviceType.code}</Badge>
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={(serviceType.status || 'live') === 'live' ? 'default' : 'destructive'}>
                       {serviceType.status || 'live'}

@@ -74,6 +74,9 @@ export interface ClientLogin extends Profile {
 export interface ServiceType {
   id: string
   name: string
+  // Short queryable code (e.g. FA, CCTV, AC) used to identify a system in
+  // quotes and to drive quote-bank analytics.
+  code?: string | null
   description: string | null
   default_frequency_months?: number // Legacy field
   default_frequency_value: number
@@ -613,7 +616,7 @@ export interface QuoteCatalogueItem {
 export interface QuoteLineItem {
   id: string
   quote_id: string
-  section_id: string | null
+  system_id: string | null
   catalogue_item_id: string | null
   service_type_id: string | null
   description: string
@@ -626,12 +629,29 @@ export interface QuoteLineItem {
   created_at: string
 }
 
-export interface QuoteSection {
+// A "system" within a quote, based on a service type. Carries a queryable
+// code (snapshot of the service type code), a work-type code, an editable
+// specification (pre-filled from a template), conditional "IF" answers, and
+// design/survey metadata.
+export interface QuoteSystem {
   id: string
   quote_id: string
-  title: string
-  description: string | null
+  service_type_id: string | null
+  system_name: string
+  system_code: string | null
+  work_type: string
+  specification: string | null
+  conditional_values: Record<string, string | number | boolean>
+  design_category_id: string | null
+  design_overview: string | null
+  designed_by: string | null
+  designed_by_name: string | null
+  drawing_reference: string | null
+  survey_carried_out: boolean
+  survey_by: string | null
+  survey_date: string | null
   position: number
+  subtotal_pence: number
   created_at: string
   line_items?: QuoteLineItem[]
 }
@@ -639,6 +659,12 @@ export interface QuoteSection {
 export interface Quote {
   id: string
   quote_number: string | null
+  // Stable reference shared across a master quote and its clones/revisions.
+  reference: string | null
+  master_quote_id: string | null
+  revision: number
+  variant_label: string | null
+  is_master: boolean
   title: string
   quote_type: string
   status: QuoteStatus
@@ -670,8 +696,64 @@ export interface Quote {
 }
 
 export interface QuoteWithDetails extends Quote {
-  sections: QuoteSection[]
+  systems: QuoteSystem[]
   line_items: QuoteLineItem[]
+}
+
+// Editable master specification keyed by service type x work type. Pre-fills
+// a system's specification when it is added to a quote.
+export interface SystemSpecTemplate {
+  id: string
+  service_type_id: string | null
+  work_type: string
+  specification: string | null
+  active: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  service_type?: ServiceType | null
+}
+
+// Admin-managed conditional "IF" field definition shown on a system based on
+// its work type (e.g. cable type for install). Answers are stored in
+// QuoteSystem.conditional_values keyed by field_key.
+export interface WorkTypeField {
+  id: string
+  work_type: string
+  label: string
+  field_key: string
+  field_type: 'text' | 'number' | 'select' | 'boolean'
+  options: string[]
+  position: number
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+// Editable design category with an importable overview, selectable per system.
+export interface QuoteDesignCategory {
+  id: string
+  name: string
+  overview: string | null
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+// A single row of the quote_bank_values view (historical system values for
+// benchmarking, filtered to sent/accepted quotes).
+export interface QuoteBankValue {
+  system_id: string
+  quote_id: string
+  reference: string | null
+  quote_number: string | null
+  status: QuoteStatus
+  quote_title: string
+  system_name: string
+  system_code: string | null
+  work_type: string
+  subtotal_pence: number
+  created_at: string
 }
 
 // Direct labour cost per role (hourly), used to underpin estimates.

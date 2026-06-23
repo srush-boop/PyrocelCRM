@@ -35,6 +35,7 @@ export function AddServiceTypeDialog() {
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
+    code: '',
     description: '',
     default_frequency_value: 12,
     default_frequency_unit: 'months' as 'weeks' | 'months',
@@ -58,6 +59,7 @@ export function AddServiceTypeDialog() {
 
     const { error } = await supabase.from('service_types').insert({
       name: formData.name,
+      code: formData.code.trim().toUpperCase() || null,
       description: formData.description || null,
       default_frequency_months: frequencyInMonths,
       default_frequency_value: formData.default_frequency_value,
@@ -82,6 +84,7 @@ export function AddServiceTypeDialog() {
       setOpen(false)
       setFormData({
         name: '',
+        code: '',
         description: '',
         default_frequency_value: 12,
         default_frequency_unit: 'months',
@@ -121,6 +124,19 @@ export function AddServiceTypeDialog() {
                 placeholder="e.g., Fire Alarm Testing"
                 required
               />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="code">System Code</Label>
+              <Input
+                id="code"
+                value={formData.code}
+                onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                placeholder="e.g. FA, CCTV, AC"
+                maxLength={12}
+              />
+              <p className="text-xs text-muted-foreground">
+                Short code used to identify this system in quotes and to query quote-bank values.
+              </p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="description">Description</Label>

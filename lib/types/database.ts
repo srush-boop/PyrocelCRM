@@ -586,3 +586,90 @@ export interface EmergencyLightInspection {
   emergency_light?: EmergencyLight
   inspector?: Profile | null
 }
+
+// =====================================================================
+// Sales / Quoting
+// Money is stored as integer pence everywhere. Totals are recomputed
+// server-side from line items, never trusted from the client.
+// =====================================================================
+
+export type QuoteStatus = 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired'
+
+export interface QuoteCatalogueItem {
+  id: string
+  name: string
+  description: string | null
+  category: string | null
+  service_type_id: string | null
+  default_unit: string | null
+  default_unit_price_pence: number
+  active: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  service_type?: ServiceType | null
+}
+
+export interface QuoteLineItem {
+  id: string
+  quote_id: string
+  section_id: string | null
+  catalogue_item_id: string | null
+  service_type_id: string | null
+  description: string
+  detail: string | null
+  quantity: number
+  unit: string | null
+  unit_price_pence: number
+  line_total_pence: number
+  position: number
+  created_at: string
+}
+
+export interface QuoteSection {
+  id: string
+  quote_id: string
+  title: string
+  description: string | null
+  position: number
+  created_at: string
+  line_items?: QuoteLineItem[]
+}
+
+export interface Quote {
+  id: string
+  quote_number: string | null
+  title: string
+  quote_type: string
+  status: QuoteStatus
+  client_id: string | null
+  site_id: string | null
+  prospect_name: string | null
+  prospect_contact: string | null
+  prospect_email: string | null
+  prospect_phone: string | null
+  prospect_address: string | null
+  summary: string | null
+  notes: string | null
+  terms: string | null
+  currency: string
+  vat_rate: number
+  discount_pence: number
+  subtotal_pence: number
+  vat_pence: number
+  total_pence: number
+  valid_until: string | null
+  sent_at: string | null
+  decided_at: string | null
+  decision_note: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  client?: Client | null
+  site?: Site | null
+}
+
+export interface QuoteWithDetails extends Quote {
+  sections: QuoteSection[]
+  line_items: QuoteLineItem[]
+}

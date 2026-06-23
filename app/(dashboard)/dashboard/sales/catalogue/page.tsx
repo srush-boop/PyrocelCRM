@@ -4,7 +4,8 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
 import { CatalogueManager } from '@/components/dashboard/sales/catalogue-manager'
-import type { Profile, QuoteCatalogueItem, ServiceType } from '@/lib/types/database'
+import { ProductSheetPanel } from '@/components/dashboard/sales/product-sheet-panel'
+import type { Profile, ProductSheet, QuoteCatalogueItem, ServiceType } from '@/lib/types/database'
 
 export const metadata = { title: 'Quote Catalogue | Pyrocel' }
 
@@ -20,9 +21,16 @@ export default async function CataloguePage() {
     redirect('/dashboard')
   }
 
-  const [{ data: items }, { data: serviceTypes }] = await Promise.all([
+  const [{ data: items }, { data: serviceTypes }, { data: currentSheet }] = await Promise.all([
     supabase.from('quote_catalogue_items').select('*').order('name'),
     supabase.from('service_types').select('id, name').eq('status', 'live').order('name'),
+    supabase
+      .from('product_sheets')
+      .select('*')
+      .eq('is_current', true)
+      .order('uploaded_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ])
 
   return (
@@ -39,6 +47,8 @@ export default async function CataloguePage() {
           Reusable items and standard prices that can be dropped into any quote.
         </p>
       </div>
+
+      <ProductSheetPanel current={(currentSheet as ProductSheet | null) ?? null} />
 
       <CatalogueManager
         items={(items ?? []) as QuoteCatalogueItem[]}

@@ -673,3 +673,18 @@ export interface QuoteWithDetails extends Quote {
   sections: QuoteSection[]
   line_items: QuoteLineItem[]
 }
+
+// Uploaded products spreadsheet (stored privately in Vercel Blob). Importing
+// a sheet seeds/updates the quote catalogue used to build estimates & specs.
+export interface ProductSheet {
+  id: string
+  filename: string
+  blob_pathname: string
+  size_bytes: number | null
+  uploaded_by: string | null
+  uploaded_at: string
+  row_count: number | null
+  imported_at: string | null
+  imported_count: number | null
+  is_current: boolean
+}

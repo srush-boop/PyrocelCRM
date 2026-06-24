@@ -1,5 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
+import { ArrowLeft } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { QuoteBuilder } from '@/components/dashboard/sales/quote-builder'
 import { resolveDefaultMargin } from '@/lib/sales'
 import type {
@@ -81,7 +84,13 @@ export default async function NewQuotePage() {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="flex flex-col gap-2">
+        <Button variant="ghost" size="sm" className="w-fit -ml-2" asChild>
+          <Link href="/dashboard/sales/quotes">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Quotes
+          </Link>
+        </Button>
         <h1 className="text-3xl font-bold tracking-tight">New Quote</h1>
         <p className="text-muted-foreground">Build a quote from one or more systems with line items.</p>
       </div>

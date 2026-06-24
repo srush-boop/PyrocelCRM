@@ -34,7 +34,9 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
-import { Plus, Trash2, GripVertical, BookOpen, Save, FileDown, TrendingUp, Calculator, Wrench, Check, ChevronsUpDown } from 'lucide-react'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { cn } from '@/lib/utils'
+import { Plus, Trash2, BookOpen, Save, FileDown, TrendingUp, Calculator, Wrench, Check, ChevronsUpDown, ChevronDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { PpmCalculatorDialog, type PpmDraft } from '@/components/dashboard/sales/ppm-calculator-dialog'
 import {
@@ -820,6 +822,9 @@ function SystemCard({
 }: SystemCardProps) {
   const disabled = readOnly || isPending
   const [ppmOpen, setPpmOpen] = useState(false)
+  // Each system section is collapsible and starts collapsed to keep long
+  // multi-system quotes scannable.
+  const [open, setOpen] = useState(false)
   const [catalogueOpen, setCatalogueOpen] = useState(false)
   const [catalogueSearch, setCatalogueSearch] = useState('')
 
@@ -928,10 +933,50 @@ function SystemCard({
 
   return (
     <Card>
-      <CardHeader className="gap-3">
-        <div className="flex items-start gap-2">
-          <GripVertical className="mt-2.5 h-4 w-4 shrink-0 text-muted-foreground" />
-          <div className="grid flex-1 gap-3">
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <div className="flex items-center gap-2 px-6 py-4">
+          <CollapsibleTrigger asChild>
+            <button type="button" aria-expanded={open} className="flex flex-1 items-center gap-3 text-left">
+              <ChevronDown
+                className={cn(
+                  'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
+                  open && 'rotate-180',
+                )}
+              />
+              <span className="truncate font-medium">
+                {system.system_name?.trim() || 'Untitled system'}
+              </span>
+              {system.system_code && (
+                <Badge variant="outline" className="shrink-0 font-mono">
+                  {system.system_code}
+                </Badge>
+              )}
+              <Badge variant="secondary" className="shrink-0">
+                {WORK_TYPES.find((w) => w.code === system.work_type)?.code ?? system.work_type}
+              </Badge>
+              <span className="ml-auto shrink-0 text-sm font-medium tabular-nums">
+                {formatPence(systemTotalPence)}
+              </span>
+            </button>
+          </CollapsibleTrigger>
+          {!readOnly && canRemove && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0 text-muted-foreground"
+              onClick={onRemove}
+              disabled={isPending}
+            >
+              <Trash2 className="h-4 w-4" />
+              <span className="sr-only">Remove system</span>
+            </Button>
+          )}
+        </div>
+
+        <CollapsibleContent>
+          <CardHeader className="gap-3">
+            <div className="flex items-start gap-2">
+              <div className="grid flex-1 gap-3">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label>System type</Label>
@@ -1005,18 +1050,6 @@ function SystemCard({
               </p>
             </div>
           </div>
-          {!readOnly && canRemove && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 shrink-0 text-muted-foreground"
-              onClick={onRemove}
-              disabled={isPending}
-            >
-              <Trash2 className="h-4 w-4" />
-              <span className="sr-only">Remove system</span>
-            </Button>
-          )}
         </div>
 
         {/* Quote bank hint */}
@@ -1470,7 +1503,9 @@ function SystemCard({
           disabled={disabled}
           onApply={onApplyPpm}
         />
-      </CardContent>
+        </CardContent>
+        </CollapsibleContent>
+      </Collapsible>
     </Card>
   )
 }

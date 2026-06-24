@@ -1,5 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
+import Link from 'next/link'
+import { ArrowLeft } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { QuoteBuilder } from '@/components/dashboard/sales/quote-builder'
 import { QuoteStatusPanel } from '@/components/dashboard/sales/quote-status-panel'
 import { QuoteGroupPanel } from '@/components/dashboard/sales/quote-group-panel'
@@ -117,6 +120,12 @@ export default async function QuoteDetailPage({
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2">
+        <Button variant="ghost" size="sm" className="w-fit -ml-2" asChild>
+          <Link href="/dashboard/sales/quotes">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Quotes
+          </Link>
+        </Button>
         <h1 className="text-3xl font-bold tracking-tight">{typedQuote.title}</h1>
         <p className="text-muted-foreground">
           {typedQuote.reference ?? typedQuote.quote_number ?? 'Draft'}

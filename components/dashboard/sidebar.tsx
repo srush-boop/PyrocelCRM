@@ -60,23 +60,37 @@ interface DashboardSidebarProps {
   profile: Profile
 }
 
-type NavItem = {
+type NavChild = {
   title: string
   href?: string
   icon: LucideIcon
   children?: { title: string; href: string; icon: LucideIcon }[]
 }
 
-// Sites now acts as a parent grouping its asset registers (dampers,
-// extinguishers, emergency lights) alongside the sites list itself.
+type NavItem = {
+  title: string
+  href?: string
+  icon: LucideIcon
+  children?: NavChild[]
+}
+
+// Sites acts as a parent: "Open Sites" links to the sites list, while the
+// individual asset registers (dampers, extinguishers, emergency lights) are
+// condensed into a nested "Assets" group.
 const sitesNavItem: NavItem = {
   title: 'Sites',
   icon: Building2,
   children: [
-    { title: 'All Sites', href: '/dashboard/sites', icon: Building2 },
-    { title: 'Dampers', href: '/dashboard/dampers', icon: Wind },
-    { title: 'Extinguishers', href: '/dashboard/extinguishers', icon: FireExtinguisher },
-    { title: 'Emergency Lights', href: '/dashboard/emergency-lights', icon: Lightbulb },
+    { title: 'Open Sites', href: '/dashboard/sites', icon: Building2 },
+    {
+      title: 'Assets',
+      icon: Boxes,
+      children: [
+        { title: 'Dampers', href: '/dashboard/dampers', icon: Wind },
+        { title: 'Extinguishers', href: '/dashboard/extinguishers', icon: FireExtinguisher },
+        { title: 'Emergency Lights', href: '/dashboard/emergency-lights', icon: Lightbulb },
+      ],
+    },
   ],
 }
 
@@ -191,7 +205,11 @@ export function DashboardSidebar({ profile }: DashboardSidebarProps) {
                   <Collapsible
                     key={item.title}
                     asChild
-                    defaultOpen={item.children.some((child) => pathname === child.href)}
+                    defaultOpen={item.children.some(
+                      (child) =>
+                        pathname === child.href ||
+                        child.children?.some((sub) => pathname === sub.href),
+                    )}
                     className="group/collapsible"
                   >
                     <SidebarMenuItem>
@@ -204,16 +222,49 @@ export function DashboardSidebar({ profile }: DashboardSidebarProps) {
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <SidebarMenuSub>
-                          {item.children.map((child) => (
-                            <SidebarMenuSubItem key={child.href}>
-                              <SidebarMenuSubButton asChild isActive={pathname === child.href}>
-                                <Link href={child.href}>
-                                  <child.icon className="h-4 w-4" />
-                                  <span>{child.title}</span>
-                                </Link>
-                              </SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                          ))}
+                          {item.children.map((child) =>
+                            child.children ? (
+                              <Collapsible
+                                key={child.title}
+                                asChild
+                                defaultOpen={child.children.some((sub) => pathname === sub.href)}
+                                className="group/subcollapsible"
+                              >
+                                <SidebarMenuSubItem>
+                                  <CollapsibleTrigger asChild>
+                                    <SidebarMenuSubButton>
+                                      <child.icon className="h-4 w-4" />
+                                      <span>{child.title}</span>
+                                      <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/subcollapsible:rotate-90" />
+                                    </SidebarMenuSubButton>
+                                  </CollapsibleTrigger>
+                                  <CollapsibleContent>
+                                    <SidebarMenuSub>
+                                      {child.children.map((sub) => (
+                                        <SidebarMenuSubItem key={sub.href}>
+                                          <SidebarMenuSubButton asChild isActive={pathname === sub.href}>
+                                            <Link href={sub.href}>
+                                              <sub.icon className="h-4 w-4" />
+                                              <span>{sub.title}</span>
+                                            </Link>
+                                          </SidebarMenuSubButton>
+                                        </SidebarMenuSubItem>
+                                      ))}
+                                    </SidebarMenuSub>
+                                  </CollapsibleContent>
+                                </SidebarMenuSubItem>
+                              </Collapsible>
+                            ) : (
+                              <SidebarMenuSubItem key={child.href}>
+                                <SidebarMenuSubButton asChild isActive={pathname === child.href}>
+                                  <Link href={child.href!}>
+                                    <child.icon className="h-4 w-4" />
+                                    <span>{child.title}</span>
+                                  </Link>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            ),
+                          )}
                         </SidebarMenuSub>
                       </CollapsibleContent>
                     </SidebarMenuItem>

@@ -3,6 +3,7 @@ import { redirect, notFound } from 'next/navigation'
 import { QuoteBuilder } from '@/components/dashboard/sales/quote-builder'
 import { QuoteStatusPanel } from '@/components/dashboard/sales/quote-status-panel'
 import { QuoteGroupPanel } from '@/components/dashboard/sales/quote-group-panel'
+import { resolveDefaultMargin } from '@/lib/sales'
 import type {
   Client,
   Profile,
@@ -64,6 +65,7 @@ export default async function QuoteDetailPage({
     { data: bankValues },
     { data: groupMembers },
     { data: companyInfo },
+    { data: department },
   ] = await Promise.all([
     supabase.from('quote_systems').select('*').eq('quote_id', id).order('position'),
     supabase.from('quote_line_items').select('*').eq('quote_id', id).order('position'),
@@ -92,11 +94,20 @@ export default async function QuoteDetailPage({
       .or(`id.eq.${masterId},master_quote_id.eq.${masterId}`)
       .order('revision'),
     supabase.from('company_info').select('default_margin_percent').limit(1).maybeSingle(),
+    (profile as Profile).department_id
+      ? supabase
+          .from('departments')
+          .select('default_margin_percent')
+          .eq('id', (profile as Profile).department_id as string)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
   ])
 
   const defaultHourlyCostPence = (ppmEngineerCost as { hourly_cost_pence: number } | null)?.hourly_cost_pence ?? 0
-  const defaultMarginPercent =
-    (companyInfo as { default_margin_percent: number } | null)?.default_margin_percent ?? 0
+  const defaultMarginPercent = resolveDefaultMargin(
+    (department as { default_margin_percent: number } | null)?.default_margin_percent ?? null,
+    (companyInfo as { default_margin_percent: number } | null)?.default_margin_percent ?? null,
+  )
 
   const editable = typedQuote.status === 'draft'
 

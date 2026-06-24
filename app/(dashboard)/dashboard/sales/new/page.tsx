@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { QuoteBuilder } from '@/components/dashboard/sales/quote-builder'
+import { resolveDefaultMargin } from '@/lib/sales'
 import type {
   Client,
   Profile,
@@ -27,6 +28,16 @@ export default async function NewQuotePage() {
   if (!profile || !['admin', 'office'].includes((profile as Profile).role)) {
     redirect('/dashboard')
   }
+
+  // The quote author's department margin (if any) overrides the company default.
+  const departmentId = (profile as Profile).department_id
+  const { data: department } = departmentId
+    ? await supabase
+        .from('departments')
+        .select('default_margin_percent')
+        .eq('id', departmentId)
+        .maybeSingle()
+    : { data: null }
 
   const [
     { data: clients },
@@ -60,8 +71,10 @@ export default async function NewQuotePage() {
   ])
 
   const defaultHourlyCostPence = (ppmEngineerCost as { hourly_cost_pence: number } | null)?.hourly_cost_pence ?? 0
-  const defaultMarginPercent =
-    (companyInfo as { default_margin_percent: number } | null)?.default_margin_percent ?? 0
+  const defaultMarginPercent = resolveDefaultMargin(
+    (department as { default_margin_percent: number } | null)?.default_margin_percent ?? null,
+    (companyInfo as { default_margin_percent: number } | null)?.default_margin_percent ?? null,
+  )
 
   return (
     <div className="space-y-6">

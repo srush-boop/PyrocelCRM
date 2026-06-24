@@ -142,6 +142,18 @@ export function resolveLineMargin(
   return Number.isFinite(systemMargin as number) ? (systemMargin as number) : 0
 }
 
+// Resolve the default margin pre-filled on a new quote: the quote author's
+// department margin takes precedence, falling back to the company default.
+export function resolveDefaultMargin(
+  departmentMargin: number | null | undefined,
+  companyMargin: number | null | undefined,
+): number {
+  if (departmentMargin !== null && departmentMargin !== undefined && Number.isFinite(departmentMargin)) {
+    return departmentMargin
+  }
+  return Number.isFinite(companyMargin as number) ? (companyMargin as number) : 0
+}
+
 // --- Totals ------------------------------------------------------------
 export interface QuoteTotals {
   subtotalPence: number

@@ -50,8 +50,20 @@ export interface Profile {
   role: UserRole
   status: 'active' | 'inactive'
   client_id: string | null
+  department_id: string | null
   invited_at: string | null
   accepted_at: string | null
+  created_at: string
+  updated_at: string
+  department?: Department | null
+}
+
+// A company department with its own default sales margin.
+export interface Department {
+  id: string
+  name: string
+  default_margin_percent: number
+  active: boolean
   created_at: string
   updated_at: string
 }

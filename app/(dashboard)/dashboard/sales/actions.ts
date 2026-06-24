@@ -234,8 +234,18 @@ export async function saveQuote(
     return { ok: false, error: 'Select a client or enter a prospect name.' }
   }
 
-  // Flatten lines to compute authoritative totals.
-  const allLines = input.systems.flatMap((s) => s.lines)
+  // Flatten lines, deriving each line's authoritative sell price from its unit
+  // cost + effective margin (per-line override, else the system margin).
+  const allLines = input.systems.flatMap((s) => {
+    const systemMargin = Number.isFinite(s.margin_percent as number) ? (s.margin_percent as number) : 0
+    return s.lines.map((l) => ({
+      quantity: l.quantity || 0,
+      unit_price_pence: sellFromCost(
+        Math.round(l.unit_cost_pence) || 0,
+        resolveLineMargin(l.margin_percent ?? null, systemMargin),
+      ),
+    }))
+  })
   const totals = computeQuoteTotals(allLines, {
     vatRate: input.vat_rate,
     discountPence: input.discount_pence,

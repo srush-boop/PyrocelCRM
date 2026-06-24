@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { get } from '@vercel/blob'
 import * as XLSX from 'xlsx'
 import { createClient } from '@/lib/supabase/server'
+import { sellFromCost } from '@/lib/sales'
 
 async function requireStaff() {
   const supabase = await createClient()
@@ -125,12 +126,18 @@ export async function importProductSheet(sheetId?: string): Promise<ImportResult
     .map((row) => {
       const name = cell(row, nameCol)
       if (!name) return null
+      // The spreadsheet price column is the supplier unit cost. Import it as the
+      // cost at 0% margin so the derived sell price equals the cost until staff
+      // set a margin in the catalogue.
+      const cost = priceCol !== -1 ? parsePrice(row[priceCol]) : 0
       return {
         name,
         description: descCol !== -1 && descCol !== nameCol ? cell(row, descCol) || null : null,
         category: catCol !== -1 ? cell(row, catCol) || null : null,
         default_unit: unitCol !== -1 ? cell(row, unitCol) || null : null,
-        default_unit_price_pence: priceCol !== -1 ? parsePrice(row[priceCol]) : 0,
+        unit_cost_pence: cost,
+        margin_percent: 0,
+        default_unit_price_pence: cost,
       }
     })
     .filter((r): r is NonNullable<typeof r> => r !== null)
@@ -139,13 +146,14 @@ export async function importProductSheet(sheetId?: string): Promise<ImportResult
     return { ok: false, error: 'No valid product rows were found in the spreadsheet.' }
   }
 
-  // Match against existing catalogue items by lowercased name.
+  // Match against existing catalogue items by lowercased name, keeping their
+  // current margin so re-importing supplier costs doesn't wipe set margins.
   const { data: existingData } = await supabase
     .from('quote_catalogue_items')
-    .select('id, name')
-  const existing = new Map<string, string>()
-  for (const item of (existingData ?? []) as Array<{ id: string; name: string }>) {
-    existing.set(item.name.toLowerCase(), item.id)
+    .select('id, name, margin_percent')
+  const existing = new Map<string, { id: string; margin_percent: number }>()
+  for (const item of (existingData ?? []) as Array<{ id: string; name: string; margin_percent: number }>) {
+    existing.set(item.name.toLowerCase(), { id: item.id, margin_percent: item.margin_percent ?? 0 })
   }
 
   let imported = 0
@@ -153,18 +161,21 @@ export async function importProductSheet(sheetId?: string): Promise<ImportResult
   const toInsert: Array<Record<string, unknown>> = []
 
   for (const p of parsed) {
-    const matchId = existing.get(p.name.toLowerCase())
-    if (matchId) {
+    const match = existing.get(p.name.toLowerCase())
+    if (match) {
+      const margin = match.margin_percent ?? 0
       const { error: upErr } = await supabase
         .from('quote_catalogue_items')
         .update({
           description: p.description,
           category: p.category,
           default_unit: p.default_unit,
-          default_unit_price_pence: p.default_unit_price_pence,
+          unit_cost_pence: p.unit_cost_pence,
+          margin_percent: margin,
+          default_unit_price_pence: sellFromCost(p.unit_cost_pence, margin),
           active: true,
         })
-        .eq('id', matchId)
+        .eq('id', match.id)
       if (!upErr) updated++
     } else {
       toInsert.push({ ...p, active: true, created_by: user.id })

@@ -12,6 +12,8 @@ import type {
   QuoteBankValue,
   SystemSpecTemplate,
   WorkTypeField,
+  SystemWorkTypeMargin,
+  WorkTypeSetting,
   QuoteDesignCategory,
   SystemType,
   ServiceType,
@@ -58,6 +60,8 @@ export default async function NewQuotePage({
     catalogue,
     { data: specTemplates },
     { data: workTypeFields },
+    { data: systemWorkTypeMargins },
+    { data: workTypeSettings },
     { data: designCategories },
     { data: bankValues },
     { data: companyInfo },
@@ -76,6 +80,8 @@ export default async function NewQuotePage({
     fetchAllCatalogueItems(supabase, { activeOnly: true }),
     supabase.from('system_spec_templates').select('*').eq('active', true),
     supabase.from('work_type_fields').select('*').eq('active', true).order('position'),
+    supabase.from('system_work_type_margins').select('*'),
+    supabase.from('work_type_settings').select('*'),
     supabase.from('quote_design_categories').select('*').eq('active', true).order('name'),
     supabase.from('quote_bank_values').select('*'),
     supabase.from('company_info').select('default_margin_percent').limit(1).maybeSingle(),
@@ -119,6 +125,8 @@ export default async function NewQuotePage({
         catalogue={(catalogue ?? []) as QuoteCatalogueItem[]}
         specTemplates={(specTemplates ?? []) as SystemSpecTemplate[]}
         workTypeFields={(workTypeFields ?? []) as WorkTypeField[]}
+        systemWorkTypeMargins={(systemWorkTypeMargins ?? []) as SystemWorkTypeMargin[]}
+        workTypeSettings={(workTypeSettings ?? []) as WorkTypeSetting[]}
         designCategories={(designCategories ?? []) as QuoteDesignCategory[]}
         bankValues={(bankValues ?? []) as QuoteBankValue[]}
       />

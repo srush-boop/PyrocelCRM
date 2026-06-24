@@ -852,12 +852,15 @@ function SystemCard({
   catalogue,
   specTemplates,
   workTypeFields,
+  systemWorkTypeMargins,
+  workTypeSettings,
   designCategories,
   bankValues,
   onUpdate,
   onRemove,
   onAddLine,
   onAddCatalogueLine,
+  onApplyCatalogueToLine,
   onAddServiceLine,
   onUpdateLine,
   onRemoveLine,
@@ -912,13 +915,24 @@ function SystemCard({
     0,
   )
 
-  // Conditional fields that apply to the selected work type.
+  // Conditional fields that apply to the selected system type AND work type.
   const conditionalFields = useMemo(
     () =>
       workTypeFields
-        .filter((f) => f.work_type === system.work_type && f.active)
+        .filter(
+          (f) =>
+            f.active &&
+            f.work_type === system.work_type &&
+            f.system_type_id === system.system_type_id,
+        )
         .sort((a, b) => a.position - b.position),
-    [workTypeFields, system.work_type],
+    [workTypeFields, system.work_type, system.system_type_id],
+  )
+
+  // Whether the design & survey section applies to this work type (admin toggle).
+  const requiresDesign = useMemo(
+    () => workTypeSettings.find((s) => s.work_type === system.work_type)?.requires_design ?? false,
+    [workTypeSettings, system.work_type],
   )
 
   // Spec template matching this system type + work type.
@@ -942,6 +956,7 @@ function SystemCard({
 
   function handleSystemType(value: string) {
     const st = systemTypes.find((s) => s.id === value)
+    const setMargin = resolveSystemWorkTypeMargin(systemWorkTypeMargins, value, system.work_type)
     onUpdate({
       system_type_id: value,
       system_code: st?.code ?? null,
@@ -950,6 +965,20 @@ function SystemCard({
         !system.system_name || system.system_name.startsWith('System ')
           ? st?.name ?? system.system_name
           : system.system_name,
+      // Auto-fill the system margin from the set-margins table when available.
+      ...(setMargin !== null ? { margin: String(setMargin) } : {}),
+    })
+  }
+
+  function handleWorkType(value: string) {
+    const setMargin = resolveSystemWorkTypeMargin(
+      systemWorkTypeMargins,
+      system.system_type_id,
+      value,
+    )
+    onUpdate({
+      work_type: value,
+      ...(setMargin !== null ? { margin: String(setMargin) } : {}),
     })
   }
 
@@ -1048,9 +1077,9 @@ function SystemCard({
               <div className="grid gap-1.5">
                 <Label>Type of work</Label>
                 <Select
-                  value={system.work_type}
-                  onValueChange={(v) => onUpdate({ work_type: v })}
-                  disabled={disabled}
+                value={system.work_type}
+                onValueChange={handleWorkType}
+                disabled={disabled}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -1195,11 +1224,11 @@ function SystemCard({
           </div>
         )}
 
-        {/* ---- Step 3 · Specification ---- */}
+        {/* ---- Step 3 · Description of Works / Specification ---- */}
         <div className="grid gap-1.5">
           <div className="flex items-center justify-between">
             <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Step 3 · Specification
+              Step 3 · Description of Works / Specification
             </Label>
             {!readOnly && (
               <Button
@@ -1224,7 +1253,8 @@ function SystemCard({
           />
         </div>
 
-        {/* ---- Design & survey ---- */}
+        {/* ---- Design & survey (only for work types that require it) ---- */}
+        {requiresDesign && (
         <div className="grid gap-3 rounded-md border p-3">
           <p className="text-xs font-medium text-muted-foreground">Design &amp; survey</p>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -1333,6 +1363,7 @@ function SystemCard({
             </div>
           )}
         </div>
+        )}
 
         {/* ---- Step 4 · Line items & pricing ---- */}
         <div className="space-y-3">
@@ -1350,6 +1381,17 @@ function SystemCard({
             <span />
           </div>
 
+          {/* Catalogue product codes for the product-code lookup boxes. */}
+          <datalist id={`catalogue-codes-${system.key}`}>
+            {catalogue
+              .filter((c) => c.product_code)
+              .map((c) => (
+                <option key={c.id} value={c.product_code as string}>
+                  {c.name}
+                </option>
+              ))}
+          </datalist>
+
           {system.lines.map((line) => {
             const unitSell = lineSellPence(line, system)
             const lineTotal = Math.round((Number.parseFloat(line.quantity) || 0) * unitSell)
@@ -1360,6 +1402,27 @@ function SystemCard({
                 className="grid gap-2 rounded-md border p-2 sm:grid-cols-[1fr_60px_70px_100px_70px_100px_100px_36px] sm:items-start sm:border-0 sm:p-0"
               >
                 <div className="grid gap-1.5">
+                  <Input
+                    list={`catalogue-codes-${system.key}`}
+                    value={line.productCode}
+                    onChange={(e) => {
+                      const code = e.target.value
+                      // If the typed/selected code matches a catalogue item, link it
+                      // (pulls description, cost, etc.); otherwise just store the code.
+                      const match = catalogue.find(
+                        (c) => c.product_code && c.product_code.toLowerCase() === code.trim().toLowerCase(),
+                      )
+                      if (match) {
+                        onApplyCatalogueToLine(line.key, match)
+                      } else {
+                        onUpdateLine(line.key, { productCode: code })
+                      }
+                    }}
+                    placeholder="Product code"
+                    className="font-mono text-xs"
+                    aria-label="Product code"
+                    disabled={disabled}
+                  />
                   <Input
                     value={line.description}
                     onChange={(e) => onUpdateLine(line.key, { description: e.target.value })}

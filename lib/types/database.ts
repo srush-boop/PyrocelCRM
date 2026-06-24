@@ -653,6 +653,9 @@ export type QuoteStatus = 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired'
 export interface QuoteCatalogueItem {
   id: string
   name: string
+  // Supplier/product code from the imported spreadsheet (e.g. "000081").
+  // Used to match items on re-import and as a secondary search key.
+  product_code: string | null
   description: string | null
   category: string | null
   service_type_id: string | null

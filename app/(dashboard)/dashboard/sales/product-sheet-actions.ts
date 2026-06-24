@@ -32,19 +32,58 @@ function key(h: unknown): string {
 }
 
 // Candidate header names for each catalogue field (checked against the
-// normalised key above). Keeps the importer tolerant of varied spreadsheets.
+// normalised key above). Order matters: more specific aliases come first so
+// they win the exact-match pass. Keeps the importer tolerant of varied
+// spreadsheets while correctly handling headers like "Standard Cost Price"
+// and "Specification Text".
 const FIELD_ALIASES: Record<string, string[]> = {
-  name: ['name', 'product', 'productname', 'item', 'itemname', 'description', 'title'],
-  description: ['description', 'desc', 'details', 'spec', 'specification', 'notes'],
-  category: ['category', 'group', 'type', 'producttype', 'systemtype'],
+  // Human-readable label used as the catalogue item name.
+  name: ['name', 'productname', 'itemname', 'item', 'title', 'description'],
+  // Supplier/product code stored on its own and used for matching.
+  productCode: ['productcode', 'code', 'sku', 'partnumber', 'partno', 'itemcode', 'stockcode'],
+  // Longer descriptive text. Specification Text is preferred over a plain
+  // Description (which is normally used as the name).
+  description: [
+    'specificationtext',
+    'spectext',
+    'specification',
+    'longdescription',
+    'details',
+    'notes',
+    'desc',
+    'description',
+  ],
+  category: ['category', 'group', 'producttype', 'systemtype'],
   unit: ['unit', 'uom', 'unitofmeasure', 'measure'],
-  price: ['price', 'unitprice', 'cost', 'unitcost', 'sellprice', 'rate', 'listprice'],
+  price: [
+    'standardcostprice',
+    'costprice',
+    'unitcost',
+    'cost',
+    'buyprice',
+    'unitprice',
+    'sellprice',
+    'listprice',
+    'price',
+    'rate',
+  ],
 }
 
-function pickColumn(headerKeys: string[], aliases: string[]): number {
+// Resolve a column index for a field: exact normalised-header match first,
+// then a "header contains alias" fallback for headers with extra words.
+function pickColumn(headerKeys: string[], aliases: string[], taken: number[] = []): number {
+  // Exact normalised-header match first.
   for (const alias of aliases) {
-    const idx = headerKeys.indexOf(alias)
-    if (idx !== -1) return idx
+    for (let i = 0; i < headerKeys.length; i++) {
+      if (!taken.includes(i) && headerKeys[i] === alias) return i
+    }
+  }
+  // Fallback: a header that contains the alias (e.g. "standardcostprice"
+  // contains "cost"). Skips empty headers and already-claimed columns.
+  for (const alias of aliases) {
+    for (let i = 0; i < headerKeys.length; i++) {
+      if (!taken.includes(i) && headerKeys[i] && headerKeys[i].includes(alias)) return i
+    }
   }
   return -1
 }
@@ -110,6 +149,8 @@ export async function importProductSheet(sheetId?: string): Promise<ImportResult
   }
 
   const headerKeys = (rows[0] as unknown[]).map(key)
+  // Resolve columns, tracking which are already claimed so a single header
+  // (e.g. "Description") is never used for two different fields.
   const nameCol = pickColumn(headerKeys, FIELD_ALIASES.name)
   if (nameCol === -1) {
     return {
@@ -117,10 +158,17 @@ export async function importProductSheet(sheetId?: string): Promise<ImportResult
       error: 'Could not find a product name column (e.g. "Name", "Product" or "Description").',
     }
   }
-  const descCol = pickColumn(headerKeys, FIELD_ALIASES.description)
-  const catCol = pickColumn(headerKeys, FIELD_ALIASES.category)
-  const unitCol = pickColumn(headerKeys, FIELD_ALIASES.unit)
-  const priceCol = pickColumn(headerKeys, FIELD_ALIASES.price)
+  const codeCol = pickColumn(headerKeys, FIELD_ALIASES.productCode, [nameCol])
+  const descCol = pickColumn(headerKeys, FIELD_ALIASES.description, [nameCol, codeCol])
+  const catCol = pickColumn(headerKeys, FIELD_ALIASES.category, [nameCol, codeCol, descCol])
+  const unitCol = pickColumn(headerKeys, FIELD_ALIASES.unit, [nameCol, codeCol, descCol, catCol])
+  const priceCol = pickColumn(headerKeys, FIELD_ALIASES.price, [
+    nameCol,
+    codeCol,
+    descCol,
+    catCol,
+    unitCol,
+  ])
 
   // Build catalogue rows from the spreadsheet body.
   const cell = (row: unknown[], idx: number) => (idx === -1 ? '' : String(row[idx] ?? '').trim())
@@ -135,7 +183,8 @@ export async function importProductSheet(sheetId?: string): Promise<ImportResult
       const cost = priceCol !== -1 ? parsePrice(row[priceCol]) : 0
       return {
         name,
-        description: descCol !== -1 && descCol !== nameCol ? cell(row, descCol) || null : null,
+        product_code: codeCol !== -1 ? cell(row, codeCol) || null : null,
+        description: descCol !== -1 ? cell(row, descCol) || null : null,
         category: catCol !== -1 ? cell(row, catCol) || null : null,
         default_unit: unitCol !== -1 ? cell(row, unitCol) || null : null,
         unit_cost_pence: cost,
@@ -153,10 +202,21 @@ export async function importProductSheet(sheetId?: string): Promise<ImportResult
   // current margin so re-importing supplier costs doesn't wipe set margins.
   const { data: existingData } = await supabase
     .from('quote_catalogue_items')
-    .select('id, name, margin_percent')
-  const existing = new Map<string, { id: string; margin_percent: number }>()
-  for (const item of (existingData ?? []) as Array<{ id: string; name: string; margin_percent: number }>) {
-    existing.set(item.name.toLowerCase(), { id: item.id, margin_percent: item.margin_percent ?? 0 })
+    .select('id, name, product_code, margin_percent')
+  // Index existing items by product code (preferred) and by lowercased name
+  // (fallback) so re-imports update the right rows rather than duplicating.
+  type ExistingItem = { id: string; margin_percent: number }
+  const byCode = new Map<string, ExistingItem>()
+  const byName = new Map<string, ExistingItem>()
+  for (const item of (existingData ?? []) as Array<{
+    id: string
+    name: string
+    product_code: string | null
+    margin_percent: number
+  }>) {
+    const ref = { id: item.id, margin_percent: item.margin_percent ?? 0 }
+    if (item.product_code) byCode.set(item.product_code.toLowerCase(), ref)
+    byName.set(item.name.toLowerCase(), ref)
   }
 
   let imported = 0
@@ -164,12 +224,16 @@ export async function importProductSheet(sheetId?: string): Promise<ImportResult
   const toInsert: Array<Record<string, unknown>> = []
 
   for (const p of parsed) {
-    const match = existing.get(p.name.toLowerCase())
+    const match =
+      (p.product_code ? byCode.get(p.product_code.toLowerCase()) : undefined) ??
+      byName.get(p.name.toLowerCase())
     if (match) {
       const margin = match.margin_percent ?? 0
       const { error: upErr } = await supabase
         .from('quote_catalogue_items')
         .update({
+          name: p.name,
+          product_code: p.product_code,
           description: p.description,
           category: p.category,
           default_unit: p.default_unit,

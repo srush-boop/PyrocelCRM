@@ -89,6 +89,7 @@ const adminServiceManagementNavItem: NavItem = {
     { title: 'Routes', href: '/dashboard/routes', icon: Route },
     { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
     { title: 'Service Types', href: '/dashboard/service-types', icon: Wrench },
+    { title: 'System Types', href: '/dashboard/sales/system-types', icon: Layers },
     { title: 'Checklists', href: '/dashboard/checklists', icon: ClipboardList },
   ],
 }
@@ -100,6 +101,7 @@ const officeServiceManagementNavItem: NavItem = {
   children: [
     { title: 'Routes', href: '/dashboard/routes', icon: Route },
     { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
+    { title: 'System Types', href: '/dashboard/sales/system-types', icon: Layers },
   ],
 }
 
@@ -113,7 +115,6 @@ const salesNavItem: NavItem = {
     { title: 'Quote Bank', href: '/dashboard/sales/quote-bank', icon: Landmark },
     { title: 'Catalogue', href: '/dashboard/sales/catalogue', icon: BookOpen },
     { title: 'Direct Costs', href: '/dashboard/sales/direct-costs', icon: Coins },
-    { title: 'System Types', href: '/dashboard/sales/system-types', icon: Layers },
     { title: 'Asset Types', href: '/dashboard/sales/asset-types', icon: Boxes },
     { title: 'Spec Templates', href: '/dashboard/sales/spec-templates', icon: FileTextIcon },
     { title: 'Work-type Fields', href: '/dashboard/sales/work-type-fields', icon: SlidersHorizontal },

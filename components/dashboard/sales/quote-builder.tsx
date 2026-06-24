@@ -25,7 +25,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Trash2, GripVertical, BookOpen, Save, FileDown, TrendingUp, Calculator, Wrench } from 'lucide-react'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import { Plus, Trash2, GripVertical, BookOpen, Save, FileDown, TrendingUp, Calculator, Wrench, Check, ChevronsUpDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { PpmCalculatorDialog, type PpmDraft } from '@/components/dashboard/sales/ppm-calculator-dialog'
 import {
@@ -36,7 +45,7 @@ import {
   poundsToPence,
   sellFromCost,
   resolveLineMargin,
-  QUOTE_TYPES,
+  quoteTypeFromWorkType,
   WORK_TYPES,
   DESIGNED_BY_OPTIONS,
 } from '@/lib/sales'
@@ -216,12 +225,13 @@ export function QuoteBuilder({
 
   // ----- Header state -----
   const [title, setTitle] = useState(quote?.title ?? '')
-  const [quoteType, setQuoteType] = useState(quote?.quote_type ?? QUOTE_TYPES[0].value)
   const [targetMode, setTargetMode] = useState<'client' | 'prospect'>(
     quote?.prospect_name && !quote?.client_id ? 'prospect' : 'client',
   )
   const [clientId, setClientId] = useState(quote?.client_id ?? '')
   const [siteId, setSiteId] = useState(quote?.site_id ?? '')
+  const [clientPickerOpen, setClientPickerOpen] = useState(false)
+  const [sitePickerOpen, setSitePickerOpen] = useState(false)
   const [prospectName, setProspectName] = useState(quote?.prospect_name ?? '')
   const [prospectContact, setProspectContact] = useState(quote?.prospect_contact ?? '')
   const [prospectEmail, setProspectEmail] = useState(quote?.prospect_email ?? '')
@@ -391,7 +401,9 @@ export function QuoteBuilder({
     const payload: QuoteInput = {
       id: quote?.id,
       title,
-      quote_type: quoteType,
+      // Quote type is no longer a header field — derive it from the first
+      // system's work type so the persisted value stays meaningful.
+      quote_type: quoteTypeFromWorkType(systems[0]?.work_type),
       client_id: targetMode === 'client' ? clientId || null : null,
       site_id: targetMode === 'client' ? siteId || null : null,
       prospect_name: targetMode === 'prospect' ? prospectName || null : null,
@@ -459,32 +471,15 @@ export function QuoteBuilder({
           <CardTitle>Quote details</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-1.5">
-              <Label htmlFor="q-title">Title *</Label>
-              <Input
-                id="q-title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Fire alarm upgrade — Block A"
-                disabled={disabled}
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="q-type">Quote type *</Label>
-              <Select value={quoteType} onValueChange={setQuoteType} disabled={disabled}>
-                <SelectTrigger id="q-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {QUOTE_TYPES.map((t) => (
-                    <SelectItem key={t.value} value={t.value}>
-                      {t.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="q-title">Title *</Label>
+            <Input
+              id="q-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Fire alarm upgrade — Block A"
+              disabled={disabled}
+            />
           </div>
 
           {/* Target: client vs prospect */}
@@ -516,40 +511,96 @@ export function QuoteBuilder({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="q-client">Client</Label>
-                <Select
-                  value={clientId}
-                  onValueChange={(v) => {
-                    setClientId(v)
-                    setSiteId('')
-                  }}
-                  disabled={disabled}
-                >
-                  <SelectTrigger id="q-client">
-                    <SelectValue placeholder="Select client" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clients.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="q-client"
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={clientPickerOpen}
+                      disabled={disabled}
+                      className="justify-between font-normal"
+                    >
+                      <span className="truncate">
+                        {clientId ? clients.find((c) => c.id === clientId)?.name ?? 'Select client' : 'Select client'}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search clients..." />
+                      <CommandList>
+                        <CommandEmpty>No client found.</CommandEmpty>
+                        <CommandGroup>
+                          {clients.map((c) => (
+                            <CommandItem
+                              key={c.id}
+                              value={c.name}
+                              onSelect={() => {
+                                setClientId(c.id === clientId ? '' : c.id)
+                                setSiteId('')
+                                setClientPickerOpen(false)
+                              }}
+                            >
+                              <Check className={`mr-2 h-4 w-4 ${clientId === c.id ? 'opacity-100' : 'opacity-0'}`} />
+                              <span className="truncate">{c.name}</span>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="q-site">Site (optional)</Label>
-                <Select value={siteId} onValueChange={setSiteId} disabled={disabled || !clientId}>
-                  <SelectTrigger id="q-site">
-                    <SelectValue placeholder={clientId ? 'Select site' : 'Choose a client first'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sitesForClient.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={sitePickerOpen} onOpenChange={setSitePickerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="q-site"
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={sitePickerOpen}
+                      disabled={disabled || !clientId}
+                      className="justify-between font-normal"
+                    >
+                      <span className="truncate">
+                        {siteId
+                          ? sitesForClient.find((s) => s.id === siteId)?.name ?? 'Select site'
+                          : clientId
+                            ? 'Select site'
+                            : 'Choose a client first'}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search sites..." />
+                      <CommandList>
+                        <CommandEmpty>No site found.</CommandEmpty>
+                        <CommandGroup>
+                          {sitesForClient.map((s) => (
+                            <CommandItem
+                              key={s.id}
+                              value={s.name}
+                              onSelect={() => {
+                                setSiteId(s.id === siteId ? '' : s.id)
+                                setSitePickerOpen(false)
+                              }}
+                            >
+                              <Check className={`mr-2 h-4 w-4 ${siteId === s.id ? 'opacity-100' : 'opacity-0'}`} />
+                              <span className="truncate">{s.name}</span>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
           ) : (

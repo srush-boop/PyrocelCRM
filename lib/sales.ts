@@ -52,6 +52,23 @@ export function workTypeLabel(code: string): string {
   return WORK_TYPES.find((t) => t.code === code)?.label ?? code
 }
 
+// Maps a per-system work-type code to the quote-level quote_type value.
+// The quote type is no longer chosen in the header — it's derived from the
+// first system's work type so the persisted quote_type stays meaningful.
+const WORK_TYPE_TO_QUOTE_TYPE: Record<string, string> = {
+  SO: 'supply_only',
+  SC: 'supply_commission',
+  SIC: 'supply_install_commission',
+  REM: 'remedial',
+  SVC: 'service_contract',
+  OTH: 'other',
+}
+
+export function quoteTypeFromWorkType(code: string | null | undefined): string {
+  if (!code) return 'other'
+  return WORK_TYPE_TO_QUOTE_TYPE[code] ?? 'other'
+}
+
 // Who produced the design for a system.
 export const DESIGNED_BY_OPTIONS = [
   { value: 'pyrocel', label: 'Pyrocel' },

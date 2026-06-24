@@ -9,6 +9,7 @@ import { ArrowLeft, MapPin, Phone, Mail, Building2, Radio, Building, User, Exter
 import { EditSiteButton } from '@/components/dashboard/sites/edit-site-button'
 import { SiteServicesManager } from '@/components/dashboard/sites/site-services-manager'
 import { SiteSystemsManager } from '@/components/dashboard/sites/site-systems-manager'
+import { QuotesTable } from '@/components/dashboard/sales/quotes-table'
 import { SiteAssetsTab, type SiteAsset } from '@/components/dashboard/sites/site-assets-tab'
 import { SiteReports } from '@/components/dashboard/sites/site-reports'
 import { SiteLogbook } from '@/components/dashboard/sites/site-logbook'
@@ -45,6 +46,7 @@ import type {
   Extinguisher,
   LogbookEntry,
   SiteBuildingInfo,
+  Quote,
 } from '@/lib/types/database'
 
 interface PageProps {
@@ -84,7 +86,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
     notFound()
   }
 
-  const [siteServicesResult, serviceTypesResult, engineersResult, routesResult, areasResult, subcontractorsResult, clientsResult, siteSystemsResult, systemTypesResult] = await Promise.all([
+  const [siteServicesResult, serviceTypesResult, engineersResult, routesResult, areasResult, subcontractorsResult, clientsResult, siteSystemsResult, systemTypesResult, quotesResult] = await Promise.all([
     supabase
       .from('site_services')
       .select(`
@@ -108,6 +110,11 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
     supabase.from('clients').select('*').order('name'),
     supabase.from('site_systems').select('*').eq('site_id', id).order('position').order('name'),
     supabase.from('system_types').select('*').eq('active', true).order('name'),
+    supabase
+      .from('quotes')
+      .select('*, client:clients(*), site:sites(*)')
+      .eq('site_id', id)
+      .order('created_at', { ascending: false }),
   ])
 
   const siteServices = (siteServicesResult.data || []) as (SiteService & { service_type: ServiceType })[]
@@ -119,6 +126,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
   const clients = (clientsResult.data || []) as Client[]
   const siteSystems = (siteSystemsResult.data || []) as SiteSystem[]
   const systemTypes = (systemTypesResult.data || []) as SystemType[]
+  const quotes = (quotesResult.data || []) as Quote[]
 
   // Get tasks for this site's services
   const siteServiceIds = siteServices.map(ss => ss.id)
@@ -325,6 +333,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
           {assetTabs.length > 0 && (
             <TabsTrigger value="assets" className="flex-none">Assets</TabsTrigger>
           )}
+          <TabsTrigger value="quotes" className="flex-none">Quotes</TabsTrigger>
           <TabsTrigger value="logbook" className="flex-none">Log Book</TabsTrigger>
           <TabsTrigger value="documents" className="flex-none">Documents</TabsTrigger>
           <TabsTrigger value="reports" className="flex-none">Reports</TabsTrigger>
@@ -514,6 +523,10 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             availableServiceTypes={availableServiceTypes}
             siteStatus={(site as Site).status}
           />
+        </TabsContent>
+
+        <TabsContent value="quotes" className="mt-0">
+          <QuotesTable quotes={quotes} />
         </TabsContent>
 
         {assetTabs.length > 0 && (

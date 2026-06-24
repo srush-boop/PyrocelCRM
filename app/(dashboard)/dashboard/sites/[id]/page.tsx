@@ -526,7 +526,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
         </TabsContent>
 
         <TabsContent value="quotes" className="mt-0">
-          <QuotesTable quotes={quotes} />
+          <QuotesTable quotes={quotes} newQuoteHref={`/dashboard/sales/new?site=${id}`} />
         </TabsContent>
 
         {assetTabs.length > 0 && (

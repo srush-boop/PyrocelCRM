@@ -21,7 +21,12 @@ import type {
 
 export const metadata = { title: 'New Quote | Pyrocel' }
 
-export default async function NewQuotePage() {
+export default async function NewQuotePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ site?: string }>
+}) {
+  const { site: siteParam } = await searchParams
   const supabase = await createClient()
   const {
     data: { user },
@@ -76,6 +81,12 @@ export default async function NewQuotePage() {
     supabase.from('company_info').select('default_margin_percent').limit(1).maybeSingle(),
   ])
 
+  // When opened from a site (e.g. the site's Quotes tab), preselect that site
+  // and its client so the new quote is linked to it from the start.
+  const initialSite = siteParam
+    ? ((sites ?? []) as Site[]).find((s) => s.id === siteParam)
+    : undefined
+
   const defaultHourlyCostPence = (ppmEngineerCost as { hourly_cost_pence: number } | null)?.hourly_cost_pence ?? 0
   const defaultMarginPercent = resolveDefaultMargin(
     (department as { default_margin_percent: number } | null)?.default_margin_percent ?? null,
@@ -98,6 +109,8 @@ export default async function NewQuotePage() {
       <QuoteBuilder
         clients={(clients ?? []) as Client[]}
         sites={(sites ?? []) as Site[]}
+        initialClientId={initialSite?.client_id ?? undefined}
+        initialSiteId={initialSite?.id ?? undefined}
         systemTypes={(systemTypes ?? []) as SystemType[]}
         serviceTypes={(serviceTypes ?? []) as ServiceType[]}
         assetTypes={(assetTypes ?? []) as AssetType[]}

@@ -45,7 +45,15 @@ import { formatPence, quoteTypeLabel, QUOTE_STATUS_META, QUOTE_TYPES } from '@/l
 import type { Quote, QuoteStatus } from '@/lib/types/database'
 import { deleteQuote, createRevision } from '@/app/(dashboard)/dashboard/sales/actions'
 
-export function QuotesTable({ quotes }: { quotes: Quote[] }) {
+export function QuotesTable({
+  quotes,
+  newQuoteHref = '/dashboard/sales/new',
+}: {
+  quotes: Quote[]
+  // Lets callers (e.g. a site's Quotes tab) deep-link "New Quote" with context
+  // such as a preselected site.
+  newQuoteHref?: string
+}) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<string>('all')
@@ -145,7 +153,7 @@ export function QuotesTable({ quotes }: { quotes: Quote[] }) {
             </Link>
           </Button>
           <Button asChild>
-            <Link href="/dashboard/sales/new">
+            <Link href={newQuoteHref}>
               <Plus className="mr-2 h-4 w-4" />
               New Quote
             </Link>

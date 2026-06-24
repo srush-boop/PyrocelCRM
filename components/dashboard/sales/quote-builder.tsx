@@ -197,6 +197,9 @@ interface QuoteBuilderProps {
   designCategories: QuoteDesignCategory[]
   bankValues: QuoteBankValue[]
   quote?: Quote
+  // Preselect a client/site for brand-new quotes (e.g. launched from a site).
+  initialClientId?: string
+  initialSiteId?: string
   initialSystems?: QuoteSystem[]
   initialLines?: QuoteLineItem[]
   initialPpm?: QuoteSystemPpm[]
@@ -217,6 +220,8 @@ export function QuoteBuilder({
   designCategories,
   bankValues,
   quote,
+  initialClientId,
+  initialSiteId,
   initialSystems,
   initialLines,
   initialPpm,
@@ -230,8 +235,8 @@ export function QuoteBuilder({
   const [targetMode, setTargetMode] = useState<'client' | 'prospect'>(
     quote?.prospect_name && !quote?.client_id ? 'prospect' : 'client',
   )
-  const [clientId, setClientId] = useState(quote?.client_id ?? '')
-  const [siteId, setSiteId] = useState(quote?.site_id ?? '')
+  const [clientId, setClientId] = useState(quote?.client_id ?? initialClientId ?? '')
+  const [siteId, setSiteId] = useState(quote?.site_id ?? initialSiteId ?? '')
   const [clientPickerOpen, setClientPickerOpen] = useState(false)
   const [sitePickerOpen, setSitePickerOpen] = useState(false)
   const [prospectName, setProspectName] = useState(quote?.prospect_name ?? '')

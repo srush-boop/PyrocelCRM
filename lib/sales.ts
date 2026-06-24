@@ -42,8 +42,20 @@ export const QUOTE_TYPES: QuoteTypeDef[] = [
     label: 'Supply, Install & Commission',
     description: 'Full turnkey: supply, installation and commissioning.',
   },
+  { value: 'supply_install', label: 'Supply & Install', description: 'Equipment supplied and installed (no commissioning).' },
+  {
+    value: 'design_supply_install_commission',
+    label: 'Design, Supply, Install & Commission',
+    description: 'Full design responsibility plus supply, installation and commissioning.',
+  },
+  { value: 'commission_only', label: 'Commission Only', description: 'Commissioning of equipment supplied/installed by others.' },
+  { value: 'takeover', label: 'Takeover', description: 'Taking over an existing system for service/responsibility.' },
   { value: 'remedial', label: 'Remedial Work', description: 'Fault rectification and remedial actions.' },
-  { value: 'service_contract', label: 'Service Contract', description: 'Recurring maintenance / service agreement.' },
+  { value: 'upgrade', label: 'Upgrade', description: 'Upgrade or extension works to an existing system.' },
+  { value: 'additions', label: 'Additions', description: 'Additions to an existing system.' },
+  { value: 'service_contract', label: 'Routine Maintenance', description: 'Recurring maintenance / service agreement.' },
+  { value: 'monitoring', label: 'Monitoring Provision', description: 'ARC / monitoring connection and charges.' },
+  { value: 'call_out', label: 'Call-out', description: 'Reactive call-out / attendance quotation.' },
   { value: 'other', label: 'Other', description: 'Bespoke or one-off work.' },
 ]
 
@@ -63,10 +75,18 @@ export interface WorkTypeDef {
 
 export const WORK_TYPES: WorkTypeDef[] = [
   { code: 'SO', label: 'Supply Only', description: 'Equipment supplied, no installation or commissioning.' },
+  { code: 'SI', label: 'Supply & Install', description: 'Equipment supplied and installed (no commissioning).' },
   { code: 'SC', label: 'Supply & Commission', description: 'Equipment supplied and commissioned.' },
   { code: 'SIC', label: 'Supply, Install & Commission', description: 'Full turnkey: supply, installation and commissioning.' },
+  { code: 'DSIC', label: 'Design, Supply, Install & Commission', description: 'Design responsibility plus supply, install and commission.' },
+  { code: 'CO', label: 'Commission Only', description: 'Commissioning of equipment supplied/installed by others.' },
+  { code: 'TO', label: 'Takeover', description: 'Taking over an existing system for service / responsibility.' },
   { code: 'REM', label: 'Remedial', description: 'Fault rectification and remedial actions.' },
-  { code: 'SVC', label: 'Service Contract', description: 'Recurring maintenance / service agreement.' },
+  { code: 'UPG', label: 'Upgrade', description: 'Upgrade or extension works to an existing system.' },
+  { code: 'ADD', label: 'Additions', description: 'Additions to an existing system.' },
+  { code: 'SVC', label: 'Routine Maintenance', description: 'Recurring maintenance / service agreement.' },
+  { code: 'MON', label: 'Monitoring Provision', description: 'ARC / monitoring connection and charges.' },
+  { code: 'CALL', label: 'Call-out', description: 'Reactive call-out / attendance quotation.' },
   { code: 'OTH', label: 'Other', description: 'Bespoke or one-off work.' },
 ]
 
@@ -79,10 +99,18 @@ export function workTypeLabel(code: string): string {
 // first system's work type so the persisted quote_type stays meaningful.
 const WORK_TYPE_TO_QUOTE_TYPE: Record<string, string> = {
   SO: 'supply_only',
+  SI: 'supply_install',
   SC: 'supply_commission',
   SIC: 'supply_install_commission',
+  DSIC: 'design_supply_install_commission',
+  CO: 'commission_only',
+  TO: 'takeover',
   REM: 'remedial',
+  UPG: 'upgrade',
+  ADD: 'additions',
   SVC: 'service_contract',
+  MON: 'monitoring',
+  CALL: 'call_out',
   OTH: 'other',
 }
 

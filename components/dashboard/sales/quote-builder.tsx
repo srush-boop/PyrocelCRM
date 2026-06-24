@@ -822,9 +822,10 @@ function SystemCard({
 }: SystemCardProps) {
   const disabled = readOnly || isPending
   const [ppmOpen, setPpmOpen] = useState(false)
-  // Each system section is collapsible and starts collapsed to keep long
-  // multi-system quotes scannable.
-  const [open, setOpen] = useState(false)
+  // Each system section is collapsible. Configured systems start collapsed to
+  // keep long multi-system quotes scannable; a brand-new (untyped) system
+  // auto-expands so the user is guided straight into setup.
+  const [open, setOpen] = useState(!system.system_type_id)
   const [catalogueOpen, setCatalogueOpen] = useState(false)
   const [catalogueSearch, setCatalogueSearch] = useState('')
 
@@ -977,6 +978,9 @@ function SystemCard({
           <CardHeader className="gap-3">
             <div className="flex items-start gap-2">
               <div className="grid flex-1 gap-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Step 1 · System details
+            </p>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label>System type</Label>
@@ -1076,38 +1080,19 @@ function SystemCard({
       </CardHeader>
 
       <CardContent className="space-y-5">
-        {/* ---- Specification ---- */}
-        <div className="grid gap-1.5">
-          <div className="flex items-center justify-between">
-            <Label>Specification</Label>
-            {!readOnly && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={importSpec}
-                disabled={disabled || !matchingTemplate}
-              >
-                <FileDown className="mr-1.5 h-3.5 w-3.5" />
-                Import from template
-              </Button>
-            )}
+        {!system.system_type_id ? (
+          <div className="rounded-md border border-dashed bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
+            Choose a <span className="font-medium text-foreground">system type</span> and{' '}
+            <span className="font-medium text-foreground">type of work</span> above to start building
+            this system.
           </div>
-          <Textarea
-            value={system.specification}
-            onChange={(e) => onUpdate({ specification: e.target.value })}
-            placeholder="The specification for this system. Import a master template above, then edit."
-            className="min-h-24"
-            disabled={disabled}
-          />
-        </div>
-
-        {/* ---- Conditional "IF" fields for the work type ---- */}
+        ) : (
+          <>
+        {/* ---- Step 2 · Questions (conditional "IF" fields for the work type) ---- */}
         {conditionalFields.length > 0 && (
           <div className="grid gap-3 rounded-md border bg-muted/20 p-3 sm:grid-cols-2">
-            <p className="sm:col-span-2 text-xs font-medium text-muted-foreground">
-              Additional details for {WORK_TYPES.find((w) => w.code === system.work_type)?.label}
+            <p className="sm:col-span-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Step 2 · Questions for {WORK_TYPES.find((w) => w.code === system.work_type)?.label}
             </p>
             {conditionalFields.map((f) => {
               const val = system.conditional_values[f.field_key]
@@ -1166,6 +1151,35 @@ function SystemCard({
             })}
           </div>
         )}
+
+        {/* ---- Step 3 · Specification ---- */}
+        <div className="grid gap-1.5">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Step 3 · Specification
+            </Label>
+            {!readOnly && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={importSpec}
+                disabled={disabled || !matchingTemplate}
+              >
+                <FileDown className="mr-1.5 h-3.5 w-3.5" />
+                Import from template
+              </Button>
+            )}
+          </div>
+          <Textarea
+            value={system.specification}
+            onChange={(e) => onUpdate({ specification: e.target.value })}
+            placeholder="The specification for this system. Import a master template above, then edit."
+            className="min-h-24"
+            disabled={disabled}
+          />
+        </div>
 
         {/* ---- Design & survey ---- */}
         <div className="grid gap-3 rounded-md border p-3">
@@ -1277,8 +1291,11 @@ function SystemCard({
           )}
         </div>
 
-        {/* ---- Line items ---- */}
+        {/* ---- Step 4 · Line items & pricing ---- */}
         <div className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Step 4 · Line items &amp; pricing
+          </p>
           <div className="hidden gap-2 px-1 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[1fr_60px_70px_100px_70px_100px_100px_36px]">
             <span>Description</span>
             <span className="text-right">Qty</span>
@@ -1492,6 +1509,9 @@ function SystemCard({
             </div>
           )}
         </div>
+
+          </>
+        )}
 
         <PpmCalculatorDialog
           open={ppmOpen}

@@ -267,6 +267,7 @@ export async function saveQuote(
   if (persistErr) return { ok: false, error: persistErr }
 
   revalidatePath('/dashboard/sales')
+  revalidatePath('/dashboard/sales/quotes')
   revalidatePath(`/dashboard/sales/${quoteId}`)
   return { ok: true, id: quoteId }
 }
@@ -348,6 +349,7 @@ export async function setQuoteStatus(
   if (upErr) return { ok: false, error: 'Could not update the quote status.' }
 
   revalidatePath('/dashboard/sales')
+  revalidatePath('/dashboard/sales/quotes')
   revalidatePath(`/dashboard/sales/${id}`)
   return { ok: true }
 }
@@ -361,6 +363,7 @@ export async function deleteQuote(id: string): Promise<{ ok: boolean; error?: st
   if (delErr) return { ok: false, error: 'Could not delete the quote.' }
 
   revalidatePath('/dashboard/sales')
+  revalidatePath('/dashboard/sales/quotes')
   return { ok: true }
 }
 
@@ -499,6 +502,7 @@ export async function cloneQuoteForContractor(
   await copySystems(supabase, id, newId)
 
   revalidatePath('/dashboard/sales')
+  revalidatePath('/dashboard/sales/quotes')
   revalidatePath(`/dashboard/sales/${masterId}`)
   return { ok: true, id: newId }
 }
@@ -564,6 +568,7 @@ export async function createRevision(
   await copySystems(supabase, id, newId)
 
   revalidatePath('/dashboard/sales')
+  revalidatePath('/dashboard/sales/quotes')
   revalidatePath(`/dashboard/sales/${masterId}`)
   return { ok: true, id: newId }
 }

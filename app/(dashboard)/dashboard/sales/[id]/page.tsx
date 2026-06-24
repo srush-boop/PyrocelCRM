@@ -6,12 +6,11 @@ import { Button } from '@/components/ui/button'
 import { QuoteBuilder } from '@/components/dashboard/sales/quote-builder'
 import { QuoteStatusPanel } from '@/components/dashboard/sales/quote-status-panel'
 import { QuoteGroupPanel } from '@/components/dashboard/sales/quote-group-panel'
-import { resolveDefaultMargin, fetchAllCatalogueItems } from '@/lib/sales'
+import { resolveDefaultMargin } from '@/lib/sales'
 import type {
   Client,
   Profile,
   Quote,
-  QuoteCatalogueItem,
   QuoteLineItem,
   QuoteSystem,
   QuoteBankValue,
@@ -65,7 +64,6 @@ export default async function QuoteDetailPage({
     { data: assetTypes },
     { data: ppmRows },
     { data: ppmEngineerCost },
-    catalogue,
     { data: specTemplates },
     { data: workTypeFields },
     { data: systemWorkTypeMargins },
@@ -93,7 +91,6 @@ export default async function QuoteDetailPage({
       .ilike('role', '%PPM%')
       .limit(1)
       .maybeSingle(),
-    fetchAllCatalogueItems(supabase, { activeOnly: true }),
     supabase.from('system_spec_templates').select('*').eq('active', true),
     supabase.from('work_type_fields').select('*').eq('active', true).order('position'),
     supabase.from('system_work_type_margins').select('*'),
@@ -156,7 +153,6 @@ export default async function QuoteDetailPage({
         assetTypes={(assetTypes ?? []) as AssetType[]}
         defaultHourlyCostPence={defaultHourlyCostPence}
         defaultMarginPercent={defaultMarginPercent}
-        catalogue={(catalogue ?? []) as QuoteCatalogueItem[]}
         specTemplates={(specTemplates ?? []) as SystemSpecTemplate[]}
         workTypeFields={(workTypeFields ?? []) as WorkTypeField[]}
         systemWorkTypeMargins={(systemWorkTypeMargins ?? []) as SystemWorkTypeMargin[]}

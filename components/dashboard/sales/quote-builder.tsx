@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -70,7 +70,12 @@ import type {
   QuoteSystemPpm,
   Site,
 } from '@/lib/types/database'
-import { saveQuote, type QuoteInput } from '@/app/(dashboard)/dashboard/sales/actions'
+import {
+  saveQuote,
+  searchCatalogueItems,
+  getCatalogueItemByCode,
+  type QuoteInput,
+} from '@/app/(dashboard)/dashboard/sales/actions'
 
 // --- Local editable shapes (money kept as pounds strings for inputs) ---
 interface EditLine {
@@ -140,6 +145,88 @@ function blankLine(): EditLine {
   }
 }
 
+// Product-code box for a line item. The catalogue is too large to ship to the
+// client, so this searches the server on demand (debounced) to power its
+// autocomplete and to resolve a typed/selected code to a full catalogue item.
+function ProductCodeInput({
+  value,
+  listId,
+  disabled,
+  onChangeCode,
+  onResolve,
+}: {
+  value: string
+  listId: string
+  disabled?: boolean
+  onChangeCode: (code: string) => void
+  onResolve: (item: QuoteCatalogueItem) => void
+}) {
+  const [results, setResults] = useState<QuoteCatalogueItem[]>([])
+
+  useEffect(() => {
+    const term = value.trim()
+    if (!term) {
+      setResults([])
+      return
+    }
+    let cancelled = false
+    const handle = setTimeout(async () => {
+      const r = await searchCatalogueItems(term, { limit: 20 })
+      if (!cancelled) setResults(r)
+    }, 200)
+    return () => {
+      cancelled = true
+      clearTimeout(handle)
+    }
+  }, [value])
+
+  function tryResolve(code: string): boolean {
+    const match = results.find(
+      (c) => c.product_code && c.product_code.toLowerCase() === code.trim().toLowerCase(),
+    )
+    if (match) {
+      onResolve(match)
+      return true
+    }
+    return false
+  }
+
+  return (
+    <>
+      <Input
+        list={listId}
+        value={value}
+        onChange={(e) => {
+          const code = e.target.value
+          // Selecting/typing an exact code links the catalogue item (pulling in
+          // description, cost, etc.); otherwise just store the raw code.
+          if (!tryResolve(code)) onChangeCode(code)
+        }}
+        onBlur={async (e) => {
+          const code = e.target.value.trim()
+          if (!code || tryResolve(code)) return
+          // Fallback: exact lookup for a pasted code we never searched for.
+          const item = await getCatalogueItemByCode(code)
+          if (item) onResolve(item)
+        }}
+        placeholder="Product code"
+        className="font-mono text-xs"
+        aria-label="Product code"
+        disabled={disabled}
+      />
+      <datalist id={listId}>
+        {results
+          .filter((c) => c.product_code)
+          .map((c) => (
+            <option key={c.id} value={c.product_code as string}>
+              {c.name}
+            </option>
+          ))}
+      </datalist>
+    </>
+  )
+}
+
 function blankSystem(index: number, defaultMargin = 0): EditSystem {
   return {
     key: uid(),
@@ -196,7 +283,6 @@ interface QuoteBuilderProps {
   assetTypes: AssetType[]
   defaultHourlyCostPence: number
   defaultMarginPercent: number
-  catalogue: QuoteCatalogueItem[]
   specTemplates: SystemSpecTemplate[]
   workTypeFields: WorkTypeField[]
   systemWorkTypeMargins: SystemWorkTypeMargin[]
@@ -221,7 +307,6 @@ export function QuoteBuilder({
   assetTypes,
   defaultHourlyCostPence,
   defaultMarginPercent,
-  catalogue,
   specTemplates,
   workTypeFields,
   systemWorkTypeMargins,
@@ -690,7 +775,6 @@ export function QuoteBuilder({
           serviceTypes={serviceTypes}
           assetTypes={assetTypes}
           defaultHourlyCostPence={defaultHourlyCostPence}
-                  catalogue={catalogue}
                   specTemplates={specTemplates}
                   workTypeFields={workTypeFields}
                   systemWorkTypeMargins={systemWorkTypeMargins}
@@ -822,7 +906,6 @@ interface SystemCardProps {
   serviceTypes: ServiceType[]
   assetTypes: AssetType[]
   defaultHourlyCostPence: number
-  catalogue: QuoteCatalogueItem[]
   specTemplates: SystemSpecTemplate[]
   workTypeFields: WorkTypeField[]
   systemWorkTypeMargins: SystemWorkTypeMargin[]
@@ -849,7 +932,6 @@ function SystemCard({
   serviceTypes,
   assetTypes,
   defaultHourlyCostPence,
-  catalogue,
   specTemplates,
   workTypeFields,
   systemWorkTypeMargins,
@@ -875,20 +957,28 @@ function SystemCard({
   const [catalogueOpen, setCatalogueOpen] = useState(false)
   const [catalogueSearch, setCatalogueSearch] = useState('')
 
-  // The catalogue can hold thousands of items, so we never render them all.
-  // Show matches for the current search, capped to a small number to keep the
-  // popover light and responsive.
-  const catalogueMatches = useMemo(() => {
-    const q = catalogueSearch.trim().toLowerCase()
-    const base = q
-      ? catalogue.filter((item) =>
-          [item.name, item.product_code, item.category]
-            .filter(Boolean)
-            .some((field) => (field as string).toLowerCase().includes(q)),
-        )
-      : catalogue
-    return base.slice(0, 50)
-  }, [catalogue, catalogueSearch])
+  // The catalogue can hold tens of thousands of items, so we never load it all.
+  // Results are fetched from the server on demand as the user types (debounced),
+  // keeping page navigation and this popover fast and light.
+  const [catalogueMatches, setCatalogueMatches] = useState<QuoteCatalogueItem[]>([])
+  const [catalogueLoading, setCatalogueLoading] = useState(false)
+
+  useEffect(() => {
+    if (!catalogueOpen) return
+    let cancelled = false
+    setCatalogueLoading(true)
+    const handle = setTimeout(async () => {
+      const results = await searchCatalogueItems(catalogueSearch, { limit: 50 })
+      if (!cancelled) {
+        setCatalogueMatches(results)
+        setCatalogueLoading(false)
+      }
+    }, 200)
+    return () => {
+      cancelled = true
+      clearTimeout(handle)
+    }
+  }, [catalogueOpen, catalogueSearch])
 
   // Asset types belonging to this system's system type (for the PPM calculator).
   const systemAssetTypes = useMemo(
@@ -1385,17 +1475,6 @@ function SystemCard({
             <span />
           </div>
 
-          {/* Catalogue product codes for the product-code lookup boxes. */}
-          <datalist id={`catalogue-codes-${system.key}`}>
-            {catalogue
-              .filter((c) => c.product_code)
-              .map((c) => (
-                <option key={c.id} value={c.product_code as string}>
-                  {c.name}
-                </option>
-              ))}
-          </datalist>
-
           {system.lines.map((line) => {
             const unitSell = lineSellPence(line, system)
             const lineTotal = Math.round((Number.parseFloat(line.quantity) || 0) * unitSell)
@@ -1406,26 +1485,12 @@ function SystemCard({
                 className="grid gap-2 rounded-md border p-2 sm:grid-cols-[1fr_60px_70px_100px_70px_100px_100px_36px] sm:items-start sm:border-0 sm:p-0"
               >
                 <div className="grid gap-1.5">
-                  <Input
-                    list={`catalogue-codes-${system.key}`}
+                  <ProductCodeInput
                     value={line.productCode}
-                    onChange={(e) => {
-                      const code = e.target.value
-                      // If the typed/selected code matches a catalogue item, link it
-                      // (pulls description, cost, etc.); otherwise just store the code.
-                      const match = catalogue.find(
-                        (c) => c.product_code && c.product_code.toLowerCase() === code.trim().toLowerCase(),
-                      )
-                      if (match) {
-                        onApplyCatalogueToLine(line.key, match)
-                      } else {
-                        onUpdateLine(line.key, { productCode: code })
-                      }
-                    }}
-                    placeholder="Product code"
-                    className="font-mono text-xs"
-                    aria-label="Product code"
+                    listId={`catalogue-codes-${line.key}`}
                     disabled={disabled}
+                    onChangeCode={(code) => onUpdateLine(line.key, { productCode: code })}
+                    onResolve={(item) => onApplyCatalogueToLine(line.key, item)}
                   />
                   <Input
                     value={line.description}
@@ -1537,35 +1602,38 @@ function SystemCard({
                     ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
-                {catalogue.length > 0 && (
-                  <Popover
-                    open={catalogueOpen}
-                    onOpenChange={(open) => {
-                      setCatalogueOpen(open)
-                      if (!open) setCatalogueSearch('')
-                    }}
-                  >
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" size="sm" disabled={isPending}>
-                        <BookOpen className="mr-2 h-4 w-4" />
-                        Add from catalogue
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent align="start" className="w-80 p-2">
-                      <Input
-                        autoFocus
-                        value={catalogueSearch}
-                        onChange={(e) => setCatalogueSearch(e.target.value)}
-                        placeholder="Search by code, name or category"
-                        className="mb-2"
-                        aria-label="Search catalogue"
-                      />
-                      <div className="max-h-72 overflow-y-auto">
-                        {catalogueMatches.length === 0 ? (
-                          <p className="px-2 py-6 text-center text-sm text-muted-foreground">
-                            No matching items
-                          </p>
-                        ) : (
+                <Popover
+                  open={catalogueOpen}
+                  onOpenChange={(open) => {
+                    setCatalogueOpen(open)
+                    if (!open) setCatalogueSearch('')
+                  }}
+                >
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" disabled={isPending}>
+                      <BookOpen className="mr-2 h-4 w-4" />
+                      Add from catalogue
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-80 p-2">
+                    <Input
+                      autoFocus
+                      value={catalogueSearch}
+                      onChange={(e) => setCatalogueSearch(e.target.value)}
+                      placeholder="Search by code, name or category"
+                      className="mb-2"
+                      aria-label="Search catalogue"
+                    />
+                    <div className="max-h-72 overflow-y-auto">
+                      {catalogueLoading ? (
+                        <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+                          Searching…
+                        </p>
+                      ) : catalogueMatches.length === 0 ? (
+                        <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+                          {catalogueSearch.trim() ? 'No matching items' : 'Type to search the catalogue'}
+                        </p>
+                      ) : (
                           catalogueMatches.map((item) => (
                             <button
                               key={item.id}
@@ -1591,15 +1659,14 @@ function SystemCard({
                             </button>
                           ))
                         )}
-                      </div>
-                      {!catalogueSearch && catalogue.length > catalogueMatches.length && (
-                        <p className="px-2 pt-2 text-xs text-muted-foreground">
-                          Showing first {catalogueMatches.length} of {catalogue.length}. Type to search.
-                        </p>
-                      )}
-                    </PopoverContent>
-                  </Popover>
-                )}
+                    </div>
+                    {!catalogueLoading && catalogueMatches.length >= 50 && (
+                      <p className="px-2 pt-2 text-xs text-muted-foreground">
+                        Showing the first 50 matches. Refine your search to narrow them down.
+                      </p>
+                    )}
+                  </PopoverContent>
+                </Popover>
                 {requiresPpm && (
                   <Button
                     variant="outline"

@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { computeQuoteTotals, QUOTE_TYPES, WORK_TYPES, sellFromCost, resolveLineMargin } from '@/lib/sales'
-import type { QuoteStatus } from '@/lib/types/database'
+import type { QuoteStatus, QuoteCatalogueItem } from '@/lib/types/database'
 
 const VALID_QUOTE_TYPES = new Set(QUOTE_TYPES.map((t) => t.value))
 const VALID_WORK_TYPES = new Set(WORK_TYPES.map((t) => t.code))
@@ -367,6 +367,54 @@ export async function deleteCatalogueItem(id: string): Promise<{ ok: boolean; er
 
   revalidatePath('/dashboard/sales/catalogue')
   return { ok: true }
+}
+
+// Search the catalogue on demand. The catalogue can hold tens of thousands of
+// items, so the quote builder never loads it all up front (that made the New
+// Quote page extremely slow). Instead it calls this with the user's query and
+// we return a small, capped result set from the database.
+export async function searchCatalogueItems(
+  query: string,
+  options: { limit?: number } = {},
+): Promise<QuoteCatalogueItem[]> {
+  const { supabase, error } = await requireStaff()
+  if (error) return []
+
+  const limit = Math.min(Math.max(options.limit ?? 25, 1), 50)
+  let q = supabase.from('quote_catalogue_items').select('*').eq('active', true)
+
+  const term = query.trim()
+  if (term) {
+    // Match against name, product code, or category (case-insensitive).
+    const escaped = term.replace(/[%_,]/g, (m) => `\\${m}`)
+    q = q.or(
+      `name.ilike.%${escaped}%,product_code.ilike.%${escaped}%,category.ilike.%${escaped}%`,
+    )
+  }
+
+  const { data, error: dbError } = await q.order('name').limit(limit)
+  if (dbError || !data) return []
+  return data as QuoteCatalogueItem[]
+}
+
+// Resolve a single catalogue item by exact product code (used when a user types
+// a code into a line's product-code box). Returns null when there's no match.
+export async function getCatalogueItemByCode(
+  code: string,
+): Promise<QuoteCatalogueItem | null> {
+  const trimmed = code.trim()
+  if (!trimmed) return null
+  const { supabase, error } = await requireStaff()
+  if (error) return null
+
+  const { data } = await supabase
+    .from('quote_catalogue_items')
+    .select('*')
+    .eq('active', true)
+    .ilike('product_code', trimmed)
+    .limit(1)
+    .maybeSingle()
+  return (data as QuoteCatalogueItem | null) ?? null
 }
 
 /** Update only a quote's status (Draft → Sent → Accepted/Rejected/Expired). */

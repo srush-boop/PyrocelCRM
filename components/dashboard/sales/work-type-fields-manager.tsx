@@ -38,8 +38,8 @@ import {
   saveWorkTypeField,
   deleteWorkTypeField,
 } from '@/app/(dashboard)/dashboard/sales/quote-config-actions'
-import { WORK_TYPES, workTypeLabel } from '@/lib/sales'
-import type { WorkTypeField } from '@/lib/types/database'
+import { WORK_TYPES } from '@/lib/sales'
+import type { WorkTypeField, SystemType } from '@/lib/types/database'
 
 type FieldType = 'text' | 'number' | 'select' | 'boolean'
 
@@ -58,13 +58,20 @@ function slugifyKey(label: string): string {
     .slice(0, 40)
 }
 
-export function WorkTypeFieldsManager({ fields }: { fields: WorkTypeField[] }) {
+export function WorkTypeFieldsManager({
+  fields,
+  systemTypes,
+}: {
+  fields: WorkTypeField[]
+  systemTypes: SystemType[]
+}) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<WorkTypeField | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
 
+  const [systemTypeId, setSystemTypeId] = useState<string>(systemTypes[0]?.id ?? '')
   const [workType, setWorkType] = useState<string>(WORK_TYPES[0].code)
   const [label, setLabel] = useState('')
   const [fieldKey, setFieldKey] = useState('')
@@ -74,6 +81,7 @@ export function WorkTypeFieldsManager({ fields }: { fields: WorkTypeField[] }) {
 
   function openNew() {
     setEditing(null)
+    setSystemTypeId(systemTypes[0]?.id ?? '')
     setWorkType(WORK_TYPES[0].code)
     setLabel('')
     setFieldKey('')
@@ -85,6 +93,7 @@ export function WorkTypeFieldsManager({ fields }: { fields: WorkTypeField[] }) {
 
   function openEdit(f: WorkTypeField) {
     setEditing(f)
+    setSystemTypeId(f.system_type_id)
     setWorkType(f.work_type)
     setLabel(f.label)
     setFieldKey(f.field_key)
@@ -100,6 +109,10 @@ export function WorkTypeFieldsManager({ fields }: { fields: WorkTypeField[] }) {
   }
 
   function handleSave() {
+    if (!systemTypeId) {
+      toast.error('Select a system type')
+      return
+    }
     if (!label.trim() || !fieldKey.trim()) {
       toast.error('Label and key are required')
       return
@@ -115,11 +128,14 @@ export function WorkTypeFieldsManager({ fields }: { fields: WorkTypeField[] }) {
       toast.error('Add at least one option for a dropdown field')
       return
     }
-    const position = editing?.position ?? fields.filter((f) => f.work_type === workType).length
+    const position =
+      editing?.position ??
+      fields.filter((f) => f.work_type === workType && f.system_type_id === systemTypeId).length
     startTransition(async () => {
       const res = await saveWorkTypeField({
         id: editing?.id,
         work_type: workType,
+        system_type_id: systemTypeId,
         label: label.trim(),
         field_key: slugifyKey(fieldKey),
         field_type: fieldType,
@@ -150,11 +166,16 @@ export function WorkTypeFieldsManager({ fields }: { fields: WorkTypeField[] }) {
     })
   }
 
-  // Group fields by work type for display.
-  const byWorkType = WORK_TYPES.map((w) => ({
-    def: w,
-    items: fields.filter((f) => f.work_type === w.code),
-  })).filter((g) => g.items.length > 0)
+  // Group fields by system type, then by work type within each.
+  const bySystemType = systemTypes
+    .map((st) => ({
+      systemType: st,
+      groups: WORK_TYPES.map((w) => ({
+        def: w,
+        items: fields.filter((f) => f.system_type_id === st.id && f.work_type === w.code),
+      })).filter((g) => g.items.length > 0),
+    }))
+    .filter((s) => s.groups.length > 0)
 
   return (
     <div className="space-y-4">
@@ -165,55 +186,62 @@ export function WorkTypeFieldsManager({ fields }: { fields: WorkTypeField[] }) {
         </Button>
       </div>
 
-      {byWorkType.length === 0 ? (
+      {bySystemType.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
-            No conditional fields yet. Supply Only typically needs none; add fields for work types
-            like Install or Supply &amp; Commission.
+            No conditional fields yet. Pick a system type and work type, then add fields such as
+            cable type for a Fire Alarm install.
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4">
-          {byWorkType.map((group) => (
-            <Card key={group.def.code}>
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Badge variant="outline" className="font-mono">
-                    {group.def.code}
-                  </Badge>
-                  {group.def.label}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {group.items.map((f) => (
-                  <div
-                    key={f.id}
-                    className="flex items-center justify-between gap-4 rounded-md border p-3"
-                  >
-                    <div className="min-w-0">
-                      <div className="font-medium">{f.label}</div>
-                      <div className="text-xs text-muted-foreground">
-                        <span className="font-mono">{f.field_key}</span> ·{' '}
-                        {FIELD_TYPES.find((t) => t.value === f.field_type)?.label}
-                        {f.field_type === 'select' && f.options.length > 0
-                          ? ` · ${f.options.join(', ')}`
-                          : ''}
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => openEdit(f)}>
-                        <Pencil className="h-4 w-4" />
-                        <span className="sr-only">Edit</span>
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => setDeleteId(f.id)}>
-                        <Trash2 className="h-4 w-4" />
-                        <span className="sr-only">Delete</span>
-                      </Button>
-                    </div>
-                  </div>
+        <div className="grid gap-6">
+          {bySystemType.map((sys) => (
+            <div key={sys.systemType.id} className="space-y-3">
+              <h2 className="text-lg font-semibold tracking-tight">{sys.systemType.name}</h2>
+              <div className="grid gap-4">
+                {sys.groups.map((group) => (
+                  <Card key={group.def.code}>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Badge variant="outline" className="font-mono">
+                          {group.def.code}
+                        </Badge>
+                        {group.def.label}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {group.items.map((f) => (
+                        <div
+                          key={f.id}
+                          className="flex items-center justify-between gap-4 rounded-md border p-3"
+                        >
+                          <div className="min-w-0">
+                            <div className="font-medium">{f.label}</div>
+                            <div className="text-xs text-muted-foreground">
+                              <span className="font-mono">{f.field_key}</span> ·{' '}
+                              {FIELD_TYPES.find((t) => t.value === f.field_type)?.label}
+                              {f.field_type === 'select' && f.options.length > 0
+                                ? ` · ${f.options.join(', ')}`
+                                : ''}
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 gap-1">
+                            <Button variant="ghost" size="icon" onClick={() => openEdit(f)}>
+                              <Pencil className="h-4 w-4" />
+                              <span className="sr-only">Edit</span>
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => setDeleteId(f.id)}>
+                              <Trash2 className="h-4 w-4" />
+                              <span className="sr-only">Delete</span>
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
                 ))}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           ))}
         </div>
       )}
@@ -223,10 +251,25 @@ export function WorkTypeFieldsManager({ fields }: { fields: WorkTypeField[] }) {
           <DialogHeader>
             <DialogTitle>{editing ? 'Edit field' : 'Add field'}</DialogTitle>
             <DialogDescription>
-              This input appears on a system when its work type matches.
+              This input appears on a system when its system type and work type both match.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
+            <div className="grid gap-2">
+              <Label>System type</Label>
+              <Select value={systemTypeId} onValueChange={setSystemTypeId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a system type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {systemTypes.map((st) => (
+                    <SelectItem key={st.id} value={st.id}>
+                      {st.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid gap-2">
               <Label>Type of work</Label>
               <Select value={workType} onValueChange={setWorkType}>

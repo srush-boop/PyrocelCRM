@@ -680,6 +680,9 @@ export interface QuoteLineItem {
   system_id: string | null
   catalogue_item_id: string | null
   service_type_id: string | null
+  // Manufacturer/supplier product code. Typing a code can link the line to a
+  // catalogue item (sets catalogue_item_id, description, cost).
+  product_code: string | null
   description: string
   detail: string | null
   quantity: number
@@ -789,6 +792,9 @@ export interface SystemSpecTemplate {
 export interface WorkTypeField {
   id: string
   work_type: string
+  // Fields are now scoped to a specific system type; they only show when that
+  // system type AND work type are both selected on a system.
+  system_type_id: string
   label: string
   field_key: string
   field_type: 'text' | 'number' | 'select' | 'boolean'
@@ -796,6 +802,28 @@ export interface WorkTypeField {
   position: number
   active: boolean
   created_at: string
+  updated_at: string
+  // Optional join
+  system_type?: SystemType | null
+}
+
+// Admin-defined gross margin % for a system type + work type combination.
+// Selecting that combination on a system auto-fills the system margin, and
+// parts added to the system inherit it.
+export interface SystemWorkTypeMargin {
+  id: string
+  system_type_id: string
+  work_type: string
+  margin_percent: number
+  created_at: string
+  updated_at: string
+  system_type?: SystemType | null
+}
+
+// Per-work-type settings, e.g. whether the design & survey section applies.
+export interface WorkTypeSetting {
+  work_type: string
+  requires_design: boolean
   updated_at: string
 }
 

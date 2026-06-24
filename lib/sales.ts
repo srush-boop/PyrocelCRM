@@ -209,6 +209,21 @@ export function resolveLineMargin(
   return Number.isFinite(systemMargin as number) ? (systemMargin as number) : 0
 }
 
+// Resolve the admin-defined "set margin" for a system type + work type from
+// the system_work_type_margins table. Returns null when no entry exists so the
+// caller can fall back to its existing default.
+export function resolveSystemWorkTypeMargin(
+  margins: { system_type_id: string; work_type: string; margin_percent: number }[],
+  systemTypeId: string | null | undefined,
+  workType: string | null | undefined,
+): number | null {
+  if (!systemTypeId || !workType) return null
+  const match = margins.find(
+    (m) => m.system_type_id === systemTypeId && m.work_type === workType,
+  )
+  return match ? match.margin_percent : null
+}
+
 // Resolve the default margin pre-filled on a new quote: the quote author's
 // department margin takes precedence, falling back to the company default.
 export function resolveDefaultMargin(

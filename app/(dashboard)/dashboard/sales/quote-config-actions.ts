@@ -134,6 +134,7 @@ export async function deleteSpecTemplate(id: string): Promise<Result> {
 export async function saveWorkTypeField(input: {
   id?: string
   work_type: string
+  system_type_id: string
   label: string
   field_key: string
   field_type: 'text' | 'number' | 'select' | 'boolean'
@@ -143,8 +144,11 @@ export async function saveWorkTypeField(input: {
   const { supabase, error } = await requireStaff()
   if (!supabase) return { ok: false, error }
 
+  if (!input.system_type_id) return { ok: false, error: 'A system type is required' }
+
   const payload = {
     work_type: input.work_type,
+    system_type_id: input.system_type_id,
     label: input.label,
     field_key: input.field_key,
     field_type: input.field_type,
@@ -198,5 +202,65 @@ export async function deleteDesignCategory(id: string): Promise<Result> {
   const { error: dbError } = await supabase.from('quote_design_categories').delete().eq('id', id)
   if (dbError) return { ok: false, error: dbError.message }
   revalidatePath('/dashboard/sales/design-categories')
+  return { ok: true }
+}
+
+// ---------- System x work-type set margins ----------
+export async function saveSystemWorkTypeMargin(input: {
+  system_type_id: string
+  work_type: string
+  margin_percent: number | null
+}): Promise<Result> {
+  const { supabase, error } = await requireStaff()
+  if (!supabase) return { ok: false, error }
+  if (!input.system_type_id || !input.work_type) {
+    return { ok: false, error: 'System type and work type are required' }
+  }
+
+  // A null/blank margin clears the entry so it falls back to the default.
+  if (input.margin_percent === null || !Number.isFinite(input.margin_percent)) {
+    const { error: delError } = await supabase
+      .from('system_work_type_margins')
+      .delete()
+      .eq('system_type_id', input.system_type_id)
+      .eq('work_type', input.work_type)
+    if (delError) return { ok: false, error: delError.message }
+    revalidatePath('/dashboard/sales/margins')
+    return { ok: true }
+  }
+
+  const { error: dbError } = await supabase.from('system_work_type_margins').upsert(
+    {
+      system_type_id: input.system_type_id,
+      work_type: input.work_type,
+      margin_percent: input.margin_percent,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'system_type_id,work_type' },
+  )
+  if (dbError) return { ok: false, error: dbError.message }
+  revalidatePath('/dashboard/sales/margins')
+  return { ok: true }
+}
+
+// ---------- Work-type settings (design/survey toggle) ----------
+export async function saveWorkTypeSetting(input: {
+  work_type: string
+  requires_design: boolean
+}): Promise<Result> {
+  const { supabase, error } = await requireStaff()
+  if (!supabase) return { ok: false, error }
+  if (!input.work_type) return { ok: false, error: 'Work type is required' }
+
+  const { error: dbError } = await supabase.from('work_type_settings').upsert(
+    {
+      work_type: input.work_type,
+      requires_design: input.requires_design,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'work_type' },
+  )
+  if (dbError) return { ok: false, error: dbError.message }
+  revalidatePath('/dashboard/sales/margins')
   return { ok: true }
 }

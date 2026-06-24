@@ -47,6 +47,7 @@ import {
   poundsToPence,
   sellFromCost,
   resolveLineMargin,
+  resolveSystemWorkTypeMargin,
   quoteTypeFromWorkType,
   WORK_TYPES,
   DESIGNED_BY_OPTIONS,
@@ -60,6 +61,8 @@ import type {
   QuoteBankValue,
   SystemSpecTemplate,
   WorkTypeField,
+  SystemWorkTypeMargin,
+  WorkTypeSetting,
   QuoteDesignCategory,
   SystemType,
   ServiceType,
@@ -72,6 +75,7 @@ import { saveQuote, type QuoteInput } from '@/app/(dashboard)/dashboard/sales/ac
 // --- Local editable shapes (money kept as pounds strings for inputs) ---
 interface EditLine {
   key: string
+  productCode: string
   description: string
   detail: string
   service_type_id: string | null
@@ -124,6 +128,7 @@ function lineSellPence(line: EditLine, system: { margin: string }): number {
 function blankLine(): EditLine {
   return {
     key: uid(),
+    productCode: '',
     description: '',
     detail: '',
     service_type_id: null,
@@ -153,7 +158,7 @@ function blankSystem(index: number, defaultMargin = 0): EditSystem {
     survey_by: '',
     survey_date: '',
     margin: String(defaultMargin ?? 0),
-    lines: [blankLine()],
+    lines: [],
     ppm: null,
   }
 }
@@ -194,6 +199,8 @@ interface QuoteBuilderProps {
   catalogue: QuoteCatalogueItem[]
   specTemplates: SystemSpecTemplate[]
   workTypeFields: WorkTypeField[]
+  systemWorkTypeMargins: SystemWorkTypeMargin[]
+  workTypeSettings: WorkTypeSetting[]
   designCategories: QuoteDesignCategory[]
   bankValues: QuoteBankValue[]
   quote?: Quote
@@ -217,6 +224,8 @@ export function QuoteBuilder({
   catalogue,
   specTemplates,
   workTypeFields,
+  systemWorkTypeMargins,
+  workTypeSettings,
   designCategories,
   bankValues,
   quote,
@@ -279,6 +288,7 @@ export function QuoteBuilder({
             .sort((a, b) => a.position - b.position)
             .map((l) => ({
               key: l.id,
+              productCode: l.product_code ?? '',
               description: l.description,
               detail: l.detail ?? '',
               service_type_id: l.service_type_id,
@@ -352,6 +362,7 @@ export function QuoteBuilder({
         if (s.key !== systemKey) return s
         const ppmLine: EditLine = {
           key: uid(),
+          productCode: '',
           description: `Annual PPM — ${s.system_name}`.trim(),
           detail: `${draft.num_visits} visit${draft.num_visits === 1 ? '' : 's'} per year`,
           service_type_id: null,
@@ -376,15 +387,32 @@ export function QuoteBuilder({
   function addCatalogueLine(systemKey: string, item: QuoteCatalogueItem) {
     addLine(systemKey, {
       key: uid(),
+      productCode: item.product_code ?? '',
       description: item.name,
       detail: item.description ?? '',
       service_type_id: item.service_type_id,
       catalogue_item_id: item.id,
       quantity: '1',
       unit: item.default_unit ?? '',
-      // Bring in the catalogue item's cost + margin so the sell price recomputes.
+      // Bring in the catalogue item's cost; the part inherits the system margin
+      // (which is auto-filled from the set-margins table) so it pulls through.
       unitCost: penceToPounds(item.unit_cost_pence),
-      margin: String(item.margin_percent ?? 0),
+      margin: '',
+    })
+  }
+
+  // Link an existing line to a catalogue item (used by the product-code box).
+  function applyCatalogueToLine(systemKey: string, lineKey: string, item: QuoteCatalogueItem) {
+    updateLine(systemKey, lineKey, {
+      productCode: item.product_code ?? '',
+      description: item.name,
+      detail: item.description ?? '',
+      service_type_id: item.service_type_id,
+      catalogue_item_id: item.id,
+      unit: item.default_unit ?? '',
+      unitCost: penceToPounds(item.unit_cost_pence),
+      // Part inherits the system margin.
+      margin: '',
     })
   }
 
@@ -393,6 +421,7 @@ export function QuoteBuilder({
   function addServiceLine(systemKey: string, service: ServiceType) {
     addLine(systemKey, {
       key: uid(),
+      productCode: '',
       description: service.name,
       detail: service.description ?? '',
       service_type_id: service.id,
@@ -448,6 +477,7 @@ export function QuoteBuilder({
             detail: l.detail || null,
             service_type_id: l.service_type_id,
             catalogue_item_id: l.catalogue_item_id,
+            product_code: l.productCode.trim() || null,
             quantity: Number.parseFloat(l.quantity) || 0,
             unit: l.unit || null,
             unit_cost_pence: poundsToPence(l.unitCost),
@@ -660,17 +690,22 @@ export function QuoteBuilder({
           serviceTypes={serviceTypes}
           assetTypes={assetTypes}
           defaultHourlyCostPence={defaultHourlyCostPence}
-          catalogue={catalogue}
-          specTemplates={specTemplates}
-          workTypeFields={workTypeFields}
-          designCategories={designCategories}
-          bankValues={bankValues}
-          onUpdate={(patch) => updateSystem(system.key, patch)}
-          onRemove={() => removeSystem(system.key)}
-          onAddLine={() => addLine(system.key)}
-          onAddCatalogueLine={(item) => addCatalogueLine(system.key, item)}
-          onAddServiceLine={(service) => addServiceLine(system.key, service)}
-          onUpdateLine={(lineKey, patch) => updateLine(system.key, lineKey, patch)}
+                  catalogue={catalogue}
+                  specTemplates={specTemplates}
+                  workTypeFields={workTypeFields}
+                  systemWorkTypeMargins={systemWorkTypeMargins}
+                  workTypeSettings={workTypeSettings}
+                  designCategories={designCategories}
+                  bankValues={bankValues}
+                  onUpdate={(patch) => updateSystem(system.key, patch)}
+                  onRemove={() => removeSystem(system.key)}
+                  onAddLine={() => addLine(system.key)}
+                  onAddCatalogueLine={(item) => addCatalogueLine(system.key, item)}
+                  onApplyCatalogueToLine={(lineKey, item) =>
+                    applyCatalogueToLine(system.key, lineKey, item)
+                  }
+                  onAddServiceLine={(service) => addServiceLine(system.key, service)}
+                  onUpdateLine={(lineKey, patch) => updateLine(system.key, lineKey, patch)}
           onRemoveLine={(lineKey) => removeLine(system.key, lineKey)}
           onApplyPpm={(draft) => applyPpm(system.key, draft)}
         />
@@ -790,12 +825,15 @@ interface SystemCardProps {
   catalogue: QuoteCatalogueItem[]
   specTemplates: SystemSpecTemplate[]
   workTypeFields: WorkTypeField[]
+  systemWorkTypeMargins: SystemWorkTypeMargin[]
+  workTypeSettings: WorkTypeSetting[]
   designCategories: QuoteDesignCategory[]
   bankValues: QuoteBankValue[]
   onUpdate: (patch: Partial<EditSystem>) => void
   onRemove: () => void
   onAddLine: () => void
   onAddCatalogueLine: (item: QuoteCatalogueItem) => void
+  onApplyCatalogueToLine: (lineKey: string, item: QuoteCatalogueItem) => void
   onAddServiceLine: (service: ServiceType) => void
   onUpdateLine: (lineKey: string, patch: Partial<EditLine>) => void
   onRemoveLine: (lineKey: string) => void

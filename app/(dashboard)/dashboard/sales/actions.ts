@@ -15,6 +15,7 @@ export interface QuoteLineInput {
   detail?: string | null
   service_type_id?: string | null
   catalogue_item_id?: string | null
+  product_code?: string | null
   quantity: number
   unit?: string | null
   // Cost + margin are authoritative; the sell price is recomputed server-side.
@@ -125,6 +126,7 @@ function buildLineRows(
         system_id: systemId,
         catalogue_item_id: l.catalogue_item_id || null,
         service_type_id: l.service_type_id || null,
+        product_code: l.product_code?.trim() || null,
         description: l.description.trim(),
         detail: l.detail?.trim() || null,
         quantity: qty,

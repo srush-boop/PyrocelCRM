@@ -116,6 +116,32 @@ export function penceToPounds(pence: number): string {
   return ((pence ?? 0) / 100).toFixed(2)
 }
 
+// --- Margin-based pricing ---------------------------------------------
+// Single source of truth for turning a unit cost + gross margin % into a
+// sell price (in pence), matching the PPM calculator: sell = cost / (1 - m).
+// A margin of 100% (or more) is clamped just below 100% to avoid division by
+// zero / negative prices.
+export function sellFromCost(costPence: number, marginPercent: number): number {
+  const cost = Number.isFinite(costPence) ? costPence : 0
+  if (cost <= 0) return 0
+  const m = Number.isFinite(marginPercent) ? marginPercent : 0
+  if (m <= 0) return Math.round(cost)
+  const safeMargin = Math.min(m, 99.9)
+  return Math.round(cost / (1 - safeMargin / 100))
+}
+
+// Resolve the margin that applies to a line: an explicit per-line margin wins,
+// otherwise fall back to the system margin (which itself defaults to company).
+export function resolveLineMargin(
+  lineMargin: number | null | undefined,
+  systemMargin: number | null | undefined,
+): number {
+  if (lineMargin !== null && lineMargin !== undefined && Number.isFinite(lineMargin)) {
+    return lineMargin
+  }
+  return Number.isFinite(systemMargin as number) ? (systemMargin as number) : 0
+}
+
 // --- Totals ------------------------------------------------------------
 export interface QuoteTotals {
   subtotalPence: number

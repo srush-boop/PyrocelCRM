@@ -508,11 +508,13 @@ export interface CompanyInfo {
   registration_number: string | null
   vat_number: string | null
   logo_url: string | null
+  // Default gross margin % pre-filled on new quote systems/lines.
+  default_margin_percent: number
   created_at?: string
   updated_at?: string
-}
-
-export interface Branch {
+  }
+  
+  export interface Branch {
   id: string
   name: string
   address: string | null
@@ -644,6 +646,10 @@ export interface QuoteCatalogueItem {
   service_type_id: string | null
   system_type_id: string | null
   default_unit: string | null
+  // Unit cost and gross margin %. The sell price (default_unit_price_pence) is
+  // derived as cost / (1 - margin%). Cost is the primary input going forward.
+  unit_cost_pence: number
+  margin_percent: number
   default_unit_price_pence: number
   active: boolean
   created_by: string | null
@@ -663,6 +669,10 @@ export interface QuoteLineItem {
   detail: string | null
   quantity: number
   unit: string | null
+  // Unit cost and gross margin %. unit_price_pence (sell) is derived as
+  // cost / (1 - margin%). margin_percent null = inherit the system margin.
+  unit_cost_pence: number
+  margin_percent: number | null
   unit_price_pence: number
   line_total_pence: number
   position: number
@@ -691,6 +701,9 @@ export interface QuoteSystem {
   survey_carried_out: boolean
   survey_by: string | null
   survey_date: string | null
+  // Default gross margin % applied to this system's lines unless a line
+  // overrides it with its own margin_percent.
+  margin_percent: number
   position: number
   subtotal_pence: number
   created_at: string

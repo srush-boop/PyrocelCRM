@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { computeQuoteTotals, lineTotalPence, QUOTE_TYPES, WORK_TYPES } from '@/lib/sales'
+import { computeQuoteTotals, QUOTE_TYPES, WORK_TYPES, sellFromCost, resolveLineMargin } from '@/lib/sales'
 import type { QuoteStatus } from '@/lib/types/database'
 
 const VALID_QUOTE_TYPES = new Set(QUOTE_TYPES.map((t) => t.value))
@@ -17,7 +17,9 @@ export interface QuoteLineInput {
   catalogue_item_id?: string | null
   quantity: number
   unit?: string | null
-  unit_price_pence: number
+  // Cost + margin are authoritative; the sell price is recomputed server-side.
+  unit_cost_pence: number
+  margin_percent: number | null
 }
 
 export interface QuotePpmInput {
@@ -56,6 +58,7 @@ export interface QuoteSystemInput {
   survey_carried_out?: boolean
   survey_by?: string | null
   survey_date?: string | null
+  margin_percent?: number
   lines: QuoteLineInput[]
   ppm?: QuotePpmInput | null
 }
@@ -101,26 +104,38 @@ async function requireStaff() {
 }
 
 // Build the persisted line rows for a system, returning rows + its subtotal.
+// The sell price is recomputed authoritatively from unit cost + the effective
+// margin (per-line override, else the system margin) so the client can never
+// submit a sell price that doesn't match its cost/margin inputs.
 function buildLineRows(
   quoteId: string,
   systemId: string,
   lines: QuoteLineInput[],
+  systemMargin: number,
 ) {
   const rows = lines
     .filter((l) => l.description?.trim())
-    .map((l, idx) => ({
-      quote_id: quoteId,
-      system_id: systemId,
-      catalogue_item_id: l.catalogue_item_id || null,
-      service_type_id: l.service_type_id || null,
-      description: l.description.trim(),
-      detail: l.detail?.trim() || null,
-      quantity: l.quantity || 0,
-      unit: l.unit?.trim() || null,
-      unit_price_pence: Math.round(l.unit_price_pence) || 0,
-      line_total_pence: lineTotalPence(l),
-      position: idx,
-    }))
+    .map((l, idx) => {
+      const unitCost = Math.round(l.unit_cost_pence) || 0
+      const margin = resolveLineMargin(l.margin_percent ?? null, systemMargin)
+      const unitSell = sellFromCost(unitCost, margin)
+      const qty = l.quantity || 0
+      return {
+        quote_id: quoteId,
+        system_id: systemId,
+        catalogue_item_id: l.catalogue_item_id || null,
+        service_type_id: l.service_type_id || null,
+        description: l.description.trim(),
+        detail: l.detail?.trim() || null,
+        quantity: qty,
+        unit: l.unit?.trim() || null,
+        unit_cost_pence: unitCost,
+        margin_percent: l.margin_percent ?? null,
+        unit_price_pence: unitSell,
+        line_total_pence: Math.round(qty * unitSell),
+        position: idx,
+      }
+    })
   const subtotal = rows.reduce((sum, r) => sum + r.line_total_pence, 0)
   return { rows, subtotal }
 }
@@ -134,7 +149,10 @@ async function persistSystems(
 ): Promise<string | null> {
   let pos = 0
   for (const system of systems) {
-    const { rows: previewRows, subtotal } = buildLineRows(quoteId, 'preview', system.lines)
+    const systemMargin = Number.isFinite(system.margin_percent as number)
+      ? (system.margin_percent as number)
+      : 0
+    const { subtotal } = buildLineRows(quoteId, 'preview', system.lines, systemMargin)
     const { data: sys, error: sysErr } = await supabase
       .from('quote_systems')
       .insert({
@@ -153,6 +171,7 @@ async function persistSystems(
         survey_carried_out: !!system.survey_carried_out,
         survey_by: system.survey_by?.trim() || null,
         survey_date: system.survey_date || null,
+        margin_percent: systemMargin,
         position: pos++,
         subtotal_pence: subtotal,
       })
@@ -161,8 +180,7 @@ async function persistSystems(
     if (sysErr || !sys) return 'Could not save a quote system.'
 
     const systemId = (sys as { id: string }).id
-    const { rows } = buildLineRows(quoteId, systemId, system.lines)
-    void previewRows
+    const { rows } = buildLineRows(quoteId, systemId, system.lines, systemMargin)
     if (rows.length > 0) {
       const { error: lineErr } = await supabase.from('quote_line_items').insert(rows)
       if (lineErr) return 'Could not save quote line items.'
@@ -282,9 +300,10 @@ export interface CatalogueInput {
   category?: string | null
   service_type_id?: string | null
   default_unit?: string | null
-  default_unit_price_pence: number
+  unit_cost_pence: number
+  margin_percent: number
   active: boolean
-}
+  }
 
 export async function saveCatalogueItem(
   input: CatalogueInput,
@@ -293,14 +312,19 @@ export async function saveCatalogueItem(
   if (error || !user) return { ok: false, error: error ?? 'Not authorised.' }
   if (!input.name?.trim()) return { ok: false, error: 'A name is required.' }
 
+  const unitCost = Math.max(0, Math.round(input.unit_cost_pence) || 0)
+  const margin = Number.isFinite(input.margin_percent) ? input.margin_percent : 0
   const row = {
-    name: input.name.trim(),
-    description: input.description?.trim() || null,
-    category: input.category?.trim() || null,
-    service_type_id: input.service_type_id || null,
-    default_unit: input.default_unit?.trim() || null,
-    default_unit_price_pence: Math.max(0, Math.round(input.default_unit_price_pence) || 0),
-    active: input.active,
+  name: input.name.trim(),
+  description: input.description?.trim() || null,
+  category: input.category?.trim() || null,
+  service_type_id: input.service_type_id || null,
+  default_unit: input.default_unit?.trim() || null,
+  unit_cost_pence: unitCost,
+  margin_percent: margin,
+  // Derived sell price kept in sync for display + back-compat.
+  default_unit_price_pence: sellFromCost(unitCost, margin),
+  active: input.active,
   }
 
   if (input.id) {
@@ -402,6 +426,7 @@ async function copySystems(
         survey_carried_out: s.survey_carried_out,
         survey_by: s.survey_by,
         survey_date: s.survey_date,
+        margin_percent: s.margin_percent ?? 0,
         position: s.position,
         subtotal_pence: s.subtotal_pence,
       })
@@ -420,6 +445,8 @@ async function copySystems(
         detail: l.detail,
         quantity: l.quantity,
         unit: l.unit,
+        unit_cost_pence: l.unit_cost_pence ?? 0,
+        margin_percent: l.margin_percent ?? null,
         unit_price_pence: l.unit_price_pence,
         line_total_pence: l.line_total_pence,
         position: l.position,

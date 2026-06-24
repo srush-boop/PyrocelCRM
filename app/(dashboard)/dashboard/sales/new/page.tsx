@@ -39,6 +39,7 @@ export default async function NewQuotePage() {
     { data: workTypeFields },
     { data: designCategories },
     { data: bankValues },
+    { data: companyInfo },
   ] = await Promise.all([
     supabase.from('clients').select('id, name').order('name'),
     supabase.from('sites').select('id, name, client_id').order('name'),
@@ -55,9 +56,12 @@ export default async function NewQuotePage() {
     supabase.from('work_type_fields').select('*').eq('active', true).order('position'),
     supabase.from('quote_design_categories').select('*').eq('active', true).order('name'),
     supabase.from('quote_bank_values').select('*'),
+    supabase.from('company_info').select('default_margin_percent').limit(1).maybeSingle(),
   ])
 
   const defaultHourlyCostPence = (ppmEngineerCost as { hourly_cost_pence: number } | null)?.hourly_cost_pence ?? 0
+  const defaultMarginPercent =
+    (companyInfo as { default_margin_percent: number } | null)?.default_margin_percent ?? 0
 
   return (
     <div className="space-y-6">
@@ -72,6 +76,7 @@ export default async function NewQuotePage() {
         systemTypes={(systemTypes ?? []) as SystemType[]}
         assetTypes={(assetTypes ?? []) as AssetType[]}
         defaultHourlyCostPence={defaultHourlyCostPence}
+        defaultMarginPercent={defaultMarginPercent}
         catalogue={(catalogue ?? []) as QuoteCatalogueItem[]}
         specTemplates={(specTemplates ?? []) as SystemSpecTemplate[]}
         workTypeFields={(workTypeFields ?? []) as WorkTypeField[]}

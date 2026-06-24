@@ -43,7 +43,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Plus, Pencil, Trash2, Loader2, PackageOpen } from 'lucide-react'
 import { toast } from 'sonner'
-import { formatPence, penceToPounds, poundsToPence } from '@/lib/sales'
+import { formatPence, penceToPounds, poundsToPence, sellFromCost } from '@/lib/sales'
 import type { QuoteCatalogueItem, ServiceType } from '@/lib/types/database'
 import { saveCatalogueItem, deleteCatalogueItem } from '@/app/(dashboard)/dashboard/sales/actions'
 
@@ -56,7 +56,8 @@ interface FormState {
   category: string
   service_type_id: string
   default_unit: string
-  price: string
+  cost: string
+  margin: string
   active: boolean
 }
 
@@ -67,7 +68,8 @@ function emptyForm(): FormState {
     category: '',
     service_type_id: NO_SERVICE,
     default_unit: '',
-    price: '0.00',
+    cost: '0.00',
+    margin: '0',
     active: true,
   }
 }
@@ -98,7 +100,8 @@ export function CatalogueManager({
       category: item.category ?? '',
       service_type_id: item.service_type_id ?? NO_SERVICE,
       default_unit: item.default_unit ?? '',
-      price: penceToPounds(item.default_unit_price_pence),
+      cost: penceToPounds(item.unit_cost_pence),
+      margin: String(item.margin_percent ?? 0),
       active: item.active,
     })
     setDialogOpen(true)
@@ -113,7 +116,8 @@ export function CatalogueManager({
         category: form.category || null,
         service_type_id: form.service_type_id === NO_SERVICE ? null : form.service_type_id,
         default_unit: form.default_unit || null,
-        default_unit_price_pence: poundsToPence(form.price),
+        unit_cost_pence: poundsToPence(form.cost),
+        margin_percent: Number.parseFloat(form.margin) || 0,
         active: form.active,
       })
       if (res.ok) {
@@ -166,7 +170,9 @@ export function CatalogueManager({
                 <TableHead>Name</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Unit</TableHead>
-                <TableHead className="text-right">Default price</TableHead>
+                <TableHead className="text-right">Cost</TableHead>
+                <TableHead className="text-right">Margin</TableHead>
+                <TableHead className="text-right">Sell price</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-20" />
               </TableRow>
@@ -182,6 +188,10 @@ export function CatalogueManager({
                   </TableCell>
                   <TableCell className="text-sm">{item.category ?? '—'}</TableCell>
                   <TableCell className="text-sm">{item.default_unit ?? '—'}</TableCell>
+                  <TableCell className="text-right tabular-nums text-muted-foreground">
+                    {formatPence(item.unit_cost_pence)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{item.margin_percent ?? 0}%</TableCell>
                   <TableCell className="text-right tabular-nums">
                     {formatPence(item.default_unit_price_pence)}
                   </TableCell>
@@ -260,14 +270,34 @@ export function CatalogueManager({
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-1.5">
-                <Label htmlFor="c-price">Default price (£)</Label>
+                <Label htmlFor="c-cost">Unit cost (£)</Label>
                 <Input
-                  id="c-price"
+                  id="c-cost"
                   inputMode="decimal"
-                  value={form.price}
-                  onChange={(e) => setForm({ ...form, price: e.target.value })}
-                  onBlur={(e) => setForm({ ...form, price: penceToPounds(poundsToPence(e.target.value)) })}
+                  value={form.cost}
+                  onChange={(e) => setForm({ ...form, cost: e.target.value })}
+                  onBlur={(e) => setForm({ ...form, cost: penceToPounds(poundsToPence(e.target.value)) })}
                 />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="c-margin">Margin %</Label>
+                <Input
+                  id="c-margin"
+                  inputMode="decimal"
+                  value={form.margin}
+                  onChange={(e) => setForm({ ...form, margin: e.target.value })}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-1.5">
+                <Label>Sell price</Label>
+                <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm tabular-nums">
+                  {formatPence(
+                    sellFromCost(poundsToPence(form.cost), Number.parseFloat(form.margin) || 0),
+                  )}
+                </div>
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="c-service">Service type</Label>

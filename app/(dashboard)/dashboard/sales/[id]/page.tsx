@@ -63,6 +63,7 @@ export default async function QuoteDetailPage({
     { data: designCategories },
     { data: bankValues },
     { data: groupMembers },
+    { data: companyInfo },
   ] = await Promise.all([
     supabase.from('quote_systems').select('*').eq('quote_id', id).order('position'),
     supabase.from('quote_line_items').select('*').eq('quote_id', id).order('position'),
@@ -90,9 +91,12 @@ export default async function QuoteDetailPage({
       .select('id, quote_number, reference, revision, variant_label, is_master, status, total_pence, master_quote_id')
       .or(`id.eq.${masterId},master_quote_id.eq.${masterId}`)
       .order('revision'),
+    supabase.from('company_info').select('default_margin_percent').limit(1).maybeSingle(),
   ])
 
   const defaultHourlyCostPence = (ppmEngineerCost as { hourly_cost_pence: number } | null)?.hourly_cost_pence ?? 0
+  const defaultMarginPercent =
+    (companyInfo as { default_margin_percent: number } | null)?.default_margin_percent ?? 0
 
   const editable = typedQuote.status === 'draft'
 
@@ -121,6 +125,7 @@ export default async function QuoteDetailPage({
         systemTypes={(systemTypes ?? []) as SystemType[]}
         assetTypes={(assetTypes ?? []) as AssetType[]}
         defaultHourlyCostPence={defaultHourlyCostPence}
+        defaultMarginPercent={defaultMarginPercent}
         catalogue={(catalogue ?? []) as QuoteCatalogueItem[]}
         specTemplates={(specTemplates ?? []) as SystemSpecTemplate[]}
         workTypeFields={(workTypeFields ?? []) as WorkTypeField[]}

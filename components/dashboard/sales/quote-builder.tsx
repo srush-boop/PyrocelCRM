@@ -34,6 +34,8 @@ import {
   formatPence,
   penceToPounds,
   poundsToPence,
+  sellFromCost,
+  resolveLineMargin,
   QUOTE_TYPES,
   WORK_TYPES,
   DESIGNED_BY_OPTIONS,
@@ -64,7 +66,8 @@ interface EditLine {
   catalogue_item_id: string | null
   quantity: string
   unit: string
-  unitPrice: string // pounds
+  unitCost: string // pounds (cost)
+  margin: string // gross margin %, empty string = inherit system margin
 }
 
 interface EditSystem {
@@ -83,6 +86,7 @@ interface EditSystem {
   survey_carried_out: boolean
   survey_by: string
   survey_date: string
+  margin: string // system-level gross margin %
   lines: EditLine[]
   // Saved PPM calculator breakdown for this system, if one has been applied.
   ppm: PpmDraft | null
@@ -93,6 +97,18 @@ const uid = () =>
     ? crypto.randomUUID()
     : `k_${Math.random().toString(36).slice(2)}`
 
+// Resolve a line's effective margin % (per-line override, else system margin).
+function effectiveMargin(line: EditLine, system: { margin: string }): number {
+  const lineMargin = line.margin.trim() === '' ? null : Number.parseFloat(line.margin)
+  const sysMargin = Number.parseFloat(system.margin) || 0
+  return resolveLineMargin(Number.isNaN(lineMargin as number) ? null : lineMargin, sysMargin)
+}
+
+// Compute the unit sell price (pence) for a line from its cost + margin.
+function lineSellPence(line: EditLine, system: { margin: string }): number {
+  return sellFromCost(poundsToPence(line.unitCost), effectiveMargin(line, system))
+}
+
 function blankLine(): EditLine {
   return {
     key: uid(),
@@ -102,11 +118,12 @@ function blankLine(): EditLine {
     catalogue_item_id: null,
     quantity: '1',
     unit: '',
-    unitPrice: '0.00',
+    unitCost: '0.00',
+    margin: '', // inherit system margin
   }
 }
 
-function blankSystem(index: number): EditSystem {
+function blankSystem(index: number, defaultMargin = 0): EditSystem {
   return {
     key: uid(),
     system_type_id: null,
@@ -123,6 +140,7 @@ function blankSystem(index: number): EditSystem {
     survey_carried_out: false,
     survey_by: '',
     survey_date: '',
+    margin: String(defaultMargin ?? 0),
     lines: [blankLine()],
     ppm: null,
   }
@@ -159,6 +177,7 @@ interface QuoteBuilderProps {
   systemTypes: SystemType[]
   assetTypes: AssetType[]
   defaultHourlyCostPence: number
+  defaultMarginPercent: number
   catalogue: QuoteCatalogueItem[]
   specTemplates: SystemSpecTemplate[]
   workTypeFields: WorkTypeField[]
@@ -177,6 +196,7 @@ export function QuoteBuilder({
   systemTypes,
   assetTypes,
   defaultHourlyCostPence,
+  defaultMarginPercent,
   catalogue,
   specTemplates,
   workTypeFields,
@@ -233,6 +253,7 @@ export function QuoteBuilder({
           survey_carried_out: s.survey_carried_out,
           survey_by: s.survey_by ?? '',
           survey_date: s.survey_date ?? '',
+          margin: String(s.margin_percent ?? defaultMarginPercent ?? 0),
           lines: (initialLines ?? [])
             .filter((l) => l.system_id === s.id)
             .sort((a, b) => a.position - b.position)
@@ -244,12 +265,13 @@ export function QuoteBuilder({
               catalogue_item_id: l.catalogue_item_id,
               quantity: String(l.quantity),
               unit: l.unit ?? '',
-              unitPrice: penceToPounds(l.unit_price_pence),
+              unitCost: penceToPounds(l.unit_cost_pence),
+              margin: l.margin_percent === null || l.margin_percent === undefined ? '' : String(l.margin_percent),
             })),
           ppm: ppmToDraft((initialPpm ?? []).find((p) => p.quote_system_id === s.id) ?? null),
         }))
     }
-    return [blankSystem(1)]
+    return [blankSystem(1, defaultMarginPercent)]
   })
 
   const sitesForClient = useMemo(
@@ -262,7 +284,7 @@ export function QuoteBuilder({
     const lines = systems.flatMap((s) =>
       s.lines.map((l) => ({
         quantity: Number.parseFloat(l.quantity) || 0,
-        unit_price_pence: poundsToPence(l.unitPrice),
+        unit_price_pence: lineSellPence(l, s),
       })),
     )
     return computeQuoteTotals(lines, {
@@ -276,7 +298,7 @@ export function QuoteBuilder({
     setSystems((prev) => prev.map((s) => (s.key === key ? { ...s, ...patch } : s)))
   }
   function addSystem() {
-    setSystems((prev) => [...prev, blankSystem(prev.length + 1)])
+    setSystems((prev) => [...prev, blankSystem(prev.length + 1, defaultMarginPercent)])
   }
   function removeSystem(key: string) {
     setSystems((prev) => prev.filter((s) => s.key !== key))
@@ -316,7 +338,10 @@ export function QuoteBuilder({
           catalogue_item_id: null,
           quantity: '1',
           unit: 'year',
-          unitPrice: penceToPounds(draft.computed_price_pence),
+          // The PPM calculator already produced a sell price (its own margin was
+          // applied inside the dialog), so store it as cost at 0% margin.
+          unitCost: penceToPounds(draft.computed_price_pence),
+          margin: '0',
         }
         // Drop a previously-applied PPM line (same description) before re-adding.
         const otherLines = s.lines.filter(
@@ -337,7 +362,9 @@ export function QuoteBuilder({
       catalogue_item_id: item.id,
       quantity: '1',
       unit: item.default_unit ?? '',
-      unitPrice: penceToPounds(item.default_unit_price_pence),
+      // Bring in the catalogue item's cost + margin so the sell price recomputes.
+      unitCost: penceToPounds(item.unit_cost_pence),
+      margin: String(item.margin_percent ?? 0),
     })
   }
 
@@ -374,6 +401,7 @@ export function QuoteBuilder({
         survey_carried_out: s.survey_carried_out,
         survey_by: s.survey_carried_out ? s.survey_by || null : null,
         survey_date: s.survey_carried_out ? s.survey_date || null : null,
+        margin_percent: Number.parseFloat(s.margin) || 0,
         ppm: s.ppm,
         lines: s.lines
           .filter((l) => l.description.trim())
@@ -384,7 +412,8 @@ export function QuoteBuilder({
             catalogue_item_id: l.catalogue_item_id,
             quantity: Number.parseFloat(l.quantity) || 0,
             unit: l.unit || null,
-            unit_price_pence: poundsToPence(l.unitPrice),
+            unit_cost_pence: poundsToPence(l.unitCost),
+            margin_percent: l.margin.trim() === '' ? null : Number.parseFloat(l.margin) || 0,
           })),
       })),
     }
@@ -726,7 +755,7 @@ function SystemCard({
   )
 
   const systemTotalPence = system.lines.reduce(
-    (sum, l) => sum + Math.round((Number.parseFloat(l.quantity) || 0) * poundsToPence(l.unitPrice)),
+    (sum, l) => sum + Math.round((Number.parseFloat(l.quantity) || 0) * lineSellPence(l, system)),
     0,
   )
 
@@ -856,6 +885,20 @@ function SystemCard({
                   </Badge>
                 )}
               </div>
+            </div>
+            <div className="grid gap-1.5 sm:max-w-[200px]">
+              <Label>System margin %</Label>
+              <Input
+                inputMode="decimal"
+                value={system.margin}
+                onChange={(e) => onUpdate({ margin: e.target.value })}
+                placeholder="0"
+                aria-label="System gross margin percent"
+                disabled={disabled}
+              />
+              <p className="text-xs text-muted-foreground">
+                Applied to all lines unless a line sets its own margin.
+              </p>
             </div>
           </div>
           {!readOnly && canRemove && (
@@ -1099,23 +1142,25 @@ function SystemCard({
 
         {/* ---- Line items ---- */}
         <div className="space-y-3">
-          <div className="hidden gap-2 px-1 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[1fr_70px_80px_110px_110px_36px]">
+          <div className="hidden gap-2 px-1 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[1fr_60px_70px_100px_70px_100px_100px_36px]">
             <span>Description</span>
             <span className="text-right">Qty</span>
             <span>Unit</span>
+            <span className="text-right">Unit cost</span>
+            <span className="text-right">Margin %</span>
             <span className="text-right">Unit price</span>
             <span className="text-right">Total</span>
             <span />
           </div>
 
           {system.lines.map((line) => {
-            const lineTotal = Math.round(
-              (Number.parseFloat(line.quantity) || 0) * poundsToPence(line.unitPrice),
-            )
+            const unitSell = lineSellPence(line, system)
+            const lineTotal = Math.round((Number.parseFloat(line.quantity) || 0) * unitSell)
+            const marginInherited = line.margin.trim() === ''
             return (
               <div
                 key={line.key}
-                className="grid gap-2 rounded-md border p-2 sm:grid-cols-[1fr_70px_80px_110px_110px_36px] sm:items-start sm:border-0 sm:p-0"
+                className="grid gap-2 rounded-md border p-2 sm:grid-cols-[1fr_60px_70px_100px_70px_100px_100px_36px] sm:items-start sm:border-0 sm:p-0"
               >
                 <div className="grid gap-1.5">
                   <Input
@@ -1149,15 +1194,31 @@ function SystemCard({
                 />
                 <Input
                   inputMode="decimal"
-                  value={line.unitPrice}
-                  onChange={(e) => onUpdateLine(line.key, { unitPrice: e.target.value })}
+                  value={line.unitCost}
+                  onChange={(e) => onUpdateLine(line.key, { unitCost: e.target.value })}
                   onBlur={(e) =>
-                    onUpdateLine(line.key, { unitPrice: penceToPounds(poundsToPence(e.target.value)) })
+                    onUpdateLine(line.key, { unitCost: penceToPounds(poundsToPence(e.target.value)) })
                   }
                   className="text-right"
-                  aria-label="Unit price in pounds"
+                  aria-label="Unit cost in pounds"
                   disabled={disabled}
                 />
+                <Input
+                  inputMode="decimal"
+                  value={line.margin}
+                  onChange={(e) => onUpdateLine(line.key, { margin: e.target.value })}
+                  placeholder={String(Number.parseFloat(system.margin) || 0)}
+                  className="text-right"
+                  aria-label="Margin percent (blank inherits system margin)"
+                  title={marginInherited ? 'Inheriting system margin' : 'Line margin override'}
+                  disabled={disabled}
+                />
+                <div
+                  className="flex h-9 items-center justify-end text-sm tabular-nums text-muted-foreground"
+                  aria-label="Computed unit price"
+                >
+                  {formatPence(unitSell)}
+                </div>
                 <div className="flex h-9 items-center justify-end text-sm font-medium tabular-nums">
                   {formatPence(lineTotal)}
                 </div>

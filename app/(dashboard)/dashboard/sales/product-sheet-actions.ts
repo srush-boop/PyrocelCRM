@@ -99,7 +99,10 @@ export async function importProductSheet(sheetId?: string): Promise<ImportResult
     rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, blankrows: false })
   } catch (e) {
     console.error('[v0] Product sheet parse error:', e)
-    return { ok: false, error: 'Could not parse the spreadsheet. Is it a valid .xlsx file?' }
+    return {
+      ok: false,
+      error: 'Could not parse the spreadsheet. Is it a valid .xlsx, .xls or .csv file?',
+    }
   }
 
   if (rows.length < 2) {

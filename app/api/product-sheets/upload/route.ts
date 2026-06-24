@@ -2,9 +2,18 @@ import { put } from '@vercel/blob'
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+// Browsers and operating systems report inconsistent MIME types for
+// spreadsheets (especially legacy .xls), so the filename extension is the
+// primary signal — this set is only a secondary allow-list.
 const ACCEPTED = new Set([
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
   'application/vnd.ms-excel', // .xls
+  'application/excel',
+  'application/x-excel',
+  'application/x-msexcel',
+  'text/csv',
+  'application/csv',
+  'application/octet-stream', // some browsers send this for .xls
 ])
 
 export async function POST(request: NextRequest) {
@@ -29,9 +38,12 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File | null
     if (!file) return NextResponse.json({ error: 'No file provided.' }, { status: 400 })
 
-    const isXlsxName = /\.(xlsx|xls)$/i.test(file.name)
-    if (!ACCEPTED.has(file.type) && !isXlsxName) {
-      return NextResponse.json({ error: 'Please upload an Excel (.xlsx) file.' }, { status: 400 })
+    const isSpreadsheetName = /\.(xlsx|xls|csv)$/i.test(file.name)
+    if (!isSpreadsheetName && !ACCEPTED.has(file.type)) {
+      return NextResponse.json(
+        { error: 'Please upload a spreadsheet file (.xlsx, .xls or .csv).' },
+        { status: 400 },
+      )
     }
 
     // Store privately under a stable folder; randomSuffix keeps versions distinct.

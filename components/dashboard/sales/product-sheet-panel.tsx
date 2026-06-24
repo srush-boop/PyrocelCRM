@@ -100,8 +100,8 @@ export function ProductSheetPanel({ current }: { current: ProductSheet | null })
               </div>
             ) : (
               <p className="mt-1 text-sm text-muted-foreground text-pretty">
-                Upload an Excel (.xlsx) file of products and prices, then import it to build the
-                quote catalogue used for estimates and specifications.
+                Upload a spreadsheet (.xlsx, .xls or .csv) of products and prices, then import it to
+                build the quote catalogue used for estimates and specifications.
               </p>
             )}
           </div>
@@ -111,7 +111,7 @@ export function ProductSheetPanel({ current }: { current: ProductSheet | null })
           <input
             ref={fileInputRef}
             type="file"
-            accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0]

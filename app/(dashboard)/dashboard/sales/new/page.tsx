@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { QuoteBuilder } from '@/components/dashboard/sales/quote-builder'
-import { resolveDefaultMargin } from '@/lib/sales'
+import { resolveDefaultMargin, fetchAllCatalogueItems } from '@/lib/sales'
 import type {
   Client,
   Profile,
@@ -50,7 +50,7 @@ export default async function NewQuotePage() {
     { data: serviceTypes },
     { data: assetTypes },
     { data: ppmEngineerCost },
-    { data: catalogue },
+    catalogue,
     { data: specTemplates },
     { data: workTypeFields },
     { data: designCategories },
@@ -68,7 +68,7 @@ export default async function NewQuotePage() {
       .ilike('role', '%PPM%')
       .limit(1)
       .maybeSingle(),
-    supabase.from('quote_catalogue_items').select('*').eq('active', true).order('name'),
+    fetchAllCatalogueItems(supabase, { activeOnly: true }),
     supabase.from('system_spec_templates').select('*').eq('active', true),
     supabase.from('work_type_fields').select('*').eq('active', true).order('position'),
     supabase.from('quote_design_categories').select('*').eq('active', true).order('name'),

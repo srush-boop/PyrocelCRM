@@ -37,12 +37,27 @@ export function SystemMarginsManager({
     return map
   })
 
-  const designByWorkType = useMemo(() => {
-    const map: Record<string, boolean> = {}
-    for (const s of settings) map[s.work_type] = s.requires_design
+  // Configurable optional sections per work type.
+  type SectionFlag = 'requires_questions' | 'requires_design' | 'requires_ppm'
+  const SECTION_DEFS: { flag: SectionFlag; label: string; help: string }[] = [
+    { flag: 'requires_questions', label: 'Questions', help: 'Conditional question fields' },
+    { flag: 'requires_design', label: 'Design & survey', help: 'Design category, survey details' },
+    { flag: 'requires_ppm', label: 'PPM', help: 'Planned maintenance pricing' },
+  ]
+  const sectionsByWorkType = useMemo(() => {
+    const map: Record<string, Record<SectionFlag, boolean>> = {}
+    for (const w of WORK_TYPES) {
+      const s = settings.find((x) => x.work_type === w.code)
+      map[w.code] = {
+        requires_questions: s?.requires_questions ?? true,
+        requires_design: s?.requires_design ?? false,
+        requires_ppm: s?.requires_ppm ?? false,
+      }
+    }
     return map
   }, [settings])
-  const [design, setDesign] = useState<Record<string, boolean>>(designByWorkType)
+  const [sections, setSections] =
+    useState<Record<string, Record<SectionFlag, boolean>>>(sectionsByWorkType)
 
   function commitMargin(systemTypeId: string, workType: string, raw: string) {
     const trimmed = raw.trim()
@@ -65,15 +80,21 @@ export function SystemMarginsManager({
     })
   }
 
-  function toggleDesign(workType: string, value: boolean) {
-    setDesign((prev) => ({ ...prev, [workType]: value }))
+  function toggleSection(workType: string, flag: SectionFlag, value: boolean) {
+    setSections((prev) => ({
+      ...prev,
+      [workType]: { ...prev[workType], [flag]: value },
+    }))
     startTransition(async () => {
-      const res = await saveWorkTypeSetting({ work_type: workType, requires_design: value })
+      const res = await saveWorkTypeSetting({ work_type: workType, [flag]: value })
       if (res.ok) {
         toast.success('Saved')
         router.refresh()
       } else {
-        setDesign((prev) => ({ ...prev, [workType]: !value }))
+        setSections((prev) => ({
+          ...prev,
+          [workType]: { ...prev[workType], [flag]: !value },
+        }))
         toast.error(res.error ?? 'Could not save setting')
       }
     })
@@ -146,37 +167,50 @@ export function SystemMarginsManager({
         )}
       </section>
 
-      {/* Design & survey applicability per work type */}
+      {/* Configurable quote sections per work type */}
       <section className="space-y-4">
         <div>
-          <h2 className="text-lg font-semibold tracking-tight">Design &amp; survey</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Quote sections</h2>
           <p className="text-sm text-muted-foreground">
-            Choose which types of work include the design &amp; survey section on a quote system.
+            Choose which optional sections appear on a quote system for each type of work.
           </p>
         </div>
-        <Card>
-          <CardContent className="grid gap-2 py-4 sm:grid-cols-2">
-            {WORK_TYPES.map((w) => (
-              <div
-                key={w.code}
-                className="flex items-center justify-between gap-4 rounded-md border p-3"
-              >
-                <Label htmlFor={`design-${w.code}`} className="flex items-center gap-2">
+        <div className="grid gap-4">
+          {WORK_TYPES.map((w) => (
+            <Card key={w.code}>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
                   <Badge variant="outline" className="font-mono text-[10px]">
                     {w.code}
                   </Badge>
                   {w.label}
-                </Label>
-                <Switch
-                  id={`design-${w.code}`}
-                  checked={design[w.code] ?? false}
-                  disabled={isPending}
-                  onCheckedChange={(v) => toggleDesign(w.code, v)}
-                />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-2 sm:grid-cols-3">
+                {SECTION_DEFS.map((sec) => (
+                  <div
+                    key={sec.flag}
+                    className="flex items-center justify-between gap-3 rounded-md border p-3"
+                  >
+                    <Label
+                      htmlFor={`${sec.flag}-${w.code}`}
+                      className="flex min-w-0 flex-col gap-0.5"
+                    >
+                      <span className="text-sm">{sec.label}</span>
+                      <span className="text-xs text-muted-foreground">{sec.help}</span>
+                    </Label>
+                    <Switch
+                      id={`${sec.flag}-${w.code}`}
+                      checked={sections[w.code]?.[sec.flag] ?? false}
+                      disabled={isPending}
+                      onCheckedChange={(v) => toggleSection(w.code, sec.flag, v)}
+                    />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </section>
     </div>
   )

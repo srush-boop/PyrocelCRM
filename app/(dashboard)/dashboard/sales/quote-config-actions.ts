@@ -243,23 +243,30 @@ export async function saveSystemWorkTypeMargin(input: {
   return { ok: true }
 }
 
-// ---------- Work-type settings (design/survey toggle) ----------
+// ---------- Work-type settings (configurable quote sections) ----------
 export async function saveWorkTypeSetting(input: {
   work_type: string
-  requires_design: boolean
+  requires_design?: boolean
+  requires_ppm?: boolean
+  requires_questions?: boolean
 }): Promise<Result> {
   const { supabase, error } = await requireStaff()
   if (!supabase) return { ok: false, error }
   if (!input.work_type) return { ok: false, error: 'Work type is required' }
 
-  const { error: dbError } = await supabase.from('work_type_settings').upsert(
-    {
-      work_type: input.work_type,
-      requires_design: input.requires_design,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'work_type' },
-  )
+  // Only write the flags that were provided so a single toggle can be saved
+  // without clobbering the others.
+  const payload: Record<string, unknown> = {
+    work_type: input.work_type,
+    updated_at: new Date().toISOString(),
+  }
+  if (input.requires_design !== undefined) payload.requires_design = input.requires_design
+  if (input.requires_ppm !== undefined) payload.requires_ppm = input.requires_ppm
+  if (input.requires_questions !== undefined) payload.requires_questions = input.requires_questions
+
+  const { error: dbError } = await supabase
+    .from('work_type_settings')
+    .upsert(payload, { onConflict: 'work_type' })
   if (dbError) return { ok: false, error: dbError.message }
   revalidatePath('/dashboard/sales/margins')
   return { ok: true }

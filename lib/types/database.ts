@@ -823,7 +823,10 @@ export interface SystemWorkTypeMargin {
 // Per-work-type settings, e.g. whether the design & survey section applies.
 export interface WorkTypeSetting {
   work_type: string
+  // Each flag controls whether an optional quote section appears for this work type.
   requires_design: boolean
+  requires_ppm: boolean
+  requires_questions: boolean
   updated_at: string
 }
 

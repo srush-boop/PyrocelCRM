@@ -929,11 +929,15 @@ function SystemCard({
     [workTypeFields, system.work_type, system.system_type_id],
   )
 
-  // Whether the design & survey section applies to this work type (admin toggle).
-  const requiresDesign = useMemo(
-    () => workTypeSettings.find((s) => s.work_type === system.work_type)?.requires_design ?? false,
+  // Which optional sections apply to this work type (admin toggles). Questions
+  // default to on; design and PPM default to off when no setting row exists.
+  const workTypeSetting = useMemo(
+    () => workTypeSettings.find((s) => s.work_type === system.work_type),
     [workTypeSettings, system.work_type],
   )
+  const requiresDesign = workTypeSetting?.requires_design ?? false
+  const requiresPpm = workTypeSetting?.requires_ppm ?? false
+  const requiresQuestions = workTypeSetting?.requires_questions ?? true
 
   // Spec template matching this system type + work type.
   const matchingTemplate = useMemo(
@@ -1161,7 +1165,7 @@ function SystemCard({
         ) : (
           <>
         {/* ---- Step 2 · Questions (conditional "IF" fields for the work type) ---- */}
-        {conditionalFields.length > 0 && (
+        {requiresQuestions && conditionalFields.length > 0 && (
           <div className="grid gap-3 rounded-md border bg-muted/20 p-3 sm:grid-cols-2">
             <p className="sm:col-span-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Step 2 · Questions for {WORK_TYPES.find((w) => w.code === system.work_type)?.label}
@@ -1596,15 +1600,17 @@ function SystemCard({
                     </PopoverContent>
                   </Popover>
                 )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPpmOpen(true)}
-                  disabled={isPending}
-                >
-                  <Calculator className="mr-2 h-4 w-4" />
-                  {system.ppm ? 'Edit PPM price' : 'PPM calculator'}
-                </Button>
+                {requiresPpm && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPpmOpen(true)}
+                    disabled={isPending}
+                  >
+                    <Calculator className="mr-2 h-4 w-4" />
+                    {system.ppm ? 'Edit PPM price' : 'PPM calculator'}
+                  </Button>
+                )}
               </div>
               <div className="text-sm text-muted-foreground">
                 System total:{' '}
@@ -1619,16 +1625,18 @@ function SystemCard({
           </>
         )}
 
-        <PpmCalculatorDialog
-          open={ppmOpen}
-          onOpenChange={setPpmOpen}
-          systemName={system.system_name}
-          assetTypes={systemAssetTypes}
-          defaultHourlyCostPence={defaultHourlyCostPence}
-          existingDraft={system.ppm}
-          disabled={disabled}
-          onApply={onApplyPpm}
-        />
+        {requiresPpm && (
+          <PpmCalculatorDialog
+            open={ppmOpen}
+            onOpenChange={setPpmOpen}
+            systemName={system.system_name}
+            assetTypes={systemAssetTypes}
+            defaultHourlyCostPence={defaultHourlyCostPence}
+            existingDraft={system.ppm}
+            disabled={disabled}
+            onApply={onApplyPpm}
+          />
+        )}
         </CardContent>
         </CollapsibleContent>
       </Collapsible>

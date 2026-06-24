@@ -25,7 +25,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Trash2, GripVertical, BookOpen, Save, FileDown, TrendingUp, Calculator } from 'lucide-react'
+import { Plus, Trash2, GripVertical, BookOpen, Save, FileDown, TrendingUp, Calculator, Wrench } from 'lucide-react'
 import { toast } from 'sonner'
 import { PpmCalculatorDialog, type PpmDraft } from '@/components/dashboard/sales/ppm-calculator-dialog'
 import {
@@ -51,6 +51,7 @@ import type {
   WorkTypeField,
   QuoteDesignCategory,
   SystemType,
+  ServiceType,
   AssetType,
   QuoteSystemPpm,
   Site,
@@ -175,6 +176,7 @@ interface QuoteBuilderProps {
   clients: Client[]
   sites: Site[]
   systemTypes: SystemType[]
+  serviceTypes: ServiceType[]
   assetTypes: AssetType[]
   defaultHourlyCostPence: number
   defaultMarginPercent: number
@@ -194,6 +196,7 @@ export function QuoteBuilder({
   clients,
   sites,
   systemTypes,
+  serviceTypes,
   assetTypes,
   defaultHourlyCostPence,
   defaultMarginPercent,
@@ -365,6 +368,22 @@ export function QuoteBuilder({
       // Bring in the catalogue item's cost + margin so the sell price recomputes.
       unitCost: penceToPounds(item.unit_cost_pence),
       margin: String(item.margin_percent ?? 0),
+    })
+  }
+
+  // Add a line seeded from a configured service (belonging to the system's
+  // system type). Staff then fill in cost/qty against the prefilled service.
+  function addServiceLine(systemKey: string, service: ServiceType) {
+    addLine(systemKey, {
+      key: uid(),
+      description: service.name,
+      detail: service.description ?? '',
+      service_type_id: service.id,
+      catalogue_item_id: null,
+      quantity: '1',
+      unit: '',
+      unitCost: '0.00',
+      margin: '',
     })
   }
 
@@ -580,6 +599,7 @@ export function QuoteBuilder({
           readOnly={readOnly}
           isPending={isPending}
           systemTypes={systemTypes}
+          serviceTypes={serviceTypes}
           assetTypes={assetTypes}
           defaultHourlyCostPence={defaultHourlyCostPence}
           catalogue={catalogue}
@@ -591,6 +611,7 @@ export function QuoteBuilder({
           onRemove={() => removeSystem(system.key)}
           onAddLine={() => addLine(system.key)}
           onAddCatalogueLine={(item) => addCatalogueLine(system.key, item)}
+          onAddServiceLine={(service) => addServiceLine(system.key, service)}
           onUpdateLine={(lineKey, patch) => updateLine(system.key, lineKey, patch)}
           onRemoveLine={(lineKey) => removeLine(system.key, lineKey)}
           onApplyPpm={(draft) => applyPpm(system.key, draft)}
@@ -705,6 +726,7 @@ interface SystemCardProps {
   readOnly: boolean
   isPending: boolean
   systemTypes: SystemType[]
+  serviceTypes: ServiceType[]
   assetTypes: AssetType[]
   defaultHourlyCostPence: number
   catalogue: QuoteCatalogueItem[]
@@ -716,6 +738,7 @@ interface SystemCardProps {
   onRemove: () => void
   onAddLine: () => void
   onAddCatalogueLine: (item: QuoteCatalogueItem) => void
+  onAddServiceLine: (service: ServiceType) => void
   onUpdateLine: (lineKey: string, patch: Partial<EditLine>) => void
   onRemoveLine: (lineKey: string) => void
   onApplyPpm: (draft: PpmDraft) => void
@@ -727,6 +750,7 @@ function SystemCard({
   readOnly,
   isPending,
   systemTypes,
+  serviceTypes,
   assetTypes,
   defaultHourlyCostPence,
   catalogue,
@@ -738,6 +762,7 @@ function SystemCard({
   onRemove,
   onAddLine,
   onAddCatalogueLine,
+  onAddServiceLine,
   onUpdateLine,
   onRemoveLine,
   onApplyPpm,
@@ -752,6 +777,17 @@ function SystemCard({
         ? assetTypes.filter((a) => a.system_type_id === system.system_type_id && a.active)
         : [],
     [assetTypes, system.system_type_id],
+  )
+
+  // Services belonging to this system's system type, addable as line items.
+  const systemServiceTypes = useMemo(
+    () =>
+      system.system_type_id
+        ? serviceTypes
+            .filter((s) => s.system_type_id === system.system_type_id)
+            .sort((a, b) => a.name.localeCompare(b.name))
+        : [],
+    [serviceTypes, system.system_type_id],
   )
 
   const systemTotalPence = system.lines.reduce(
@@ -1245,6 +1281,34 @@ function SystemCard({
                   <Plus className="mr-2 h-4 w-4" />
                   Add line
                 </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isPending || !system.system_type_id || systemServiceTypes.length === 0}
+                      title={
+                        !system.system_type_id
+                          ? 'Choose a system type first to add its services'
+                          : systemServiceTypes.length === 0
+                            ? 'No services configured for this system type'
+                            : undefined
+                      }
+                    >
+                      <Wrench className="mr-2 h-4 w-4" />
+                      Add service
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="max-h-72 w-72 overflow-y-auto">
+                    <DropdownMenuLabel>Services</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {systemServiceTypes.map((service) => (
+                      <DropdownMenuItem key={service.id} onClick={() => onAddServiceLine(service)}>
+                        <span className="truncate">{service.name}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 {catalogue.length > 0 && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>

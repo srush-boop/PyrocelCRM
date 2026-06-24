@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -61,6 +61,7 @@ export function SiteSystemsManager({
   siteStatus = 'live',
 }: SiteSystemsManagerProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const supabase = createClient()
 
   const isDead = siteStatus === 'dead'
@@ -235,7 +236,16 @@ export function SiteSystemsManager({
     setServiceSystemId(null)
     setServiceSelection([])
     toast.success(`Added ${insertData.length} service${insertData.length !== 1 ? 's' : ''}`)
-    router.refresh()
+
+    // Bring up the full services edit page for the newly added service so the
+    // user can configure frequency, assignment and KPIs straight away. With
+    // multiple, the first opens; the rest keep their defaults.
+    const firstId = (inserted as { id: string }[] | null)?.[0]?.id
+    if (firstId) {
+      router.push(`${pathname}?tab=overview&editService=${firstId}`)
+    } else {
+      router.refresh()
+    }
   }
 
   // Group services by their site_system_id.

@@ -49,10 +49,12 @@ import type {
 
 interface PageProps {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ tab?: string; editService?: string }>
 }
 
-export default async function SiteDetailPage({ params }: PageProps) {
+export default async function SiteDetailPage({ params, searchParams }: PageProps) {
   const { id } = await params
+  const { tab: tabParam, editService: editServiceParam } = await searchParams
   const supabase = await createClient()
   
   const { data: { user } } = await supabase.auth.getUser()
@@ -312,7 +314,11 @@ export default async function SiteDetailPage({ params }: PageProps) {
         <EditSiteButton site={site as Site & { route: Route | null }} clients={clients} />
       </div>
 
-      <Tabs defaultValue="overview" className="gap-6">
+      <Tabs
+        key={editServiceParam ? `edit-${editServiceParam}` : tabParam ?? 'overview'}
+        defaultValue={editServiceParam ? 'overview' : tabParam ?? 'overview'}
+        className="gap-6"
+      >
         <TabsList className="h-auto flex-wrap justify-start">
           <TabsTrigger value="overview" className="flex-none">Overview</TabsTrigger>
           <TabsTrigger value="systems" className="flex-none">Systems</TabsTrigger>
@@ -486,6 +492,7 @@ export default async function SiteDetailPage({ params }: PageProps) {
 
         <SiteServicesManager
           siteId={id}
+          initialEditServiceId={editServiceParam}
           siteServices={siteServices}
           availableServiceTypes={availableServiceTypes}
           engineers={engineers}

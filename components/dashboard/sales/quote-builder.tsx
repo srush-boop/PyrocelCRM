@@ -820,6 +820,23 @@ function SystemCard({
 }: SystemCardProps) {
   const disabled = readOnly || isPending
   const [ppmOpen, setPpmOpen] = useState(false)
+  const [catalogueOpen, setCatalogueOpen] = useState(false)
+  const [catalogueSearch, setCatalogueSearch] = useState('')
+
+  // The catalogue can hold thousands of items, so we never render them all.
+  // Show matches for the current search, capped to a small number to keep the
+  // popover light and responsive.
+  const catalogueMatches = useMemo(() => {
+    const q = catalogueSearch.trim().toLowerCase()
+    const base = q
+      ? catalogue.filter((item) =>
+          [item.name, item.product_code, item.category]
+            .filter(Boolean)
+            .some((field) => (field as string).toLowerCase().includes(q)),
+        )
+      : catalogue
+    return base.slice(0, 50)
+  }, [catalogue, catalogueSearch])
 
   // Asset types belonging to this system's system type (for the PPM calculator).
   const systemAssetTypes = useMemo(
@@ -1361,28 +1378,67 @@ function SystemCard({
                   </DropdownMenuContent>
                 </DropdownMenu>
                 {catalogue.length > 0 && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
+                  <Popover
+                    open={catalogueOpen}
+                    onOpenChange={(open) => {
+                      setCatalogueOpen(open)
+                      if (!open) setCatalogueSearch('')
+                    }}
+                  >
+                    <PopoverTrigger asChild>
                       <Button variant="outline" size="sm" disabled={isPending}>
                         <BookOpen className="mr-2 h-4 w-4" />
                         Add from catalogue
                       </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="max-h-72 w-72 overflow-y-auto">
-                      <DropdownMenuLabel>Catalogue items</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      {catalogue.map((item) => (
-                        <DropdownMenuItem key={item.id} onClick={() => onAddCatalogueLine(item)}>
-                          <div className="flex w-full items-center justify-between gap-2">
-                            <span className="truncate">{item.name}</span>
-                            <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                              {formatPence(item.default_unit_price_pence)}
-                            </span>
-                          </div>
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-80 p-2">
+                      <Input
+                        autoFocus
+                        value={catalogueSearch}
+                        onChange={(e) => setCatalogueSearch(e.target.value)}
+                        placeholder="Search by code, name or category"
+                        className="mb-2"
+                        aria-label="Search catalogue"
+                      />
+                      <div className="max-h-72 overflow-y-auto">
+                        {catalogueMatches.length === 0 ? (
+                          <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+                            No matching items
+                          </p>
+                        ) : (
+                          catalogueMatches.map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => {
+                                onAddCatalogueLine(item)
+                                setCatalogueOpen(false)
+                                setCatalogueSearch('')
+                              }}
+                              className="flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                            >
+                              <span className="flex min-w-0 items-center gap-2">
+                                {item.product_code && (
+                                  <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                                    {item.product_code}
+                                  </span>
+                                )}
+                                <span className="truncate">{item.name}</span>
+                              </span>
+                              <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                                {formatPence(item.default_unit_price_pence)}
+                              </span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                      {!catalogueSearch && catalogue.length > catalogueMatches.length && (
+                        <p className="px-2 pt-2 text-xs text-muted-foreground">
+                          Showing first {catalogueMatches.length} of {catalogue.length}. Type to search.
+                        </p>
+                      )}
+                    </PopoverContent>
+                  </Popover>
                 )}
                 <Button
                   variant="outline"

@@ -306,6 +306,7 @@ export async function saveQuote(
 export interface CatalogueInput {
   id?: string
   name: string
+  product_code?: string | null
   description?: string | null
   category?: string | null
   service_type_id?: string | null
@@ -326,6 +327,7 @@ export async function saveCatalogueItem(
   const margin = Number.isFinite(input.margin_percent) ? input.margin_percent : 0
   const row = {
   name: input.name.trim(),
+  product_code: input.product_code?.trim() || null,
   description: input.description?.trim() || null,
   category: input.category?.trim() || null,
   service_type_id: input.service_type_id || null,

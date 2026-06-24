@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -41,7 +41,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Pencil, Trash2, Loader2, PackageOpen } from 'lucide-react'
+import { Plus, Pencil, Trash2, Loader2, PackageOpen, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatPence, penceToPounds, poundsToPence, sellFromCost } from '@/lib/sales'
 import type { QuoteCatalogueItem, ServiceType } from '@/lib/types/database'
@@ -52,6 +52,7 @@ const NO_SERVICE = '__none__'
 interface FormState {
   id?: string
   name: string
+  product_code: string
   description: string
   category: string
   service_type_id: string
@@ -64,6 +65,7 @@ interface FormState {
 function emptyForm(): FormState {
   return {
     name: '',
+    product_code: '',
     description: '',
     category: '',
     service_type_id: NO_SERVICE,
@@ -73,6 +75,10 @@ function emptyForm(): FormState {
     active: true,
   }
 }
+
+// Render only a slice of the (potentially thousands of) catalogue items so the
+// DOM stays small and the page remains responsive.
+const PAGE_SIZE = 50
 
 export function CatalogueManager({
   items,
@@ -86,6 +92,32 @@ export function CatalogueManager({
   const [dialogOpen, setDialogOpen] = useState(false)
   const [form, setForm] = useState<FormState>(emptyForm())
   const [deleteTarget, setDeleteTarget] = useState<QuoteCatalogueItem | null>(null)
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(0)
+
+  // Filter by name, product code, category or description. Memoised so we only
+  // recompute when the source list or query changes (the list can be large).
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return items
+    return items.filter((item) =>
+      [item.name, item.product_code, item.category, item.description]
+        .filter(Boolean)
+        .some((field) => (field as string).toLowerCase().includes(q)),
+    )
+  }, [items, search])
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage = Math.min(page, pageCount - 1)
+  const pageItems = useMemo(
+    () => filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE),
+    [filtered, safePage],
+  )
+
+  function onSearchChange(value: string) {
+    setSearch(value)
+    setPage(0)
+  }
 
   function openNew() {
     setForm(emptyForm())
@@ -96,6 +128,7 @@ export function CatalogueManager({
     setForm({
       id: item.id,
       name: item.name,
+      product_code: item.product_code ?? '',
       description: item.description ?? '',
       category: item.category ?? '',
       service_type_id: item.service_type_id ?? NO_SERVICE,
@@ -112,6 +145,7 @@ export function CatalogueManager({
       const res = await saveCatalogueItem({
         id: form.id,
         name: form.name,
+        product_code: form.product_code || null,
         description: form.description || null,
         category: form.category || null,
         service_type_id: form.service_type_id === NO_SERVICE ? null : form.service_type_id,
@@ -147,8 +181,18 @@ export function CatalogueManager({
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button onClick={openNew}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full sm:max-w-xs">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Search by code, name or category"
+            className="pl-9"
+            aria-label="Search catalogue"
+          />
+        </div>
+        <Button onClick={openNew} className="shrink-0">
           <Plus className="mr-2 h-4 w-4" />
           Add Item
         </Button>
@@ -163,10 +207,19 @@ export function CatalogueManager({
               Add standard products and services to speed up quoting.
             </p>
           </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-2 p-12 text-center">
+            <Search className="h-8 w-8 text-muted-foreground" />
+            <p className="font-medium">No matching items</p>
+            <p className="text-sm text-muted-foreground">
+              Nothing matches &ldquo;{search}&rdquo;. Try a different search.
+            </p>
+          </div>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Code</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Unit</TableHead>
@@ -178,8 +231,11 @@ export function CatalogueManager({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.map((item) => (
+              {pageItems.map((item) => (
                 <TableRow key={item.id}>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    {item.product_code ?? '—'}
+                  </TableCell>
                   <TableCell>
                     <div className="font-medium">{item.name}</div>
                     {item.description && (
@@ -224,6 +280,38 @@ export function CatalogueManager({
         )}
       </Card>
 
+      {filtered.length > PAGE_SIZE && (
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-sm text-muted-foreground">
+            Showing {safePage * PAGE_SIZE + 1}–{Math.min((safePage + 1) * PAGE_SIZE, filtered.length)} of{' '}
+            {filtered.length}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={safePage === 0}
+            >
+              <ChevronLeft className="mr-1 h-4 w-4" />
+              Previous
+            </Button>
+            <span className="text-sm text-muted-foreground tabular-nums">
+              Page {safePage + 1} of {pageCount}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+              disabled={safePage >= pageCount - 1}
+            >
+              Next
+              <ChevronRight className="ml-1 h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
@@ -231,14 +319,25 @@ export function CatalogueManager({
             <DialogDescription>Reusable line item available across all quotes.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
-            <div className="grid gap-1.5">
-              <Label htmlFor="c-name">Name *</Label>
-              <Input
-                id="c-name"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="e.g. Optical smoke detector"
-              />
+            <div className="grid grid-cols-[130px_1fr] gap-4">
+              <div className="grid gap-1.5">
+                <Label htmlFor="c-code">Product code</Label>
+                <Input
+                  id="c-code"
+                  value={form.product_code}
+                  onChange={(e) => setForm({ ...form, product_code: e.target.value })}
+                  placeholder="000081"
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="c-name">Name *</Label>
+                <Input
+                  id="c-name"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="e.g. Optical smoke detector"
+                />
+              </div>
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="c-desc">Description</Label>

@@ -263,6 +263,7 @@ export interface Site {
   last_service_date: string | null
   next_service_date: string | null
   deadline_tolerance_days: number
+  deadline_tolerance_unit: ToleranceUnit
   // Optional client KPI override for this site/service. NULL = inherit the
   // service type's regulatory KPI as the client default.
   client_tolerance_value: number | null

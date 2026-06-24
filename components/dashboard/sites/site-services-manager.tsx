@@ -89,6 +89,7 @@ export function SiteServicesManager({
   const [editFrequencyValue, setEditFrequencyValue] = useState<number>(12)
   const [editFrequencyUnit, setEditFrequencyUnit] = useState<'weeks' | 'months'>('months')
   const [editToleranceDays, setEditToleranceDays] = useState<number>(7)
+  const [editToleranceUnit, setEditToleranceUnit] = useState<ToleranceUnit>('days')
   // Client KPI override for this site/service. Empty string = no override
   // (falls back to the service type's regulatory KPI).
   const [editClientToleranceValue, setEditClientToleranceValue] = useState<string>('')
@@ -173,6 +174,7 @@ export function SiteServicesManager({
     setEditFrequencyValue(ss.frequency_value)
     setEditFrequencyUnit(ss.frequency_unit)
     setEditToleranceDays(ss.deadline_tolerance_days)
+    setEditToleranceUnit((ss.deadline_tolerance_unit as ToleranceUnit) || 'days')
     setEditClientToleranceValue(
       ss.client_tolerance_value != null ? String(ss.client_tolerance_value) : '',
     )
@@ -237,6 +239,7 @@ export function SiteServicesManager({
         frequency_value: editFrequencyValue,
         frequency_unit: editFrequencyUnit,
         deadline_tolerance_days: editToleranceDays,
+        deadline_tolerance_unit: editToleranceUnit,
         // Client KPI override: blank clears it (inherits regulatory default).
         client_tolerance_value:
           editClientToleranceValue.trim() === ''
@@ -377,7 +380,13 @@ export function SiteServicesManager({
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
                         <span>Every {ss.frequency_value} {ss.frequency_unit}</span>
                         <span>•</span>
-                        <span>Tolerance: {ss.deadline_tolerance_days} days</span>
+                        <span>
+                          Tolerance:{' '}
+                          {describeTolerance({
+                            value: ss.deadline_tolerance_days,
+                            unit: (ss.deadline_tolerance_unit as ToleranceUnit) || 'days',
+                          })}
+                        </span>
                         {ss.next_service_date && (
                           <>
                             <span>•</span>
@@ -734,17 +743,32 @@ export function SiteServicesManager({
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="tolerance-days">Deadline Tolerance (days)</Label>
-              <Input
-                id="tolerance-days"
-                type="number"
-                min={1}
-                max={365}
-                value={editToleranceDays}
-                onChange={(e) => setEditToleranceDays(parseInt(e.target.value) || 7)}
-              />
+              <Label htmlFor="tolerance-value">Deadline Tolerance</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="tolerance-value"
+                  type="number"
+                  min={1}
+                  max={editToleranceUnit === 'months' ? 24 : 365}
+                  value={editToleranceDays}
+                  onChange={(e) => setEditToleranceDays(parseInt(e.target.value) || 1)}
+                  className="flex-1"
+                />
+                <Select
+                  value={editToleranceUnit}
+                  onValueChange={(v) => setEditToleranceUnit(v as ToleranceUnit)}
+                >
+                  <SelectTrigger className="w-32" aria-label="Deadline tolerance unit">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="days">Days</SelectItem>
+                    <SelectItem value="months">Months</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <p className="text-xs text-muted-foreground">
-                How many days after the due date before this service is considered overdue
+                How long after the due date before this service is considered overdue
               </p>
             </div>
 

@@ -504,6 +504,8 @@ export default async function SiteDetailPage({ params }: PageProps) {
             siteSystems={siteSystems}
             siteServices={siteServices}
             systemTypes={systemTypes}
+            availableServiceTypes={availableServiceTypes}
+            siteStatus={(site as Site).status}
           />
         </TabsContent>
 

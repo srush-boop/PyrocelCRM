@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -34,7 +35,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Pencil, Trash2, Layers, Wrench, MapPin } from 'lucide-react'
+import { Plus, Pencil, Trash2, Layers, Wrench } from 'lucide-react'
 import { toast } from 'sonner'
 import type { SiteSystem, SiteService, ServiceType, SystemType } from '@/lib/types/database'
 
@@ -47,6 +48,8 @@ interface SiteSystemsManagerProps {
   siteSystems: SiteSystem[]
   siteServices: ServiceWithType[]
   systemTypes: SystemType[]
+  availableServiceTypes: ServiceType[]
+  siteStatus?: 'live' | 'dead'
 }
 
 export function SiteSystemsManager({
@@ -54,34 +57,58 @@ export function SiteSystemsManager({
   siteSystems,
   siteServices,
   systemTypes,
+  availableServiceTypes,
+  siteStatus = 'live',
 }: SiteSystemsManagerProps) {
   const router = useRouter()
   const supabase = createClient()
+
+  const isDead = siteStatus === 'dead'
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<SiteSystem | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
-    name: '',
     system_type_id: '',
-    location: '',
     description: '',
     install_date: '',
   })
 
+  // Add-services-to-a-system flow
+  const [serviceSystemId, setServiceSystemId] = useState<string | null>(null)
+  const [serviceSelection, setServiceSelection] = useState<string[]>([])
+  const [serviceVisitDate, setServiceVisitDate] = useState('')
+  const [addingServices, setAddingServices] = useState(false)
+
+  function systemTypeName(id: string | null): string | null {
+    if (!id) return null
+    return systemTypes.find((s) => s.id === id)?.name ?? null
+  }
+
+  function systemTypeLabel(id: string | null): string | null {
+    if (!id) return null
+    const st = systemTypes.find((s) => s.id === id)
+    if (!st) return null
+    return st.code ? `${st.code} — ${st.name}` : st.name
+  }
+
+  // Title for a system is its system type; fall back to the stored name for
+  // legacy systems created before the type became mandatory.
+  function systemTitle(system: SiteSystem): string {
+    return systemTypeName(system.system_type_id) ?? system.name ?? 'System'
+  }
+
   function openAdd() {
     setEditing(null)
-    setForm({ name: '', system_type_id: '', location: '', description: '', install_date: '' })
+    setForm({ system_type_id: '', description: '', install_date: '' })
     setDialogOpen(true)
   }
 
   function openEdit(system: SiteSystem) {
     setEditing(system)
     setForm({
-      name: system.name,
       system_type_id: system.system_type_id ?? '',
-      location: system.location ?? '',
       description: system.description ?? '',
       install_date: system.install_date ?? '',
     })
@@ -89,16 +116,16 @@ export function SiteSystemsManager({
   }
 
   async function handleSave() {
-    if (!form.name.trim()) {
-      toast.error('Enter a system name')
+    if (!form.system_type_id) {
+      toast.error('Select a system type')
       return
     }
     setSaving(true)
     const payload = {
       site_id: siteId,
-      name: form.name.trim(),
-      system_type_id: form.system_type_id || null,
-      location: form.location.trim() || null,
+      // The system type is the title, so the stored name mirrors it.
+      name: systemTypeName(form.system_type_id) ?? 'System',
+      system_type_id: form.system_type_id,
       description: form.description.trim() || null,
       install_date: form.install_date || null,
     }
@@ -141,6 +168,76 @@ export function SiteSystemsManager({
     router.refresh()
   }
 
+  function openAddServices(systemId: string) {
+    setServiceSystemId(systemId)
+    setServiceSelection([])
+    setServiceVisitDate(new Date().toISOString().slice(0, 10))
+  }
+
+  function toggleServiceType(id: string) {
+    setServiceSelection((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    )
+  }
+
+  // Service types available to add, with those matching the system's type
+  // sorted to the top (and flagged as suggested) so nothing is hidden.
+  function serviceTypesForSystem(system: SiteSystem | undefined): ServiceType[] {
+    if (!system) return availableServiceTypes
+    return [...availableServiceTypes].sort((a, b) => {
+      const am = a.system_type_id === system.system_type_id ? 0 : 1
+      const bm = b.system_type_id === system.system_type_id ? 0 : 1
+      if (am !== bm) return am - bm
+      return a.name.localeCompare(b.name)
+    })
+  }
+
+  async function handleAddServicesToSystem() {
+    if (!serviceSystemId || serviceSelection.length === 0) return
+    setAddingServices(true)
+    const visitDateStr = serviceVisitDate || new Date().toISOString().slice(0, 10)
+
+    const insertData = serviceSelection.map((serviceTypeId) => {
+      const st = availableServiceTypes.find((s) => s.id === serviceTypeId)
+      return {
+        site_id: siteId,
+        service_type_id: serviceTypeId,
+        site_system_id: serviceSystemId,
+        frequency_value: st?.default_frequency_value ?? 12,
+        frequency_unit: st?.default_frequency_unit ?? 'months',
+        worker_type: st?.default_worker_type ?? 'cdo',
+        next_service_date: isDead ? null : visitDateStr,
+      }
+    })
+
+    const { data: inserted, error } = await supabase
+      .from('site_services')
+      .insert(insertData)
+      .select('id')
+
+    if (error) {
+      setAddingServices(false)
+      toast.error(error.message)
+      return
+    }
+
+    // Live sites get a scheduled task for each new service on the visit date.
+    if (!isDead && inserted && inserted.length > 0) {
+      const taskData = (inserted as { id: string }[]).map((row) => ({
+        site_service_id: row.id,
+        scheduled_date: visitDateStr,
+        status: 'pending' as const,
+      }))
+      await supabase.from('tasks').insert(taskData)
+    }
+
+    setAddingServices(false)
+    setServiceSystemId(null)
+    setServiceSelection([])
+    toast.success(`Added ${insertData.length} service${insertData.length !== 1 ? 's' : ''}`)
+    router.refresh()
+  }
+
   // Group services by their site_system_id.
   const servicesBySystem = new Map<string, ServiceWithType[]>()
   const unassigned: ServiceWithType[] = []
@@ -154,12 +251,8 @@ export function SiteSystemsManager({
     }
   }
 
-  function systemTypeLabel(id: string | null): string | null {
-    if (!id) return null
-    const st = systemTypes.find((s) => s.id === id)
-    if (!st) return null
-    return st.code ? `${st.code} — ${st.name}` : st.name
-  }
+  const activeServiceSystem = siteSystems.find((s) => s.id === serviceSystemId)
+  const serviceTypeOptions = serviceTypesForSystem(activeServiceSystem)
 
   return (
     <div className="space-y-4">
@@ -203,23 +296,15 @@ export function SiteSystemsManager({
                   <div className="space-y-1">
                     <CardTitle className="flex items-center gap-2 text-base">
                       <Layers className="h-4 w-4 text-muted-foreground" />
-                      {system.name}
-                      {typeLabel && (
+                      {systemTitle(system)}
+                      {typeLabel && system.system_type_id && (
                         <Badge variant="outline" className="font-mono text-xs">
-                          {typeLabel}
+                          {systemTypes.find((s) => s.id === system.system_type_id)?.code ?? ''}
                         </Badge>
                       )}
                     </CardTitle>
-                    {(system.location || system.description) && (
-                      <CardDescription className="flex flex-col gap-0.5">
-                        {system.location && (
-                          <span className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3" />
-                            {system.location}
-                          </span>
-                        )}
-                        {system.description && <span>{system.description}</span>}
-                      </CardDescription>
+                    {system.description && (
+                      <CardDescription>{system.description}</CardDescription>
                     )}
                   </div>
                   <div className="flex gap-1">
@@ -233,7 +318,7 @@ export function SiteSystemsManager({
                     </Button>
                   </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-3">
                   {services.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No services attached.</p>
                   ) : (
@@ -258,6 +343,15 @@ export function SiteSystemsManager({
                       ))}
                     </ul>
                   )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openAddServices(system.id)}
+                    disabled={availableServiceTypes.length === 0}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add service
+                  </Button>
                 </CardContent>
               </Card>
             )
@@ -295,7 +389,7 @@ export function SiteSystemsManager({
                       <SelectItem value={UNASSIGNED}>Unassigned</SelectItem>
                       {siteSystems.map((system) => (
                         <SelectItem key={system.id} value={system.id}>
-                          {system.name}
+                          {systemTitle(system)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -312,19 +406,10 @@ export function SiteSystemsManager({
           <DialogHeader>
             <DialogTitle>{editing ? 'Edit system' : 'Add system'}</DialogTitle>
             <DialogDescription>
-              A system installed at this site (e.g. &quot;Fire Alarm — Gent panel&quot;).
+              The system type is the title. Add an optional description for extra detail.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
-            <div className="grid gap-2">
-              <Label htmlFor="system-name">Name</Label>
-              <Input
-                id="system-name"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="e.g. Fire Alarm — main panel"
-              />
-            </div>
             <div className="grid gap-2">
               <Label htmlFor="system-type">System type</Label>
               <Select
@@ -344,30 +429,26 @@ export function SiteSystemsManager({
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="system-location">Location</Label>
-              <Input
-                id="system-location"
-                value={form.location}
-                onChange={(e) => setForm({ ...form, location: e.target.value })}
-                placeholder="e.g. Ground floor reception"
+              <Label htmlFor="system-desc">
+                Additional description <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <Textarea
+                id="system-desc"
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                placeholder="e.g. Gent panel in ground floor reception"
+                rows={2}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="system-install">Install date</Label>
+              <Label htmlFor="system-install">
+                Install date <span className="text-muted-foreground">(optional)</span>
+              </Label>
               <Input
                 id="system-install"
                 type="date"
                 value={form.install_date}
                 onChange={(e) => setForm({ ...form, install_date: e.target.value })}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="system-desc">Notes</Label>
-              <Textarea
-                id="system-desc"
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-                rows={2}
               />
             </div>
           </div>
@@ -377,6 +458,91 @@ export function SiteSystemsManager({
             </Button>
             <Button onClick={handleSave} disabled={saving}>
               {saving ? 'Saving...' : editing ? 'Save changes' : 'Add system'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!serviceSystemId}
+        onOpenChange={(open) => !open && setServiceSystemId(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add services</DialogTitle>
+            <DialogDescription>
+              {activeServiceSystem
+                ? `Services added here are linked to ${systemTitle(activeServiceSystem)}.`
+                : 'Services added here are linked to this system.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            {serviceTypeOptions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                All service types are already on this site.
+              </p>
+            ) : (
+              <>
+                <div className="grid gap-2">
+                  <Label>Service types</Label>
+                  <div className="max-h-60 space-y-1 overflow-y-auto rounded-md border p-1">
+                    {serviceTypeOptions.map((st) => {
+                      const suggested =
+                        !!activeServiceSystem &&
+                        st.system_type_id === activeServiceSystem.system_type_id
+                      return (
+                        <label
+                          key={st.id}
+                          className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-accent"
+                        >
+                          <Checkbox
+                            checked={serviceSelection.includes(st.id)}
+                            onCheckedChange={() => toggleServiceType(st.id)}
+                          />
+                          <span className="flex-1 text-sm">{st.name}</span>
+                          {suggested && (
+                            <Badge variant="secondary" className="text-xs">
+                              Suggested
+                            </Badge>
+                          )}
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="service-visit">First visit date</Label>
+                  <Input
+                    id="service-visit"
+                    type="date"
+                    value={serviceVisitDate}
+                    onChange={(e) => setServiceVisitDate(e.target.value)}
+                    disabled={isDead}
+                  />
+                  {isDead && (
+                    <p className="text-xs text-muted-foreground">
+                      This site is Dead — services will be added but no visit is scheduled.
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setServiceSystemId(null)}
+              disabled={addingServices}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAddServicesToSystem}
+              disabled={serviceSelection.length === 0 || addingServices}
+            >
+              {addingServices
+                ? 'Adding...'
+                : `Add ${serviceSelection.length > 0 ? `(${serviceSelection.length})` : ''} service${serviceSelection.length !== 1 ? 's' : ''}`}
             </Button>
           </DialogFooter>
         </DialogContent>

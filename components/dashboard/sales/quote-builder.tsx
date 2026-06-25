@@ -1550,13 +1550,26 @@ function SystemCard({
             <span />
           </div>
 
-          {system.lines.map((line) => {
+          {(() => {
+            // Show products first, then services, with a "Services" heading
+            // before the first service line so they read as their own group.
+            const orderedLines = [
+              ...system.lines.filter((l) => !l.is_service),
+              ...system.lines.filter((l) => l.is_service),
+            ]
+            const firstServiceKey = orderedLines.find((l) => l.is_service)?.key
+            return orderedLines.map((line) => {
             const unitSell = lineSellPence(line, system)
             const lineTotal = Math.round((Number.parseFloat(line.quantity) || 0) * unitSell)
             const marginInherited = line.margin.trim() === ''
             return (
+              <Fragment key={line.key}>
+              {line.key === firstServiceKey && (
+                <p className="pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Services
+                </p>
+              )}
               <div
-                key={line.key}
                 className="grid gap-2 rounded-md border p-2 sm:grid-cols-[1fr_60px_70px_100px_70px_100px_100px_36px] sm:items-start sm:border-0 sm:p-0"
               >
                 <div className="grid gap-1.5">

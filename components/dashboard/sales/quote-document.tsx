@@ -183,6 +183,9 @@ export function QuoteDocument({ quote, systems, lines, company, backHref }: Quot
               const systemLines = lines
                 .filter((l) => l.system_id === system.id)
                 .sort((a, b) => a.position - b.position)
+              // Products and non-product services are shown as separate groups.
+              const productLines = systemLines.filter((l) => !l.is_service)
+              const serviceLines = systemLines.filter((l) => l.is_service)
               const systemTotal = systemLines.reduce((sum, l) => sum + l.line_total_pence, 0)
               const conditional = Object.entries(system.conditional_values ?? {}).filter(
                 ([, value]) => !isOmittedValue(value),
@@ -306,40 +309,60 @@ export function QuoteDocument({ quote, systems, lines, company, backHref }: Quot
 
                   {systemLines.length > 0 && (
                     <>
-                      {quote.show_line_items && (
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-                            <th className="py-1 font-medium">Description</th>
-                            <th className="py-1 text-right font-medium">Qty</th>
-                            <th className="py-1 text-right font-medium">Unit price</th>
-                            <th className="py-1 text-right font-medium">Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {systemLines.map((line) => (
-                            <tr key={line.id} className="border-b border-dashed last:border-0">
-                              <td className="py-2 pr-4 align-top">
-                                <div className="font-medium">{line.description}</div>
-                                {line.detail && (
-                                  <div className="text-xs text-muted-foreground">{line.detail}</div>
-                                )}
-                              </td>
-                              <td className="py-2 text-right align-top tabular-nums">
-                                {line.quantity}
-                                {line.unit ? ` ${line.unit}` : ''}
-                              </td>
-                              <td className="py-2 text-right align-top tabular-nums">
-                                {formatPence(line.unit_price_pence, quote.currency)}
-                              </td>
-                              <td className="py-2 text-right align-top font-medium tabular-nums">
-                                {formatPence(line.line_total_pence, quote.currency)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      )}
+                      {quote.show_line_items &&
+                        (
+                          [
+                            { heading: null, rows: productLines },
+                            { heading: 'Services', rows: serviceLines },
+                          ] as const
+                        ).map((group) =>
+                          group.rows.length === 0 ? null : (
+                            <div key={group.heading ?? 'products'} className="mt-3 first:mt-0">
+                              {group.heading && (
+                                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                  {group.heading}
+                                </div>
+                              )}
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                                    <th className="py-1 font-medium">Description</th>
+                                    <th className="py-1 text-right font-medium">Qty</th>
+                                    <th className="py-1 text-right font-medium">Unit price</th>
+                                    <th className="py-1 text-right font-medium">Total</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {group.rows.map((line) => (
+                                    <tr
+                                      key={line.id}
+                                      className="border-b border-dashed last:border-0"
+                                    >
+                                      <td className="py-2 pr-4 align-top">
+                                        <div className="font-medium">{line.description}</div>
+                                        {line.detail && (
+                                          <div className="text-xs text-muted-foreground">
+                                            {line.detail}
+                                          </div>
+                                        )}
+                                      </td>
+                                      <td className="py-2 text-right align-top tabular-nums">
+                                        {line.quantity}
+                                        {line.unit ? ` ${line.unit}` : ''}
+                                      </td>
+                                      <td className="py-2 text-right align-top tabular-nums">
+                                        {formatPence(line.unit_price_pence, quote.currency)}
+                                      </td>
+                                      <td className="py-2 text-right align-top font-medium tabular-nums">
+                                        {formatPence(line.line_total_pence, quote.currency)}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ),
+                        )}
                       <div className="mt-1 text-right text-sm text-muted-foreground">
                         System total:{' '}
                         <span className="font-medium text-foreground tabular-nums">

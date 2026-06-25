@@ -1524,7 +1524,7 @@ function SystemCard({
             Step 4 · Line items &amp; pricing
           </p>
           <div className="hidden gap-2 px-1 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[1fr_60px_70px_100px_70px_100px_100px_36px]">
-            <span>Description</span>
+            <span>Product code</span>
             <span className="text-right">Qty</span>
             <span>Unit</span>
             <span className="text-right">Unit cost</span>
@@ -1553,10 +1553,10 @@ function SystemCard({
                   Services
                 </p>
               )}
-              <div
-                className="grid gap-2 rounded-md border p-2 sm:grid-cols-[1fr_60px_70px_100px_70px_100px_100px_36px] sm:items-start sm:border-0 sm:p-0"
-              >
-                <div className="grid gap-1.5">
+              <div className="grid gap-2 rounded-md border p-2 sm:border-0 sm:p-0">
+                {/* Pricing row: product code + numeric fields stay aligned to
+                    the column headers above. */}
+                <div className="grid gap-2 sm:grid-cols-[1fr_60px_70px_100px_70px_100px_100px_36px] sm:items-center">
                   <ProductCodeInput
                     value={line.productCode}
                     listId={`catalogue-codes-${line.key}`}
@@ -1565,76 +1565,79 @@ function SystemCard({
                     onResolve={(item) => onApplyCatalogueToLine(line.key, item)}
                   />
                   <Input
-                    value={line.description}
-                    onChange={(e) => onUpdateLine(line.key, { description: e.target.value })}
-                    placeholder="Item description"
+                    inputMode="decimal"
+                    value={line.quantity}
+                    onChange={(e) => onUpdateLine(line.key, { quantity: e.target.value })}
+                    className="text-right"
+                    aria-label="Quantity"
                     disabled={disabled}
                   />
                   <Input
-                    value={line.detail}
-                    onChange={(e) => onUpdateLine(line.key, { detail: e.target.value })}
-                    placeholder="Extra detail (optional)"
-                    className="text-xs"
+                    value={line.unit}
+                    onChange={(e) => onUpdateLine(line.key, { unit: e.target.value })}
+                    placeholder="each"
+                    aria-label="Unit"
                     disabled={disabled}
                   />
-                </div>
-                <Input
-                  inputMode="decimal"
-                  value={line.quantity}
-                  onChange={(e) => onUpdateLine(line.key, { quantity: e.target.value })}
-                  className="text-right"
-                  aria-label="Quantity"
-                  disabled={disabled}
-                />
-                <Input
-                  value={line.unit}
-                  onChange={(e) => onUpdateLine(line.key, { unit: e.target.value })}
-                  placeholder="each"
-                  aria-label="Unit"
-                  disabled={disabled}
-                />
-                <Input
-                  inputMode="decimal"
-                  value={line.unitCost}
-                  onChange={(e) => onUpdateLine(line.key, { unitCost: e.target.value })}
-                  onBlur={(e) =>
-                    onUpdateLine(line.key, { unitCost: penceToPounds(poundsToPence(e.target.value)) })
-                  }
-                  className="text-right"
-                  aria-label="Unit cost in pounds"
-                  disabled={disabled}
-                />
-                <Input
-                  inputMode="decimal"
-                  value={line.margin}
-                  onChange={(e) => onUpdateLine(line.key, { margin: e.target.value })}
-                  placeholder={String(Number.parseFloat(system.margin) || 0)}
-                  className="text-right"
-                  aria-label="Margin percent (blank inherits system margin)"
-                  title={marginInherited ? 'Inheriting system margin' : 'Line margin override'}
-                  disabled={disabled}
-                />
-                <div
-                  className="flex h-9 items-center justify-end text-sm tabular-nums text-muted-foreground"
-                  aria-label="Computed unit price"
-                >
-                  {formatPence(unitSell)}
-                </div>
-                <div className="flex h-9 items-center justify-end text-sm font-medium tabular-nums">
-                  {formatPence(lineTotal)}
-                </div>
-                {!readOnly && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-9 text-muted-foreground"
-                    onClick={() => onRemoveLine(line.key)}
-                    disabled={isPending}
+                  <Input
+                    inputMode="decimal"
+                    value={line.unitCost}
+                    onChange={(e) => onUpdateLine(line.key, { unitCost: e.target.value })}
+                    onBlur={(e) =>
+                      onUpdateLine(line.key, { unitCost: penceToPounds(poundsToPence(e.target.value)) })
+                    }
+                    className="text-right"
+                    aria-label="Unit cost in pounds"
+                    disabled={disabled}
+                  />
+                  <Input
+                    inputMode="decimal"
+                    value={line.margin}
+                    onChange={(e) => onUpdateLine(line.key, { margin: e.target.value })}
+                    placeholder={String(Number.parseFloat(system.margin) || 0)}
+                    className="text-right"
+                    aria-label="Margin percent (blank inherits system margin)"
+                    title={marginInherited ? 'Inheriting system margin' : 'Line margin override'}
+                    disabled={disabled}
+                  />
+                  <div
+                    className="flex h-9 items-center justify-end text-sm tabular-nums text-muted-foreground"
+                    aria-label="Computed unit price"
                   >
-                    <Trash2 className="h-4 w-4" />
-                    <span className="sr-only">Remove line</span>
-                  </Button>
-                )}
+                    {formatPence(unitSell)}
+                  </div>
+                  <div className="flex h-9 items-center justify-end text-sm font-medium tabular-nums">
+                    {formatPence(lineTotal)}
+                  </div>
+                  {!readOnly && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 text-muted-foreground"
+                      onClick={() => onRemoveLine(line.key)}
+                      disabled={isPending}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span className="sr-only">Remove line</span>
+                    </Button>
+                  )}
+                </div>
+                {/* Description + extra detail span the full row width so long
+                    catalogue names are fully readable. */}
+                <Input
+                  value={line.description}
+                  onChange={(e) => onUpdateLine(line.key, { description: e.target.value })}
+                  placeholder="Item description"
+                  className="w-full"
+                  disabled={disabled}
+                />
+                <Input
+                  value={line.detail}
+                  onChange={(e) => onUpdateLine(line.key, { detail: e.target.value })}
+                  placeholder="Extra detail (optional)"
+                  className="w-full text-xs"
+                  disabled={disabled}
+                />
               </div>
               </Fragment>
             )

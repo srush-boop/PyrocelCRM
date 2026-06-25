@@ -1,29 +1,7 @@
 // Sales / quoting shared helpers: quote-type catalogue, money math, and
 // status metadata. Money is always integer pence internally.
 
-import type { SupabaseClient } from '@supabase/supabase-js'
-import type { QuoteCatalogueItem, QuoteLineItem, QuoteStatus } from '@/lib/types/database'
-
-// Supabase caps a single select at 1000 rows. The quote catalogue can hold
-// several thousand items, so fetch it in batches to guarantee every item is
-// available to client-side search. Pass activeOnly to limit to active items
-// (used by the quote builder); omit it to load everything (catalogue admin).
-export async function fetchAllCatalogueItems(
-  supabase: SupabaseClient,
-  options: { activeOnly?: boolean } = {},
-): Promise<QuoteCatalogueItem[]> {
-  const BATCH = 1000
-  const all: QuoteCatalogueItem[] = []
-  for (let from = 0; ; from += BATCH) {
-    let query = supabase.from('quote_catalogue_items').select('*').order('name')
-    if (options.activeOnly) query = query.eq('active', true)
-    const { data, error } = await query.range(from, from + BATCH - 1)
-    if (error || !data || data.length === 0) break
-    all.push(...(data as QuoteCatalogueItem[]))
-    if (data.length < BATCH) break
-  }
-  return all
-}
+import type { QuoteLineItem, QuoteStatus } from '@/lib/types/database'
 
 // --- Quote types -------------------------------------------------------
 // Futureproof: the canonical list lives here (not a DB enum) so new offer

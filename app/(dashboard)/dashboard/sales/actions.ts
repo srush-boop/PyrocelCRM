@@ -397,6 +397,39 @@ export async function searchCatalogueItems(
   return data as QuoteCatalogueItem[]
 }
 
+// Paginated catalogue listing for the catalogue admin page. The table has
+// thousands of rows, so we never load them all into the browser — we fetch one
+// page at a time from the database (with an optional search term) and return the
+// total count so the UI can render pager controls. Unlike searchCatalogueItems
+// this includes inactive items so they can be managed.
+export async function fetchCataloguePage(options: {
+  search?: string
+  page?: number
+  pageSize?: number
+}): Promise<{ items: QuoteCatalogueItem[]; total: number }> {
+  const { supabase, error } = await requireStaff()
+  if (error) return { items: [], total: 0 }
+
+  const pageSize = Math.min(Math.max(options.pageSize ?? 50, 1), 100)
+  const page = Math.max(options.page ?? 0, 0)
+  const from = page * pageSize
+  const to = from + pageSize - 1
+
+  let q = supabase.from('quote_catalogue_items').select('*', { count: 'exact' })
+
+  const term = (options.search ?? '').trim()
+  if (term) {
+    const escaped = term.replace(/[%_,]/g, (m) => `\\${m}`)
+    q = q.or(
+      `name.ilike.%${escaped}%,product_code.ilike.%${escaped}%,category.ilike.%${escaped}%,description.ilike.%${escaped}%`,
+    )
+  }
+
+  const { data, count, error: dbError } = await q.order('name').range(from, to)
+  if (dbError || !data) return { items: [], total: 0 }
+  return { items: data as QuoteCatalogueItem[], total: count ?? 0 }
+}
+
 // Resolve a single catalogue item by exact product code (used when a user types
 // a code into a line's product-code box). Returns null when there's no match.
 export async function getCatalogueItemByCode(

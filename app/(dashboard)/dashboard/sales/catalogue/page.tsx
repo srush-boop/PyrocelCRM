@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
 import { CatalogueManager } from '@/components/dashboard/sales/catalogue-manager'
 import { ProductSheetPanel } from '@/components/dashboard/sales/product-sheet-panel'
-import { fetchAllCatalogueItems } from '@/lib/sales'
+import { fetchCataloguePage } from '@/app/(dashboard)/dashboard/sales/actions'
 import type { Profile, ProductSheet, ServiceType } from '@/lib/types/database'
 
 export const metadata = { title: 'Quote Catalogue | Pyrocel' }
@@ -22,8 +22,8 @@ export default async function CataloguePage() {
     redirect('/dashboard')
   }
 
-  const [items, { data: serviceTypes }, { data: currentSheet }] = await Promise.all([
-    fetchAllCatalogueItems(supabase),
+  const [firstPage, { data: serviceTypes }, { data: currentSheet }] = await Promise.all([
+    fetchCataloguePage({ page: 0, pageSize: 50 }),
     supabase.from('service_types').select('id, name').eq('status', 'live').order('name'),
     supabase
       .from('product_sheets')
@@ -52,7 +52,9 @@ export default async function CataloguePage() {
       <ProductSheetPanel current={(currentSheet as ProductSheet | null) ?? null} />
 
       <CatalogueManager
-        items={items}
+        initialItems={firstPage.items}
+        initialTotal={firstPage.total}
+        pageSize={50}
         serviceTypes={(serviceTypes ?? []) as ServiceType[]}
       />
     </div>

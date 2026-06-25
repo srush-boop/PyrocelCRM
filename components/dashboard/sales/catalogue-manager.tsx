@@ -1,7 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
+import { useCallback, useEffect, useState, useTransition } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -45,7 +44,11 @@ import { Plus, Pencil, Trash2, Loader2, PackageOpen, Search, ChevronLeft, Chevro
 import { toast } from 'sonner'
 import { formatPence, penceToPounds, poundsToPence, sellFromCost } from '@/lib/sales'
 import type { QuoteCatalogueItem, ServiceType } from '@/lib/types/database'
-import { saveCatalogueItem, deleteCatalogueItem } from '@/app/(dashboard)/dashboard/sales/actions'
+import {
+  saveCatalogueItem,
+  deleteCatalogueItem,
+  fetchCataloguePage,
+} from '@/app/(dashboard)/dashboard/sales/actions'
 
 const NO_SERVICE = '__none__'
 
@@ -76,18 +79,17 @@ function emptyForm(): FormState {
   }
 }
 
-// Render only a slice of the (potentially thousands of) catalogue items so the
-// DOM stays small and the page remains responsive.
-const PAGE_SIZE = 50
-
 export function CatalogueManager({
-  items,
+  initialItems,
+  initialTotal,
+  pageSize,
   serviceTypes,
 }: {
-  items: QuoteCatalogueItem[]
+  initialItems: QuoteCatalogueItem[]
+  initialTotal: number
+  pageSize: number
   serviceTypes: ServiceType[]
 }) {
-  const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [form, setForm] = useState<FormState>(emptyForm())
@@ -95,24 +97,46 @@ export function CatalogueManager({
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
 
-  // Filter by name, product code, category or description. Memoised so we only
-  // recompute when the source list or query changes (the list can be large).
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return items
-    return items.filter((item) =>
-      [item.name, item.product_code, item.category, item.description]
-        .filter(Boolean)
-        .some((field) => (field as string).toLowerCase().includes(q)),
-    )
-  }, [items, search])
+  // The catalogue can hold thousands of rows, so we fetch one page at a time
+  // from the server (with the search term applied in SQL) instead of loading
+  // everything into the browser. The first page is provided by the server
+  // component so there's no loading flash on initial render.
+  const [items, setItems] = useState<QuoteCatalogueItem[]>(initialItems)
+  const [total, setTotal] = useState(initialTotal)
+  const [loading, setLoading] = useState(false)
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const PAGE_SIZE = pageSize
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const safePage = Math.min(page, pageCount - 1)
-  const pageItems = useMemo(
-    () => filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE),
-    [filtered, safePage],
+
+  const loadPage = useCallback(
+    async (opts: { search: string; page: number }) => {
+      setLoading(true)
+      const res = await fetchCataloguePage({
+        search: opts.search,
+        page: opts.page,
+        pageSize: PAGE_SIZE,
+      })
+      setItems(res.items)
+      setTotal(res.total)
+      setLoading(false)
+    },
+    [PAGE_SIZE],
   )
+
+  // Debounce search; refetch immediately on page changes. We skip the very
+  // first render because the server already supplied page 0 with no search.
+  const [hydrated, setHydrated] = useState(false)
+  useEffect(() => {
+    if (!hydrated) {
+      setHydrated(true)
+      return
+    }
+    const handle = setTimeout(() => {
+      void loadPage({ search, page })
+    }, 250)
+    return () => clearTimeout(handle)
+  }, [search, page, hydrated, loadPage])
 
   function onSearchChange(value: string) {
     setSearch(value)
@@ -157,7 +181,7 @@ export function CatalogueManager({
       if (res.ok) {
         toast.success('Catalogue item saved')
         setDialogOpen(false)
-        router.refresh()
+        await loadPage({ search, page })
       } else {
         toast.error(res.error ?? 'Could not save item')
       }
@@ -172,7 +196,10 @@ export function CatalogueManager({
       if (res.ok) {
         toast.success('Catalogue item deleted')
         setDeleteTarget(null)
-        router.refresh()
+        // If we just removed the last item on the page, step back a page.
+        const nextPage = items.length === 1 && page > 0 ? page - 1 : page
+        setPage(nextPage)
+        await loadPage({ search, page: nextPage })
       } else {
         toast.error(res.error ?? 'Could not delete item')
       }
@@ -199,7 +226,7 @@ export function CatalogueManager({
       </div>
 
       <Card>
-        {items.length === 0 ? (
+        {total === 0 && !search.trim() ? (
           <div className="flex flex-col items-center justify-center gap-2 p-12 text-center">
             <PackageOpen className="h-8 w-8 text-muted-foreground" />
             <p className="font-medium">No catalogue items yet</p>
@@ -207,7 +234,7 @@ export function CatalogueManager({
               Add standard products and services to speed up quoting.
             </p>
           </div>
-        ) : filtered.length === 0 ? (
+        ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 p-12 text-center">
             <Search className="h-8 w-8 text-muted-foreground" />
             <p className="font-medium">No matching items</p>
@@ -231,7 +258,7 @@ export function CatalogueManager({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {pageItems.map((item) => (
+              {items.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell className="font-mono text-xs text-muted-foreground">
                     {item.product_code ?? '—'}
@@ -280,11 +307,12 @@ export function CatalogueManager({
         )}
       </Card>
 
-      {filtered.length > PAGE_SIZE && (
+      {total > PAGE_SIZE && (
         <div className="flex items-center justify-between gap-4">
           <p className="text-sm text-muted-foreground">
-            Showing {safePage * PAGE_SIZE + 1}–{Math.min((safePage + 1) * PAGE_SIZE, filtered.length)} of{' '}
-            {filtered.length}
+            {loading
+              ? 'Loading…'
+              : `Showing ${safePage * PAGE_SIZE + 1}–${Math.min((safePage + 1) * PAGE_SIZE, total)} of ${total}`}
           </p>
           <div className="flex items-center gap-2">
             <Button

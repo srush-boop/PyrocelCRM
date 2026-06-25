@@ -181,6 +181,7 @@ export function QuotesTable({
                 <TableHead>Type</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Total</TableHead>
+                <TableHead>Created</TableHead>
                 <TableHead>Valid until</TableHead>
                 <TableHead className="w-10" />
               </TableRow>
@@ -224,6 +225,9 @@ export function QuotesTable({
                   </TableCell>
                   <TableCell className="text-right font-medium tabular-nums">
                     {formatPence(quote.total_pence, quote.currency)}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {quote.created_at ? formatDateUK(quote.created_at) : '—'}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {quote.valid_until ? formatDateUK(quote.valid_until) : '—'}

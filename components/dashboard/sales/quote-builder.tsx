@@ -932,7 +932,19 @@ export function QuoteBuilder({
       </Card>
 
       {!readOnly && (
-        <div className="sticky bottom-4 flex justify-end">
+        <div className="sticky bottom-4 flex items-center justify-end gap-3">
+          {canAutosave && autosaveState !== 'idle' && (
+            <span
+              className="rounded-md bg-background/80 px-3 py-1.5 text-sm text-muted-foreground shadow-sm backdrop-blur"
+              aria-live="polite"
+            >
+              {autosaveState === 'saving' && 'Saving…'}
+              {autosaveState === 'saved' && 'All changes saved'}
+              {autosaveState === 'error' && (
+                <span className="text-destructive">Couldn&apos;t autosave</span>
+              )}
+            </span>
+          )}
           <Button size="lg" onClick={handleSave} disabled={isPending || !title.trim()} className="shadow-lg">
             <Save className="mr-2 h-4 w-4" />
             {quote?.id ? 'Save changes' : 'Create quote'}

@@ -1,6 +1,5 @@
 'use server'
 
-import { put } from '@vercel/blob'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 type Result = { ok: boolean; error?: string }
@@ -54,20 +53,11 @@ export async function respondToPublicQuote(args: {
       patch.signed_at = new Date().toISOString()
     }
 
-    // Persist the drawn signature image to Blob storage.
+    // Store the drawn signature inline as a data URL. Signatures are small
+    // (a few KB) so this avoids Blob storage and works everywhere the image is
+    // shown (staff panel, PDF, public page) without signed-URL handling.
     if (args.signatureDataUrl?.startsWith('data:image/')) {
-      try {
-        const base64 = args.signatureDataUrl.split(',')[1] ?? ''
-        const bytes = Buffer.from(base64, 'base64')
-        const blob = await put(`quote-signatures/${quote.id}-${Date.now()}.png`, bytes, {
-          access: 'public',
-          contentType: 'image/png',
-        })
-        patch.signature_image_url = blob.url
-      } catch (e) {
-        console.error('[v0] Signature upload failed:', e)
-        return { ok: false, error: 'Could not save the signature. Please try again.' }
-      }
+      patch.signature_image_url = args.signatureDataUrl
     }
   }
 

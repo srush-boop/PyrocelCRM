@@ -364,7 +364,7 @@ export function QuoteDocument({ quote, systems, lines, company, backHref }: Quot
                           ),
                         )}
                       <div className="mt-1 text-right text-sm text-muted-foreground">
-                        System total:{' '}
+                        Total:{' '}
                         <span className="font-medium text-foreground tabular-nums">
                           {formatPence(systemTotal, quote.currency)}
                         </span>

@@ -1759,7 +1759,7 @@ function SystemCard({
                 )}
               </div>
               <div className="text-sm text-muted-foreground">
-                System total:{' '}
+                Total:{' '}
                 <span className="font-medium text-foreground tabular-nums">
                   {formatPence(systemTotalPence)}
                 </span>

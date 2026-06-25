@@ -292,7 +292,7 @@ function QuotePdfDocument({
                       )
                     : null}
                   <Text style={styles.systemTotal}>
-                    System total:{' '}
+                    Total:{' '}
                     <Text style={[styles.bold, { color: '#0f172a' }]}>
                       {formatPence(systemTotal, quote.currency)}
                     </Text>

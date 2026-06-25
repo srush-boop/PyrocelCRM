@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -41,7 +41,7 @@ import { Label } from '@/components/ui/label'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { describeTolerance } from '@/lib/kpi'
-import type { ServiceType, SiteService, Profile, Task, Route, Area, Subcontractor, WorkerType } from '@/lib/types/database'
+import type { ServiceType, SiteService, Profile, Task, Route, Area, Subcontractor, WorkerType, ToleranceUnit } from '@/lib/types/database'
 import {
   WORKER_TYPE_LABELS,
   allowedMethodsForWorker,
@@ -53,6 +53,9 @@ const NONE_VALUE = '__none__'
 
 interface SiteServicesManagerProps {
   siteId: string
+  // When set (via the ?editService= URL param, e.g. after adding a service
+  // from a system), the edit dialog for this service opens automatically.
+  initialEditServiceId?: string
   siteServices: (SiteService & { service_type: ServiceType })[]
   availableServiceTypes: ServiceType[]
   engineers?: Profile[]
@@ -65,6 +68,7 @@ interface SiteServicesManagerProps {
 
 export function SiteServicesManager({
   siteId,
+  initialEditServiceId,
   siteServices,
   availableServiceTypes,
   engineers = [],
@@ -85,6 +89,11 @@ export function SiteServicesManager({
   const [editFrequencyValue, setEditFrequencyValue] = useState<number>(12)
   const [editFrequencyUnit, setEditFrequencyUnit] = useState<'weeks' | 'months'>('months')
   const [editToleranceDays, setEditToleranceDays] = useState<number>(7)
+  const [editToleranceUnit, setEditToleranceUnit] = useState<ToleranceUnit>('days')
+  // Client KPI override for this site/service. Empty string = no override
+  // (falls back to the service type's regulatory KPI).
+  const [editClientToleranceValue, setEditClientToleranceValue] = useState<string>('')
+  const [editClientToleranceUnit, setEditClientToleranceUnit] = useState<ToleranceUnit>('months')
   const [editWorkerType, setEditWorkerType] = useState<WorkerType>('cdo')
   const [editMethod, setEditMethod] = useState<AssignmentMethod>('route')
   const [editRouteId, setEditRouteId] = useState<string>(NONE_VALUE)
@@ -105,6 +114,7 @@ export function SiteServicesManager({
   const [scheduling, setScheduling] = useState(false)
 
   const router = useRouter()
+  const pathname = usePathname()
   const supabase = createClient()
 
   const isDead = siteStatus === 'dead'
@@ -164,6 +174,11 @@ export function SiteServicesManager({
     setEditFrequencyValue(ss.frequency_value)
     setEditFrequencyUnit(ss.frequency_unit)
     setEditToleranceDays(ss.deadline_tolerance_days)
+    setEditToleranceUnit((ss.deadline_tolerance_unit as ToleranceUnit) || 'days')
+    setEditClientToleranceValue(
+      ss.client_tolerance_value != null ? String(ss.client_tolerance_value) : '',
+    )
+    setEditClientToleranceUnit((ss.client_tolerance_unit as ToleranceUnit) || 'months')
     const workerType = (ss.worker_type as WorkerType) || 'cdo'
     setEditWorkerType(workerType)
     setEditRouteId(ss.route_id || NONE_VALUE)
@@ -184,6 +199,19 @@ export function SiteServicesManager({
     setEditAnchorNextToSchedule(ss.anchor_next_to_schedule ?? true)
     setNewEmail('')
   }
+
+  // Auto-open the edit dialog when arrived at via ?editService= (e.g. straight
+  // after adding a service from a system). Runs once on mount.
+  const autoOpenedRef = useRef(false)
+  useEffect(() => {
+    if (autoOpenedRef.current || !initialEditServiceId) return
+    const match = siteServices.find((s) => s.id === initialEditServiceId)
+    if (match) {
+      autoOpenedRef.current = true
+      openEditDialog(match)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleAddEmail = () => {
     const email = newEmail.trim()
@@ -211,6 +239,14 @@ export function SiteServicesManager({
         frequency_value: editFrequencyValue,
         frequency_unit: editFrequencyUnit,
         deadline_tolerance_days: editToleranceDays,
+        deadline_tolerance_unit: editToleranceUnit,
+        // Client KPI override: blank clears it (inherits regulatory default).
+        client_tolerance_value:
+          editClientToleranceValue.trim() === ''
+            ? null
+            : Math.max(0, parseInt(editClientToleranceValue, 10) || 0),
+        client_tolerance_unit:
+          editClientToleranceValue.trim() === '' ? null : editClientToleranceUnit,
         worker_type: editWorkerType,
         route_id: routeId,
         area_id: areaId,
@@ -344,7 +380,13 @@ export function SiteServicesManager({
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
                         <span>Every {ss.frequency_value} {ss.frequency_unit}</span>
                         <span>•</span>
-                        <span>Tolerance: {ss.deadline_tolerance_days} days</span>
+                        <span>
+                          Tolerance:{' '}
+                          {describeTolerance({
+                            value: ss.deadline_tolerance_days,
+                            unit: (ss.deadline_tolerance_unit as ToleranceUnit) || 'days',
+                          })}
+                        </span>
                         {ss.next_service_date && (
                           <>
                             <span>•</span>
@@ -654,7 +696,16 @@ export function SiteServicesManager({
       </AlertDialog>
 
       {/* Edit Service Dialog */}
-      <Dialog open={!!editingId} onOpenChange={(open) => !open && setEditingId(null)}>
+      <Dialog
+        open={!!editingId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingId(null)
+            // Drop the ?editService= param so it doesn't reopen on refresh.
+            if (initialEditServiceId) router.replace(pathname)
+          }
+        }}
+      >
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Service</DialogTitle>
@@ -692,19 +743,107 @@ export function SiteServicesManager({
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="tolerance-days">Deadline Tolerance (days)</Label>
-              <Input
-                id="tolerance-days"
-                type="number"
-                min={1}
-                max={365}
-                value={editToleranceDays}
-                onChange={(e) => setEditToleranceDays(parseInt(e.target.value) || 7)}
-              />
+              <Label htmlFor="tolerance-value">Deadline Tolerance</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="tolerance-value"
+                  type="number"
+                  min={1}
+                  max={editToleranceUnit === 'months' ? 24 : 365}
+                  value={editToleranceDays}
+                  onChange={(e) => setEditToleranceDays(parseInt(e.target.value) || 1)}
+                  className="flex-1"
+                />
+                <Select
+                  value={editToleranceUnit}
+                  onValueChange={(v) => setEditToleranceUnit(v as ToleranceUnit)}
+                >
+                  <SelectTrigger className="w-32" aria-label="Deadline tolerance unit">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="days">Days</SelectItem>
+                    <SelectItem value="months">Months</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <p className="text-xs text-muted-foreground">
-                How many days after the due date before this service is considered overdue
+                How long after the due date before this service is considered overdue
               </p>
             </div>
+
+            {(() => {
+              const editingService = siteServices.find((s) => s.id === editingId)
+              const regValue = editingService?.service_type?.regulatory_tolerance_value ?? 0
+              const regUnit = (editingService?.service_type?.regulatory_tolerance_unit ??
+                'months') as ToleranceUnit
+              const regLabel = describeTolerance({ value: regValue, unit: regUnit })
+              const hasOverride = editClientToleranceValue.trim() !== ''
+              return (
+                <div className="grid gap-2 rounded-lg border border-border p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <Label htmlFor="client-kpi-value">Client KPI (optional)</Label>
+                      <p className="text-xs text-muted-foreground">
+                        A tighter target shared with the client. Leave blank to use the
+                        regulatory standard ({regLabel}).
+                      </p>
+                    </div>
+                    {hasOverride && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEditClientToleranceValue('')}
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      id="client-kpi-value"
+                      type="number"
+                      min={0}
+                      max={60}
+                      placeholder="Inherit"
+                      value={editClientToleranceValue}
+                      onChange={(e) => setEditClientToleranceValue(e.target.value)}
+                    />
+                    <Select
+                      value={editClientToleranceUnit}
+                      onValueChange={(v) => setEditClientToleranceUnit(v as ToleranceUnit)}
+                    >
+                      <SelectTrigger id="client-kpi-unit" aria-label="Client KPI unit">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="days">Days</SelectItem>
+                        <SelectItem value="months">Months</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {hasOverride ? (
+                      <>
+                        Client target:{' '}
+                        <span className="font-medium text-foreground">
+                          {describeTolerance({
+                            value: parseInt(editClientToleranceValue, 10) || 0,
+                            unit: editClientToleranceUnit,
+                          })}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        Using regulatory standard:{' '}
+                        <span className="font-medium text-foreground">{regLabel}</span>
+                      </>
+                    )}
+                  </p>
+                </div>
+              )
+            })()}
 
             <div className="grid gap-2">
               <Label>Next Service Date</Label>

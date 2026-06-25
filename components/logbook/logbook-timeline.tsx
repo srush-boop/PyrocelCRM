@@ -23,6 +23,8 @@ import {
   Wind,
   Users,
   ClipboardList,
+  DoorClosed,
+  GraduationCap,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -31,7 +33,9 @@ const SYSTEM_ICONS: Record<LogbookSystemId, LucideIcon> = {
   emergency_lighting: Lightbulb,
   extinguishers: FireExtinguisher,
   dampers: Wind,
+  fire_doors: DoorClosed,
   fire_drill: Users,
+  training: GraduationCap,
   general: ClipboardList,
 }
 

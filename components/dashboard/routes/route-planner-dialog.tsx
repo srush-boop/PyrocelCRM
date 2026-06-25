@@ -21,6 +21,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ArrowUp, ArrowDown, Loader2, MapPin, Building2, Plus, X } from 'lucide-react'
+import { resolveAssignedEngineerId } from '@/lib/assignment'
+import type { WorkerType } from '@/lib/types/database'
 
 export interface PlannerService {
   id: string
@@ -34,6 +36,18 @@ export interface PlannerSite {
   route_id: string | null
   route_position: number | null
   services: PlannerService[]
+}
+
+// Shape returned when re-resolving a service's engineer after a route change.
+type EngineerRel = { assigned_engineer_id: string | null } | { assigned_engineer_id: string | null }[] | null
+interface RawAffectedService {
+  id: string
+  worker_type: WorkerType
+  assigned_engineer_id: string | null
+  route_id: string | null
+  area_id: string | null
+  route: EngineerRel
+  area: EngineerRel
 }
 
 interface RoutePlannerDialogProps {
@@ -137,6 +151,10 @@ export function RoutePlannerDialog({
     const updatedAt = new Date().toISOString()
     const orderIds = new Set(order.map((s) => s.id))
 
+    // Services whose route membership changed in this save. Their open calls
+    // need their engineer recomputed afterwards (step 4).
+    const affectedServiceIds: string[] = []
+
     // 1) Per-service route assignment for every known site/service.
     for (const site of sites) {
       const sel = selected[site.id] ?? new Set<string>()
@@ -147,11 +165,13 @@ export function RoutePlannerDialog({
             .from('site_services')
             .update({ route_id: routeId })
             .eq('id', svc.id)
+          affectedServiceIds.push(svc.id)
         } else if (!shouldBeOnRoute && svc.route_id === routeId) {
           await supabase
             .from('site_services')
             .update({ route_id: null })
             .eq('id', svc.id)
+          affectedServiceIds.push(svc.id)
         }
       }
     }
@@ -172,6 +192,35 @@ export function RoutePlannerDialog({
         .from('sites')
         .update({ route_id: null, route_position: null, updated_at: updatedAt })
         .eq('id', site.id)
+    }
+
+    // 4) Keep open calls in sync with route membership. For every service whose
+    // route changed, recompute its engineer (direct override → route → area)
+    // and push that onto its pending tasks, so newly-routed calls pick up the
+    // route's engineer and de-routed calls fall back correctly.
+    if (affectedServiceIds.length > 0) {
+      const { data: affected } = await supabase
+        .from('site_services')
+        .select('id, worker_type, assigned_engineer_id, route_id, area_id, route:routes(assigned_engineer_id), area:areas(assigned_engineer_id)')
+        .in('id', affectedServiceIds)
+
+      for (const svc of (affected ?? []) as RawAffectedService[]) {
+        const route = Array.isArray(svc.route) ? svc.route[0] : svc.route
+        const area = Array.isArray(svc.area) ? svc.area[0] : svc.area
+        const resolved = resolveAssignedEngineerId({
+          worker_type: svc.worker_type,
+          assigned_engineer_id: svc.assigned_engineer_id,
+          route_id: svc.route_id,
+          area_id: svc.area_id,
+          route: route ? { assigned_engineer_id: route.assigned_engineer_id } : null,
+          area: area ? { assigned_engineer_id: area.assigned_engineer_id } : null,
+        })
+        await supabase
+          .from('tasks')
+          .update({ assigned_engineer_id: resolved })
+          .eq('site_service_id', svc.id)
+          .eq('status', 'pending')
+      }
     }
 
     setSaving(false)

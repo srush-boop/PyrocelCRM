@@ -1,4 +1,4 @@
-import { getAuthContext } from '@/lib/auth'
+import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import { ServiceReport } from '@/components/dashboard/reports/service-report'
 import type {
@@ -14,8 +14,18 @@ interface PageProps {
 
 export default async function ServiceReportPage({ params }: PageProps) {
   const { taskId } = await params
-  const { supabase, user, profile } = await getAuthContext()
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single()
   if (!profile) redirect('/auth/login')
 
   const { data: task } = await supabase

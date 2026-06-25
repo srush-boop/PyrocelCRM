@@ -47,6 +47,10 @@ export interface KpiTask {
   siteName: string
   clientId: string | null
   clientName: string | null
+  // Client KPI tier for this specific site/service. When a site/service has no
+  // client override, this falls back to the regulatory standard (set upstream
+  // in kpi-data), so the client tier always has a figure to report against.
+  clientTolerance?: ToleranceConfig
 }
 
 function toDate(value: string | Date | null): Date | null {
@@ -170,8 +174,11 @@ export function buildKpiReport(
   for (const task of tasks) {
     const tol = tolerances[task.serviceTypeId]
     if (!tol) continue
+    // Regulatory = the service type's legal baseline. Client = this site/service's
+    // override when present, otherwise the regulatory standard as the default.
+    const clientTol = task.clientTolerance ?? tol.regulatory
     const regStatus = classifyTask(task, tol.regulatory, today)
-    const clientStatus = classifyTask(task, tol.client, today)
+    const clientStatus = classifyTask(task, clientTol, today)
 
     addToCounts(overallReg, regStatus)
     addToCounts(overallClient, clientStatus)

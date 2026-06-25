@@ -8,19 +8,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { User, Lock, LogOut, Loader2, Building2 } from 'lucide-react'
+import { User, Lock, LogOut, Loader2, Building2, Users } from 'lucide-react'
 import type { User as AuthUser } from '@supabase/supabase-js'
-import type { Profile, CompanyInfo, Branch } from '@/lib/types/database'
+import type { Profile, CompanyInfo, Branch, Department } from '@/lib/types/database'
 import { CompanySettings } from './company-settings'
+import { DepartmentsSettings } from './departments-settings'
 
 interface SettingsContentProps {
   user: AuthUser
   profile: Profile
   company: CompanyInfo | null
   branches: Branch[]
+  departments: Department[]
 }
 
-export function SettingsContent({ user, profile, company, branches }: SettingsContentProps) {
+export function SettingsContent({ user, profile, company, branches, departments }: SettingsContentProps) {
   const isAdmin = profile.role === 'admin'
   const [fullName, setFullName] = useState(profile.full_name || '')
   const [loadingProfile, setLoadingProfile] = useState(false)
@@ -104,6 +106,12 @@ export function SettingsContent({ user, profile, company, branches }: SettingsCo
           <TabsTrigger value="company" className="gap-2">
             <Building2 className="h-4 w-4" />
             Company
+          </TabsTrigger>
+        )}
+        {isAdmin && (
+          <TabsTrigger value="departments" className="gap-2">
+            <Users className="h-4 w-4" />
+            Departments
           </TabsTrigger>
         )}
       </TabsList>
@@ -225,6 +233,12 @@ export function SettingsContent({ user, profile, company, branches }: SettingsCo
       {isAdmin && (
         <TabsContent value="company" className="space-y-4">
           <CompanySettings company={company} branches={branches} />
+        </TabsContent>
+      )}
+
+      {isAdmin && (
+        <TabsContent value="departments" className="space-y-4">
+          <DepartmentsSettings departments={departments} />
         </TabsContent>
       )}
 

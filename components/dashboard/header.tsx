@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { LogOut, User, ArrowLeft } from 'lucide-react'
+import { GlobalSiteSearch } from '@/components/dashboard/global-site-search'
 import type { Profile } from '@/lib/types/database'
 
 interface DashboardHeaderProps {
@@ -45,7 +46,7 @@ export function DashboardHeader({ profile }: DashboardHeaderProps) {
     : profile.email.slice(0, 2).toUpperCase()
 
   return (
-    <header className="flex h-16 items-center gap-4 border-b border-border bg-background px-6">
+    <header data-dashboard-header className="flex h-16 items-center gap-4 border-b border-border bg-background px-6">
       <SidebarTrigger className="-ml-2" />
       <Separator orientation="vertical" className="h-6" />
       {showBack && (
@@ -60,6 +61,9 @@ export function DashboardHeader({ profile }: DashboardHeaderProps) {
         </Button>
       )}
       <div className="flex-1" />
+      {(profile.role === 'admin' || profile.role === 'office') && (
+        <GlobalSiteSearch />
+      )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="relative h-9 w-9 rounded-full">

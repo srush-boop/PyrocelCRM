@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Loader2 } from 'lucide-react'
-import type { ServiceType, WorkerType, ToleranceUnit } from '@/lib/types/database'
+import type { ServiceType, WorkerType, ToleranceUnit, SystemType } from '@/lib/types/database'
 import { WORKER_TYPE_LABELS } from '@/lib/assignment'
 import { ServiceColorPicker } from './service-color-picker'
 import { ToleranceFields } from './tolerance-fields'
@@ -31,14 +31,16 @@ import {
 
 interface EditServiceTypeDialogProps {
   serviceType: ServiceType
+  systemTypes: SystemType[]
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditServiceTypeDialogProps) {
+export function EditServiceTypeDialog({ serviceType, systemTypes, open, onOpenChange }: EditServiceTypeDialogProps) {
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: serviceType.name,
+    system_type_id: serviceType.system_type_id || '',
     description: serviceType.description || '',
     default_frequency_value: serviceType.default_frequency_value ?? serviceType.default_frequency_months ?? 12,
     default_frequency_unit: (serviceType.default_frequency_unit || 'months') as 'weeks' | 'months',
@@ -48,8 +50,6 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
     color: serviceType.color || PYROCEL_RED,
     regulatory_tolerance_value: serviceType.regulatory_tolerance_value ?? 0,
     regulatory_tolerance_unit: (serviceType.regulatory_tolerance_unit || 'days') as ToleranceUnit,
-    client_tolerance_value: serviceType.client_tolerance_value ?? 0,
-    client_tolerance_unit: (serviceType.client_tolerance_unit || 'days') as ToleranceUnit,
   })
   const router = useRouter()
   const supabase = createClient()
@@ -67,6 +67,7 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
       .from('service_types')
       .update({
         name: formData.name,
+        system_type_id: formData.system_type_id || null,
         description: formData.description || null,
         default_frequency_months: frequencyInMonths,
         default_frequency_value: formData.default_frequency_value,
@@ -77,8 +78,10 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
         color: formData.color,
         regulatory_tolerance_value: formData.regulatory_tolerance_value,
         regulatory_tolerance_unit: formData.regulatory_tolerance_unit,
-        client_tolerance_value: formData.client_tolerance_value,
-        client_tolerance_unit: formData.client_tolerance_unit,
+        // Keep the legacy service-type client default in step with regulatory;
+        // tighter client KPIs live per site/service.
+        client_tolerance_value: formData.regulatory_tolerance_value,
+        client_tolerance_unit: formData.regulatory_tolerance_unit,
       })
       .eq('id', serviceType.id)
 
@@ -112,6 +115,28 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
               />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="system-type">System Type</Label>
+              <Select
+                value={formData.system_type_id}
+                onValueChange={(value) => setFormData({ ...formData, system_type_id: value })}
+              >
+                <SelectTrigger id="system-type">
+                  <SelectValue placeholder="Select a system type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {systemTypes.map((st) => (
+                    <SelectItem key={st.id} value={st.id}>
+                      {st.code ? `${st.code} — ${st.name}` : st.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                The system this service belongs to (e.g. Fire Alarm). The queryable code lives on the
+                system type.
+              </p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="description">Description</Label>
@@ -159,8 +184,6 @@ export function EditServiceTypeDialog({ serviceType, open, onOpenChange }: EditS
               value={{
                 regulatory_tolerance_value: formData.regulatory_tolerance_value,
                 regulatory_tolerance_unit: formData.regulatory_tolerance_unit,
-                client_tolerance_value: formData.client_tolerance_value,
-                client_tolerance_unit: formData.client_tolerance_unit,
               }}
               onChange={(t) => setFormData({ ...formData, ...t })}
             />

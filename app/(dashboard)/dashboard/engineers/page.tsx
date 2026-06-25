@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { EngineersTable } from '@/components/dashboard/engineers/engineers-table'
-import type { Profile } from '@/lib/types/database'
+import type { Profile, Department } from '@/lib/types/database'
 
 export default async function EngineersPage() {
   const supabase = await createClient()
@@ -19,11 +19,10 @@ export default async function EngineersPage() {
     redirect('/dashboard')
   }
 
-  const { data: users } = await supabase
-    .from('profiles')
-    .select('*')
-    .neq('role', 'client')
-    .order('full_name')
+  const [{ data: users }, { data: departments }] = await Promise.all([
+    supabase.from('profiles').select('*').neq('role', 'client').order('full_name'),
+    supabase.from('departments').select('*').order('name'),
+  ])
 
   return (
     <div className="space-y-6">
@@ -36,7 +35,10 @@ export default async function EngineersPage() {
         </div>
       </div>
 
-      <EngineersTable users={(users || []) as Profile[]} />
+      <EngineersTable
+        users={(users || []) as Profile[]}
+        departments={(departments || []) as Department[]}
+      />
     </div>
   )
 }

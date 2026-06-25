@@ -26,6 +26,14 @@ import {
 } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import {
   ChartContainer,
   ChartTooltip,
@@ -41,7 +49,7 @@ import {
   type KpiTask,
   type ToleranceLookup,
 } from '@/lib/kpi'
-import { ShieldCheck, Target, AlertTriangle, CircleCheck } from 'lucide-react'
+import { ShieldCheck, Target, AlertTriangle, CircleCheck, ListFilter, X } from 'lucide-react'
 
 interface KpiDashboardProps {
   tasks: KpiTask[]
@@ -68,11 +76,60 @@ export function KpiDashboard({
   const [clientId, setClientId] = useState<string>('all')
   const [tier, setTier] = useState<ComplianceTier>('regulatory')
   const [groupBy, setGroupBy] = useState<'service' | 'site'>('service')
+  const [dateFrom, setDateFrom] = useState<string>('')
+  const [dateTo, setDateTo] = useState<string>('')
+  // Empty set = no service-type restriction (show all).
+  const [serviceTypeIds, setServiceTypeIds] = useState<Set<string>>(new Set())
+
+  // Distinct service types present in the data, for the multi-select filter.
+  const serviceTypeOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const t of tasks) {
+      if (t.serviceTypeId) map.set(t.serviceTypeId, t.serviceTypeName)
+    }
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [tasks])
+
+  const toggleServiceType = (id: string) => {
+    setServiceTypeIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const filteredTasks = useMemo(() => {
-    if (clientId === 'all') return tasks
-    return tasks.filter((t) => t.clientId === clientId)
-  }, [tasks, clientId])
+    // dueDate drives the date-range filter; parse once per task.
+    const fromTime = dateFrom ? new Date(dateFrom).getTime() : null
+    // Include the whole "to" day by pushing to end-of-day.
+    const toTime = dateTo ? new Date(dateTo).getTime() + 24 * 60 * 60 * 1000 - 1 : null
+
+    return tasks.filter((t) => {
+      if (clientId !== 'all' && t.clientId !== clientId) return false
+      if (serviceTypeIds.size > 0 && !serviceTypeIds.has(t.serviceTypeId)) return false
+      if (fromTime !== null || toTime !== null) {
+        if (!t.dueDate) return false
+        const due = new Date(t.dueDate).getTime()
+        if (Number.isNaN(due)) return false
+        if (fromTime !== null && due < fromTime) return false
+        if (toTime !== null && due > toTime) return false
+      }
+      return true
+    })
+  }, [tasks, clientId, serviceTypeIds, dateFrom, dateTo])
+
+  const hasActiveFilters =
+    dateFrom !== '' || dateTo !== '' || serviceTypeIds.size > 0 || clientId !== 'all'
+
+  const clearFilters = () => {
+    setClientId('all')
+    setDateFrom('')
+    setDateTo('')
+    setServiceTypeIds(new Set())
+  }
 
   const report = useMemo(
     () => buildKpiReport(filteredTasks, tolerances),
@@ -96,24 +153,98 @@ export function KpiDashboard({
 
   return (
     <div className="space-y-6">
-      {showClientFilter && clients.length > 0 && (
-        <div className="grid w-full max-w-xs gap-1.5">
-          <Label className="text-xs text-muted-foreground">Client</Label>
-          <Select value={clientId} onValueChange={setClientId}>
-            <SelectTrigger>
-              <SelectValue placeholder="All clients" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All clients</SelectItem>
-              {clients.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <div className="flex flex-wrap items-end gap-3">
+        {showClientFilter && clients.length > 0 && (
+          <div className="grid w-full max-w-[14rem] gap-1.5">
+            <Label className="text-xs text-muted-foreground">Client</Label>
+            <Select value={clientId} onValueChange={setClientId}>
+              <SelectTrigger>
+                <SelectValue placeholder="All clients" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All clients</SelectItem>
+                {clients.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Service type multi-select */}
+        <div className="grid gap-1.5">
+          <Label className="text-xs text-muted-foreground">Service types</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="w-[14rem] justify-start font-normal">
+                <ListFilter className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="truncate">
+                  {serviceTypeIds.size === 0
+                    ? 'All service types'
+                    : `${serviceTypeIds.size} selected`}
+                </span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-[16rem] p-2">
+              {serviceTypeOptions.length === 0 ? (
+                <p className="px-2 py-1.5 text-sm text-muted-foreground">No service types.</p>
+              ) : (
+                <div className="max-h-64 space-y-0.5 overflow-y-auto">
+                  {serviceTypeOptions.map((st) => (
+                    <label
+                      key={st.id}
+                      className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted"
+                    >
+                      <Checkbox
+                        checked={serviceTypeIds.has(st.id)}
+                        onCheckedChange={() => toggleServiceType(st.id)}
+                      />
+                      <span className="truncate">{st.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
         </div>
-      )}
+
+        {/* Date range (by due date) */}
+        <div className="grid gap-1.5">
+          <Label htmlFor="kpi-date-from" className="text-xs text-muted-foreground">
+            Due from
+          </Label>
+          <Input
+            id="kpi-date-from"
+            type="date"
+            value={dateFrom}
+            max={dateTo || undefined}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="w-[10rem]"
+          />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="kpi-date-to" className="text-xs text-muted-foreground">
+            Due to
+          </Label>
+          <Input
+            id="kpi-date-to"
+            type="date"
+            value={dateTo}
+            min={dateFrom || undefined}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="w-[10rem]"
+          />
+        </div>
+
+        {hasActiveFilters && (
+          <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-2">
+            <X className="h-4 w-4" />
+            Clear
+          </Button>
+        )}
+      </div>
 
       {/* Summary cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

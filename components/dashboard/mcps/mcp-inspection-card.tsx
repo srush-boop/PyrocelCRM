@@ -59,6 +59,14 @@ export function McpInspectionCard({ mcp, state, disabled = false, onChange }: Mc
     onChange({ ...state, checklist, result, touched: true })
   }
 
+  // Mark every checklist item on this call point as pass and set the overall
+  // result to pass — the common "all good" shortcut.
+  const passAll = () => {
+    const checklist: Record<string, CheckValue> = {}
+    for (const item of MCP_CHECKLIST) checklist[item.id] = 'pass'
+    onChange({ ...state, checklist, result: 'pass', touched: true })
+  }
+
   const handlePhotos = async (files: FileList | null) => {
     if (!files || files.length === 0) return
     setUploading(true)
@@ -179,7 +187,20 @@ export function McpInspectionCard({ mcp, state, disabled = false, onChange }: Mc
 
         {/* Per-call-point checklist */}
         <div className="grid gap-2">
-          <Label className="text-sm font-semibold">Test checklist</Label>
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-sm font-semibold">Test checklist</Label>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={disabled}
+              onClick={passAll}
+              className="gap-1.5"
+            >
+              <Check className="h-3.5 w-3.5" />
+              Pass all
+            </Button>
+          </div>
           <div className="divide-y rounded-md border">
             {MCP_CHECKLIST.map((item) => {
               const value = state.checklist[item.id]

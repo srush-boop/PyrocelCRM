@@ -146,7 +146,7 @@ function blankLine(): EditLine {
     service_type_id: null,
     is_service: false,
     catalogue_item_id: null,
-    quantity: '1',
+    quantity: '', // required: starts empty so the field highlights until filled
     unit: '',
     unitCost: '0.00',
     margin: '', // inherit system margin
@@ -495,7 +495,7 @@ export function QuoteBuilder({
       service_type_id: item.service_type_id,
       is_service: false,
       catalogue_item_id: item.id,
-      quantity: '1',
+      quantity: '', // required: starts empty so the field highlights until filled
       unit: item.default_unit ?? '',
       // Bring in the catalogue item's cost; the part inherits the system margin
       // (which is auto-filled from the set-margins table) so it pulls through.

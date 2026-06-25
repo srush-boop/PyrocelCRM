@@ -1572,8 +1572,14 @@ function SystemCard({
                     inputMode="decimal"
                     value={line.quantity}
                     onChange={(e) => onUpdateLine(line.key, { quantity: e.target.value })}
-                    className="text-right"
+                    className={cn(
+                      'text-right',
+                      // Required field: highlight in transparent red until a valid quantity is entered.
+                      !(Number.parseFloat(line.quantity) > 0) &&
+                        'border-destructive bg-destructive/10 focus-visible:ring-destructive',
+                    )}
                     aria-label="Quantity"
+                    aria-invalid={!(Number.parseFloat(line.quantity) > 0)}
                     disabled={disabled}
                   />
                   <Input

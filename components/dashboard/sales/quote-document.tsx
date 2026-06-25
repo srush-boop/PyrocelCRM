@@ -306,6 +306,7 @@ export function QuoteDocument({ quote, systems, lines, company, backHref }: Quot
 
                   {systemLines.length > 0 && (
                     <>
+                      {quote.show_line_items && (
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -338,6 +339,7 @@ export function QuoteDocument({ quote, systems, lines, company, backHref }: Quot
                           ))}
                         </tbody>
                       </table>
+                      )}
                       <div className="mt-1 text-right text-sm text-muted-foreground">
                         System total:{' '}
                         <span className="font-medium text-foreground tabular-nums">

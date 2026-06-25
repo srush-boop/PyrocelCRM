@@ -757,6 +757,9 @@ export interface Quote {
   subtotal_pence: number
   vat_pence: number
   total_pence: number
+  // When false, the PDF/quote document hides the itemised product lines and
+  // shows only each system's total (and the overall total).
+  show_line_items: boolean
   valid_until: string | null
   sent_at: string | null
   decided_at: string | null

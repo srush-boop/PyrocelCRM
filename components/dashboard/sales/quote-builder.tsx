@@ -345,6 +345,7 @@ export function QuoteBuilder({
   const [vatRate, setVatRate] = useState(String(quote?.vat_rate ?? 20))
   const [discount, setDiscount] = useState(penceToPounds(quote?.discount_pence ?? 0))
   const [validUntil, setValidUntil] = useState(quote?.valid_until ?? '')
+  const [showLineItems, setShowLineItems] = useState(quote?.show_line_items ?? true)
 
   // ----- Systems / lines state -----
   const [systems, setSystems] = useState<EditSystem[]>(() => {
@@ -538,6 +539,7 @@ export function QuoteBuilder({
       notes: notes || null,
       vat_rate: Number.parseFloat(vatRate) || 0,
       discount_pence: poundsToPence(discount),
+      show_line_items: showLineItems,
       valid_until: validUntil || null,
       systems: systems.map((s) => ({
         system_type_id: s.system_type_id,
@@ -589,6 +591,7 @@ export function QuoteBuilder({
     vatRate,
     discount,
     validUntil,
+    showLineItems,
     systems,
   ])
 
@@ -889,6 +892,24 @@ export function QuoteBuilder({
                 onChange={(e) => setValidUntil(e.target.value)}
                 disabled={disabled}
                 className="w-full sm:w-[12rem]"
+              />
+            </div>
+            <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+              <div className="grid gap-0.5">
+                <Label htmlFor="q-show-lines" className="cursor-pointer">
+                  Itemise products on quote
+                </Label>
+                <span className="text-xs text-muted-foreground">
+                  {showLineItems
+                    ? 'Each product line and its price are shown.'
+                    : 'Only system and overall totals are shown — individual products are hidden.'}
+                </span>
+              </div>
+              <Switch
+                id="q-show-lines"
+                checked={showLineItems}
+                onCheckedChange={setShowLineItems}
+                disabled={disabled}
               />
             </div>
             <div className="grid gap-1.5">

@@ -80,9 +80,10 @@ export interface QuoteInput {
   terms?: string | null
   vat_rate: number
   discount_pence: number
+  show_line_items?: boolean
   valid_until?: string | null
   systems: QuoteSystemInput[]
-}
+  }
 
 async function requireStaff() {
   const supabase = await createClient()
@@ -271,6 +272,7 @@ export async function saveQuote(
     subtotal_pence: totals.subtotalPence,
     vat_pence: totals.vatPence,
     total_pence: totals.totalPence,
+    show_line_items: input.show_line_items ?? true,
     valid_until: input.valid_until || null,
   }
 
@@ -614,6 +616,7 @@ export async function cloneQuoteForContractor(
       subtotal_pence: quote.subtotal_pence,
       vat_pence: quote.vat_pence,
       total_pence: quote.total_pence,
+      show_line_items: quote.show_line_items,
       created_by: user.id,
     })
     .select('id')
@@ -680,6 +683,7 @@ export async function createRevision(
       subtotal_pence: quote.subtotal_pence,
       vat_pence: quote.vat_pence,
       total_pence: quote.total_pence,
+      show_line_items: quote.show_line_items,
       created_by: user.id,
     })
     .select('id')

@@ -40,7 +40,6 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronsDownUp,
-  GripVertical,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -50,6 +49,7 @@ import {
   reorderQuoteSections,
   saveQuoteSectionElement,
   deleteQuoteSectionElement,
+  reorderQuoteSectionElements,
 } from '@/app/(dashboard)/dashboard/sales/quote-config-actions'
 import { WORK_TYPES, workTypeLabel } from '@/lib/sales'
 import type {
@@ -69,6 +69,11 @@ const ELEMENT_TYPES: { value: QuoteElementType; label: string; help: string }[] 
   { value: 'price', label: 'Price', help: 'Currency amount' },
   { value: 'table', label: 'Table', help: 'Repeatable rows with columns' },
   { value: 'asset_type', label: 'Asset type', help: 'Pick from configured asset types' },
+  {
+    value: 'design_category',
+    label: 'Design category',
+    help: 'Pick from configured design categories',
+  },
   {
     value: 'spec_template',
     label: 'Specification',
@@ -258,6 +263,24 @@ function SectionCard({
     })
   }
 
+  // Reorder elements within this section (optimistic, then persist).
+  function moveElement(elIndex: number, direction: -1 | 1) {
+    const current = section.elements ?? []
+    const target = elIndex + direction
+    if (target < 0 || target >= current.length) return
+    const reorderedEls = [...current]
+    const [removed] = reorderedEls.splice(elIndex, 1)
+    reorderedEls.splice(target, 0, removed)
+    // Optimistically update this section's elements in the parent list.
+    setSections(
+      sections.map((s) => (s.id === section.id ? { ...s, elements: reorderedEls } : s)),
+    )
+    startTransition(async () => {
+      const res = await reorderQuoteSectionElements(reorderedEls.map((e) => e.id))
+      if (!res.ok) toast.error(res.error ?? 'Could not reorder elements')
+    })
+  }
+
   function handleDelete() {
     startTransition(async () => {
       const res = await deleteQuoteSection(section.id)
@@ -348,10 +371,29 @@ function SectionCard({
           <p className="text-sm text-muted-foreground">No elements yet.</p>
         ) : (
           <ul className="divide-y rounded-md border">
-            {elements.map((el) => (
+            {elements.map((el, elIndex) => (
               <li key={el.id} className="flex items-center justify-between gap-3 px-3 py-2">
                 <div className="flex items-center gap-2">
-                  <GripVertical className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  <div className="flex flex-col">
+                    <button
+                      type="button"
+                      onClick={() => moveElement(elIndex, -1)}
+                      disabled={elIndex === 0 || isPending}
+                      className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                      aria-label="Move element up"
+                    >
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveElement(elIndex, 1)}
+                      disabled={elIndex === elements.length - 1 || isPending}
+                      className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                      aria-label="Move element down"
+                    >
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                   <span className="font-medium">{el.label}</span>
                   {el.required && <Badge variant="outline">Required</Badge>}
                   <Badge variant="secondary">{elementTypeLabel(el.element_type)}</Badge>

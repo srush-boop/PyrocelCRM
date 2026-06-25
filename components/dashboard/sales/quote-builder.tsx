@@ -1420,6 +1420,9 @@ function SystemCard({
           specification={system.specification}
           onSpecChange={(value) => onUpdate({ specification: value })}
           matchingTemplate={matchingTemplate}
+          designCategories={designCategories}
+          designCategoryId={system.design_category_id}
+          onDesignCategoryChange={handleDesignCategory}
         />
 
         {/* ---- Design & survey (only for work types that require it) ---- */}
@@ -1427,25 +1430,6 @@ function SystemCard({
         <div className="grid gap-3 rounded-md border p-3">
           <p className="text-xs font-medium text-muted-foreground">Design &amp; survey</p>
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="grid gap-1.5">
-              <Label>Design category</Label>
-              <Select
-                value={system.design_category_id ?? ''}
-                onValueChange={handleDesignCategory}
-                disabled={disabled}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {designCategories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
             <div className="grid gap-1.5">
               <Label>Drawing reference</Label>
               <Input

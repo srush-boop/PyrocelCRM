@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils'
 import { fetchQuoteSections } from '@/app/(dashboard)/dashboard/sales/quote-config-actions'
 import type {
   AssetType,
+  QuoteDesignCategory,
   QuoteSection,
   QuoteSectionElement,
   QuoteTableColumn,
@@ -43,6 +44,10 @@ type RenderContext = {
   onSpecChange: (value: string) => void
   // Spec template matching this system type + work type, if any.
   matchingTemplate?: SystemSpecTemplate
+  // Design categories + the system's current selection (design_category writes here).
+  designCategories: QuoteDesignCategory[]
+  designCategoryId: string | null
+  onDesignCategoryChange: (id: string) => void
 }
 
 // Parse a table element's stored JSON-string value back into rows.
@@ -73,6 +78,9 @@ export function QuoteSectionRenderer({
   specification,
   onSpecChange,
   matchingTemplate,
+  designCategories,
+  designCategoryId,
+  onDesignCategoryChange,
 }: {
   systemTypeId: string
   workType: string
@@ -85,10 +93,21 @@ export function QuoteSectionRenderer({
   specification: string
   onSpecChange: (value: string) => void
   matchingTemplate?: SystemSpecTemplate
+  designCategories: QuoteDesignCategory[]
+  designCategoryId: string | null
+  onDesignCategoryChange: (id: string) => void
 }) {
   const [sections, setSections] = useState<QuoteSection[] | null>(null)
 
-  const ctx: RenderContext = { assetTypes, specification, onSpecChange, matchingTemplate }
+  const ctx: RenderContext = {
+    assetTypes,
+    specification,
+    onSpecChange,
+    matchingTemplate,
+    designCategories,
+    designCategoryId,
+    onDesignCategoryChange,
+  }
 
   useEffect(() => {
     if (!systemTypeId || !workType) {
@@ -262,6 +281,31 @@ function renderControl(
               ctx.assetTypes.map((a) => (
                 <SelectItem key={a.id} value={a.name}>
                   {a.name}
+                </SelectItem>
+              ))
+            )}
+          </SelectContent>
+        </Select>
+      )
+    case 'design_category':
+      return (
+        <Select
+          value={ctx.designCategoryId ?? ''}
+          onValueChange={(v) => ctx.onDesignCategoryChange(v)}
+          disabled={disabled}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Select design category" />
+          </SelectTrigger>
+          <SelectContent>
+            {ctx.designCategories.length === 0 ? (
+              <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                No design categories configured
+              </div>
+            ) : (
+              ctx.designCategories.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
                 </SelectItem>
               ))
             )}

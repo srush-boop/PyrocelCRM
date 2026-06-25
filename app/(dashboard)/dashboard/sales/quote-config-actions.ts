@@ -481,3 +481,18 @@ export async function deleteQuoteSectionElement(id: string): Promise<Result> {
   revalidatePath(SECTIONS_PATH)
   return { ok: true }
 }
+
+// Persist the order of elements within a section in one call (after reorder).
+export async function reorderQuoteSectionElements(orderedIds: string[]): Promise<Result> {
+  const { supabase, error } = await requireStaff()
+  if (!supabase) return { ok: false, error }
+  for (let i = 0; i < orderedIds.length; i++) {
+    const { error: dbError } = await supabase
+      .from('quote_section_elements')
+      .update({ position: i, updated_at: new Date().toISOString() })
+      .eq('id', orderedIds[i])
+    if (dbError) return { ok: false, error: dbError.message }
+  }
+  revalidatePath(SECTIONS_PATH)
+  return { ok: true }
+}

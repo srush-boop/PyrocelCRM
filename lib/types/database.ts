@@ -866,6 +866,10 @@ export type QuoteElementType =
   | 'asset_type'
   // A long-text block pre-fillable from the matching system spec template.
   | 'spec_template'
+  // Picks one of the configured design categories (from the Design Categories
+  // admin page). Writes to the system's design_category_id and imports its
+  // overview, rather than storing in conditional_values.
+  | 'design_category'
 
 // Column definition for a 'table' element.
 export interface QuoteTableColumn {

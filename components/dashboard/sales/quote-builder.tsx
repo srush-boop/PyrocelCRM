@@ -349,7 +349,9 @@ export function QuoteBuilder({
   const [prospectEmail, setProspectEmail] = useState(quote?.prospect_email ?? '')
   const [prospectPhone, setProspectPhone] = useState(quote?.prospect_phone ?? '')
   const [prospectAddress, setProspectAddress] = useState(quote?.prospect_address ?? '')
-  const [summary, setSummary] = useState(quote?.summary ?? '')
+  // Scope / summary is no longer edited in the form, but we preserve any
+  // previously-saved value so editing a quote doesn't wipe it.
+  const [summary] = useState(quote?.summary ?? '')
   // New quotes start with the standard terms line; existing quotes keep whatever was saved.
   const [terms, setTerms] = useState(quote ? (quote.terms ?? '') : DEFAULT_QUOTE_TERMS)
   const [notes, setNotes] = useState(quote?.notes ?? '')
@@ -821,16 +823,6 @@ export function QuoteBuilder({
             </div>
           )}
 
-          <div className="grid gap-1.5">
-            <Label htmlFor="q-summary">Scope / summary</Label>
-            <Textarea
-              id="q-summary"
-              value={summary}
-              onChange={(e) => setSummary(e.target.value)}
-              placeholder="Shown at the top of the quote."
-              disabled={disabled}
-            />
-          </div>
         </CardContent>
       </Card>
 

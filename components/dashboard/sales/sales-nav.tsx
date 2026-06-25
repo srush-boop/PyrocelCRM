@@ -13,6 +13,7 @@ import {
   FileText,
   SlidersHorizontal,
   PencilRuler,
+  LayoutList,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -35,6 +36,7 @@ const links: SalesNavLink[] = [
   { title: 'Asset Types', href: '/dashboard/sales/asset-types', icon: Boxes },
   { title: 'Spec Templates', href: '/dashboard/sales/spec-templates', icon: FileText },
   { title: 'Work-type Fields', href: '/dashboard/sales/work-type-fields', icon: SlidersHorizontal },
+  { title: 'Quote Sections', href: '/dashboard/sales/quote-sections', icon: LayoutList },
   { title: 'Design Categories', href: '/dashboard/sales/design-categories', icon: PencilRuler },
 ]
 

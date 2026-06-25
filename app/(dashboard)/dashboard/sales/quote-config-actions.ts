@@ -2,6 +2,12 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import type {
+  QuoteSection,
+  QuoteSectionElement,
+  QuoteElementType,
+  QuoteTableColumn,
+} from '@/lib/types/database'
 
 type Result = { ok: boolean; error?: string }
 
@@ -269,5 +275,167 @@ export async function saveWorkTypeSetting(input: {
     .upsert(payload, { onConflict: 'work_type' })
   if (dbError) return { ok: false, error: dbError.message }
   revalidatePath('/dashboard/sales/margins')
+  return { ok: true }
+}
+
+// ---------- Configurable quote sections (JotForm-style builder) ----------
+const SECTIONS_PATH = '/dashboard/sales/quote-sections'
+
+// Fetch all sections (with their elements) for a system type x work type combo,
+// ordered by position. Used by both the configurator and the quote builder.
+export async function fetchQuoteSections(
+  systemTypeId: string,
+  workType: string,
+): Promise<QuoteSection[]> {
+  const { supabase } = await requireStaff()
+  if (!supabase) return []
+
+  const { data: sections, error } = await supabase
+    .from('quote_sections')
+    .select('*')
+    .eq('system_type_id', systemTypeId)
+    .eq('work_type', workType)
+    .eq('active', true)
+    .order('position')
+  if (error || !sections) return []
+
+  const ids = (sections as QuoteSection[]).map((s) => s.id)
+  if (ids.length === 0) return sections as QuoteSection[]
+
+  const { data: elements } = await supabase
+    .from('quote_section_elements')
+    .select('*')
+    .in('section_id', ids)
+    .eq('active', true)
+    .order('position')
+
+  const bySection = new Map<string, QuoteSectionElement[]>()
+  for (const el of (elements ?? []) as QuoteSectionElement[]) {
+    const list = bySection.get(el.section_id) ?? []
+    list.push(el)
+    bySection.set(el.section_id, list)
+  }
+
+  return (sections as QuoteSection[]).map((s) => ({
+    ...s,
+    elements: bySection.get(s.id) ?? [],
+  }))
+}
+
+export async function saveQuoteSection(input: {
+  id?: string
+  system_type_id: string
+  work_type: string
+  title: string
+  position: number
+  default_collapsed: boolean
+  condition_element_key: string | null
+  condition_value: string | null
+}): Promise<Result & { id?: string }> {
+  const { supabase, error } = await requireStaff()
+  if (!supabase) return { ok: false, error }
+  if (!input.system_type_id || !input.work_type) {
+    return { ok: false, error: 'System type and work type are required' }
+  }
+  if (!input.title.trim()) return { ok: false, error: 'A section title is required' }
+
+  const payload = {
+    system_type_id: input.system_type_id,
+    work_type: input.work_type,
+    title: input.title.trim(),
+    position: input.position,
+    default_collapsed: input.default_collapsed,
+    condition_element_key: input.condition_element_key || null,
+    condition_value: input.condition_value || null,
+    updated_at: new Date().toISOString(),
+  }
+
+  if (input.id) {
+    const { error: dbError } = await supabase
+      .from('quote_sections')
+      .update(payload)
+      .eq('id', input.id)
+    if (dbError) return { ok: false, error: dbError.message }
+    revalidatePath(SECTIONS_PATH)
+    return { ok: true, id: input.id }
+  }
+
+  const { data, error: dbError } = await supabase
+    .from('quote_sections')
+    .insert(payload)
+    .select('id')
+    .single()
+  if (dbError) return { ok: false, error: dbError.message }
+  revalidatePath(SECTIONS_PATH)
+  return { ok: true, id: (data as { id: string }).id }
+}
+
+export async function deleteQuoteSection(id: string): Promise<Result> {
+  const { supabase, error } = await requireStaff()
+  if (!supabase) return { ok: false, error }
+  const { error: dbError } = await supabase.from('quote_sections').delete().eq('id', id)
+  if (dbError) return { ok: false, error: dbError.message }
+  revalidatePath(SECTIONS_PATH)
+  return { ok: true }
+}
+
+// Persist the order of sections in one call (after drag/reorder).
+export async function reorderQuoteSections(orderedIds: string[]): Promise<Result> {
+  const { supabase, error } = await requireStaff()
+  if (!supabase) return { ok: false, error }
+  for (let i = 0; i < orderedIds.length; i++) {
+    const { error: dbError } = await supabase
+      .from('quote_sections')
+      .update({ position: i, updated_at: new Date().toISOString() })
+      .eq('id', orderedIds[i])
+    if (dbError) return { ok: false, error: dbError.message }
+  }
+  revalidatePath(SECTIONS_PATH)
+  return { ok: true }
+}
+
+export async function saveQuoteSectionElement(input: {
+  id?: string
+  section_id: string
+  label: string
+  element_key: string
+  element_type: QuoteElementType
+  options: string[] | QuoteTableColumn[]
+  required: boolean
+  position: number
+}): Promise<Result> {
+  const { supabase, error } = await requireStaff()
+  if (!supabase) return { ok: false, error }
+  if (!input.section_id) return { ok: false, error: 'A section is required' }
+  if (!input.label.trim()) return { ok: false, error: 'An element label is required' }
+  if (!input.element_key.trim()) return { ok: false, error: 'An element key is required' }
+
+  const payload = {
+    section_id: input.section_id,
+    label: input.label.trim(),
+    element_key: input.element_key.trim(),
+    element_type: input.element_type,
+    options: input.options,
+    required: input.required,
+    position: input.position,
+    updated_at: new Date().toISOString(),
+  }
+
+  const query = input.id
+    ? supabase.from('quote_section_elements').update(payload).eq('id', input.id)
+    : supabase.from('quote_section_elements').insert(payload)
+
+  const { error: dbError } = await query
+  if (dbError) return { ok: false, error: dbError.message }
+  revalidatePath(SECTIONS_PATH)
+  return { ok: true }
+}
+
+export async function deleteQuoteSectionElement(id: string): Promise<Result> {
+  const { supabase, error } = await requireStaff()
+  if (!supabase) return { ok: false, error }
+  const { error: dbError } = await supabase.from('quote_section_elements').delete().eq('id', id)
+  if (dbError) return { ok: false, error: dbError.message }
+  revalidatePath(SECTIONS_PATH)
   return { ok: true }
 }

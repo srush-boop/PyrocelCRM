@@ -831,6 +831,59 @@ export interface WorkTypeSetting {
   updated_at: string
 }
 
+// --- Configurable quote sections (JotForm-style builder) ----------------
+// A quote section is an admin-defined, ordered, optionally-collapsible group of
+// elements shown on a quote system for a specific system type x work type combo.
+export type QuoteElementType =
+  | 'text'
+  | 'paragraph'
+  | 'select'
+  | 'yesno'
+  | 'number'
+  | 'price'
+  | 'table'
+
+// Column definition for a 'table' element.
+export interface QuoteTableColumn {
+  key: string
+  label: string
+}
+
+export interface QuoteSectionElement {
+  id: string
+  section_id: string
+  label: string
+  // Key under which the answer is stored in QuoteSystem.conditional_values.
+  element_key: string
+  element_type: QuoteElementType
+  // For 'select': string[] of options. For 'table': QuoteTableColumn[].
+  options: string[] | QuoteTableColumn[]
+  required: boolean
+  position: number
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface QuoteSection {
+  id: string
+  system_type_id: string
+  work_type: string
+  title: string
+  position: number
+  default_collapsed: boolean
+  // Optional single show/hide rule: show only when the element keyed by
+  // condition_element_key equals condition_value. NULL = always show.
+  condition_element_key: string | null
+  condition_value: string | null
+  active: boolean
+  created_at: string
+  updated_at: string
+  // Optional joins
+  elements?: QuoteSectionElement[]
+  system_type?: SystemType | null
+}
+
 // Editable design category with an importable overview, selectable per system.
 export interface QuoteDesignCategory {
   id: string

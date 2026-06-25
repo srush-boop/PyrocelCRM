@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -39,6 +39,7 @@ import { cn } from '@/lib/utils'
 import { Plus, Trash2, BookOpen, Save, FileDown, TrendingUp, Calculator, Wrench, Check, ChevronsUpDown, ChevronDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { PpmCalculatorDialog, type PpmDraft } from '@/components/dashboard/sales/ppm-calculator-dialog'
+import { QuoteSectionRenderer } from '@/components/dashboard/sales/quote-section-renderer'
 import {
   computeQuoteTotals,
   computeBankStats,
@@ -518,8 +519,8 @@ export function QuoteBuilder({
     })
   }
 
-  function handleSave() {
-    const payload: QuoteInput = {
+  const buildPayload = useCallback((): QuoteInput => {
+    return {
       id: quote?.id,
       title,
       // Quote type is no longer a header field — derive it from the first
@@ -570,7 +571,29 @@ export function QuoteBuilder({
           })),
       })),
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    quote?.id,
+    title,
+    targetMode,
+    clientId,
+    siteId,
+    prospectName,
+    prospectContact,
+    prospectEmail,
+    prospectPhone,
+    prospectAddress,
+    summary,
+    terms,
+    notes,
+    vatRate,
+    discount,
+    validUntil,
+    systems,
+  ])
 
+  function handleSave() {
+    const payload = buildPayload()
     startTransition(async () => {
       const res = await saveQuote(payload)
       if (res.ok && res.id) {
@@ -582,6 +605,32 @@ export function QuoteBuilder({
       }
     })
   }
+
+  // ----- Debounced autosave (existing draft quotes only) -----
+  // Sent/accepted quotes are read-only; brand-new quotes are saved explicitly
+  // first (we need an id before autosaving), so autosave only runs for drafts
+  // that already exist.
+  const canAutosave = Boolean(quote?.id) && quote?.status === 'draft' && !readOnly
+  const [autosaveState, setAutosaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  // Skip the first render so loading a quote doesn't immediately trigger a save.
+  const hasMounted = useRef(false)
+
+  useEffect(() => {
+    if (!canAutosave) return
+    if (!hasMounted.current) {
+      hasMounted.current = true
+      return
+    }
+    if (!title.trim()) return
+
+    setAutosaveState('saving')
+    const handle = setTimeout(async () => {
+      const res = await saveQuote(buildPayload())
+      setAutosaveState(res.ok ? 'saved' : 'error')
+    }, 1500)
+
+    return () => clearTimeout(handle)
+  }, [canAutosave, title, buildPayload])
 
   const disabled = readOnly || isPending
 
@@ -1317,6 +1366,15 @@ function SystemCard({
             })}
           </div>
         )}
+
+        {/* ---- Configured sections (system type x work type) ---- */}
+        <QuoteSectionRenderer
+          systemTypeId={system.system_type_id ?? ''}
+          workType={system.work_type}
+          values={system.conditional_values}
+          onChange={setConditional}
+          disabled={disabled}
+        />
 
         {/* ---- Step 3 · Description of Works / Specification ---- */}
         <div className="grid gap-1.5">

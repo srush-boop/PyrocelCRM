@@ -34,8 +34,38 @@ function humanizeKey(key: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
+// A table element stores its rows as a JSON array string. Detect & parse it so
+// it can be rendered as a table rather than raw JSON.
+function parseTableRows(value: string | number | boolean): Record<string, string>[] | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed.startsWith('[')) return null
+  try {
+    const parsed = JSON.parse(trimmed)
+    if (Array.isArray(parsed) && parsed.every((r) => r && typeof r === 'object')) {
+      return parsed as Record<string, string>[]
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+// Whether a conditional answer should appear on the quote at all. "N/A" answers
+// and blank values are omitted entirely (JotForm-style "if N/A, don't add").
+function isOmittedValue(value: string | number | boolean): boolean {
+  if (value === null || value === undefined) return true
+  if (typeof value === 'string') {
+    const v = value.trim().toLowerCase()
+    return v === '' || v === 'na' || v === 'n/a'
+  }
+  return false
+}
+
 function renderConditionalValue(value: string | number | boolean): string {
   if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  if (value === 'yes') return 'Yes'
+  if (value === 'no') return 'No'
   return String(value)
 }
 
@@ -154,7 +184,9 @@ export function QuoteDocument({ quote, systems, lines, company, backHref }: Quot
                 .filter((l) => l.system_id === system.id)
                 .sort((a, b) => a.position - b.position)
               const systemTotal = systemLines.reduce((sum, l) => sum + l.line_total_pence, 0)
-              const conditional = Object.entries(system.conditional_values ?? {})
+              const conditional = Object.entries(system.conditional_values ?? {}).filter(
+                ([, value]) => !isOmittedValue(value),
+              )
               return (
                 <div key={system.id} className="break-inside-avoid">
                   <div className="mb-2 flex items-baseline justify-between gap-2 border-b pb-1">
@@ -217,17 +249,60 @@ export function QuoteDocument({ quote, systems, lines, company, backHref }: Quot
                     </div>
                   )}
 
-                  {/* Conditional values */}
-                  {conditional.length > 0 && (
-                    <dl className="mb-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-                      {conditional.map(([key, value]) => (
-                        <div key={key} className="flex gap-2">
-                          <dt className="text-muted-foreground">{humanizeKey(key)}:</dt>
-                          <dd className="font-medium">{renderConditionalValue(value)}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                  )}
+                  {/* Conditional / configured values. Scalars render as a
+                      definition list; table answers render as their own table. */}
+                  {(() => {
+                    const scalars = conditional.filter(([, v]) => !parseTableRows(v))
+                    const tables = conditional.filter(([, v]) => parseTableRows(v))
+                    return (
+                      <>
+                        {scalars.length > 0 && (
+                          <dl className="mb-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+                            {scalars.map(([key, value]) => (
+                              <div key={key} className="flex gap-2">
+                                <dt className="text-muted-foreground">{humanizeKey(key)}:</dt>
+                                <dd className="font-medium">{renderConditionalValue(value)}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        )}
+                        {tables.map(([key, value]) => {
+                          const rows = parseTableRows(value) ?? []
+                          if (rows.length === 0) return null
+                          const columns = Object.keys(rows[0])
+                          return (
+                            <div key={key} className="mb-3">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                {humanizeKey(key)}
+                              </p>
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                                    {columns.map((c) => (
+                                      <th key={c} className="py-1 font-medium">
+                                        {humanizeKey(c)}
+                                      </th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {rows.map((row, i) => (
+                                    <tr key={i} className="border-b border-dashed last:border-0">
+                                      {columns.map((c) => (
+                                        <td key={c} className="py-1 pr-4 align-top">
+                                          {row[c]}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )
+                        })}
+                      </>
+                    )
+                  })()}
 
                   {systemLines.length > 0 && (
                     <>

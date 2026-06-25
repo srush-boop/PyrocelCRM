@@ -14,9 +14,17 @@ import {
   SlidersHorizontal,
   PencilRuler,
   LayoutList,
+  Settings,
+  ChevronDown,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 type SalesNavLink = {
   title: string
@@ -24,13 +32,16 @@ type SalesNavLink = {
   icon: LucideIcon
 }
 
-// The sales sub-sections shown in the horizontal menu header. The first entry
-// is the dashboard landing; the rest are the quoting tools and config areas.
-const links: SalesNavLink[] = [
+// Top-level sales tabs: the dashboard landing plus the day-to-day quoting tools.
+const topLevelLinks: SalesNavLink[] = [
   { title: 'Dashboard', href: '/dashboard/sales', icon: LayoutDashboard },
   { title: 'Quotes', href: '/dashboard/sales/quotes', icon: ReceiptText },
   { title: 'Quote Bank', href: '/dashboard/sales/quote-bank', icon: Landmark },
   { title: 'Catalogue', href: '/dashboard/sales/catalogue', icon: BookOpen },
+]
+
+// Setup areas grouped under the "Sales Configuration" dropdown.
+const configLinks: SalesNavLink[] = [
   { title: 'Direct Costs', href: '/dashboard/sales/direct-costs', icon: Coins },
   { title: 'System Types', href: '/dashboard/sales/system-types', icon: Layers },
   { title: 'Asset Types', href: '/dashboard/sales/asset-types', icon: Boxes },
@@ -44,7 +55,7 @@ const links: SalesNavLink[] = [
 // /dashboard/sales (e.g. "new" or a quote id) is the full-page quote editor,
 // where the menu header is hidden.
 const sectionSlugs = new Set(
-  links
+  [...topLevelLinks, ...configLinks]
     .map((l) => l.href.split('/')[3])
     .filter((slug): slug is string => Boolean(slug)),
 )
@@ -57,10 +68,17 @@ function isEditorRoute(pathname: string): boolean {
   return !sectionSlugs.has(slug)
 }
 
+const tabClass =
+  'flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium transition-colors'
+
 export function SalesNav() {
   const pathname = usePathname()
 
   if (isEditorRoute(pathname)) return null
+
+  const configActive = configLinks.some(
+    (link) => pathname === link.href || pathname.startsWith(`${link.href}/`),
+  )
 
   return (
     <nav
@@ -68,7 +86,7 @@ export function SalesNav() {
       className="-mx-4 border-b border-border px-4 sm:mx-0 sm:px-0"
     >
       <ul className="flex flex-wrap items-center gap-1 pb-px">
-        {links.map((link) => {
+        {topLevelLinks.map((link) => {
           const active =
             link.href === '/dashboard/sales'
               ? pathname === '/dashboard/sales'
@@ -79,7 +97,7 @@ export function SalesNav() {
                 href={link.href}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium transition-colors',
+                  tabClass,
                   active
                     ? 'border-primary text-foreground'
                     : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground',
@@ -91,6 +109,40 @@ export function SalesNav() {
             </li>
           )
         })}
+
+        <li className="shrink-0">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className={cn(
+                tabClass,
+                configActive
+                  ? 'border-primary text-foreground'
+                  : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground',
+              )}
+            >
+              <Settings className="h-4 w-4" />
+              Sales Configuration
+              <ChevronDown className="h-4 w-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {configLinks.map((link) => {
+                const active = pathname === link.href || pathname.startsWith(`${link.href}/`)
+                return (
+                  <DropdownMenuItem key={link.href} asChild>
+                    <Link
+                      href={link.href}
+                      aria-current={active ? 'page' : undefined}
+                      className={cn('flex items-center gap-2', active && 'font-medium text-foreground')}
+                    >
+                      <link.icon className="h-4 w-4" />
+                      {link.title}
+                    </Link>
+                  </DropdownMenuItem>
+                )
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </li>
       </ul>
     </nav>
   )

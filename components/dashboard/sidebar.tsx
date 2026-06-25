@@ -121,7 +121,9 @@ const officeServiceManagementNavItem: NavItem = {
   ],
 }
 
-// Sales groups quoting and the reusable line-item catalogue.
+// Sales groups quoting and the reusable line-item catalogue. The setup areas
+// (pricing, templates, field/section config) are condensed into a nested
+// "Sales Configuration" group so the day-to-day quoting links stay prominent.
 const salesNavItem: NavItem = {
   title: 'Sales',
   icon: ReceiptText,
@@ -130,14 +132,20 @@ const salesNavItem: NavItem = {
     { title: 'Quotes', href: '/dashboard/sales/quotes', icon: ReceiptText },
     { title: 'Quote Bank', href: '/dashboard/sales/quote-bank', icon: Landmark },
     { title: 'Catalogue', href: '/dashboard/sales/catalogue', icon: BookOpen },
-    { title: 'Direct Costs', href: '/dashboard/sales/direct-costs', icon: Coins },
-    { title: 'Set Margins', href: '/dashboard/sales/margins', icon: Percent },
-    { title: 'Asset Types', href: '/dashboard/sales/asset-types', icon: Boxes },
-    { title: 'Spec Templates', href: '/dashboard/sales/spec-templates', icon: FileTextIcon },
-    { title: 'Work-type Fields', href: '/dashboard/sales/work-type-fields', icon: SlidersHorizontal },
-    { title: 'Quote Sections', href: '/dashboard/sales/quote-sections', icon: LayoutList },
-    { title: 'Quote Services', href: '/dashboard/sales/quote-services', icon: Wrench },
-    { title: 'Design Categories', href: '/dashboard/sales/design-categories', icon: PencilRuler },
+    {
+      title: 'Sales Configuration',
+      icon: Settings,
+      children: [
+        { title: 'Direct Costs', href: '/dashboard/sales/direct-costs', icon: Coins },
+        { title: 'Set Margins', href: '/dashboard/sales/margins', icon: Percent },
+        { title: 'Asset Types', href: '/dashboard/sales/asset-types', icon: Boxes },
+        { title: 'Spec Templates', href: '/dashboard/sales/spec-templates', icon: FileTextIcon },
+        { title: 'Work-type Fields', href: '/dashboard/sales/work-type-fields', icon: SlidersHorizontal },
+        { title: 'Quote Sections', href: '/dashboard/sales/quote-sections', icon: LayoutList },
+        { title: 'Quote Services', href: '/dashboard/sales/quote-services', icon: Wrench },
+        { title: 'Design Categories', href: '/dashboard/sales/design-categories', icon: PencilRuler },
+      ],
+    },
   ],
 }
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -1652,8 +1652,10 @@ function SystemCard({
                   </Button>
                 )}
               </div>
+              </Fragment>
             )
-          })}
+          })
+          })()}
 
           {!readOnly && (
             <div className="flex flex-wrap items-center justify-between gap-2 pt-1">

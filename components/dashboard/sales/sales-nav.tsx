@@ -67,7 +67,7 @@ export function SalesNav() {
       aria-label="Sales sections"
       className="-mx-4 border-b border-border px-4 sm:mx-0 sm:px-0"
     >
-      <ul className="flex items-center gap-1 overflow-x-auto pb-px [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <ul className="flex flex-wrap items-center gap-1 pb-px">
         {links.map((link) => {
           const active =
             link.href === '/dashboard/sales'

@@ -842,6 +842,10 @@ export type QuoteElementType =
   | 'number'
   | 'price'
   | 'table'
+  // Picks one of the configured asset types (from the Asset Types admin page).
+  | 'asset_type'
+  // A long-text block pre-fillable from the matching system spec template.
+  | 'spec_template'
 
 // Column definition for a 'table' element.
 export interface QuoteTableColumn {

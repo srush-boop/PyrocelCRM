@@ -68,6 +68,12 @@ const ELEMENT_TYPES: { value: QuoteElementType; label: string; help: string }[] 
   { value: 'number', label: 'Number', help: 'Numeric value' },
   { value: 'price', label: 'Price', help: 'Currency amount' },
   { value: 'table', label: 'Table', help: 'Repeatable rows with columns' },
+  { value: 'asset_type', label: 'Asset type', help: 'Pick from configured asset types' },
+  {
+    value: 'spec_template',
+    label: 'Specification',
+    help: 'Long text, importable from the matching spec template',
+  },
 ]
 
 function elementTypeLabel(t: QuoteElementType): string {

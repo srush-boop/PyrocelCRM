@@ -36,7 +36,7 @@ import {
 } from '@/components/ui/command'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
-import { Plus, Trash2, BookOpen, Save, FileDown, TrendingUp, Calculator, Wrench, Check, ChevronsUpDown, ChevronDown } from 'lucide-react'
+import { Plus, Trash2, BookOpen, Save, TrendingUp, Calculator, Wrench, Check, ChevronsUpDown, ChevronDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { PpmCalculatorDialog, type PpmDraft } from '@/components/dashboard/sales/ppm-calculator-dialog'
 import { QuoteSectionRenderer } from '@/components/dashboard/sales/quote-section-renderer'
@@ -1137,15 +1137,6 @@ function SystemCard({
     })
   }
 
-  function importSpec() {
-    if (matchingTemplate?.specification) {
-      onUpdate({ specification: matchingTemplate.specification })
-      toast.success('Specification imported from template')
-    } else {
-      toast.error('No template for this system + work type yet')
-    }
-  }
-
   function handleDesignCategory(value: string) {
     const cat = designCategories.find((c) => c.id === value)
     onUpdate({
@@ -1379,43 +1370,20 @@ function SystemCard({
           </div>
         )}
 
-        {/* ---- Configured sections (system type x work type) ---- */}
+        {/* ---- Configured sections (system type x work type) ----
+             Includes spec_template and asset_type elements, which replace the
+             old hardcoded "Description of Works / Specification" step. */}
         <QuoteSectionRenderer
           systemTypeId={system.system_type_id ?? ''}
           workType={system.work_type}
           values={system.conditional_values}
           onChange={setConditional}
           disabled={disabled}
+          assetTypes={systemAssetTypes}
+          specification={system.specification}
+          onSpecChange={(value) => onUpdate({ specification: value })}
+          matchingTemplate={matchingTemplate}
         />
-
-        {/* ---- Step 3 · Description of Works / Specification ---- */}
-        <div className="grid gap-1.5">
-          <div className="flex items-center justify-between">
-            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Step 3 · Description of Works / Specification
-            </Label>
-            {!readOnly && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={importSpec}
-                disabled={disabled || !matchingTemplate}
-              >
-                <FileDown className="mr-1.5 h-3.5 w-3.5" />
-                Import from template
-              </Button>
-            )}
-          </div>
-          <Textarea
-            value={system.specification}
-            onChange={(e) => onUpdate({ specification: e.target.value })}
-            placeholder="The specification for this system. Import a master template above, then edit."
-            className="min-h-24"
-            disabled={disabled}
-          />
-        </div>
 
         {/* ---- Design & survey (only for work types that require it) ---- */}
         {requiresDesign && (

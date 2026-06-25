@@ -17,17 +17,33 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import { ChevronDown, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, FileDown, Plus, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { fetchQuoteSections } from '@/app/(dashboard)/dashboard/sales/quote-config-actions'
 import type {
+  AssetType,
   QuoteSection,
   QuoteSectionElement,
   QuoteTableColumn,
+  SystemSpecTemplate,
 } from '@/lib/types/database'
 
 type Values = Record<string, string | number | boolean>
 type TableRow = Record<string, string>
+
+// Extra data the asset_type and spec_template elements need to render. Threaded
+// down from the system being edited so these elements behave like the old
+// hardcoded Step 3 / PPM asset pickers.
+type RenderContext = {
+  // Asset types belonging to this system's system type.
+  assetTypes: AssetType[]
+  // The system's current specification text and a setter (spec_template writes here).
+  specification: string
+  onSpecChange: (value: string) => void
+  // Spec template matching this system type + work type, if any.
+  matchingTemplate?: SystemSpecTemplate
+}
 
 // Parse a table element's stored JSON-string value back into rows.
 function parseRows(value: string | number | boolean | undefined): TableRow[] {
@@ -53,6 +69,10 @@ export function QuoteSectionRenderer({
   onChange,
   disabled,
   onLoaded,
+  assetTypes,
+  specification,
+  onSpecChange,
+  matchingTemplate,
 }: {
   systemTypeId: string
   workType: string
@@ -61,8 +81,14 @@ export function QuoteSectionRenderer({
   disabled?: boolean
   // Notifies the parent whether any sections exist (to hide default fallbacks).
   onLoaded?: (hasSections: boolean) => void
+  assetTypes: AssetType[]
+  specification: string
+  onSpecChange: (value: string) => void
+  matchingTemplate?: SystemSpecTemplate
 }) {
   const [sections, setSections] = useState<QuoteSection[] | null>(null)
+
+  const ctx: RenderContext = { assetTypes, specification, onSpecChange, matchingTemplate }
 
   useEffect(() => {
     if (!systemTypeId || !workType) {
@@ -94,6 +120,7 @@ export function QuoteSectionRenderer({
           values={values}
           onChange={onChange}
           disabled={disabled}
+          ctx={ctx}
         />
       ))}
     </div>
@@ -105,11 +132,13 @@ function SectionBlock({
   values,
   onChange,
   disabled,
+  ctx,
 }: {
   section: QuoteSection
   values: Values
   onChange: (key: string, value: string | number | boolean) => void
   disabled?: boolean
+  ctx: RenderContext
 }) {
   const [open, setOpen] = useState(!section.default_collapsed)
 
@@ -158,6 +187,7 @@ function SectionBlock({
                 value={values[el.element_key]}
                 onChange={(v) => onChange(el.element_key, v)}
                 disabled={disabled}
+                ctx={ctx}
               />
             ))
           )}
@@ -172,13 +202,27 @@ function ElementField({
   value,
   onChange,
   disabled,
+  ctx,
 }: {
   element: QuoteSectionElement
   value: string | number | boolean | undefined
   onChange: (value: string | number | boolean) => void
   disabled?: boolean
+  ctx: RenderContext
 }) {
-  const fullWidth = element.element_type === 'paragraph' || element.element_type === 'table'
+  const fullWidth =
+    element.element_type === 'paragraph' ||
+    element.element_type === 'table' ||
+    element.element_type === 'spec_template'
+
+  // The spec_template element renders its own label + import button inline.
+  if (element.element_type === 'spec_template') {
+    return (
+      <div className="grid gap-1.5 sm:col-span-2">
+        {renderControl(element, value, onChange, ctx, disabled)}
+      </div>
+    )
+  }
 
   return (
     <div className={cn('grid gap-1.5', fullWidth && 'sm:col-span-2')}>
@@ -186,7 +230,7 @@ function ElementField({
         {element.label}
         {element.required && <span className="ml-0.5 text-destructive">*</span>}
       </Label>
-      {renderControl(element, value, onChange, disabled)}
+      {renderControl(element, value, onChange, ctx, disabled)}
     </div>
   )
 }
@@ -195,9 +239,71 @@ function renderControl(
   element: QuoteSectionElement,
   value: string | number | boolean | undefined,
   onChange: (value: string | number | boolean) => void,
+  ctx: RenderContext,
   disabled?: boolean,
 ) {
   switch (element.element_type) {
+    case 'asset_type':
+      return (
+        <Select
+          value={String(value ?? '')}
+          onValueChange={(v) => onChange(v)}
+          disabled={disabled}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Select asset type" />
+          </SelectTrigger>
+          <SelectContent>
+            {ctx.assetTypes.length === 0 ? (
+              <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                No asset types for this system type
+              </div>
+            ) : (
+              ctx.assetTypes.map((a) => (
+                <SelectItem key={a.id} value={a.name}>
+                  {a.name}
+                </SelectItem>
+              ))
+            )}
+          </SelectContent>
+        </Select>
+      )
+    case 'spec_template':
+      return (
+        <>
+          <div className="flex items-center justify-between">
+            <Label className="text-sm">
+              {element.label}
+              {element.required && <span className="ml-0.5 text-destructive">*</span>}
+            </Label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              disabled={disabled || !ctx.matchingTemplate?.specification}
+              onClick={() => {
+                if (ctx.matchingTemplate?.specification) {
+                  ctx.onSpecChange(ctx.matchingTemplate.specification)
+                  toast.success('Specification imported from template')
+                } else {
+                  toast.error('No template for this system + work type yet')
+                }
+              }}
+            >
+              <FileDown className="mr-1.5 h-3.5 w-3.5" />
+              Import from template
+            </Button>
+          </div>
+          <Textarea
+            value={ctx.specification}
+            onChange={(e) => ctx.onSpecChange(e.target.value)}
+            rows={4}
+            placeholder="The specification for this system. Import a master template, then edit."
+            disabled={disabled}
+          />
+        </>
+      )
     case 'paragraph':
       return (
         <Textarea

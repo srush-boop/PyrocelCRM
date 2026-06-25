@@ -67,6 +67,7 @@ import type {
   QuoteDesignCategory,
   SystemType,
   ServiceType,
+  QuoteService,
   AssetType,
   QuoteSystemPpm,
   Site,
@@ -85,6 +86,8 @@ interface EditLine {
   description: string
   detail: string
   service_type_id: string | null
+  // True for non-product service lines (grouped as a "Services" sub-section).
+  is_service: boolean
   catalogue_item_id: string | null
   quantity: string
   unit: string
@@ -138,6 +141,7 @@ function blankLine(): EditLine {
     description: '',
     detail: '',
     service_type_id: null,
+    is_service: false,
     catalogue_item_id: null,
     quantity: '1',
     unit: '',
@@ -281,6 +285,8 @@ interface QuoteBuilderProps {
   sites: Site[]
   systemTypes: SystemType[]
   serviceTypes: ServiceType[]
+  // Global, configurable non-product services (Installation, Decommission, etc.).
+  quoteServices: QuoteService[]
   assetTypes: AssetType[]
   defaultHourlyCostPence: number
   defaultMarginPercent: number
@@ -305,6 +311,7 @@ export function QuoteBuilder({
   sites,
   systemTypes,
   serviceTypes,
+  quoteServices,
   assetTypes,
   defaultHourlyCostPence,
   defaultMarginPercent,
@@ -379,6 +386,7 @@ export function QuoteBuilder({
               description: l.description,
               detail: l.detail ?? '',
               service_type_id: l.service_type_id,
+              is_service: l.is_service ?? false,
               catalogue_item_id: l.catalogue_item_id,
               quantity: String(l.quantity),
               unit: l.unit ?? '',
@@ -453,6 +461,7 @@ export function QuoteBuilder({
           description: `Annual PPM — ${s.system_name}`.trim(),
           detail: `${draft.num_visits} visit${draft.num_visits === 1 ? '' : 's'} per year`,
           service_type_id: null,
+          is_service: false,
           catalogue_item_id: null,
           quantity: '1',
           unit: 'year',
@@ -478,6 +487,7 @@ export function QuoteBuilder({
       description: item.name,
       detail: item.description ?? '',
       service_type_id: item.service_type_id,
+      is_service: false,
       catalogue_item_id: item.id,
       quantity: '1',
       unit: item.default_unit ?? '',
@@ -503,20 +513,24 @@ export function QuoteBuilder({
     })
   }
 
-  // Add a line seeded from a configured service (belonging to the system's
-  // system type). Staff then fill in cost/qty against the prefilled service.
-  function addServiceLine(systemKey: string, service: ServiceType) {
+  // Add a non-product service line seeded from a global Quote Service
+  // (e.g. Installation, Decommission). It is flagged is_service so it groups
+  // into the Services sub-section. The default price seeds the unit cost at
+  // zero margin (sell = price); staff can adjust cost/qty/margin afterwards.
+  function addServiceLine(systemKey: string, service: QuoteService) {
     addLine(systemKey, {
       key: uid(),
       productCode: '',
       description: service.name,
       detail: service.description ?? '',
-      service_type_id: service.id,
+      service_type_id: null,
+      is_service: true,
       catalogue_item_id: null,
       quantity: '1',
       unit: '',
-      unitCost: '0.00',
-      margin: '',
+      unitCost:
+        service.default_price_pence !== null ? penceToPounds(service.default_price_pence) : '0.00',
+      margin: '0',
     })
   }
 
@@ -564,6 +578,7 @@ export function QuoteBuilder({
             description: l.description,
             detail: l.detail || null,
             service_type_id: l.service_type_id,
+            is_service: l.is_service,
             catalogue_item_id: l.catalogue_item_id,
             product_code: l.productCode.trim() || null,
             quantity: Number.parseFloat(l.quantity) || 0,
@@ -825,6 +840,7 @@ export function QuoteBuilder({
           isPending={isPending}
           systemTypes={systemTypes}
           serviceTypes={serviceTypes}
+          quoteServices={quoteServices}
           assetTypes={assetTypes}
           defaultHourlyCostPence={defaultHourlyCostPence}
                   specTemplates={specTemplates}
@@ -986,6 +1002,7 @@ interface SystemCardProps {
   isPending: boolean
   systemTypes: SystemType[]
   serviceTypes: ServiceType[]
+  quoteServices: QuoteService[]
   assetTypes: AssetType[]
   defaultHourlyCostPence: number
   specTemplates: SystemSpecTemplate[]
@@ -999,7 +1016,7 @@ interface SystemCardProps {
   onAddLine: () => void
   onAddCatalogueLine: (item: QuoteCatalogueItem) => void
   onApplyCatalogueToLine: (lineKey: string, item: QuoteCatalogueItem) => void
-  onAddServiceLine: (service: ServiceType) => void
+  onAddServiceLine: (service: QuoteService) => void
   onUpdateLine: (lineKey: string, patch: Partial<EditLine>) => void
   onRemoveLine: (lineKey: string) => void
   onApplyPpm: (draft: PpmDraft) => void
@@ -1011,7 +1028,7 @@ function SystemCard({
   readOnly,
   isPending,
   systemTypes,
-  serviceTypes,
+  quoteServices,
   assetTypes,
   defaultHourlyCostPence,
   specTemplates,
@@ -1071,15 +1088,14 @@ function SystemCard({
     [assetTypes, system.system_type_id],
   )
 
-  // Services belonging to this system's system type, addable as line items.
-  const systemServiceTypes = useMemo(
+  // Global non-product services (Installation, Decommission, etc.), addable to
+  // any system regardless of its system type. Only active ones are offered.
+  const availableServices = useMemo(
     () =>
-      system.system_type_id
-        ? serviceTypes
-            .filter((s) => s.system_type_id === system.system_type_id)
-            .sort((a, b) => a.name.localeCompare(b.name))
-        : [],
-    [serviceTypes, system.system_type_id],
+      quoteServices
+        .filter((s) => s.active)
+        .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name)),
+    [quoteServices],
   )
 
   const systemTotalPence = system.lines.reduce(
@@ -1638,13 +1654,11 @@ function SystemCard({
                     <Button
                       variant="outline"
                       size="sm"
-                      disabled={isPending || !system.system_type_id || systemServiceTypes.length === 0}
+                      disabled={isPending || availableServices.length === 0}
                       title={
-                        !system.system_type_id
-                          ? 'Choose a system type first to add its services'
-                          : systemServiceTypes.length === 0
-                            ? 'No services configured for this system type'
-                            : undefined
+                        availableServices.length === 0
+                          ? 'No services configured yet — add them under Sales → Quote Services'
+                          : undefined
                       }
                     >
                       <Wrench className="mr-2 h-4 w-4" />
@@ -1654,9 +1668,16 @@ function SystemCard({
                   <DropdownMenuContent align="start" className="max-h-72 w-72 overflow-y-auto">
                     <DropdownMenuLabel>Services</DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    {systemServiceTypes.map((service) => (
+                    {availableServices.map((service) => (
                       <DropdownMenuItem key={service.id} onClick={() => onAddServiceLine(service)}>
-                        <span className="truncate">{service.name}</span>
+                        <span className="flex w-full items-center justify-between gap-2">
+                          <span className="truncate">{service.name}</span>
+                          {service.default_price_pence !== null && (
+                            <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                              {formatPence(service.default_price_pence)}
+                            </span>
+                          )}
+                        </span>
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuContent>

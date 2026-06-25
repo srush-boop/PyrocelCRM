@@ -21,6 +21,7 @@ import type {
   QuoteDesignCategory,
   SystemType,
   ServiceType,
+  QuoteService,
   AssetType,
   QuoteSystemPpm,
   Site,
@@ -61,6 +62,7 @@ export default async function QuoteDetailPage({
     { data: sites },
     { data: systemTypes },
     { data: serviceTypes },
+    { data: quoteServices },
     { data: assetTypes },
     { data: ppmRows },
     { data: ppmEngineerCost },
@@ -80,6 +82,7 @@ export default async function QuoteDetailPage({
     supabase.from('sites').select('id, name, client_id').order('name'),
     supabase.from('system_types').select('*').eq('active', true).order('name'),
     supabase.from('service_types').select('*').order('name'),
+    supabase.from('quote_services').select('*').eq('active', true).order('position').order('name'),
     supabase.from('asset_types').select('*').eq('active', true).order('position').order('name'),
     supabase
       .from('quote_system_ppm')
@@ -150,6 +153,7 @@ export default async function QuoteDetailPage({
         sites={(sites ?? []) as Site[]}
         systemTypes={(systemTypes ?? []) as SystemType[]}
         serviceTypes={(serviceTypes ?? []) as ServiceType[]}
+        quoteServices={(quoteServices ?? []) as QuoteService[]}
         assetTypes={(assetTypes ?? []) as AssetType[]}
         defaultHourlyCostPence={defaultHourlyCostPence}
         defaultMarginPercent={defaultMarginPercent}

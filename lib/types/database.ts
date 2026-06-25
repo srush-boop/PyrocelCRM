@@ -125,6 +125,20 @@ export interface ServiceType {
   system_type?: SystemType | null
 }
 
+// A reusable, global non-product service that can be added to any quote system
+// (e.g. Installation, Decommission redundant equipment). Configured under
+// Sales → Quote Services and surfaced via the quote builder's "Add service".
+export interface QuoteService {
+  id: string
+  name: string
+  description: string | null
+  default_price_pence: number | null
+  position: number
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface ChecklistItem {
   id: string
   label: string
@@ -681,6 +695,9 @@ export interface QuoteLineItem {
   system_id: string | null
   catalogue_item_id: string | null
   service_type_id: string | null
+  // True for non-product service lines (Installation, Decommission, etc.).
+  // These are grouped into a separate "Services" sub-section on the quote.
+  is_service: boolean
   // Manufacturer/supplier product code. Typing a code can link the line to a
   // catalogue item (sets catalogue_item_id, description, cost).
   product_code: string | null

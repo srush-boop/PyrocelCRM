@@ -14,6 +14,7 @@ export interface QuoteLineInput {
   description: string
   detail?: string | null
   service_type_id?: string | null
+  is_service?: boolean
   catalogue_item_id?: string | null
   product_code?: string | null
   quantity: number
@@ -125,10 +126,11 @@ function buildLineRows(
       return {
         quote_id: quoteId,
         system_id: systemId,
-        catalogue_item_id: l.catalogue_item_id || null,
-        service_type_id: l.service_type_id || null,
-        product_code: l.product_code?.trim() || null,
-        description: l.description.trim(),
+      catalogue_item_id: l.catalogue_item_id || null,
+      service_type_id: l.service_type_id || null,
+      is_service: l.is_service ?? false,
+      product_code: l.product_code?.trim() || null,
+      description: l.description.trim(),
         detail: l.detail?.trim() || null,
         quantity: qty,
         unit: l.unit?.trim() || null,
@@ -538,6 +540,7 @@ async function copySystems(
         system_id: newSysId,
         catalogue_item_id: l.catalogue_item_id,
         service_type_id: l.service_type_id,
+        is_service: l.is_service ?? false,
         description: l.description,
         detail: l.detail,
         quantity: l.quantity,

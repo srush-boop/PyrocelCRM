@@ -136,6 +136,7 @@ const salesNavItem: NavItem = {
     { title: 'Spec Templates', href: '/dashboard/sales/spec-templates', icon: FileTextIcon },
     { title: 'Work-type Fields', href: '/dashboard/sales/work-type-fields', icon: SlidersHorizontal },
     { title: 'Quote Sections', href: '/dashboard/sales/quote-sections', icon: LayoutList },
+    { title: 'Quote Services', href: '/dashboard/sales/quote-services', icon: Wrench },
     { title: 'Design Categories', href: '/dashboard/sales/design-categories', icon: PencilRuler },
   ],
 }

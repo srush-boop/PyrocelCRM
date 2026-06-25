@@ -101,6 +101,48 @@ export async function deleteAssetType(id: string): Promise<Result> {
   return { ok: true }
 }
 
+// ---------- Quote services (global non-product services) ----------
+export async function saveQuoteService(input: {
+  id?: string
+  name: string
+  description: string
+  default_price_pence: number | null
+  active: boolean
+}): Promise<Result> {
+  const { supabase, error } = await requireStaff()
+  if (!supabase) return { ok: false, error }
+  if (!input.name.trim()) return { ok: false, error: 'A service name is required' }
+
+  const payload = {
+    name: input.name.trim(),
+    description: input.description.trim() || null,
+    default_price_pence:
+      input.default_price_pence !== null && Number.isFinite(input.default_price_pence)
+        ? input.default_price_pence
+        : null,
+    active: input.active,
+    updated_at: new Date().toISOString(),
+  }
+
+  const query = input.id
+    ? supabase.from('quote_services').update(payload).eq('id', input.id)
+    : supabase.from('quote_services').insert(payload)
+
+  const { error: dbError } = await query
+  if (dbError) return { ok: false, error: dbError.message }
+  revalidatePath('/dashboard/sales/quote-services')
+  return { ok: true }
+}
+
+export async function deleteQuoteService(id: string): Promise<Result> {
+  const { supabase, error } = await requireStaff()
+  if (!supabase) return { ok: false, error }
+  const { error: dbError } = await supabase.from('quote_services').delete().eq('id', id)
+  if (dbError) return { ok: false, error: dbError.message }
+  revalidatePath('/dashboard/sales/quote-services')
+  return { ok: true }
+}
+
 // ---------- Spec templates ----------
 export async function saveSpecTemplate(input: {
   id?: string

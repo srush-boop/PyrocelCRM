@@ -12,6 +12,7 @@ import { cn, formatDateUK } from '@/lib/utils'
 import { QUOTE_STATUS_META } from '@/lib/sales'
 import type { Quote, QuoteStatus } from '@/lib/types/database'
 import { setQuoteStatus } from '@/app/(dashboard)/dashboard/sales/actions'
+import { SendQuoteDialog } from './send-quote-dialog'
 
 export function QuoteStatusPanel({ quote }: { quote: Quote }) {
   const router = useRouter()
@@ -55,15 +56,20 @@ export function QuoteStatusPanel({ quote }: { quote: Quote }) {
           </Link>
         </Button>
 
-        {quote.status === 'draft' && (
-          <Button size="sm" onClick={() => update('sent')} disabled={isPending}>
-            <Send className="mr-2 h-4 w-4" />
-            Mark as Sent
-          </Button>
-        )}
+        {quote.status === 'draft' && <SendQuoteDialog quote={quote} />}
 
         {quote.status === 'sent' && (
           <>
+            <SendQuoteDialog
+              quote={quote}
+              label="Resend"
+              trigger={
+                <Button size="sm" variant="outline" disabled={isPending}>
+                  <Send className="mr-2 h-4 w-4" />
+                  Resend
+                </Button>
+              }
+            />
             <Button
               size="sm"
               onClick={() => update('accepted')}

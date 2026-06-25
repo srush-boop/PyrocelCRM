@@ -1,9 +1,19 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { computeQuoteTotals, QUOTE_TYPES, WORK_TYPES, sellFromCost, resolveLineMargin } from '@/lib/sales'
-import type { QuoteStatus, QuoteCatalogueItem } from '@/lib/types/database'
+import { sendEmail } from '@/lib/email/send-email'
+import { renderQuotePdfBuffer } from '@/lib/pdf/quote-pdf'
+import type {
+  QuoteStatus,
+  QuoteCatalogueItem,
+  Quote,
+  QuoteSystem,
+  QuoteLineItem,
+  CompanyInfo,
+} from '@/lib/types/database'
 
 const VALID_QUOTE_TYPES = new Set(QUOTE_TYPES.map((t) => t.value))
 const VALID_WORK_TYPES = new Set(WORK_TYPES.map((t) => t.code))
@@ -474,6 +484,126 @@ export async function setQuoteStatus(
   revalidatePath('/dashboard/sales')
   revalidatePath('/dashboard/sales/quotes')
   revalidatePath(`/dashboard/sales/${id}`)
+  return { ok: true }
+}
+
+// Resolve the app's public base URL for building portal links inside emails.
+// Prefer explicit env, then Vercel's deployment URL, then the request host.
+async function resolveBaseUrl(): Promise<string> {
+  const vercelUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL
+  const envUrl = process.env.NEXT_PUBLIC_APP_URL || (vercelUrl ? `https://${vercelUrl}` : '')
+  if (envUrl) return envUrl.replace(/\/$/, '')
+  const h = await headers()
+  const host = h.get('x-forwarded-host') || h.get('host')
+  const proto = h.get('x-forwarded-proto') || 'https'
+  return host ? `${proto}://${host}`.replace(/\/$/, '') : ''
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+// Wrap the (plain text) draft message in a simple branded HTML email with a
+// button linking to the customer portal quote.
+function buildQuoteEmailHtml(args: {
+  message: string
+  companyName: string
+  quoteLink?: string
+}): string {
+  const body = escapeHtml(args.message).replace(/\n/g, '<br>')
+  const button = args.quoteLink
+    ? `<p style="margin:24px 0;"><a href="${args.quoteLink}" style="background:#0f172a;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;display:inline-block;">View your quote online</a></p>`
+    : ''
+  return `<!doctype html><html><body style="margin:0;background:#f1f5f9;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
+    <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;">
+      <div style="background:#0f172a;color:#ffffff;padding:20px 24px;font-size:18px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">${escapeHtml(
+        args.companyName,
+      )}</div>
+      <div style="padding:24px;font-size:14px;line-height:1.6;">
+        <div>${body}</div>
+        ${button}
+        <p style="font-size:12px;color:#64748b;margin-top:24px;">A PDF copy of your quotation is attached to this email.</p>
+      </div>
+    </div>
+  </body></html>`
+}
+
+/**
+ * Email a quote to the client with a PDF attachment + portal link, and mark it
+ * as Sent. The caller supplies an (editable) recipient, subject, and message.
+ */
+export async function sendQuote(args: {
+  id: string
+  to: string
+  cc?: string[]
+  subject: string
+  message: string
+}): Promise<{ ok: boolean; error?: string }> {
+  const { supabase, user, error } = await requireStaff()
+  if (error || !user) return { ok: false, error: error ?? 'Not authorised.' }
+
+  const to = args.to.trim()
+  if (!/.+@.+\..+/.test(to)) return { ok: false, error: 'Please enter a valid recipient email address.' }
+  if (!args.subject.trim()) return { ok: false, error: 'Please enter a subject.' }
+
+  // Load everything the PDF + email need.
+  const { data: quote } = await supabase
+    .from('quotes')
+    .select('*, client:clients(*), site:sites(*)')
+    .eq('id', args.id)
+    .single()
+  if (!quote) return { ok: false, error: 'Quote not found.' }
+
+  const [{ data: systems }, { data: lines }, { data: company }] = await Promise.all([
+    supabase.from('quote_systems').select('*').eq('quote_id', args.id).order('position'),
+    supabase.from('quote_line_items').select('*').eq('quote_id', args.id).order('position'),
+    supabase.from('company_info').select('*').limit(1).maybeSingle(),
+  ])
+
+  const typedQuote = quote as Quote
+  const companyName = (company as CompanyInfo | null)?.name || 'Pyrocel Ltd'
+
+  // Generate the PDF attachment.
+  let pdf: Buffer
+  try {
+    pdf = await renderQuotePdfBuffer({
+      quote: typedQuote,
+      systems: (systems ?? []) as QuoteSystem[],
+      lines: (lines ?? []) as QuoteLineItem[],
+      company: (company ?? null) as CompanyInfo | null,
+    })
+  } catch (e) {
+    console.error('[v0] Quote PDF generation failed:', e)
+    return { ok: false, error: 'Could not generate the quote PDF.' }
+  }
+
+  const baseUrl = await resolveBaseUrl()
+  const quoteLink = baseUrl ? `${baseUrl}/portal/quotes/${args.id}` : undefined
+  const html = buildQuoteEmailHtml({ message: args.message, companyName, quoteLink })
+  const fileName = `Quote-${(typedQuote.reference ?? typedQuote.quote_number ?? typedQuote.id).toString().replace(/[^a-zA-Z0-9-_]/g, '')}.pdf`
+
+  const result = await sendEmail(to, args.subject.trim(), html, {
+    cc: args.cc,
+    attachments: [{ filename: fileName, content: pdf }],
+  })
+  if (!result.success) {
+    return { ok: false, error: result.error || 'The email could not be sent.' }
+  }
+
+  // Mark as sent. Don't downgrade a quote that was already accepted/rejected.
+  const patch: Record<string, unknown> = { sent_at: new Date().toISOString() }
+  if (typedQuote.status === 'draft' || typedQuote.status === 'sent') {
+    patch.status = 'sent'
+  }
+  await supabase.from('quotes').update(patch).eq('id', args.id)
+
+  revalidatePath('/dashboard/sales')
+  revalidatePath('/dashboard/sales/quotes')
+  revalidatePath(`/dashboard/sales/${args.id}`)
   return { ok: true }
 }
 

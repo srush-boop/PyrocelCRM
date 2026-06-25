@@ -131,7 +131,7 @@ export const QUOTE_STATUS_META: Record<
   { label: string; badgeClass: string }
 > = {
   draft: { label: 'Draft', badgeClass: 'bg-muted text-muted-foreground' },
-  sent: { label: 'Sent', badgeClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' },
+  sent: { label: 'Sent for Approval', badgeClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' },
   accepted: {
     label: 'Accepted',
     badgeClass: 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300',

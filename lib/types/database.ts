@@ -781,6 +781,13 @@ export interface Quote {
   sent_at: string | null
   decided_at: string | null
   decision_note: string | null
+  // Public client-approval link + signature/PO capture.
+  share_token: string | null
+  require_signature: boolean
+  po_number: string | null
+  signature_name: string | null
+  signature_image_url: string | null
+  signed_at: string | null
   created_by: string | null
   created_at: string
   updated_at: string

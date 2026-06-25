@@ -542,6 +542,8 @@ export async function sendQuote(args: {
   cc?: string[]
   subject: string
   message: string
+  // When true, the client must draw a signature to approve via the public link.
+  requireSignature?: boolean
 }): Promise<{ ok: boolean; error?: string }> {
   const { supabase, user, error } = await requireStaff()
   if (error || !user) return { ok: false, error: error ?? 'Not authorised.' }
@@ -581,8 +583,12 @@ export async function sendQuote(args: {
     return { ok: false, error: 'Could not generate the quote PDF.' }
   }
 
+  // Ensure the quote has a public secret link token (no client login needed).
+  const shareToken = typedQuote.share_token ?? crypto.randomUUID().replace(/-/g, '')
+
   const baseUrl = await resolveBaseUrl()
-  const quoteLink = baseUrl ? `${baseUrl}/portal/quotes/${args.id}` : undefined
+  // Public, login-free approval page keyed by the secret token.
+  const quoteLink = baseUrl ? `${baseUrl}/quote/${shareToken}` : undefined
   const html = buildQuoteEmailHtml({ message: args.message, companyName, quoteLink })
   const fileName = `Quote-${(typedQuote.reference ?? typedQuote.quote_number ?? typedQuote.id).toString().replace(/[^a-zA-Z0-9-_]/g, '')}.pdf`
 
@@ -595,7 +601,11 @@ export async function sendQuote(args: {
   }
 
   // Mark as sent. Don't downgrade a quote that was already accepted/rejected.
-  const patch: Record<string, unknown> = { sent_at: new Date().toISOString() }
+  const patch: Record<string, unknown> = {
+    sent_at: new Date().toISOString(),
+    share_token: shareToken,
+    require_signature: !!args.requireSignature,
+  }
   if (typedQuote.status === 'draft' || typedQuote.status === 'sent') {
     patch.status = 'sent'
   }

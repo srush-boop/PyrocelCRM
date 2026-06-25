@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
 import { Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { sendQuote } from '@/app/(dashboard)/dashboard/sales/actions'
@@ -53,12 +54,14 @@ export function SendQuoteDialog({
     `Quotation${ref ? ` ${ref}` : ''}${quote.title ? ` — ${quote.title}` : ''}`,
   )
   const [message, setMessage] = useState(defaultMessage(quote))
+  const [requireSignature, setRequireSignature] = useState(quote.require_signature ?? false)
 
   function reset() {
     setTo(defaultTo)
     setCc('')
     setSubject(`Quotation${ref ? ` ${ref}` : ''}${quote.title ? ` — ${quote.title}` : ''}`)
     setMessage(defaultMessage(quote))
+    setRequireSignature(quote.require_signature ?? false)
   }
 
   function handleSend() {
@@ -73,6 +76,7 @@ export function SendQuoteDialog({
         cc: ccList.length > 0 ? ccList : undefined,
         subject,
         message,
+        requireSignature,
       })
       if (res.ok) {
         toast.success('Quote sent to the client')
@@ -153,6 +157,20 @@ export function SendQuoteDialog({
               onChange={(e) => setMessage(e.target.value)}
               rows={9}
               className="resize-y"
+            />
+          </div>
+
+          <div className="flex items-start justify-between gap-4 rounded-md border p-3">
+            <div className="grid gap-0.5">
+              <Label htmlFor="quote-require-sig">Require signature to approve</Label>
+              <p className="text-xs text-muted-foreground">
+                The client must draw a signature and enter their name before they can approve.
+              </p>
+            </div>
+            <Switch
+              id="quote-require-sig"
+              checked={requireSignature}
+              onCheckedChange={setRequireSignature}
             />
           </div>
         </div>

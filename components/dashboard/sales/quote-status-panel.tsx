@@ -45,6 +45,28 @@ export function QuoteStatusPanel({ quote }: { quote: Quote }) {
             <span>Declined {formatDateUK(quote.decided_at)}.</span>
           )}
           {quote.status === 'draft' && <span>Not yet sent to the client.</span>}
+          {quote.status === 'accepted' && (quote.po_number || quote.signature_name) && (
+            <div className="mt-1 flex flex-col gap-1 text-foreground">
+              {quote.po_number && (
+                <span>
+                  PO number: <span className="font-medium">{quote.po_number}</span>
+                </span>
+              )}
+              {quote.signature_name && (
+                <span className="flex items-center gap-2">
+                  Signed by <span className="font-medium">{quote.signature_name}</span>
+                  {quote.signature_image_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={quote.signature_image_url || '/placeholder.svg'}
+                      alt={`Signature of ${quote.signature_name}`}
+                      className="h-10 rounded border bg-white"
+                    />
+                  )}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

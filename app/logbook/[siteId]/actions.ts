@@ -4,14 +4,19 @@ import crypto from 'crypto'
 import { cookies } from 'next/headers'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { LogbookEntry, LogbookEntryType } from '@/lib/types/database'
-import { LOGBOOK_ENTRY_TYPES } from '@/lib/logbook'
 
 const COOKIE_PREFIX = 'lb_access_'
 // Access session lifetime: 8 hours.
 const MAX_AGE_SECONDS = 60 * 60 * 8
 
-// Derived from the shared catalog so occupier/staff/portal stay in sync.
-const VALID_ENTRY_TYPES: LogbookEntryType[] = LOGBOOK_ENTRY_TYPES.map((t) => t.value)
+const VALID_ENTRY_TYPES: LogbookEntryType[] = [
+  'weekly_alarm_test',
+  'monthly_emergency_light_test',
+  'fire_drill',
+  'false_alarm',
+  'fault_defect',
+  'note',
+]
 
 /** Server-only secret used to sign access cookies. */
 function signingSecret(): string {

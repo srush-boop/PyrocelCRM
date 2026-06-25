@@ -21,14 +21,14 @@ export async function fetchKpiData(supabase: SupabaseClient): Promise<KpiData> {
       completed_at,
       site_service:site_services(
         service_type_id,
-        client_tolerance_value,
-        client_tolerance_unit,
         site:sites(id, name, client_id, client:clients(id, name)),
         service_type:service_types(
           id,
           name,
           regulatory_tolerance_value,
-          regulatory_tolerance_unit
+          regulatory_tolerance_unit,
+          client_tolerance_value,
+          client_tolerance_unit
         )
       )
     `,
@@ -51,26 +51,18 @@ export async function fetchKpiData(supabase: SupabaseClient): Promise<KpiData> {
 
     const serviceTypeId = serviceType.id as string
 
-    const regulatory = {
-      value: serviceType.regulatory_tolerance_value ?? 0,
-      unit: (serviceType.regulatory_tolerance_unit ?? 'days') as ToleranceUnit,
-    }
-
     if (!tolerances[serviceTypeId]) {
-      // Client tier defaults to the regulatory standard at the service-type
-      // level; the per-site/service override (below) tightens it where set.
-      tolerances[serviceTypeId] = { regulatory, client: regulatory }
+      tolerances[serviceTypeId] = {
+        regulatory: {
+          value: serviceType.regulatory_tolerance_value ?? 0,
+          unit: (serviceType.regulatory_tolerance_unit ?? 'days') as ToleranceUnit,
+        },
+        client: {
+          value: serviceType.client_tolerance_value ?? 0,
+          unit: (serviceType.client_tolerance_unit ?? 'days') as ToleranceUnit,
+        },
+      }
     }
-
-    // Client KPI for this specific site/service: use the override when present,
-    // otherwise fall back to the regulatory standard.
-    const clientTolerance =
-      ss.client_tolerance_value != null
-        ? {
-            value: ss.client_tolerance_value as number,
-            unit: (ss.client_tolerance_unit ?? 'days') as ToleranceUnit,
-          }
-        : regulatory
 
     tasks.push({
       id: row.id,
@@ -82,7 +74,6 @@ export async function fetchKpiData(supabase: SupabaseClient): Promise<KpiData> {
       siteName: site.name,
       clientId: site.client?.id ?? site.client_id ?? null,
       clientName: site.client?.name ?? null,
-      clientTolerance,
     })
   }
 

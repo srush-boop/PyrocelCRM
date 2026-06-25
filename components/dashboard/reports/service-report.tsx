@@ -33,7 +33,6 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
   pass: { label: 'Pass', color: '#16a34a' },
   fail: { label: 'Fail', color: '#dc2626' },
   partial: { label: 'Partial', color: '#d97706' },
-  no_access: { label: 'No Access', color: '#d97706' },
   pending: { label: 'Pending', color: '#6b7280' },
 }
 

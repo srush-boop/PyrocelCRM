@@ -8,8 +8,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ArrowLeft, MapPin, Phone, Mail, Building2, Radio, Building, User, ExternalLink } from 'lucide-react'
 import { EditSiteButton } from '@/components/dashboard/sites/edit-site-button'
 import { SiteServicesManager } from '@/components/dashboard/sites/site-services-manager'
-import { SiteSystemsManager } from '@/components/dashboard/sites/site-systems-manager'
-import { QuotesTable } from '@/components/dashboard/sales/quotes-table'
 import { SiteAssetsTab, type SiteAsset } from '@/components/dashboard/sites/site-assets-tab'
 import { SiteReports } from '@/components/dashboard/sites/site-reports'
 import { SiteLogbook } from '@/components/dashboard/sites/site-logbook'
@@ -34,8 +32,6 @@ import type {
   Subcontractor,
   ServiceType,
   SiteService,
-  SiteSystem,
-  SystemType,
   Task,
   TaskResult,
   Damper,
@@ -45,18 +41,14 @@ import type {
   EmergencyLightInspection,
   Extinguisher,
   LogbookEntry,
-  SiteBuildingInfo,
-  Quote,
 } from '@/lib/types/database'
 
 interface PageProps {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ tab?: string; editService?: string }>
 }
 
-export default async function SiteDetailPage({ params, searchParams }: PageProps) {
+export default async function SiteDetailPage({ params }: PageProps) {
   const { id } = await params
-  const { tab: tabParam, editService: editServiceParam } = await searchParams
   const supabase = await createClient()
   
   const { data: { user } } = await supabase.auth.getUser()
@@ -86,7 +78,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
     notFound()
   }
 
-  const [siteServicesResult, serviceTypesResult, engineersResult, routesResult, areasResult, subcontractorsResult, clientsResult, siteSystemsResult, systemTypesResult, quotesResult] = await Promise.all([
+  const [siteServicesResult, serviceTypesResult, engineersResult, routesResult, areasResult, subcontractorsResult, clientsResult] = await Promise.all([
     supabase
       .from('site_services')
       .select(`
@@ -108,13 +100,6 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
     supabase.from('areas').select('*').order('name'),
     supabase.from('subcontractors').select('*').eq('status', 'active').order('name'),
     supabase.from('clients').select('*').order('name'),
-    supabase.from('site_systems').select('*').eq('site_id', id).order('position').order('name'),
-    supabase.from('system_types').select('*').eq('active', true).order('name'),
-    supabase
-      .from('quotes')
-      .select('*, client:clients(*), site:sites(*)')
-      .eq('site_id', id)
-      .order('created_at', { ascending: false }),
   ])
 
   const siteServices = (siteServicesResult.data || []) as (SiteService & { service_type: ServiceType })[]
@@ -124,9 +109,6 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
   const areas = (areasResult.data || []) as Area[]
   const subcontractors = (subcontractorsResult.data || []) as Subcontractor[]
   const clients = (clientsResult.data || []) as Client[]
-  const siteSystems = (siteSystemsResult.data || []) as SiteSystem[]
-  const systemTypes = (systemTypesResult.data || []) as SystemType[]
-  const quotes = (quotesResult.data || []) as Quote[]
 
   // Get tasks for this site's services
   const siteServiceIds = siteServices.map(ss => ss.id)
@@ -242,14 +224,6 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
     .order('entry_date', { ascending: false })
   const logbookEntries = (logbookData || []) as LogbookEntry[]
 
-  // General building information (responsible persons, FRA, emergency contacts).
-  const { data: buildingInfoData } = await supabase
-    .from('site_building_info')
-    .select('*')
-    .eq('site_id', id)
-    .maybeSingle()
-  const buildingInfo = (buildingInfoData as SiteBuildingInfo | null) ?? null
-
   const logbookReports: ReportTimelineItem[] = completedTasks.map((task) => {
     const serviceName = task.site_service?.service_type?.name || 'Service'
     const reportHref = isDamperService(serviceName)
@@ -322,18 +296,12 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
         <EditSiteButton site={site as Site & { route: Route | null }} clients={clients} />
       </div>
 
-      <Tabs
-        key={editServiceParam ? `edit-${editServiceParam}` : tabParam ?? 'overview'}
-        defaultValue={editServiceParam ? 'overview' : tabParam ?? 'overview'}
-        className="gap-6"
-      >
+      <Tabs defaultValue="overview" className="gap-6">
         <TabsList className="h-auto flex-wrap justify-start">
           <TabsTrigger value="overview" className="flex-none">Overview</TabsTrigger>
-          <TabsTrigger value="systems" className="flex-none">Systems</TabsTrigger>
           {assetTabs.length > 0 && (
             <TabsTrigger value="assets" className="flex-none">Assets</TabsTrigger>
           )}
-          <TabsTrigger value="quotes" className="flex-none">Quotes</TabsTrigger>
           <TabsTrigger value="logbook" className="flex-none">Log Book</TabsTrigger>
           <TabsTrigger value="documents" className="flex-none">Documents</TabsTrigger>
           <TabsTrigger value="reports" className="flex-none">Reports</TabsTrigger>
@@ -404,12 +372,6 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
               <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
               <span>{site.address}</span>
             </div>
-            {(site as Site).uprn && (
-              <div className="text-sm">
-                <span className="text-muted-foreground">UPRN: </span>
-                {(site as Site).uprn}
-              </div>
-            )}
             {site.contact_name && (
               <div className="text-sm">
                 <span className="text-muted-foreground">Contact: </span>
@@ -501,7 +463,6 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
 
         <SiteServicesManager
           siteId={id}
-          initialEditServiceId={editServiceParam}
           siteServices={siteServices}
           availableServiceTypes={availableServiceTypes}
           engineers={engineers}
@@ -512,21 +473,6 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
           siteStatus={(site as Site).status}
         />
           </div>
-        </TabsContent>
-
-        <TabsContent value="systems" className="mt-0">
-          <SiteSystemsManager
-            siteId={id}
-            siteSystems={siteSystems}
-            siteServices={siteServices}
-            systemTypes={systemTypes}
-            availableServiceTypes={availableServiceTypes}
-            siteStatus={(site as Site).status}
-          />
-        </TabsContent>
-
-        <TabsContent value="quotes" className="mt-0">
-          <QuotesTable quotes={quotes} newQuoteHref={`/dashboard/sales/new?site=${id}`} />
         </TabsContent>
 
         {assetTabs.length > 0 && (
@@ -541,10 +487,9 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             siteName={site.name}
             siteAddress={site.address}
             postcode={(site as Site).postcode}
-                reports={logbookReports}
-                entries={logbookEntries}
-                buildingInfo={buildingInfo}
-              />
+            reports={logbookReports}
+            entries={logbookEntries}
+          />
         </TabsContent>
 
         <TabsContent value="documents" className="mt-0">

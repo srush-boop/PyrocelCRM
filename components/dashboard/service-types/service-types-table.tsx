@@ -31,14 +31,13 @@ import {
 } from '@/components/ui/alert-dialog'
 import { MoreHorizontal, Pencil, Trash2, Wrench } from 'lucide-react'
 import { EditServiceTypeDialog } from './edit-service-type-dialog'
-import type { ServiceType, SystemType } from '@/lib/types/database'
+import type { ServiceType } from '@/lib/types/database'
 
 interface ServiceTypesTableProps {
   serviceTypes: ServiceType[]
-  systemTypes: SystemType[]
 }
 
-export function ServiceTypesTable({ serviceTypes, systemTypes }: ServiceTypesTableProps) {
+export function ServiceTypesTable({ serviceTypes }: ServiceTypesTableProps) {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [editServiceType, setEditServiceType] = useState<ServiceType | null>(null)
   const router = useRouter()
@@ -59,7 +58,6 @@ export function ServiceTypesTable({ serviceTypes, systemTypes }: ServiceTypesTab
           <TableHeader>
             <TableRow>
               <TableHead>Service Name</TableHead>
-              <TableHead>System</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Description</TableHead>
               <TableHead>Default Frequency</TableHead>
@@ -69,7 +67,7 @@ export function ServiceTypesTable({ serviceTypes, systemTypes }: ServiceTypesTab
           <TableBody>
             {serviceTypes.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={5} className="h-24 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <Wrench className="h-8 w-8 text-muted-foreground/50 mb-2" />
                     <p className="text-muted-foreground">No service types found</p>
@@ -80,17 +78,6 @@ export function ServiceTypesTable({ serviceTypes, systemTypes }: ServiceTypesTab
               serviceTypes.map((serviceType) => (
                 <TableRow key={serviceType.id}>
                   <TableCell className="font-medium">{serviceType.name}</TableCell>
-                  <TableCell>
-                    {serviceType.system_type ? (
-                      <Badge variant="outline" className="font-mono">
-                        {serviceType.system_type.code
-                          ? `${serviceType.system_type.code} — ${serviceType.system_type.name}`
-                          : serviceType.system_type.name}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
                   <TableCell>
                     <Badge variant={(serviceType.status || 'live') === 'live' ? 'default' : 'destructive'}>
                       {serviceType.status || 'live'}
@@ -152,7 +139,6 @@ export function ServiceTypesTable({ serviceTypes, systemTypes }: ServiceTypesTab
       {editServiceType && (
         <EditServiceTypeDialog
           serviceType={editServiceType}
-          systemTypes={systemTypes}
           open={!!editServiceType}
           onOpenChange={() => setEditServiceType(null)}
         />

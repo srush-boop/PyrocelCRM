@@ -42,7 +42,6 @@ import {
   Loader2,
   ChevronRight,
   UserCheck,
-  ArrowUpDown,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
@@ -70,7 +69,6 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   const [search, setSearch] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [activeTab, setActiveTab] = useState('upcoming')
-  const [sortBy, setSortBy] = useState<'date' | 'postcode'>('date')
   const [selectedEngineer, setSelectedEngineer] = useState<string>('all')
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined)
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined)
@@ -166,28 +164,10 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     return matchesSearch && matchesEngineer && matchesDateFrom && matchesDateTo
   })
 
-  // Sort the filtered tasks by the chosen key. This flows through to the
-  // upcoming/completed/overdue lists. The route/area grouped views apply their
-  // own ordering (route position / site name) on top of this.
-  const sortedTasks = [...filteredTasks].sort((a, b) => {
-    if (sortBy === 'postcode') {
-      const pa = a.site_service?.site?.postcode?.trim().toUpperCase() ?? ''
-      const pb = b.site_service?.site?.postcode?.trim().toUpperCase() ?? ''
-      // Push tasks with no postcode to the bottom
-      if (pa && !pb) return -1
-      if (!pa && pb) return 1
-      if (pa !== pb) return pa.localeCompare(pb)
-      // Tie-break by due date so same-postcode work stays date-ordered
-      return new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime()
-    }
-    // Default: due date ascending
-    return new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime()
-  })
-
-  const upcomingTasks = sortedTasks.filter(
+  const upcomingTasks = filteredTasks.filter(
     (task) => task.status === 'pending' || task.status === 'in_progress'
   )
-  const completedTasks = sortedTasks.filter((task) => task.status === 'completed')
+  const completedTasks = filteredTasks.filter((task) => task.status === 'completed')
   const overdueTasks = upcomingTasks.filter(
     (task) => new Date(task.scheduled_date) < today && task.status === 'pending'
   )
@@ -616,19 +596,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
           </Button>
         )}
 
-        <div className="ml-auto flex items-center gap-3">
-          <Select value={sortBy} onValueChange={(v) => setSortBy(v as 'date' | 'postcode')}>
-            <SelectTrigger className="w-[160px]">
-              <ArrowUpDown className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
-              <SelectValue placeholder="Sort by" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="date">Due date</SelectItem>
-              <SelectItem value="postcode">Postcode</SelectItem>
-            </SelectContent>
-          </Select>
-          {viewToggle}
-        </div>
+        <div className="ml-auto">{viewToggle}</div>
       </div>
 
       {viewMode === 'grid' && overdueTasks.length > 0 && (

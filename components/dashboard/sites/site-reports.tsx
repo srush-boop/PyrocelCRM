@@ -181,8 +181,6 @@ export function SiteReports({ siteName, siteAddress, completedTasks, reportingEm
         return <Badge className="bg-red-500/10 text-red-600 border-red-500/20"><XCircle className="h-3 w-3 mr-1" />Fail</Badge>
       case 'partial':
         return <Badge className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20"><AlertCircle className="h-3 w-3 mr-1" />Partial</Badge>
-      case 'no_access':
-        return <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20"><AlertCircle className="h-3 w-3 mr-1" />No Access</Badge>
       default:
         return <Badge variant="secondary">{status}</Badge>
     }

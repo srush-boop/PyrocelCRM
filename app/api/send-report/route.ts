@@ -5,7 +5,6 @@ import { sendEmail } from '@/lib/email/send-email'
 import {
   generateClientPassEmail,
   generateClientFailEmail,
-  generateClientNoAccessEmail,
   generateInternalAlertEmail,
   EmailData,
 } from '@/lib/email/templates'
@@ -67,7 +66,7 @@ export async function POST(request: NextRequest) {
     const site = siteService?.site
     const serviceType = siteService?.service_type
     const engineer = task.assigned_engineer
-    const overallStatus = taskResult.overall_status as 'pass' | 'fail' | 'partial' | 'no_access'
+    const overallStatus = taskResult.overall_status as 'pass' | 'fail' | 'partial'
 
     // Build the "Open report" link. This points at the public, token-based
     // report route (/r/<public_token>) so recipients can open the report
@@ -162,14 +161,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Pick the right client-facing template based on result. 'no_access' is a
-    // neutral outcome (not a failure), so it gets its own template.
+    // Pick the right client-facing template based on result
     const { subject, html } =
       overallStatus === 'pass'
         ? generateClientPassEmail(emailData)
-        : overallStatus === 'no_access'
-          ? generateClientNoAccessEmail(emailData)
-          : generateClientFailEmail(emailData)
+        : generateClientFailEmail(emailData)
 
     // Send to every client recipient (CC the defects addresses on the first
     // recipient only, so the department is looped in without duplicate emails).
@@ -188,9 +184,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // For failed/partial inspections, also notify internal staff. 'no_access'
-    // is not a defect, so it does not trigger the defect alert.
-    if (overallStatus === 'fail' || overallStatus === 'partial') {
+    // For failed/partial inspections, also notify internal staff
+    if (overallStatus !== 'pass') {
       const internalEmails =
         process.env.INTERNAL_ALERT_EMAILS?.split(',').map((e) => e.trim()).filter(Boolean) ||
         []

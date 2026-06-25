@@ -42,30 +42,6 @@ export const LOGBOOK_ENTRY_TYPES: LogbookEntryTypeMeta[] = [
     description: 'Record faults, defects and remedial action.',
   },
   {
-    value: 'fire_door_check',
-    label: 'Fire door / escape route check',
-    reference: 'RRO 2005',
-    description: 'Routine inspection of fire doors, signage and that escape routes are kept clear.',
-  },
-  {
-    value: 'firefighting_equipment_check',
-    label: 'Firefighting equipment check',
-    reference: 'BS 5306',
-    description: 'Monthly visual check of extinguishers, hose reels and other firefighting equipment.',
-  },
-  {
-    value: 'staff_training',
-    label: 'Staff training / instruction',
-    reference: 'RRO 2005',
-    description: 'Record fire safety training, inductions and instructions given to staff.',
-  },
-  {
-    value: 'frs_visit',
-    label: 'Fire & Rescue Service visit',
-    reference: 'RRO 2005',
-    description: 'Record visits, audits or correspondence from the Fire & Rescue Service.',
-  },
-  {
     value: 'note',
     label: 'General note',
     reference: '—',
@@ -88,9 +64,7 @@ export type LogbookSystemId =
   | 'emergency_lighting'
   | 'extinguishers'
   | 'dampers'
-  | 'fire_doors'
   | 'fire_drill'
-  | 'training'
   | 'general'
 
 export interface LogbookSystemMeta {
@@ -103,9 +77,7 @@ export const LOGBOOK_SYSTEMS: LogbookSystemMeta[] = [
   { id: 'emergency_lighting', label: 'Emergency lighting' },
   { id: 'extinguishers', label: 'Fire extinguishers' },
   { id: 'dampers', label: 'Fire & smoke dampers' },
-  { id: 'fire_doors', label: 'Fire doors & escape routes' },
   { id: 'fire_drill', label: 'Fire drills' },
-  { id: 'training', label: 'Training' },
   { id: 'general', label: 'General' },
 ]
 
@@ -123,12 +95,6 @@ export function systemForEntryType(type: LogbookEntryType): LogbookSystemId {
       return 'emergency_lighting'
     case 'fire_drill':
       return 'fire_drill'
-    case 'fire_door_check':
-      return 'fire_doors'
-    case 'firefighting_equipment_check':
-      return 'extinguishers'
-    case 'staff_training':
-      return 'training'
     default:
       return 'general'
   }

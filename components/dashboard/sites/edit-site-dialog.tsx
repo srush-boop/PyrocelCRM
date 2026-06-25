@@ -44,7 +44,6 @@ export function EditSiteDialog({ site, clients, open, onOpenChange }: EditSiteDi
     contact_email: site.contact_email || '',
     contact_phone: site.contact_phone || '',
     client_id: site.client_id || '',
-    uprn: site.uprn || '',
     status: site.status || 'live',
     notes: site.notes || '',
     has_remote_monitoring: site.has_remote_monitoring ?? false,
@@ -157,16 +156,6 @@ export function EditSiteDialog({ site, clients, open, onOpenChange }: EditSiteDi
                 Used as the access code for the site&apos;s QR fire safety log book.
               </p>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="uprn">UPRN</Label>
-              <Input
-                id="uprn"
-                value={formData.uprn}
-                onChange={(e) => setFormData({ ...formData, uprn: e.target.value })}
-                placeholder="Unique Property Reference Number"
-                inputMode="numeric"
-              />
-            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="contact_name">Contact Name</Label>
@@ -186,13 +175,12 @@ export function EditSiteDialog({ site, clients, open, onOpenChange }: EditSiteDi
               </div>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="contact_email">Contact Email *</Label>
+              <Label htmlFor="contact_email">Contact Email</Label>
               <Input
                 id="contact_email"
                 type="email"
                 value={formData.contact_email}
                 onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
-                required
               />
             </div>
             <div className="grid gap-2">

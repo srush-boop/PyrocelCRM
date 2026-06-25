@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { SettingsContent } from '@/components/dashboard/settings/settings-content'
-import type { Profile, CompanyInfo, Branch, Department } from '@/lib/types/database'
+import type { Profile, CompanyInfo, Branch } from '@/lib/types/database'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -19,14 +19,13 @@ export default async function SettingsPage() {
 
   const isAdmin = (profile as Profile).role === 'admin'
 
-  // Company info, branches + departments are only needed for the admin tabs.
-  const [companyResult, branchesResult, departmentsResult] = isAdmin
+  // Company info + branches are only needed for the admin-only Company tab.
+  const [companyResult, branchesResult] = isAdmin
     ? await Promise.all([
         supabase.from('company_info').select('*').limit(1).maybeSingle(),
         supabase.from('branches').select('*').order('name'),
-        supabase.from('departments').select('*').order('name'),
       ])
-    : [{ data: null }, { data: [] }, { data: [] }]
+    : [{ data: null }, { data: [] }]
 
   return (
     <div className="space-y-6">
@@ -42,7 +41,6 @@ export default async function SettingsPage() {
         profile={profile as Profile}
         company={(companyResult.data as CompanyInfo) || null}
         branches={(branchesResult.data as Branch[]) || []}
-        departments={(departmentsResult.data as Department[]) || []}
       />
     </div>
   )

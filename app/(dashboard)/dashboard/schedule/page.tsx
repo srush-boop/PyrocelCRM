@@ -2,7 +2,6 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { ScheduleView } from '@/components/dashboard/schedule/schedule-view'
 import { CreateTaskDialog } from '@/components/dashboard/schedule/create-task-dialog'
-import { ScanQrButton } from '@/components/dashboard/dampers/scan-qr-button'
 import type { Profile, Site, ServiceType, SiteService } from '@/lib/types/database'
 
 export default async function SchedulePage() {
@@ -77,15 +76,12 @@ export default async function SchedulePage() {
             {isAdminOrOffice ? 'Manage and schedule service tasks' : 'View your scheduled tasks'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <ScanQrButton />
-          {isAdminOrOffice && (
-            <CreateTaskDialog 
-              siteServices={siteServices}
-              engineers={engineers}
-            />
-          )}
-        </div>
+        {isAdminOrOffice && (
+          <CreateTaskDialog 
+            siteServices={siteServices}
+            engineers={engineers}
+          />
+        )}
       </div>
 
       <ScheduleView 

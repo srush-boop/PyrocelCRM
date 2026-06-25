@@ -43,9 +43,6 @@ function StatusBadge({ status }: { status: PortalReport['overallStatus'] }) {
   if (status === 'fail') {
     return <Badge variant="destructive">Fail</Badge>
   }
-  if (status === 'no_access') {
-    return <Badge className="bg-amber-500 text-white hover:bg-amber-500/90">No Access</Badge>
-  }
   return <Badge variant="secondary">—</Badge>
 }
 

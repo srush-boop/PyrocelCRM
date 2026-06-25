@@ -21,24 +21,20 @@ import {
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Loader2 } from 'lucide-react'
-import type { UserRole, Department } from '@/lib/types/database'
-
-const NO_DEPARTMENT = '__none__'
+import { Plus, Loader2 } from 'lucide-react'
+import type { UserRole } from '@/lib/types/database'
 
 interface InviteEngineerDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  departments: Department[]
 }
 
-export function InviteEngineerDialog({ open, onOpenChange, departments }: InviteEngineerDialogProps) {
+export function InviteEngineerDialog({ open, onOpenChange }: InviteEngineerDialogProps) {
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     email: '',
     full_name: '',
     role: 'engineer' as UserRole,
-    department_id: NO_DEPARTMENT,
   })
   const router = useRouter()
   const supabase = createClient()
@@ -77,7 +73,6 @@ export function InviteEngineerDialog({ open, onOpenChange, departments }: Invite
           .update({
             full_name: formData.full_name,
             role: formData.role,
-            department_id: formData.department_id === NO_DEPARTMENT ? null : formData.department_id,
             invited_at: new Date().toISOString(),
           })
           .eq('id', authData.user.id)
@@ -93,7 +88,6 @@ export function InviteEngineerDialog({ open, onOpenChange, departments }: Invite
         email: '',
         full_name: '',
         role: 'engineer',
-        department_id: NO_DEPARTMENT,
       })
       router.refresh()
     } catch (error) {
@@ -151,28 +145,6 @@ export function InviteEngineerDialog({ open, onOpenChange, departments }: Invite
                 <SelectItem value="engineer">Engineer</SelectItem>
                 <SelectItem value="office">Office Staff</SelectItem>
                 <SelectItem value="admin">Admin</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="department">Department</Label>
-            <Select
-              value={formData.department_id}
-              onValueChange={(value) => setFormData({ ...formData, department_id: value })}
-            >
-              <SelectTrigger id="department" disabled={loading}>
-                <SelectValue placeholder="No department" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_DEPARTMENT}>No department</SelectItem>
-                {departments
-                  .filter((d) => d.active)
-                  .map((d) => (
-                    <SelectItem key={d.id} value={d.id}>
-                      {d.name} ({d.default_margin_percent ?? 0}% margin)
-                    </SelectItem>
-                  ))}
               </SelectContent>
             </Select>
           </div>

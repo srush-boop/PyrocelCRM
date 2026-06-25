@@ -28,7 +28,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import {
   ArrowLeft,
   MapPin,
@@ -43,12 +42,10 @@ import {
   ArrowRight,
   History,
   Plus,
-  CheckCheck,
-  Ban,
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
-import { generateMcpUrn, TEST_KEY_TYPES, MCP_CHECKLIST } from '@/lib/mcps'
+import { generateMcpUrn, TEST_KEY_TYPES } from '@/lib/mcps'
 import { McpInspectionCard, type McpInspectionState, type CheckValue } from './mcp-inspection-card'
 import type { Profile, TaskWithDetails, Mcp, McpInspection } from '@/lib/types/database'
 
@@ -93,10 +90,6 @@ export function McpTaskExecution({
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [showSubmit, setShowSubmit] = useState(false)
-  const [showPassAll, setShowPassAll] = useState(false)
-  // "No access" outcome: engineer attended but couldn't get into the site.
-  const [showNoAccess, setShowNoAccess] = useState(false)
-  const [noAccessNotes, setNoAccessNotes] = useState('')
   const router = useRouter()
   const supabase = createClient()
 
@@ -200,29 +193,6 @@ export function McpTaskExecution({
     router.refresh()
   }
 
-  // Task-level shortcut: mark every call point on the register as fully passed.
-  // Useful when a whole site's test is clean; individual call points can still
-  // be edited afterwards.
-  const passAllMcps = () => {
-    setStates((prev) => {
-      const next: Record<string, McpInspectionState> = {}
-      for (const mcp of mcpList) {
-        const checklist: Record<string, CheckValue> = {}
-        for (const item of MCP_CHECKLIST) checklist[item.id] = 'pass'
-        const existing = prev[mcp.id]
-        next[mcp.id] = {
-          result: 'pass',
-          checklist,
-          comments: existing?.comments ?? '',
-          photos: existing?.photos ?? [],
-          touched: true,
-        }
-      }
-      return next
-    })
-    setShowPassAll(false)
-  }
-
   const buildRows = () => {
     const today = new Date().toISOString().split('T')[0]
     return mcpList
@@ -264,21 +234,25 @@ export function McpTaskExecution({
     return 'pass'
   }
 
-  // Shared completion logic for both a normal submit and a "no access" outcome.
-  // `updateLastService` is false for no-access since the service wasn't carried
-  // out, but the next recurring visit is still scheduled either way.
-  const completeTask = async (opts: {
-    overall: 'pass' | 'fail' | 'partial' | 'no_access'
-    engineerNotes: string
-    checklistResults: Array<Record<string, unknown>>
-    updateLastService: boolean
-  }) => {
+  const handleSubmit = async () => {
+    setSubmitting(true)
+    await persistInspections()
     const today = new Date().toISOString().split('T')[0]
+
+    const overall = overallTaskStatus()
+    const checklistResults = [
+      { item_id: 'total', label: 'Call points on register', type: 'number', value: summary.total, passed: null, notes: '' },
+      { item_id: 'tested', label: 'Call points tested', type: 'number', value: summary.tested, passed: null, notes: '' },
+      { item_id: 'passed', label: 'Passed', type: 'number', value: summary.passed, passed: null, notes: '' },
+      { item_id: 'remedial', label: 'Remedial', type: 'number', value: summary.remedial, passed: null, notes: '' },
+      { item_id: 'failed', label: 'Failed', type: 'number', value: summary.failed, passed: null, notes: '' },
+      { item_id: 'na', label: 'N/A', type: 'number', value: summary.na, passed: null, notes: '' },
+    ]
     const resultData = {
       task_id: task.id,
-      checklist_results: opts.checklistResults,
-      overall_status: opts.overall,
-      engineer_notes: opts.engineerNotes,
+      checklist_results: checklistResults,
+      overall_status: overall,
+      engineer_notes: `Fire alarm test: ${summary.tested}/${summary.total} call points tested, ${summary.passed} pass, ${summary.remedial} remedial, ${summary.failed} fail.`,
       photos: [] as string[],
       updated_at: new Date().toISOString(),
     }
@@ -299,12 +273,10 @@ export function McpTaskExecution({
       .update({ status: 'completed', completed_at: completedAt.toISOString(), updated_at: completedAt.toISOString() })
       .eq('id', task.id)
 
-    if (opts.updateLastService) {
-      await supabase
-        .from('site_services')
-        .update({ last_service_date: today })
-        .eq('id', task.site_service_id)
-    }
+    await supabase
+      .from('site_services')
+      .update({ last_service_date: today })
+      .eq('id', task.site_service_id)
 
     // Generate next recurring task if both the site and service type are live
     const { data: ss } = await supabase
@@ -342,60 +314,10 @@ export function McpTaskExecution({
       console.log('[v0] Report email request error:', err)
     }
 
-    router.push('/dashboard')
-    router.refresh()
-  }
-
-  const handleSubmit = async () => {
-    setSubmitting(true)
-    await persistInspections()
-
-    const overall = overallTaskStatus()
-    const checklistResults = [
-      { item_id: 'total', label: 'Call points on register', type: 'number', value: summary.total, passed: null, notes: '' },
-      { item_id: 'tested', label: 'Call points tested', type: 'number', value: summary.tested, passed: null, notes: '' },
-      { item_id: 'passed', label: 'Passed', type: 'number', value: summary.passed, passed: null, notes: '' },
-      { item_id: 'remedial', label: 'Remedial', type: 'number', value: summary.remedial, passed: null, notes: '' },
-      { item_id: 'failed', label: 'Failed', type: 'number', value: summary.failed, passed: null, notes: '' },
-      { item_id: 'na', label: 'N/A', type: 'number', value: summary.na, passed: null, notes: '' },
-    ]
-    await completeTask({
-      overall,
-      engineerNotes: `Fire alarm test: ${summary.tested}/${summary.total} call points tested, ${summary.passed} pass, ${summary.remedial} remedial, ${summary.failed} fail.`,
-      checklistResults,
-      updateLastService: true,
-    })
-
     setSubmitting(false)
     setShowSubmit(false)
-  }
-
-  // Records the visit as "no access" — a non-failure outcome. The service was
-  // not carried out, so last_service_date is left untouched, but the next
-  // scheduled visit is still generated.
-  const handleNoAccessSubmit = async () => {
-    setSubmitting(true)
-    const note = noAccessNotes.trim()
-    await completeTask({
-      overall: 'no_access',
-      engineerNotes: note
-        ? `No access — could not gain entry to site. ${note}`
-        : 'No access — could not gain entry to site.',
-      checklistResults: [
-        {
-          item_id: 'no_access',
-          label: 'Site access',
-          type: 'text',
-          value: 'No access — engineer could not gain entry',
-          passed: null,
-          notes: note,
-        },
-      ],
-      updateLastService: false,
-    })
-
-    setSubmitting(false)
-    setShowNoAccess(false)
+    router.push('/dashboard')
+    router.refresh()
   }
 
   return (
@@ -525,24 +447,14 @@ export function McpTaskExecution({
                   />
                 </div>
                 {canEdit && (
-                  <>
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowPassAll(true)}
-                      className="shrink-0 bg-transparent"
-                    >
-                      <CheckCheck className="mr-2 h-4 w-4" />
-                      Mark all passed
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => setAddOpen(true)}
-                      className="shrink-0 bg-transparent"
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add call point
-                    </Button>
-                  </>
+                  <Button
+                    variant="outline"
+                    onClick={() => setAddOpen(true)}
+                    className="shrink-0 bg-transparent"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add call point
+                  </Button>
                 )}
               </div>
               {filtered.map((mcp) => (
@@ -572,40 +484,27 @@ export function McpTaskExecution({
         </>
       )}
 
-      {status === 'in_progress' && canEdit && (
-        <div className="fixed bottom-0 left-0 right-0 flex flex-col gap-2 border-t bg-background p-4 md:relative md:flex-row md:border-0 md:p-0">
-          {mcpList.length > 0 && (
-            <Button variant="outline" onClick={handleSave} disabled={saving} className="flex-1">
-              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-              Save Progress
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            onClick={() => setShowNoAccess(true)}
-            disabled={submitting}
-            className="flex-1"
-          >
-            <Ban className="mr-2 h-4 w-4" />
-            No Access
+      {status === 'in_progress' && canEdit && mcpList.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 flex gap-2 border-t bg-background p-4 md:relative md:border-0 md:p-0">
+          <Button variant="outline" onClick={handleSave} disabled={saving} className="flex-1">
+            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            Save Progress
           </Button>
-          {mcpList.length > 0 && (
-            <div className="flex flex-1 flex-col items-stretch gap-1">
-              <Button
-                onClick={() => setShowSubmit(true)}
-                disabled={!dueDone}
-                className="w-full"
-              >
-                <Send className="mr-2 h-4 w-4" />
-                Complete &amp; Submit
-              </Button>
-              {!dueDone && (
-                <p className="text-center text-xs text-muted-foreground">
-                  Test or mark the call point due this week before submitting
-                </p>
-              )}
-            </div>
-          )}
+          <div className="flex flex-1 flex-col items-stretch gap-1">
+            <Button
+              onClick={() => setShowSubmit(true)}
+              disabled={!dueDone}
+              className="w-full"
+            >
+              <Send className="mr-2 h-4 w-4" />
+              Complete &amp; Submit
+            </Button>
+            {!dueDone && (
+              <p className="text-center text-xs text-muted-foreground">
+                Test or mark the call point due this week before submitting
+              </p>
+            )}
+          </div>
         </div>
       )}
 
@@ -701,56 +600,6 @@ export function McpTaskExecution({
               {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Complete Test
             </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <Dialog open={showNoAccess} onOpenChange={setShowNoAccess}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Record No Access</DialogTitle>
-            <DialogDescription>
-              Use this if you attended but could not gain access to the site. This is not
-              recorded as a service failure. The visit will be closed and the next scheduled
-              test created automatically.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-1.5">
-            <Label htmlFor="no-access-notes">Notes (optional)</Label>
-            <Textarea
-              id="no-access-notes"
-              value={noAccessNotes}
-              onChange={(e) => setNoAccessNotes(e.target.value)}
-              placeholder="e.g. Building locked, no key holder on site, gate code not working…"
-              rows={4}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowNoAccess(false)} disabled={submitting}>
-              Cancel
-            </Button>
-            <Button onClick={handleNoAccessSubmit} disabled={submitting}>
-              {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Ban className="mr-2 h-4 w-4" />}
-              Confirm No Access
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog open={showPassAll} onOpenChange={setShowPassAll}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Mark all call points passed?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This sets every checklist item to pass and the result to pass for all{' '}
-              {summary.total} call point{summary.total === 1 ? '' : 's'} on the register,
-              overwriting any results already entered. You can still adjust individual call
-              points afterwards.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={passAllMcps}>Mark all passed</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

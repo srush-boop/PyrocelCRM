@@ -303,25 +303,24 @@ export function DocumentBrowser({
         <div className="flex flex-col gap-4">
           {/* Folders */}
           {visibleFolders.length > 0 && (
-            <Card className="divide-y">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {visibleFolders.map((folder) => (
-                <div
+                <Card
                   key={folder.id}
-                  className="group flex items-center gap-3 p-3 transition-colors hover:bg-muted/50"
+                  className="group flex items-center justify-between gap-2 p-3 transition-colors hover:bg-muted/50"
                 >
                   <button
                     type="button"
                     onClick={() => setCurrentFolder(folder.id)}
-                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
                   >
                     <Folder className="h-5 w-5 shrink-0 text-primary" />
                     <span className="truncate text-sm font-medium">{folder.name}</span>
-                    <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" />
                   </button>
                   {canManage && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
                           <MoreVertical className="h-4 w-4" />
                           <span className="sr-only">Folder actions</span>
                         </Button>
@@ -348,9 +347,9 @@ export function DocumentBrowser({
                       </DropdownMenuContent>
                     </DropdownMenu>
                   )}
-                </div>
+                </Card>
               ))}
-            </Card>
+            </div>
           )}
 
           {/* Files */}

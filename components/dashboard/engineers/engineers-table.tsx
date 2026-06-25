@@ -59,15 +59,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import type { Profile, UserRole, Department } from '@/lib/types/database'
+import type { Profile, UserRole } from '@/lib/types/database'
 import { formatDateUK } from '@/lib/utils'
 import { InviteEngineerDialog } from './invite-engineer-dialog'
 
-const NO_DEPARTMENT = '__none__'
-
 interface EngineersTableProps {
   users: Profile[]
-  departments: Department[]
 }
 
 const roleColors: Record<UserRole, string> = {
@@ -77,9 +74,7 @@ const roleColors: Record<UserRole, string> = {
   client: 'bg-muted text-muted-foreground',
 }
 
-export function EngineersTable({ users, departments }: EngineersTableProps) {
-  const departmentName = (id: string | null) =>
-    id ? departments.find((d) => d.id === id)?.name ?? null : null
+export function EngineersTable({ users }: EngineersTableProps) {
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
   const [inviteOpen, setInviteOpen] = useState(false)
@@ -177,17 +172,6 @@ export function EngineersTable({ users, departments }: EngineersTableProps) {
     router.refresh()
   }
 
-  const handleDepartmentChange = async (userId: string, value: string) => {
-    await supabase
-      .from('profiles')
-      .update({
-        department_id: value === NO_DEPARTMENT ? null : value,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', userId)
-    router.refresh()
-  }
-
   const handleDelete = async () => {
     if (!deleteUser) return
     setDeleting(true)
@@ -243,7 +227,6 @@ export function EngineersTable({ users, departments }: EngineersTableProps) {
               <TableHead>Name</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Role</TableHead>
-              <TableHead>Department</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="hidden lg:table-cell">Invited</TableHead>
               <TableHead className="hidden lg:table-cell">Accepted</TableHead>
@@ -253,7 +236,7 @@ export function EngineersTable({ users, departments }: EngineersTableProps) {
           <TableBody>
             {filteredUsers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <Users className="h-8 w-8 text-muted-foreground/50 mb-2" />
                     <p className="text-muted-foreground">No users found</p>
@@ -273,28 +256,6 @@ export function EngineersTable({ users, departments }: EngineersTableProps) {
                     <Badge className={roleColors[user.role]} variant="secondary">
                       {user.role}
                     </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Select
-                      value={user.department_id ?? NO_DEPARTMENT}
-                      onValueChange={(value) => handleDepartmentChange(user.id, value)}
-                    >
-                      <SelectTrigger className="h-8 w-[160px]" aria-label={`Department for ${user.full_name || user.email}`}>
-                        <SelectValue placeholder="No department">
-                          {departmentName(user.department_id) ?? 'No department'}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={NO_DEPARTMENT}>No department</SelectItem>
-                        {departments
-                          .filter((d) => d.active || d.id === user.department_id)
-                          .map((d) => (
-                            <SelectItem key={d.id} value={d.id}>
-                              {d.name}
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
                   </TableCell>
                   <TableCell>
                     {user.accepted_at ? (
@@ -370,11 +331,7 @@ export function EngineersTable({ users, departments }: EngineersTableProps) {
         </Table>
       </div>
 
-      <InviteEngineerDialog
-        open={inviteOpen}
-        onOpenChange={setInviteOpen}
-        departments={departments}
-      />
+      <InviteEngineerDialog open={inviteOpen} onOpenChange={setInviteOpen} />
 
       <Dialog
         open={!!passwordUser}

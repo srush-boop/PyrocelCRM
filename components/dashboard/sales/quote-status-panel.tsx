@@ -94,16 +94,17 @@ export function QuoteStatusPanel({ quote }: { quote: Quote }) {
             />
             <Button
               size="sm"
+              variant="outline"
               onClick={() => update('accepted')}
               disabled={isPending}
-              className="bg-green-600 text-white hover:bg-green-700"
+              className="border-green-600 text-green-700 hover:bg-green-50 hover:text-green-800"
             >
               <Check className="mr-2 h-4 w-4" />
-              Accepted
+              Mark accepted
             </Button>
             <Button size="sm" variant="outline" onClick={() => update('rejected')} disabled={isPending}>
               <X className="mr-2 h-4 w-4" />
-              Declined
+              Mark declined
             </Button>
             <Button size="sm" variant="outline" onClick={() => update('expired')} disabled={isPending}>
               <Clock className="mr-2 h-4 w-4" />

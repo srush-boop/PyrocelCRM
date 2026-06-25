@@ -478,8 +478,20 @@ export async function setQuoteStatus(
     patch.decided_at = new Date().toISOString()
   }
 
-  const { error: upErr } = await supabase.from('quotes').update(patch).eq('id', id)
-  if (upErr) return { ok: false, error: 'Could not update the quote status.' }
+  // Return the affected rows so we can detect a silent no-op (e.g. wrong id or
+  // a row blocked by RLS), which otherwise reports success without changing anything.
+  const { data: updated, error: upErr } = await supabase
+    .from('quotes')
+    .update(patch)
+    .eq('id', id)
+    .select('id')
+  if (upErr) {
+    console.log('[v0] setQuoteStatus update error:', upErr.message)
+    return { ok: false, error: 'Could not update the quote status.' }
+  }
+  if (!updated || updated.length === 0) {
+    return { ok: false, error: 'Quote not found or you do not have permission to update it.' }
+  }
 
   revalidatePath('/dashboard/sales')
   revalidatePath('/dashboard/sales/quotes')

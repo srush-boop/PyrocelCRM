@@ -51,6 +51,7 @@ import {
   FileText as FileTextIcon,
   SlidersHorizontal,
   PencilRuler,
+  LayoutList,
   Layers,
   Boxes,
 } from 'lucide-react'
@@ -134,6 +135,7 @@ const salesNavItem: NavItem = {
     { title: 'Asset Types', href: '/dashboard/sales/asset-types', icon: Boxes },
     { title: 'Spec Templates', href: '/dashboard/sales/spec-templates', icon: FileTextIcon },
     { title: 'Work-type Fields', href: '/dashboard/sales/work-type-fields', icon: SlidersHorizontal },
+    { title: 'Quote Sections', href: '/dashboard/sales/quote-sections', icon: LayoutList },
     { title: 'Design Categories', href: '/dashboard/sales/design-categories', icon: PencilRuler },
   ],
 }

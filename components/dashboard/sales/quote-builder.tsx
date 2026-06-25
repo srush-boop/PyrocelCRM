@@ -79,6 +79,9 @@ import {
   type QuoteInput,
 } from '@/app/(dashboard)/dashboard/sales/actions'
 
+// Default terms shown on a brand-new quote (editable per quote).
+const DEFAULT_QUOTE_TERMS = 'Standard terms and conditions apply which are available on request.'
+
 // --- Local editable shapes (money kept as pounds strings for inputs) ---
 interface EditLine {
   key: string
@@ -347,7 +350,8 @@ export function QuoteBuilder({
   const [prospectPhone, setProspectPhone] = useState(quote?.prospect_phone ?? '')
   const [prospectAddress, setProspectAddress] = useState(quote?.prospect_address ?? '')
   const [summary, setSummary] = useState(quote?.summary ?? '')
-  const [terms, setTerms] = useState(quote?.terms ?? '')
+  // New quotes start with the standard terms line; existing quotes keep whatever was saved.
+  const [terms, setTerms] = useState(quote ? (quote.terms ?? '') : DEFAULT_QUOTE_TERMS)
   const [notes, setNotes] = useState(quote?.notes ?? '')
   const [vatRate, setVatRate] = useState(String(quote?.vat_rate ?? 20))
   const [discount, setDiscount] = useState(penceToPounds(quote?.discount_pence ?? 0))

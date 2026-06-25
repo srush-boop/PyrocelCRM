@@ -46,7 +46,7 @@ export default async function QuoteDetailPage({
 
   const { data: quote } = await supabase
     .from('quotes')
-    .select('*, client:clients(id, name), site:sites(id, name)')
+    .select('*, client:clients(id, name), site:sites(id, name), preparer:profiles!quotes_created_by_fkey(id, full_name)')
     .eq('id', id)
     .single()
   if (!quote) notFound()

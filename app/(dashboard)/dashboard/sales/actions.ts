@@ -555,7 +555,7 @@ export async function sendQuote(args: {
   // Load everything the PDF + email need.
   const { data: quote } = await supabase
     .from('quotes')
-    .select('*, client:clients(*), site:sites(*)')
+    .select('*, client:clients(*), site:sites(*), preparer:profiles!quotes_created_by_fkey(id, full_name)')
     .eq('id', args.id)
     .single()
   if (!quote) return { ok: false, error: 'Quote not found.' }

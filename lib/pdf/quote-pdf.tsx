@@ -167,6 +167,12 @@ function QuotePdfDocument({
               <Text style={styles.muted}>Date</Text>
               <Text style={styles.bold}>{formatDateUK(quote.created_at)}</Text>
             </View>
+            {quote.preparer?.full_name ? (
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <Text style={styles.muted}>Prepared by</Text>
+                <Text style={styles.bold}>{quote.preparer.full_name}</Text>
+              </View>
+            ) : null}
             {quote.valid_until ? (
               <View style={{ flexDirection: 'row', gap: 12 }}>
                 <Text style={styles.muted}>Valid until</Text>

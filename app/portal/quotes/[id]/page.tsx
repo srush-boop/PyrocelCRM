@@ -24,7 +24,7 @@ export default async function PortalQuoteDetailPage({
   // RLS ensures the client can only read quotes for their permitted sites.
   const { data: quote } = await supabase
     .from('quotes')
-    .select('*, client:clients(*), site:sites(*)')
+    .select('*, client:clients(*), site:sites(*), preparer:profiles!quotes_created_by_fkey(id, full_name)')
     .eq('id', id)
     .single()
   if (!quote) notFound()

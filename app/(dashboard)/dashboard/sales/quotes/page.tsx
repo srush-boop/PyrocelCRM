@@ -22,7 +22,7 @@ export default async function QuotesPage() {
 
   const { data: quotes } = await supabase
     .from('quotes')
-    .select('*, client:clients(id, name), site:sites(id, name)')
+    .select('*, client:clients(id, name), site:sites(id, name), preparer:profiles!quotes_created_by_fkey(id, full_name)')
     .order('created_at', { ascending: false })
 
   return (

@@ -72,7 +72,7 @@ export async function getPublicQuote(token: string) {
   const supabase = createAdminClient()
   const { data: quote } = await supabase
     .from('quotes')
-    .select('*, client:clients(*), site:sites(*)')
+    .select('*, client:clients(*), site:sites(*), preparer:profiles!quotes_created_by_fkey(id, full_name)')
     .eq('share_token', token)
     .maybeSingle()
   if (!quote) return null

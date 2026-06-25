@@ -58,14 +58,29 @@ export function QuotesTable({
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<string>('all')
   const [type, setType] = useState<string>('all')
+  const [preparedBy, setPreparedBy] = useState<string>('all')
   const [deleteTarget, setDeleteTarget] = useState<Quote | null>(null)
   const [isPending, startTransition] = useTransition()
+
+  // Distinct preparers present in the current quote set, for the filter dropdown.
+  const preparers = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const quote of quotes) {
+      if (quote.preparer?.id && quote.preparer.full_name) {
+        map.set(quote.preparer.id, quote.preparer.full_name)
+      }
+    }
+    return Array.from(map, ([id, name]) => ({ id, name })).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )
+  }, [quotes])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return quotes.filter((quote) => {
       if (status !== 'all' && quote.status !== status) return false
       if (type !== 'all' && quote.quote_type !== type) return false
+      if (preparedBy !== 'all' && quote.preparer?.id !== preparedBy) return false
       if (!q) return true
       const target =
         quote.client?.name ?? quote.prospect_name ?? ''
@@ -73,10 +88,11 @@ export function QuotesTable({
         quote.title.toLowerCase().includes(q) ||
         (quote.quote_number ?? '').toLowerCase().includes(q) ||
         (quote.reference ?? '').toLowerCase().includes(q) ||
-        target.toLowerCase().includes(q)
+        target.toLowerCase().includes(q) ||
+        (quote.preparer?.full_name ?? '').toLowerCase().includes(q)
       )
     })
-  }, [quotes, search, status, type])
+  }, [quotes, search, status, type, preparedBy])
 
   function handleRevision(id: string) {
     startTransition(async () => {
@@ -144,6 +160,21 @@ export function QuotesTable({
               ))}
             </SelectContent>
           </Select>
+          {preparers.length > 0 && (
+            <Select value={preparedBy} onValueChange={setPreparedBy}>
+              <SelectTrigger className="w-[190px]">
+                <SelectValue placeholder="Prepared by" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All preparers</SelectItem>
+                {preparers.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" asChild>
@@ -181,6 +212,7 @@ export function QuotesTable({
                 <TableHead>Type</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Total</TableHead>
+                <TableHead>Prepared by</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead>Valid until</TableHead>
                 <TableHead className="w-10" />
@@ -225,6 +257,9 @@ export function QuotesTable({
                   </TableCell>
                   <TableCell className="text-right font-medium tabular-nums">
                     {formatPence(quote.total_pence, quote.currency)}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {quote.preparer?.full_name ?? '—'}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {quote.created_at ? formatDateUK(quote.created_at) : '—'}

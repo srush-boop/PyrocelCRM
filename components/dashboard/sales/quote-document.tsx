@@ -153,6 +153,12 @@ export function QuoteDocument({ quote, systems, lines, company, backHref }: Quot
                 <dt className="text-muted-foreground">Date</dt>
                 <dd className="font-medium">{formatDateUK(quote.created_at)}</dd>
               </div>
+              {quote.preparer?.full_name && (
+                <div className="flex justify-between sm:justify-end sm:gap-4">
+                  <dt className="text-muted-foreground">Prepared by</dt>
+                  <dd className="font-medium">{quote.preparer.full_name}</dd>
+                </div>
+              )}
               {quote.valid_until && (
                 <div className="flex justify-between sm:justify-end sm:gap-4">
                   <dt className="text-muted-foreground">Valid until</dt>

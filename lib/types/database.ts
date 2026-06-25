@@ -793,6 +793,8 @@ export interface Quote {
   updated_at: string
   client?: Client | null
   site?: Site | null
+  // The staff member who prepared the quote (joined from profiles via created_by).
+  preparer?: { id: string; full_name: string | null } | null
 }
 
 export interface QuoteWithDetails extends Quote {

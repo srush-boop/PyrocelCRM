@@ -77,6 +77,18 @@ export function QuoteDocument({ quote, systems, lines, company, backHref }: Quot
   const recipientPhone = quote.client?.contact_phone || quote.prospect_phone
   const recipientAddress = quote.site?.address || quote.client?.address || quote.prospect_address
 
+  // window.print() is silently blocked inside an iframe (the v0 preview, or an
+  // in-app email/webview viewer). In that case, pop the page out to a top-level
+  // browser tab where the visitor can print/save as PDF; otherwise print directly.
+  function handlePrint() {
+    const inIframe = typeof window !== 'undefined' && window.self !== window.top
+    if (inIframe) {
+      window.open(window.location.href, '_blank', 'noopener,noreferrer')
+      return
+    }
+    window.print()
+  }
+
   return (
     <div className="mx-auto max-w-4xl">
       {/* Action bar (hidden in print) */}
@@ -91,7 +103,7 @@ export function QuoteDocument({ quote, systems, lines, company, backHref }: Quot
         ) : (
           <span />
         )}
-        <Button onClick={() => window.print()}>
+        <Button onClick={handlePrint}>
           <Printer className="mr-2 h-4 w-4" />
           Print / Save PDF
         </Button>

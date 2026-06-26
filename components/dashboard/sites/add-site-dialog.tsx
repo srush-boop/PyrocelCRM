@@ -177,7 +177,7 @@ export function AddSiteDialog({ clients }: AddSiteDialogProps) {
                 Used as the access code for the site&apos;s QR fire safety log book.
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label htmlFor="contact_name">Contact Name</Label>
                 <Input
@@ -231,7 +231,7 @@ export function AddSiteDialog({ clients }: AddSiteDialogProps) {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label htmlFor="site_id_cash">Site ID (CASH)</Label>
                 <Input

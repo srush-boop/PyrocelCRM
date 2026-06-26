@@ -375,7 +375,7 @@ export function CatalogueManager({
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="c-cat">Category</Label>
                 <Input
@@ -395,7 +395,7 @@ export function CatalogueManager({
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="c-cost">Unit cost (£)</Label>
                 <Input
@@ -417,7 +417,7 @@ export function CatalogueManager({
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label>Sell price</Label>
                 <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm tabular-nums">

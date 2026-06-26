@@ -242,6 +242,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
               </CardTitle>
               <CardDescription>
                 {task.site_service?.service_type?.name}
+                {task.visit_type?.name ? ` · ${task.visit_type.name}` : ''}
               </CardDescription>
             </div>
             <Badge variant={config.variant} className="flex items-center gap-1">
@@ -343,6 +344,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
             <p className="truncate text-sm font-medium">{task.site_service?.site?.name}</p>
             <p className="truncate text-xs text-muted-foreground">
               {task.site_service?.service_type?.name}
+              {task.visit_type?.name ? ` · ${task.visit_type.name}` : ''}
               {!isEngineer
                 ? ` · ${task.assigned_engineer ? (task.assigned_engineer.full_name || task.assigned_engineer.email) : 'Unassigned'}`
                 : ''}

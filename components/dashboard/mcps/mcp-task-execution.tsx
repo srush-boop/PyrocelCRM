@@ -413,6 +413,9 @@ export function McpTaskExecution({
               {status.replace('_', ' ')}
             </Badge>
             <Badge variant="outline">{serviceType?.name}</Badge>
+            {task.visit_type?.name && (
+              <Badge variant="secondary">{task.visit_type.name}</Badge>
+            )}
           </div>
           <h1 className="text-2xl font-bold">{site?.name}</h1>
         </div>

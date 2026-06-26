@@ -34,7 +34,8 @@ export default async function SchedulePage() {
         site:sites(*, route:routes(*)),
         service_type:service_types(*)
       ),
-      assigned_engineer:profiles(*)
+      assigned_engineer:profiles(*),
+      visit_type:service_visit_types(*)
     `)
     .order('scheduled_date', { ascending: true })
 

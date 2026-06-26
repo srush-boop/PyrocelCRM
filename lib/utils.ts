@@ -8,10 +8,18 @@ export function cn(...inputs: ClassValue[]) {
 // UK Regional Settings
 export const UK_LOCALE = 'en-GB'
 
+// A fixed timezone is pinned on every formatter so dates render identically on
+// the server (which runs in UTC) and in the visitor's browser (local timezone).
+// Without this, dates near a day boundary format differently server vs client,
+// causing React hydration mismatches that visibly re-render/"reload" the page
+// (notably on the public quote view).
+const UK_TIME_ZONE = 'Europe/London'
+
 export const dateFormatOptions: Intl.DateTimeFormatOptions = {
   year: 'numeric',
   month: 'short',
   day: 'numeric',
+  timeZone: UK_TIME_ZONE,
 }
 
 export const dateTimeFormatOptions: Intl.DateTimeFormatOptions = {
@@ -20,11 +28,13 @@ export const dateTimeFormatOptions: Intl.DateTimeFormatOptions = {
   day: 'numeric',
   hour: '2-digit',
   minute: '2-digit',
+  timeZone: UK_TIME_ZONE,
 }
 
 export const timeFormatOptions: Intl.DateTimeFormatOptions = {
   hour: '2-digit',
   minute: '2-digit',
+  timeZone: UK_TIME_ZONE,
 }
 
 // Helper functions for UK date formatting

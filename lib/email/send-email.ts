@@ -24,7 +24,12 @@ export async function sendEmail(
   to: string,
   subject: string,
   html: string,
-  options?: { cc?: string[] },
+  options?: {
+    cc?: string[]
+    // File attachments. `content` is the raw bytes (Buffer); it is base64
+    // encoded before being sent to Resend.
+    attachments?: { filename: string; content: Buffer }[]
+  },
 ) {
   // Using Resend as the default email service
   // Users can set RESEND_API_KEY in their environment
@@ -40,6 +45,12 @@ export async function sendEmail(
     .map((e) => e.trim())
     .filter((e) => e && e.toLowerCase() !== to.toLowerCase())
 
+  // Resend expects attachment content as a base64 string.
+  const attachments = (options?.attachments || []).map((a) => ({
+    filename: a.filename,
+    content: a.content.toString('base64'),
+  }))
+
   try {
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -53,6 +64,7 @@ export async function sendEmail(
         subject,
         html,
         ...(cc.length > 0 ? { cc } : {}),
+        ...(attachments.length > 0 ? { attachments } : {}),
       }),
     })
 

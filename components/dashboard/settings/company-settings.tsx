@@ -41,6 +41,7 @@ export function CompanySettings({ company, branches }: CompanySettingsProps) {
     registration_number: company?.registration_number || '',
     vat_number: company?.vat_number || '',
     logo_url: company?.logo_url || '',
+    default_margin_percent: String(company?.default_margin_percent ?? 0),
   })
   const [savingCompany, setSavingCompany] = useState(false)
   const [companyMessage, setCompanyMessage] = useState<Feedback>(null)
@@ -67,6 +68,7 @@ export function CompanySettings({ company, branches }: CompanySettingsProps) {
       registration_number: form.registration_number.trim() || null,
       vat_number: form.vat_number.trim() || null,
       logo_url: form.logo_url.trim() || null,
+      default_margin_percent: Number.parseFloat(form.default_margin_percent) || 0,
       updated_at: new Date().toISOString(),
     }
 
@@ -233,6 +235,19 @@ export function CompanySettings({ company, branches }: CompanySettingsProps) {
                   onChange={(e) => setForm({ ...form, vat_number: e.target.value })}
                   placeholder="VAT number"
                 />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="company_margin">Default quote margin %</Label>
+                <Input
+                  id="company_margin"
+                  inputMode="decimal"
+                  value={form.default_margin_percent}
+                  onChange={(e) => setForm({ ...form, default_margin_percent: e.target.value })}
+                  placeholder="0"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Pre-filled on new quote systems and lines. Sell price = cost / (1 − margin%).
+                </p>
               </div>
             </div>
 

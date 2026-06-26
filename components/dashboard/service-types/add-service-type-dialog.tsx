@@ -24,17 +24,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { WorkerType, ToleranceUnit } from '@/lib/types/database'
+import type { WorkerType, ToleranceUnit, SystemType } from '@/lib/types/database'
 import { WORKER_TYPE_LABELS } from '@/lib/assignment'
 import { ServiceColorPicker } from './service-color-picker'
 import { ToleranceFields } from './tolerance-fields'
 import { PYROCEL_RED } from '@/lib/service-colors'
 
-export function AddServiceTypeDialog() {
+export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[] }) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
+    system_type_id: '',
     description: '',
     default_frequency_value: 12,
     default_frequency_unit: 'months' as 'weeks' | 'months',
@@ -58,6 +59,7 @@ export function AddServiceTypeDialog() {
 
     const { error } = await supabase.from('service_types').insert({
       name: formData.name,
+      system_type_id: formData.system_type_id || null,
       description: formData.description || null,
       default_frequency_months: frequencyInMonths,
       default_frequency_value: formData.default_frequency_value,
@@ -82,6 +84,7 @@ export function AddServiceTypeDialog() {
       setOpen(false)
       setFormData({
         name: '',
+        system_type_id: '',
         description: '',
         default_frequency_value: 12,
         default_frequency_unit: 'months',
@@ -121,6 +124,28 @@ export function AddServiceTypeDialog() {
                 placeholder="e.g., Fire Alarm Testing"
                 required
               />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="system-type">System Type</Label>
+              <Select
+                value={formData.system_type_id}
+                onValueChange={(value) => setFormData({ ...formData, system_type_id: value })}
+              >
+                <SelectTrigger id="system-type">
+                  <SelectValue placeholder="Select a system type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {systemTypes.map((st) => (
+                    <SelectItem key={st.id} value={st.id}>
+                      {st.code ? `${st.code} — ${st.name}` : st.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                The system this service belongs to (e.g. Fire Alarm). The queryable code lives on the
+                system type.
+              </p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="description">Description</Label>

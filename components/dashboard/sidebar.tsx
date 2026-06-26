@@ -43,6 +43,17 @@ import {
   Gauge,
   ChevronRight,
   HelpCircle,
+  ReceiptText,
+  BookOpen,
+  Coins,
+  Percent,
+  Landmark,
+  FileText as FileTextIcon,
+  SlidersHorizontal,
+  PencilRuler,
+  LayoutList,
+  Layers,
+  Boxes,
 } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 import type { LucideIcon } from 'lucide-react'
@@ -51,23 +62,37 @@ interface DashboardSidebarProps {
   profile: Profile
 }
 
-type NavItem = {
+type NavChild = {
   title: string
   href?: string
   icon: LucideIcon
   children?: { title: string; href: string; icon: LucideIcon }[]
 }
 
-// Sites now acts as a parent grouping its asset registers (dampers,
-// extinguishers, emergency lights) alongside the sites list itself.
+type NavItem = {
+  title: string
+  href?: string
+  icon: LucideIcon
+  children?: NavChild[]
+}
+
+// Sites acts as a parent: "Open Sites" links to the sites list, while the
+// individual asset registers (dampers, extinguishers, emergency lights) are
+// condensed into a nested "Assets" group.
 const sitesNavItem: NavItem = {
   title: 'Sites',
   icon: Building2,
   children: [
-    { title: 'All Sites', href: '/dashboard/sites', icon: Building2 },
-    { title: 'Dampers', href: '/dashboard/dampers', icon: Wind },
-    { title: 'Extinguishers', href: '/dashboard/extinguishers', icon: FireExtinguisher },
-    { title: 'Emergency Lights', href: '/dashboard/emergency-lights', icon: Lightbulb },
+    { title: 'Open Sites', href: '/dashboard/sites', icon: Building2 },
+    {
+      title: 'Assets',
+      icon: Boxes,
+      children: [
+        { title: 'Dampers', href: '/dashboard/dampers', icon: Wind },
+        { title: 'Extinguishers', href: '/dashboard/extinguishers', icon: FireExtinguisher },
+        { title: 'Emergency Lights', href: '/dashboard/emergency-lights', icon: Lightbulb },
+      ],
+    },
   ],
 }
 
@@ -80,6 +105,7 @@ const adminServiceManagementNavItem: NavItem = {
     { title: 'Routes', href: '/dashboard/routes', icon: Route },
     { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
     { title: 'Service Types', href: '/dashboard/service-types', icon: Wrench },
+    { title: 'System Types', href: '/dashboard/sales/system-types', icon: Layers },
     { title: 'Checklists', href: '/dashboard/checklists', icon: ClipboardList },
   ],
 }
@@ -91,6 +117,35 @@ const officeServiceManagementNavItem: NavItem = {
   children: [
     { title: 'Routes', href: '/dashboard/routes', icon: Route },
     { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
+    { title: 'System Types', href: '/dashboard/sales/system-types', icon: Layers },
+  ],
+}
+
+// Sales groups quoting and the reusable line-item catalogue. The setup areas
+// (pricing, templates, field/section config) are condensed into a nested
+// "Sales Configuration" group so the day-to-day quoting links stay prominent.
+const salesNavItem: NavItem = {
+  title: 'Sales',
+  icon: ReceiptText,
+  children: [
+    { title: 'Dashboard', href: '/dashboard/sales', icon: LayoutDashboard },
+    { title: 'Quotes', href: '/dashboard/sales/quotes', icon: ReceiptText },
+    { title: 'Quote Bank', href: '/dashboard/sales/quote-bank', icon: Landmark },
+    { title: 'Catalogue', href: '/dashboard/sales/catalogue', icon: BookOpen },
+    {
+      title: 'Sales Configuration',
+      icon: Settings,
+      children: [
+        { title: 'Direct Costs', href: '/dashboard/sales/direct-costs', icon: Coins },
+        { title: 'Set Margins', href: '/dashboard/sales/margins', icon: Percent },
+        { title: 'Asset Types', href: '/dashboard/sales/asset-types', icon: Boxes },
+        { title: 'Spec Templates', href: '/dashboard/sales/spec-templates', icon: FileTextIcon },
+        { title: 'Work-type Fields', href: '/dashboard/sales/work-type-fields', icon: SlidersHorizontal },
+        { title: 'Quote Sections', href: '/dashboard/sales/quote-sections', icon: LayoutList },
+        { title: 'Quote Services', href: '/dashboard/sales/quote-services', icon: Wrench },
+        { title: 'Design Categories', href: '/dashboard/sales/design-categories', icon: PencilRuler },
+      ],
+    },
   ],
 }
 
@@ -103,6 +158,7 @@ const adminNavItems: NavItem[] = [
   { title: 'Users', href: '/dashboard/engineers', icon: Users },
   { title: 'Client Logins', href: '/dashboard/client-logins', icon: KeyRound },
   { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
+  salesNavItem,
   { title: 'Reports', href: '/dashboard/reports', icon: FileText },
   { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
@@ -119,6 +175,7 @@ const officeNavItems: NavItem[] = [
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
   officeServiceManagementNavItem,
   { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
+  salesNavItem,
   { title: 'Reports', href: '/dashboard/reports', icon: FileText },
   { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
@@ -161,7 +218,11 @@ export function DashboardSidebar({ profile }: DashboardSidebarProps) {
                   <Collapsible
                     key={item.title}
                     asChild
-                    defaultOpen={item.children.some((child) => pathname === child.href)}
+                    defaultOpen={item.children.some(
+                      (child) =>
+                        pathname === child.href ||
+                        child.children?.some((sub) => pathname === sub.href),
+                    )}
                     className="group/collapsible"
                   >
                     <SidebarMenuItem>
@@ -174,16 +235,49 @@ export function DashboardSidebar({ profile }: DashboardSidebarProps) {
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <SidebarMenuSub>
-                          {item.children.map((child) => (
-                            <SidebarMenuSubItem key={child.href}>
-                              <SidebarMenuSubButton asChild isActive={pathname === child.href}>
-                                <Link href={child.href}>
-                                  <child.icon className="h-4 w-4" />
-                                  <span>{child.title}</span>
-                                </Link>
-                              </SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                          ))}
+                          {item.children.map((child) =>
+                            child.children ? (
+                              <Collapsible
+                                key={child.title}
+                                asChild
+                                defaultOpen={child.children.some((sub) => pathname === sub.href)}
+                                className="group/subcollapsible"
+                              >
+                                <SidebarMenuSubItem>
+                                  <CollapsibleTrigger asChild>
+                                    <SidebarMenuSubButton>
+                                      <child.icon className="h-4 w-4" />
+                                      <span>{child.title}</span>
+                                      <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/subcollapsible:rotate-90" />
+                                    </SidebarMenuSubButton>
+                                  </CollapsibleTrigger>
+                                  <CollapsibleContent>
+                                    <SidebarMenuSub>
+                                      {child.children.map((sub) => (
+                                        <SidebarMenuSubItem key={sub.href}>
+                                          <SidebarMenuSubButton asChild isActive={pathname === sub.href}>
+                                            <Link href={sub.href}>
+                                              <sub.icon className="h-4 w-4" />
+                                              <span>{sub.title}</span>
+                                            </Link>
+                                          </SidebarMenuSubButton>
+                                        </SidebarMenuSubItem>
+                                      ))}
+                                    </SidebarMenuSub>
+                                  </CollapsibleContent>
+                                </SidebarMenuSubItem>
+                              </Collapsible>
+                            ) : (
+                              <SidebarMenuSubItem key={child.href}>
+                                <SidebarMenuSubButton asChild isActive={pathname === child.href}>
+                                  <Link href={child.href!}>
+                                    <child.icon className="h-4 w-4" />
+                                    <span>{child.title}</span>
+                                  </Link>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            ),
+                          )}
                         </SidebarMenuSub>
                       </CollapsibleContent>
                     </SidebarMenuItem>

@@ -78,6 +78,7 @@ export default async function DashboardPage() {
     inProgressCount,
     completedMonthCount,
     overdueCount,
+    openDefectsCount,
   ] = await Promise.all([
     supabase.from('sites').select('id', { count: 'exact', head: true }),
     supabase.from('routes').select('id', { count: 'exact', head: true }),
@@ -100,6 +101,10 @@ export default async function DashboardPage() {
       .select('id', { count: 'exact', head: true })
       .in('status', ['pending', 'in_progress'])
       .lt('scheduled_date', todayStr),
+    supabase
+      .from('defects')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'open'),
   ])
 
   const taskSelect = `
@@ -216,6 +221,14 @@ export default async function DashboardPage() {
       icon: AlertTriangle,
       href: '/dashboard/schedule',
       alert: (overdueCount.count || 0) > 0,
+    },
+    {
+      label: 'Open Defects',
+      value: openDefectsCount.count || 0,
+      hint: 'Failed reports to action',
+      icon: AlertTriangle,
+      href: '/dashboard/defects',
+      alert: (openDefectsCount.count || 0) > 0,
     },
     {
       label: 'Done This Month',

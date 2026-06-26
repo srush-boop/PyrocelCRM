@@ -379,6 +379,25 @@ export interface ChecklistResult {
   notes?: string
 }
 
+// Defect tracking: one row per failed report (task_result with overall_status='fail').
+// Auto-maintained by a DB trigger; lifecycle open -> quoted -> resolved/dismissed.
+export type DefectStatus = 'open' | 'quoted' | 'resolved' | 'dismissed'
+
+export interface Defect {
+  id: string
+  task_result_id: string
+  task_id: string | null
+  site_id: string | null
+  client_id: string | null
+  reference_number: string | null
+  failed_count: number
+  status: DefectStatus
+  quote_id: string | null
+  resolved_at: string | null
+  created_at: string
+  updated_at: string
+}
+
 // 'no_access' is used when an engineer attended but could not gain access to
 // the site. It is a distinct outcome and is NOT treated as a failure.
 export type TaskResultStatus = 'pending' | 'pass' | 'fail' | 'partial' | 'no_access'

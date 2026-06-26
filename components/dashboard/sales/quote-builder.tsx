@@ -78,6 +78,7 @@ import {
   getCatalogueItemByCode,
   type QuoteInput,
 } from '@/app/(dashboard)/dashboard/sales/actions'
+import { linkDefectToQuote } from '@/app/(dashboard)/dashboard/defects/actions'
 
 // Default terms shown on a brand-new quote (editable per quote).
 const DEFAULT_QUOTE_TERMS = 'Standard terms and conditions apply which are available on request.'
@@ -303,6 +304,12 @@ interface QuoteBuilderProps {
   // Preselect a client/site for brand-new quotes (e.g. launched from a site).
   initialClientId?: string
   initialSiteId?: string
+  // Prefill the title/notes for brand-new quotes (e.g. a remedial quote raised
+  // from a defect, where the scope of works is seeded from the failed items).
+  initialTitle?: string
+  initialNotes?: string
+  // When set, links the saved quote back to this defect and marks it 'quoted'.
+  defectId?: string
   initialSystems?: QuoteSystem[]
   initialLines?: QuoteLineItem[]
   initialPpm?: QuoteSystemPpm[]
@@ -327,6 +334,9 @@ export function QuoteBuilder({
   quote,
   initialClientId,
   initialSiteId,
+  initialTitle,
+  initialNotes,
+  defectId,
   initialSystems,
   initialLines,
   initialPpm,
@@ -336,7 +346,7 @@ export function QuoteBuilder({
   const [isPending, startTransition] = useTransition()
 
   // ----- Header state -----
-  const [title, setTitle] = useState(quote?.title ?? '')
+  const [title, setTitle] = useState(quote?.title ?? initialTitle ?? '')
   const [targetMode, setTargetMode] = useState<'client' | 'prospect'>(
     quote?.prospect_name && !quote?.client_id ? 'prospect' : 'client',
   )
@@ -354,7 +364,7 @@ export function QuoteBuilder({
   const [summary] = useState(quote?.summary ?? '')
   // New quotes start with the standard terms line; existing quotes keep whatever was saved.
   const [terms, setTerms] = useState(quote ? (quote.terms ?? '') : DEFAULT_QUOTE_TERMS)
-  const [notes, setNotes] = useState(quote?.notes ?? '')
+  const [notes, setNotes] = useState(quote?.notes ?? initialNotes ?? '')
   const [vatRate, setVatRate] = useState(String(quote?.vat_rate ?? 20))
   const [discount, setDiscount] = useState(penceToPounds(quote?.discount_pence ?? 0))
   const [validUntil, setValidUntil] = useState(quote?.valid_until ?? '')
@@ -624,6 +634,11 @@ export function QuoteBuilder({
     startTransition(async () => {
       const res = await saveQuote(payload)
       if (res.ok && res.id) {
+        // When raised from a defect, link the new quote back and mark the
+        // defect as quoted so it drops out of the "open" list.
+        if (defectId && !quote?.id) {
+          await linkDefectToQuote(defectId, res.id)
+        }
         toast.success('Quote saved')
         if (quote?.id) router.refresh()
         else router.push(`/dashboard/sales/${res.id}`)

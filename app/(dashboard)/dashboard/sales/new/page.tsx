@@ -5,6 +5,8 @@ import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { QuoteBuilder } from '@/components/dashboard/sales/quote-builder'
 import { resolveDefaultMargin } from '@/lib/sales'
+import { getFailedChecklistItems, buildRemedialScope } from '@/lib/defects'
+import type { ChecklistResult } from '@/lib/types/database'
 import type {
   Client,
   Profile,
@@ -26,9 +28,9 @@ export const metadata = { title: 'New Quote | Pyrocel' }
 export default async function NewQuotePage({
   searchParams,
 }: {
-  searchParams: Promise<{ site?: string }>
+  searchParams: Promise<{ site?: string; defect?: string }>
 }) {
-  const { site: siteParam } = await searchParams
+  const { site: siteParam, defect: defectParam } = await searchParams
   const supabase = await createClient()
   const {
     data: { user },
@@ -93,6 +95,43 @@ export default async function NewQuotePage({
     ? ((sites ?? []) as Site[]).find((s) => s.id === siteParam)
     : undefined
 
+  // When launched from a defect, prefill the quote with the site/client, a
+  // remedial title, and a scope of works seeded from the failed checklist items.
+  let defectPrefill:
+    | { defectId: string; clientId?: string; siteId?: string; title: string; notes: string }
+    | undefined
+  if (defectParam) {
+    const { data: defect } = await supabase
+      .from('defects')
+      .select(
+        `id, site_id, client_id, reference_number,
+         task_result:task_results(checklist_results),
+         site:sites(name)`,
+      )
+      .eq('id', defectParam)
+      .maybeSingle()
+
+    if (defect) {
+      const d = defect as any
+      const failedItems = getFailedChecklistItems(
+        (d.task_result?.checklist_results ?? []) as ChecklistResult[],
+      )
+      const siteName: string | null = d.site?.name ?? null
+      defectPrefill = {
+        defectId: d.id,
+        clientId: d.client_id ?? undefined,
+        siteId: d.site_id ?? undefined,
+        title: `Remedial works${siteName ? ` — ${siteName}` : ''}${
+          d.reference_number ? ` (${d.reference_number})` : ''
+        }`,
+        notes: buildRemedialScope(failedItems, {
+          reference: d.reference_number,
+          siteName,
+        }),
+      }
+    }
+  }
+
   const defaultHourlyCostPence = (ppmEngineerCost as { hourly_cost_pence: number } | null)?.hourly_cost_pence ?? 0
   const defaultMarginPercent = resolveDefaultMargin(
     (department as { default_margin_percent: number } | null)?.default_margin_percent ?? null,
@@ -115,8 +154,11 @@ export default async function NewQuotePage({
       <QuoteBuilder
         clients={(clients ?? []) as Client[]}
         sites={(sites ?? []) as Site[]}
-        initialClientId={initialSite?.client_id ?? undefined}
-        initialSiteId={initialSite?.id ?? undefined}
+        initialClientId={defectPrefill?.clientId ?? initialSite?.client_id ?? undefined}
+        initialSiteId={defectPrefill?.siteId ?? initialSite?.id ?? undefined}
+        initialTitle={defectPrefill?.title}
+        initialNotes={defectPrefill?.notes}
+        defectId={defectPrefill?.defectId}
         systemTypes={(systemTypes ?? []) as SystemType[]}
         serviceTypes={(serviceTypes ?? []) as ServiceType[]}
         quoteServices={(quoteServices ?? []) as QuoteService[]}

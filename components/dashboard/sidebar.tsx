@@ -54,6 +54,7 @@ import {
   LayoutList,
   Layers,
   Boxes,
+  AlertTriangle,
 } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 import type { LucideIcon } from 'lucide-react'
@@ -160,6 +161,7 @@ const adminNavItems: NavItem[] = [
   { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
   salesNavItem,
   { title: 'Reports', href: '/dashboard/reports', icon: FileText },
+  { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
   { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
 ]
@@ -177,6 +179,7 @@ const officeNavItems: NavItem[] = [
   { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
   salesNavItem,
   { title: 'Reports', href: '/dashboard/reports', icon: FileText },
+  { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
   { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
 ]

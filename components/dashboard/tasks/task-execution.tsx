@@ -238,12 +238,15 @@ export function TaskExecution({
       })
       const nextDateStr = toDateString(nextDate)
 
-      // Create the next recurring task
+      // Create the next recurring task. Carry the visit type forward so each
+      // visit in a multi-visit service (e.g. Annual, Periodic) recurs on its own
+      // track one full cycle later.
       await supabase.from('tasks').insert({
         site_service_id: task.site_service_id,
         assigned_engineer_id: task.assigned_engineer_id, // Keep same engineer
         scheduled_date: nextDateStr,
         status: 'pending',
+        visit_type_id: task.visit_type_id ?? null,
       })
 
       // Update next_service_date on site_service

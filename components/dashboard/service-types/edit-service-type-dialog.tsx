@@ -20,6 +20,7 @@ import type { ServiceType, WorkerType, ToleranceUnit, SystemType } from '@/lib/t
 import { WORKER_TYPE_LABELS } from '@/lib/assignment'
 import { ServiceColorPicker } from './service-color-picker'
 import { ToleranceFields } from './tolerance-fields'
+import { ServiceVisitTypesManager } from './service-visit-types-manager'
 import { PYROCEL_RED } from '@/lib/service-colors'
 import {
   Select,
@@ -98,7 +99,7 @@ export function EditServiceTypeDialog({ serviceType, systemTypes, open, onOpenCh
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Edit Service Type</DialogTitle>
@@ -180,6 +181,11 @@ export function EditServiceTypeDialog({ serviceType, systemTypes, open, onOpenCh
                 </Select>
               </div>
             </div>
+            <ServiceVisitTypesManager
+              serviceTypeId={serviceType.id}
+              frequencyValue={formData.default_frequency_value}
+              frequencyUnit={formData.default_frequency_unit}
+            />
             <ToleranceFields
               value={{
                 regulatory_tolerance_value: formData.regulatory_tolerance_value,

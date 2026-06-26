@@ -52,7 +52,8 @@ export default async function TaskPage({ params }: PageProps) {
         site:sites(*),
         service_type:service_types(*)
       ),
-      assigned_engineer:profiles(*)
+      assigned_engineer:profiles(*),
+      visit_type:service_visit_types(*)
     `)
     .eq('id', id)
     .single()
@@ -164,13 +165,23 @@ export default async function TaskPage({ params }: PageProps) {
     )
   }
 
-  // Fetch checklist template for this service type
-  const { data: checklistTemplate } = await supabase
+  // Fetch the checklist template for this service type. For multi-visit
+  // services each visit type can have its own checklist; prefer the one matching
+  // this task's visit type and fall back to the service-wide template (the one
+  // with no visit_type_id) when the visit has no specific checklist.
+  const { data: checklistTemplates } = await supabase
     .from('checklist_templates')
     .select('*')
     .eq('service_type_id', task.site_service.service_type_id)
-    .limit(1)
-    .single()
+
+  const templates = (checklistTemplates || []) as ChecklistTemplate[]
+  const checklistTemplate =
+    (task.visit_type_id
+      ? templates.find((t) => t.visit_type_id === task.visit_type_id)
+      : undefined) ??
+    templates.find((t) => !t.visit_type_id) ??
+    templates[0] ??
+    null
 
   // Fetch existing task result if any
   const { data: taskResult } = await supabase

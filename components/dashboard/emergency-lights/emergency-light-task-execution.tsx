@@ -330,6 +330,7 @@ export function EmergencyLightTaskExecution({
         assigned_engineer_id: task.assigned_engineer_id,
         scheduled_date: nextDateStr,
         status: 'pending',
+        visit_type_id: task.visit_type_id ?? null,
       })
       await supabase
         .from('site_services')

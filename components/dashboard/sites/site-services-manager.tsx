@@ -41,6 +41,7 @@ import { Label } from '@/components/ui/label'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { describeTolerance } from '@/lib/kpi'
+import { buildSeedTaskRows, fetchVisitsByServiceType } from '@/lib/scheduling'
 import type { ServiceType, SiteService, Profile, Task, Route, Area, Subcontractor, WorkerType, ToleranceUnit } from '@/lib/types/database'
 import {
   WORKER_TYPE_LABELS,
@@ -149,16 +150,25 @@ export function SiteServicesManager({
     const { data: inserted } = await supabase
       .from('site_services')
       .insert(insertData)
-      .select('id')
+      .select('id, service_type_id, frequency_value, frequency_unit')
 
-    // Generate a scheduled task for each new service on the visit date.
-    // Dead sites never generate tasks.
+    // Generate scheduled tasks for each new service. Dead sites never generate
+    // tasks. For multi-visit services (e.g. Fire Alarm = Annual + Periodic) we
+    // seed the WHOLE first cycle up front: one task per visit type, evenly split
+    // across the service frequency. Single/zero-visit services seed one task.
     if (!isDead && inserted && inserted.length > 0) {
-      const taskData = (inserted as { id: string }[]).map((row) => ({
-        site_service_id: row.id,
-        scheduled_date: visitDateStr,
-        status: 'pending' as const,
-      }))
+      const rows = inserted as {
+        id: string
+        service_type_id: string
+        frequency_value: number
+        frequency_unit: 'weeks' | 'months'
+      }[]
+
+      const visitsByServiceType = await fetchVisitsByServiceType(
+        supabase,
+        rows.map((r) => r.service_type_id),
+      )
+      const taskData = buildSeedTaskRows(rows, visitDateStr, visitsByServiceType)
       await supabase.from('tasks').insert(taskData)
     }
 

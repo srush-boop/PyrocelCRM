@@ -123,6 +123,20 @@ export interface ServiceType {
   status: 'live' | 'dead'
   created_at: string
   system_type?: SystemType | null
+  // Optional ordered set of distinct visits within one service cycle (e.g.
+  // Fire Alarm Maintenance = Annual, Periodic). Empty/length 1 = single visit.
+  visit_types?: ServiceVisitType[]
+}
+
+// A distinct visit within a multi-visit service cycle. Visits are evenly split
+// across the service frequency (2 visits over 12 months = 6 months apart).
+export interface ServiceVisitType {
+  id: string
+  service_type_id: string
+  name: string
+  sort_order: number
+  created_at: string
+  updated_at: string
 }
 
 // A reusable, global non-product service that can be added to any quote system
@@ -149,6 +163,9 @@ export interface ChecklistItem {
 export interface ChecklistTemplate {
   id: string
   service_type_id: string
+  // When set, this template applies only to the matching visit type. When null,
+  // it is the service-wide fallback used by visits with no specific template.
+  visit_type_id?: string | null
   name: string
   items: ChecklistItem[]
   created_at: string
@@ -346,8 +363,11 @@ export interface Task {
   public_token: string
   created_at: string
   updated_at: string
+  // The visit type this task fulfils (null = single/legacy service-wide visit).
+  visit_type_id?: string | null
   site_service?: SiteService
   assigned_engineer?: Profile | null
+  visit_type?: ServiceVisitType | null
   }
 
 export interface ChecklistResult {

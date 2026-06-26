@@ -104,7 +104,7 @@ export function SendQuoteDialog({
           {label}
         </Button>
       )}
-      <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-lg">
+      <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Send quote to client</DialogTitle>
           <DialogDescription>
@@ -113,7 +113,9 @@ export function SendQuoteDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 overflow-y-auto">
+        {/* min-h-0 is required so this flex child can shrink and scroll instead of
+            pushing the footer (Cancel / Send) off-screen where it can't be tapped. */}
+        <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto">
           <div className="grid gap-2">
             <Label htmlFor="quote-to">To</Label>
             <Input

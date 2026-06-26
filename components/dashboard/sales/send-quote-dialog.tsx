@@ -104,7 +104,7 @@ export function SendQuoteDialog({
           {label}
         </Button>
       )}
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Send quote to client</DialogTitle>
           <DialogDescription>
@@ -113,7 +113,7 @@ export function SendQuoteDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4">
+        <div className="grid gap-4 overflow-y-auto">
           <div className="grid gap-2">
             <Label htmlFor="quote-to">To</Label>
             <Input

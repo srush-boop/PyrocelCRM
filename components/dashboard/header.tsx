@@ -31,14 +31,13 @@ export function DashboardHeader({ profile }: DashboardHeaderProps) {
   const showBack = pathname !== '/dashboard'
 
   const handleBack = () => {
-    // router.back() does nothing when there's no in-app history (e.g. the page
-    // was opened via a direct link or sidebar navigation on a fresh load).
-    // Fall back to the dashboard root in that case.
-    if (typeof window !== 'undefined' && window.history.length > 1) {
-      router.back()
-    } else {
-      router.push('/dashboard')
-    }
+    // Navigate up one path segment (e.g. /dashboard/defects -> /dashboard).
+    // This is deterministic and always works, unlike router.back(), which does
+    // nothing when there's no in-app history (direct link / fresh load / sidebar
+    // navigation) and can land on an unexpected page otherwise.
+    const segments = pathname.split('/').filter(Boolean)
+    const parent = segments.length > 1 ? `/${segments.slice(0, -1).join('/')}` : '/dashboard'
+    router.push(parent)
   }
 
   const handleSignOut = async () => {

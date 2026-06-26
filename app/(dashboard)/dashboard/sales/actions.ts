@@ -527,8 +527,14 @@ function buildQuoteEmailHtml(args: {
   quoteLink?: string
 }): string {
   const body = escapeHtml(args.message).replace(/\n/g, '<br>')
+  // Render the styled button AND a plain, always-visible URL beneath it. Some
+  // email clients strip or dark-invert button styles so they stop looking
+  // clickable; the visible link guarantees the recipient can always reach the
+  // page to view and approve the quote.
   const button = args.quoteLink
-    ? `<p style="margin:24px 0;"><a href="${args.quoteLink}" style="background:#0f172a;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;display:inline-block;">View your quote online</a></p>`
+    ? `<p style="margin:24px 0;"><a href="${args.quoteLink}" style="background:#b91c1c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;display:inline-block;">View &amp; approve your quote</a></p>
+       <p style="font-size:13px;color:#334155;margin:0 0 8px;">Or open this link in your browser:</p>
+       <p style="font-size:13px;margin:0 0 8px;word-break:break-all;"><a href="${args.quoteLink}" style="color:#b91c1c;text-decoration:underline;">${escapeHtml(args.quoteLink)}</a></p>`
     : ''
   return `<!doctype html><html><body style="margin:0;background:#f1f5f9;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
     <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;">

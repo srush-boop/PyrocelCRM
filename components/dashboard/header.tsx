@@ -30,6 +30,17 @@ export function DashboardHeader({ profile }: DashboardHeaderProps) {
   // The dashboard root is the top-level page, so it has nowhere to go "back" to.
   const showBack = pathname !== '/dashboard'
 
+  const handleBack = () => {
+    // router.back() does nothing when there's no in-app history (e.g. the page
+    // was opened via a direct link or sidebar navigation on a fresh load).
+    // Fall back to the dashboard root in that case.
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back()
+    } else {
+      router.push('/dashboard')
+    }
+  }
+
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     router.push('/auth/login')
@@ -53,7 +64,7 @@ export function DashboardHeader({ profile }: DashboardHeaderProps) {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => router.back()}
+          onClick={handleBack}
           className="gap-2"
         >
           <ArrowLeft className="h-4 w-4" />

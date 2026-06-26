@@ -1,8 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { DefectsTable, type DefectRow } from '@/components/dashboard/defects/defects-table'
 
 export const dynamic = 'force-dynamic'
@@ -52,12 +49,6 @@ export default async function DefectsPage() {
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6">
       <div>
-        <Button asChild variant="ghost" size="sm" className="-ml-2 mb-2 h-auto px-2 py-1">
-          <Link href="/dashboard">
-            <ArrowLeft className="mr-1 h-4 w-4" />
-            Back to Dashboard
-          </Link>
-        </Button>
         <h1 className="text-2xl font-bold tracking-tight text-balance">Defects</h1>
         <p className="text-sm text-muted-foreground">
           Failed reports that may require remedial works. Raise a remedial quote directly from a

@@ -1003,6 +1003,14 @@ export interface QuoteBankValue {
   work_type: string
   subtotal_pence: number
   created_at: string
+  client_id: string | null
+  client_name: string | null
+  site_id: string | null
+  site_name: string | null
+  created_by: string | null
+  quoted_by_name: string | null
+  department_id: string | null
+  department_name: string | null
 }
 
 // Direct labour cost per role (hourly), used to underpin estimates.

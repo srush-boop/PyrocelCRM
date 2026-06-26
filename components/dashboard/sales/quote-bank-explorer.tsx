@@ -25,6 +25,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { formatPence, workTypeLabel, computeBankStats, WORK_TYPES } from '@/lib/sales'
 import { formatDateUK } from '@/lib/utils'
@@ -41,6 +43,12 @@ export function QuoteBankExplorer({
 }) {
   const [systemCode, setSystemCode] = useState<string>(ALL)
   const [workType, setWorkType] = useState<string>(ALL)
+  const [department, setDepartment] = useState<string>(ALL)
+  const [quotedBy, setQuotedBy] = useState<string>(ALL)
+  const [client, setClient] = useState<string>(ALL)
+  const [site, setSite] = useState<string>(ALL)
+  const [dateFrom, setDateFrom] = useState<string>('')
+  const [dateTo, setDateTo] = useState<string>('')
 
   // Distinct system codes that actually appear in the bank, paired with a name.
   const codeOptions = useMemo(() => {
@@ -55,28 +63,78 @@ export function QuoteBankExplorer({
     return Array.from(map.entries()).map(([code, name]) => ({ code, name }))
   }, [systemTypes, values])
 
+  // Build distinct id→label option lists from the data that is actually present.
+  const departmentOptions = useDistinctOptions(values, (v) => [v.department_id, v.department_name])
+  const quotedByOptions = useDistinctOptions(values, (v) => [v.created_by, v.quoted_by_name])
+  const clientOptions = useDistinctOptions(values, (v) => [v.client_id, v.client_name])
+  const siteOptions = useDistinctOptions(values, (v) => [v.site_id, v.site_name])
+
   const filtered = useMemo(() => {
+    // Interpret the date range as inclusive calendar days.
+    const fromMs = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null
+    const toMs = dateTo ? new Date(`${dateTo}T23:59:59.999`).getTime() : null
     return values.filter((v) => {
       if (systemCode !== ALL && v.system_code !== systemCode) return false
       if (workType !== ALL && v.work_type !== workType) return false
+      if (department !== ALL && v.department_id !== department) return false
+      if (quotedBy !== ALL && v.created_by !== quotedBy) return false
+      if (client !== ALL && v.client_id !== client) return false
+      if (site !== ALL && v.site_id !== site) return false
+      if (fromMs !== null || toMs !== null) {
+        const t = new Date(v.created_at).getTime()
+        if (fromMs !== null && t < fromMs) return false
+        if (toMs !== null && t > toMs) return false
+      }
       return true
     })
-  }, [values, systemCode, workType])
+  }, [values, systemCode, workType, department, quotedBy, client, site, dateFrom, dateTo])
 
   const stats = useMemo(
     () => computeBankStats(filtered.map((v) => v.subtotal_pence)),
     [filtered],
   )
 
+  const hasActiveFilters =
+    systemCode !== ALL ||
+    workType !== ALL ||
+    department !== ALL ||
+    quotedBy !== ALL ||
+    client !== ALL ||
+    site !== ALL ||
+    dateFrom !== '' ||
+    dateTo !== ''
+
+  function clearFilters() {
+    setSystemCode(ALL)
+    setWorkType(ALL)
+    setDepartment(ALL)
+    setQuotedBy(ALL)
+    setClient(ALL)
+    setSite(ALL)
+    setDateFrom('')
+    setDateTo('')
+  }
+
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Filters</CardTitle>
-          <CardDescription>Narrow the bank by system code and type of work.</CardDescription>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <CardTitle>Filters</CardTitle>
+              <CardDescription>
+                Narrow the bank by system, work type, department, who quoted, client, site and date.
+              </CardDescription>
+            </div>
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className="grid gap-2">
               <Label>System</Label>
               <Select value={systemCode} onValueChange={setSystemCode}>
@@ -109,6 +167,90 @@ export function QuoteBankExplorer({
                 </SelectContent>
               </Select>
             </div>
+            <div className="grid gap-2">
+              <Label>Department</Label>
+              <Select value={department} onValueChange={setDepartment}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All departments" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>All departments</SelectItem>
+                  {departmentOptions.map((o) => (
+                    <SelectItem key={o.id} value={o.id}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Quoted by</Label>
+              <Select value={quotedBy} onValueChange={setQuotedBy}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Anyone" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>Anyone</SelectItem>
+                  {quotedByOptions.map((o) => (
+                    <SelectItem key={o.id} value={o.id}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Client</Label>
+              <Select value={client} onValueChange={setClient}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All clients" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>All clients</SelectItem>
+                  {clientOptions.map((o) => (
+                    <SelectItem key={o.id} value={o.id}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Site</Label>
+              <Select value={site} onValueChange={setSite}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All sites" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>All sites</SelectItem>
+                  {siteOptions.map((o) => (
+                    <SelectItem key={o.id} value={o.id}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="bank-date-from">Date from</Label>
+              <Input
+                id="bank-date-from"
+                type="date"
+                value={dateFrom}
+                max={dateTo || undefined}
+                onChange={(e) => setDateFrom(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="bank-date-to">Date to</Label>
+              <Input
+                id="bank-date-to"
+                type="date"
+                value={dateTo}
+                min={dateFrom || undefined}
+                onChange={(e) => setDateTo(e.target.value)}
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -128,7 +270,7 @@ export function QuoteBankExplorer({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
+          <div className="overflow-x-auto rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -136,6 +278,9 @@ export function QuoteBankExplorer({
                   <TableHead>System</TableHead>
                   <TableHead>Work type</TableHead>
                   <TableHead>Quote</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Site</TableHead>
+                  <TableHead>Quoted by</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead className="text-right">Value</TableHead>
                 </TableRow>
@@ -143,7 +288,7 @@ export function QuoteBankExplorer({
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                       No matching historical values.
                     </TableCell>
                   </TableRow>
@@ -173,6 +318,13 @@ export function QuoteBankExplorer({
                         </Link>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
+                        {v.client_name ?? '—'}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{v.site_name ?? '—'}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {v.quoted_by_name ?? '—'}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
                         {formatDateUK(v.created_at)}
                       </TableCell>
                       <TableCell className="text-right font-medium">
@@ -188,6 +340,28 @@ export function QuoteBankExplorer({
       </Card>
     </div>
   )
+}
+
+// Builds a sorted, de-duplicated list of { id, label } options from the rows,
+// using the provided accessor to extract an [id, name] pair. Rows without an id
+// are skipped so filter values always map to a concrete record.
+function useDistinctOptions(
+  values: QuoteBankValue[],
+  accessor: (v: QuoteBankValue) => [string | null, string | null],
+) {
+  return useMemo(() => {
+    const map = new Map<string, string>()
+    for (const v of values) {
+      const [id, name] = accessor(v)
+      if (!id) continue
+      if (!map.has(id)) map.set(id, name ?? 'Unknown')
+    }
+    return Array.from(map.entries())
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+    // accessor is a stable inline function per filter; values drives recompute.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [values])
 }
 
 function StatCard({ label, value }: { label: string; value: string }) {

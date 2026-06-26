@@ -310,6 +310,12 @@ interface QuoteBuilderProps {
   initialNotes?: string
   // When set, links the saved quote back to this defect and marks it 'quoted'.
   defectId?: string
+  // Seed the first system for a brand-new quote (e.g. a remedial quote raised
+  // from a defect): the originating service's system type, the work type
+  // (Remedial), and a scope of works placed in the system specification.
+  initialSystemTypeId?: string | null
+  initialWorkType?: string
+  initialSpecification?: string
   initialSystems?: QuoteSystem[]
   initialLines?: QuoteLineItem[]
   initialPpm?: QuoteSystemPpm[]
@@ -337,6 +343,9 @@ export function QuoteBuilder({
   initialTitle,
   initialNotes,
   defectId,
+  initialSystemTypeId,
+  initialWorkType,
+  initialSpecification,
   initialSystems,
   initialLines,
   initialPpm,
@@ -412,7 +421,27 @@ export function QuoteBuilder({
           ppm: ppmToDraft((initialPpm ?? []).find((p) => p.quote_system_id === s.id) ?? null),
         }))
     }
-    return [blankSystem(1, defaultMarginPercent)]
+    const base = blankSystem(1, defaultMarginPercent)
+    // Seed a brand-new quote raised from a defect with the originating service's
+    // system type, the work type (Remedial), and the scope as the specification.
+    if (initialSystemTypeId || initialWorkType || initialSpecification) {
+      const workType = initialWorkType ?? base.work_type
+      const systemTypeId = initialSystemTypeId ?? base.system_type_id
+      const seededMargin =
+        systemTypeId !== null
+          ? resolveSystemWorkTypeMargin(systemWorkTypeMargins, systemTypeId, workType)
+          : null
+      return [
+        {
+          ...base,
+          system_type_id: systemTypeId,
+          work_type: workType,
+          specification: initialSpecification ?? base.specification,
+          margin: seededMargin !== null ? String(seededMargin) : base.margin,
+        },
+      ]
+    }
+    return [base]
   })
 
   const sitesForClient = useMemo(

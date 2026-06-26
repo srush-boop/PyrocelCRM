@@ -3,8 +3,34 @@ import { TaskResult } from '@/lib/types/database'
 export interface ChecklistItem {
   id: string
   label: string
-  passed: boolean
+  // `passed` is only meaningful for pass/fail items. Summary/informational
+  // items (numbers, text) carry `null` and must not be rendered as failures.
+  passed: boolean | null
+  type?: 'pass_fail' | 'text' | 'number' | 'checkbox'
+  value?: boolean | string | number | null
   notes?: string
+}
+
+// Renders a single checklist row. Pass/fail items get a ✓/✗ result icon;
+// informational items (e.g. damper summary counts like "Failed: 1") render
+// neutrally with their value, so they are never shown as failures.
+const checklistItemHtml = (item: ChecklistItem): string => {
+  const isPassFail = item.type === 'pass_fail' || typeof item.passed === 'boolean'
+  if (!isPassFail) {
+    const hasValue = item.value !== undefined && item.value !== null && item.value !== ''
+    return `
+      <div class="item info">
+        <strong>${item.label}${hasValue ? `: ${item.value}` : ''}</strong>
+        ${item.notes ? `<p>${item.notes}</p>` : ''}
+      </div>
+    `
+  }
+  return `
+    <div class="item ${item.passed ? 'pass' : 'fail'}">
+      <strong>${item.passed ? '✓' : '✗'} ${item.label}</strong>
+      ${item.notes ? `<p>${item.notes}</p>` : ''}
+    </div>
+  `
 }
 
 export interface EmailData {
@@ -56,6 +82,7 @@ export const generateClientPassEmail = (data: EmailData): { subject: string; htm
           .item { padding: 10px; border-left: 4px solid #2d8659; background: white; margin: 10px 0; }
           .pass { border-left-color: #28a745; }
           .fail { border-left-color: #dc3545; }
+          .info { border-left-color: #6b7280; }
           .footer { text-align: center; color: #666; font-size: 12px; }
           .stamp { background: #28a745; color: white; padding: 10px 20px; border-radius: 5px; display: inline-block; font-weight: bold; }
         </style>
@@ -85,12 +112,7 @@ export const generateClientPassEmail = (data: EmailData): { subject: string; htm
             <div class="stamp">✓ ALL ITEMS PASSED</div>
             
             <div class="checklist">
-              ${data.checklist.map(item => `
-                <div class="item pass">
-                  <strong>✓ ${item.label}</strong>
-                  ${item.notes ? `<p>${item.notes}</p>` : ''}
-                </div>
-              `).join('')}
+              ${data.checklist.map(checklistItemHtml).join('')}
             </div>
 
             ${reportButton(data.reportUrl)}
@@ -119,7 +141,7 @@ export const generateClientPassEmail = (data: EmailData): { subject: string; htm
 }
 
 export const generateClientFailEmail = (data: EmailData): { subject: string; html: string } => {
-  const failedItems = data.checklist.filter(item => !item.passed)
+  const failedItems = data.checklist.filter(item => item.passed === false)
   
   const html = `
     <!DOCTYPE html>
@@ -135,6 +157,7 @@ export const generateClientFailEmail = (data: EmailData): { subject: string; htm
           .item { padding: 10px; border-left: 4px solid #dc3545; background: white; margin: 10px 0; }
           .pass { border-left-color: #28a745; }
           .fail { border-left-color: #dc3545; }
+          .info { border-left-color: #6b7280; }
           .footer { text-align: center; color: #666; font-size: 12px; }
           .stamp { background: #dc3545; color: white; padding: 10px 20px; border-radius: 5px; display: inline-block; font-weight: bold; }
           .alert { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 12px; border-radius: 5px; margin: 20px 0; }
@@ -167,12 +190,7 @@ export const generateClientFailEmail = (data: EmailData): { subject: string; htm
             <div class="stamp">⚠ ITEMS REQUIRE ATTENTION</div>
             
             <div class="checklist">
-              ${data.checklist.map(item => `
-                <div class="item ${item.passed ? 'pass' : 'fail'}">
-                  <strong>${item.passed ? '✓' : '✗'} ${item.label}</strong>
-                  ${item.notes ? `<p>${item.notes}</p>` : ''}
-                </div>
-              `).join('')}
+              ${data.checklist.map(checklistItemHtml).join('')}
             </div>
             
             ${data.engineerNotes ? `
@@ -274,7 +292,7 @@ export const generateClientNoAccessEmail = (data: EmailData): { subject: string;
 }
 
 export const generateInternalAlertEmail = (data: EmailData): { subject: string; html: string } => {
-  const failedItems = data.checklist.filter(item => !item.passed)
+  const failedItems = data.checklist.filter(item => item.passed === false)
   
   const html = `
     <!DOCTYPE html>

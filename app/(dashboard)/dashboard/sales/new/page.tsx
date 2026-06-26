@@ -98,7 +98,14 @@ export default async function NewQuotePage({
   // When launched from a defect, prefill the quote with the site/client, a
   // remedial title, and a scope of works seeded from the failed checklist items.
   let defectPrefill:
-    | { defectId: string; clientId?: string; siteId?: string; title: string; notes: string }
+    | {
+        defectId: string
+        clientId?: string
+        siteId?: string
+        title: string
+        scope: string
+        systemTypeId?: string | null
+      }
     | undefined
   if (defectParam) {
     const { data: defect } = await supabase
@@ -106,7 +113,8 @@ export default async function NewQuotePage({
       .select(
         `id, site_id, client_id, reference_number,
          task_result:task_results(checklist_results),
-         site:sites(name)`,
+         site:sites(name),
+         task:tasks(site_service:site_services(service_type:service_types(name, system_type_id)))`,
       )
       .eq('id', defectParam)
       .maybeSingle()
@@ -121,10 +129,13 @@ export default async function NewQuotePage({
         defectId: d.id,
         clientId: d.client_id ?? undefined,
         siteId: d.site_id ?? undefined,
+        // System type is inherited from the originating service so the quote's
+        // first system matches the report it came from.
+        systemTypeId: d.task?.site_service?.service_type?.system_type_id ?? undefined,
         title: `Remedial works${siteName ? ` — ${siteName}` : ''}${
           d.reference_number ? ` (${d.reference_number})` : ''
         }`,
-        notes: buildRemedialScope(failedItems, {
+        scope: buildRemedialScope(failedItems, {
           reference: d.reference_number,
           siteName,
         }),
@@ -157,7 +168,9 @@ export default async function NewQuotePage({
         initialClientId={defectPrefill?.clientId ?? initialSite?.client_id ?? undefined}
         initialSiteId={defectPrefill?.siteId ?? initialSite?.id ?? undefined}
         initialTitle={defectPrefill?.title}
-        initialNotes={defectPrefill?.notes}
+        initialSystemTypeId={defectPrefill?.systemTypeId}
+        initialWorkType={defectPrefill ? 'REM' : undefined}
+        initialSpecification={defectPrefill?.scope}
         defectId={defectPrefill?.defectId}
         systemTypes={(systemTypes ?? []) as SystemType[]}
         serviceTypes={(serviceTypes ?? []) as ServiceType[]}

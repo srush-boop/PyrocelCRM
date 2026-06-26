@@ -120,10 +120,20 @@ export async function POST(request: NextRequest) {
       completedDate: formatDateUK(task.completed_at || new Date().toISOString()),
       overallStatus,
       checklist: (taskResult.checklist_results || []).map(
-        (r: { label: string; passed: boolean | null; notes?: string }) => ({
+        (r: {
+          label: string
+          type?: 'pass_fail' | 'text' | 'number' | 'checkbox'
+          value?: boolean | string | number | null
+          passed: boolean | null
+          notes?: string
+        }) => ({
           id: r.label,
           label: r.label,
-          passed: r.passed === true,
+          type: r.type,
+          value: r.value,
+          // Preserve null for summary/informational items so they are not
+          // rendered as failures in the email.
+          passed: r.passed ?? null,
           notes: r.notes,
         })
       ),

@@ -412,7 +412,6 @@ export function McpRegister({ siteId, mcps }: McpRegisterProps) {
                     <input
                       type="file"
                       accept="image/*"
-                      capture="environment"
                       className="hidden"
                       disabled={uploadingAsset}
                       onChange={(e) => handleAssetImage(e.target.files)}

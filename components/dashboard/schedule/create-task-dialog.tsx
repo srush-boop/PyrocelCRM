@@ -33,6 +33,8 @@ interface CreateTaskDialogProps {
   engineers: Profile[]
 }
 
+const ALL_VISITS = '__all__'
+
 export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -41,8 +43,30 @@ export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogPr
     assigned_engineer_id: '',
     scheduled_date: new Date(),
   })
+  // Visit types for the currently-selected service (multi-visit services only),
+  // plus which visit the new task is for.
+  const [visitTypes, setVisitTypes] = useState<{ id: string; name: string }[]>([])
+  const [visitTypeId, setVisitTypeId] = useState<string>(ALL_VISITS)
   const router = useRouter()
   const supabase = createClient()
+
+  // When a site service is picked, load its service type's visit types so the
+  // user can schedule a specific visit (e.g. Annual vs Periodic).
+  const handleServiceChange = async (siteServiceId: string) => {
+    setFormData({ ...formData, site_service_id: siteServiceId })
+    setVisitTypeId(ALL_VISITS)
+    const ss = siteServices.find((s) => s.id === siteServiceId)
+    if (!ss?.service_type_id) {
+      setVisitTypes([])
+      return
+    }
+    const { data } = await supabase
+      .from('service_visit_types')
+      .select('id, name, sort_order')
+      .eq('service_type_id', ss.service_type_id)
+      .order('sort_order', { ascending: true })
+    setVisitTypes((data as { id: string; name: string }[]) ?? [])
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -53,6 +77,7 @@ export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogPr
       assigned_engineer_id: formData.assigned_engineer_id || null,
       scheduled_date: format(formData.scheduled_date, 'yyyy-MM-dd'),
       status: 'pending',
+      visit_type_id: visitTypeId === ALL_VISITS ? null : visitTypeId,
     })
 
     setLoading(false)
@@ -64,6 +89,8 @@ export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogPr
         assigned_engineer_id: '',
         scheduled_date: new Date(),
       })
+      setVisitTypes([])
+      setVisitTypeId(ALL_VISITS)
       router.refresh()
     }
   }
@@ -99,7 +126,7 @@ export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogPr
               <Label>Site & Service *</Label>
               <Select
                 value={formData.site_service_id}
-                onValueChange={(value) => setFormData({ ...formData, site_service_id: value })}
+                onValueChange={handleServiceChange}
                 required
               >
                 <SelectTrigger>
@@ -121,6 +148,25 @@ export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogPr
                 </SelectContent>
               </Select>
             </div>
+
+            {visitTypes.length > 0 && (
+              <div className="grid gap-2">
+                <Label>Visit</Label>
+                <Select value={visitTypeId} onValueChange={setVisitTypeId}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_VISITS}>Unspecified</SelectItem>
+                    {visitTypes.map((vt) => (
+                      <SelectItem key={vt.id} value={vt.id}>
+                        {vt.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="grid gap-2">
               <Label>Assign Engineer</Label>

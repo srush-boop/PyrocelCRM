@@ -296,28 +296,36 @@ export function QuoteDocument({ quote, systems, lines, company, backHref }: Quot
                               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                 {humanizeKey(key)}
                               </p>
-                              <table className="w-full text-sm">
-                                <thead>
-                                  <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-                                    {columns.map((c) => (
-                                      <th key={c} className="py-1 font-medium">
-                                        {humanizeKey(c)}
-                                      </th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {rows.map((row, i) => (
-                                    <tr key={i} className="border-b border-dashed last:border-0">
-                                      {columns.map((c) => (
-                                        <td key={c} className="py-1 pr-4 align-top">
-                                          {row[c]}
-                                        </td>
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                                      {columns.map((c, ci) => (
+                                        <th
+                                          key={c}
+                                          className={`py-1 font-medium ${ci > 0 ? 'pl-3' : ''}`}
+                                        >
+                                          {humanizeKey(c)}
+                                        </th>
                                       ))}
                                     </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                                  </thead>
+                                  <tbody>
+                                    {rows.map((row, i) => (
+                                      <tr key={i} className="border-b border-dashed last:border-0">
+                                        {columns.map((c, ci) => (
+                                          <td
+                                            key={c}
+                                            className={`py-1 align-top ${ci > 0 ? 'pl-3' : 'pr-3'}`}
+                                          >
+                                            {row[c]}
+                                          </td>
+                                        ))}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
                             </div>
                           )
                         })}
@@ -341,38 +349,46 @@ export function QuoteDocument({ quote, systems, lines, company, backHref }: Quot
                                   {group.heading}
                                 </div>
                               )}
-                              <table className="w-full text-sm">
-                                <thead>
-                                  <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-                                    <th className="py-1 font-medium">Description</th>
-                                    <th className="py-1 text-right font-medium">Qty</th>
-                                    <th className="py-1 text-right font-medium">Unit price</th>
-                                    <th className="py-1 text-right font-medium">Total</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {group.rows.map((line) => (
-                                    <tr
-                                      key={line.id}
-                                      className="border-b border-dashed last:border-0"
-                                    >
-                                      <td className="py-2 pr-4 align-top">
-                                        <div className="font-medium">{line.description}</div>
-                                      </td>
-                                      <td className="py-2 text-right align-top tabular-nums">
-                                        {line.quantity}
-                                        {line.unit ? ` ${line.unit}` : ''}
-                                      </td>
-                                      <td className="py-2 text-right align-top tabular-nums">
-                                        {formatPence(line.unit_price_pence, quote.currency)}
-                                      </td>
-                                      <td className="py-2 text-right align-top font-medium tabular-nums">
-                                        {formatPence(line.line_total_pence, quote.currency)}
-                                      </td>
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                                      <th className="py-1 font-medium">Description</th>
+                                      <th className="py-1 pl-3 text-right font-medium whitespace-nowrap">
+                                        Qty
+                                      </th>
+                                      <th className="py-1 pl-3 text-right font-medium whitespace-nowrap">
+                                        Unit price
+                                      </th>
+                                      <th className="py-1 pl-3 text-right font-medium whitespace-nowrap">
+                                        Total
+                                      </th>
                                     </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                                  </thead>
+                                  <tbody>
+                                    {group.rows.map((line) => (
+                                      <tr
+                                        key={line.id}
+                                        className="border-b border-dashed last:border-0"
+                                      >
+                                        <td className="py-2 pr-3 align-top">
+                                          <div className="font-medium">{line.description}</div>
+                                        </td>
+                                        <td className="py-2 pl-3 text-right align-top tabular-nums whitespace-nowrap">
+                                          {line.quantity}
+                                          {line.unit ? ` ${line.unit}` : ''}
+                                        </td>
+                                        <td className="py-2 pl-3 text-right align-top tabular-nums whitespace-nowrap">
+                                          {formatPence(line.unit_price_pence, quote.currency)}
+                                        </td>
+                                        <td className="py-2 pl-3 text-right align-top font-medium tabular-nums whitespace-nowrap">
+                                          {formatPence(line.line_total_pence, quote.currency)}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
                             </div>
                           ),
                         )}

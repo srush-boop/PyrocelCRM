@@ -399,10 +399,10 @@ export async function searchCatalogueItems(
 
   const term = query.trim()
   if (term) {
-    // Match against name, product code, or category (case-insensitive).
+    // Match against name, product code, description, or category (case-insensitive).
     const escaped = term.replace(/[%_,]/g, (m) => `\\${m}`)
     q = q.or(
-      `name.ilike.%${escaped}%,product_code.ilike.%${escaped}%,category.ilike.%${escaped}%`,
+      `name.ilike.%${escaped}%,product_code.ilike.%${escaped}%,description.ilike.%${escaped}%,category.ilike.%${escaped}%`,
     )
   }
 

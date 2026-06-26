@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Printer, Send, Check, X, RotateCcw, Clock } from 'lucide-react'
+import { Printer, Send, Check, X, RotateCcw, Clock, FileText } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn, formatDateUK } from '@/lib/utils'
 import { QUOTE_STATUS_META } from '@/lib/sales'
@@ -75,6 +75,15 @@ export function QuoteStatusPanel({ quote }: { quote: Quote }) {
           <Link href={`/dashboard/sales/${quote.id}/print`} target="_blank">
             <Printer className="mr-2 h-4 w-4" />
             View / PDF
+          </Link>
+        </Button>
+
+        {/* Staff can always generate the full equipment specification (part
+            numbers + standard descriptions + spec detail) for the client. */}
+        <Button variant="outline" size="sm" asChild>
+          <Link href={`/dashboard/sales/${quote.id}/spec`} target="_blank">
+            <FileText className="mr-2 h-4 w-4" />
+            Equipment spec
           </Link>
         </Button>
 

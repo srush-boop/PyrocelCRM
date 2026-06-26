@@ -279,7 +279,6 @@ function QuotePdfDocument({
                               <View key={line.id} style={styles.tRow}>
                                 <View style={styles.cDesc}>
                                   <Text style={styles.bold}>{line.description}</Text>
-                                  {line.detail ? <Text style={styles.lineDetail}>{line.detail}</Text> : null}
                                 </View>
                                 <Text style={styles.cQty}>
                                   {line.quantity}

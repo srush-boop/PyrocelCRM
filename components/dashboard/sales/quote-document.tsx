@@ -346,11 +346,6 @@ export function QuoteDocument({ quote, systems, lines, company, backHref }: Quot
                                     >
                                       <td className="py-2 pr-4 align-top">
                                         <div className="font-medium">{line.description}</div>
-                                        {line.detail && (
-                                          <div className="text-xs text-muted-foreground">
-                                            {line.detail}
-                                          </div>
-                                        )}
                                       </td>
                                       <td className="py-2 text-right align-top tabular-nums">
                                         {line.quantity}

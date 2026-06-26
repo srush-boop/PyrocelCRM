@@ -491,7 +491,9 @@ export function QuoteBuilder({
       key: uid(),
       productCode: item.product_code ?? '',
       description: item.name,
-      detail: item.description ?? '',
+      // The catalogue's spec text is intentionally NOT pulled onto the quote line.
+      // It stays in the catalogue and is only used for the equipment specification.
+      detail: '',
       service_type_id: item.service_type_id,
       is_service: false,
       catalogue_item_id: item.id,
@@ -509,7 +511,8 @@ export function QuoteBuilder({
     updateLine(systemKey, lineKey, {
       productCode: item.product_code ?? '',
       description: item.name,
-      detail: item.description ?? '',
+      // Spec text stays in the catalogue (used only for the equipment specification).
+      detail: '',
       service_type_id: item.service_type_id,
       catalogue_item_id: item.id,
       unit: item.default_unit ?? '',
@@ -1624,20 +1627,14 @@ function SystemCard({
                     </Button>
                   )}
                 </div>
-                {/* Description + extra detail span the full row width so long
-                    catalogue names are fully readable. */}
+                {/* Description spans the full row width so long catalogue names
+                    are fully readable. Extra spec detail is no longer edited on
+                    the quote line; it lives in the catalogue. */}
                 <Input
                   value={line.description}
                   onChange={(e) => onUpdateLine(line.key, { description: e.target.value })}
                   placeholder="Item description"
                   className="w-full"
-                  disabled={disabled}
-                />
-                <Input
-                  value={line.detail}
-                  onChange={(e) => onUpdateLine(line.key, { detail: e.target.value })}
-                  placeholder="Extra detail (optional)"
-                  className="w-full text-xs"
                   disabled={disabled}
                 />
               </div>

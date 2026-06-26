@@ -61,8 +61,21 @@ export async function respondToPublicQuote(args: {
     }
   }
 
-  const { error: updateError } = await supabase.from('quotes').update(patch).eq('id', quote.id)
-  if (updateError) return { ok: false, error: 'Could not record your response.' }
+  // Select the affected row back so a silent no-op (zero rows updated) is caught
+  // rather than reported as success.
+  const { data: updated, error: updateError } = await supabase
+    .from('quotes')
+    .update(patch)
+    .eq('id', quote.id)
+    .select('id')
+
+  if (updateError) {
+    console.log('[v0] respondToPublicQuote update error:', updateError.message)
+    return { ok: false, error: 'Could not record your response.' }
+  }
+  if (!updated || updated.length === 0) {
+    return { ok: false, error: 'Could not record your response. Please try again.' }
+  }
 
   return { ok: true }
 }

@@ -30,6 +30,16 @@ export function DashboardHeader({ profile }: DashboardHeaderProps) {
   // The dashboard root is the top-level page, so it has nowhere to go "back" to.
   const showBack = pathname !== '/dashboard'
 
+  const handleBack = () => {
+    // Navigate up one path segment (e.g. /dashboard/defects -> /dashboard).
+    // This is deterministic and always works, unlike router.back(), which does
+    // nothing when there's no in-app history (direct link / fresh load / sidebar
+    // navigation) and can land on an unexpected page otherwise.
+    const segments = pathname.split('/').filter(Boolean)
+    const parent = segments.length > 1 ? `/${segments.slice(0, -1).join('/')}` : '/dashboard'
+    router.push(parent)
+  }
+
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     router.push('/auth/login')
@@ -46,14 +56,14 @@ export function DashboardHeader({ profile }: DashboardHeaderProps) {
     : profile.email.slice(0, 2).toUpperCase()
 
   return (
-    <header data-dashboard-header className="flex h-16 items-center gap-4 border-b border-border bg-background px-6">
+    <header data-dashboard-header className="flex h-16 items-center gap-2 border-b border-border bg-background px-3 sm:gap-4 sm:px-6">
       <SidebarTrigger className="-ml-2" />
       <Separator orientation="vertical" className="h-6" />
       {showBack && (
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => router.back()}
+          onClick={handleBack}
           className="gap-2"
         >
           <ArrowLeft className="h-4 w-4" />

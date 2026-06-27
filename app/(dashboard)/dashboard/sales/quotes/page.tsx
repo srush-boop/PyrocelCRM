@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { QuotesTable } from '@/components/dashboard/sales/quotes-table'
+import { BranchFilter } from '@/components/dashboard/branch-filter'
+import { getBranchScope } from '@/lib/branches'
 import type { Profile, Quote } from '@/lib/types/database'
 
 export const metadata = {
@@ -8,7 +10,11 @@ export const metadata = {
   description: 'Create and manage quotes across the fire & security portfolio.',
 }
 
-export default async function QuotesPage() {
+export default async function QuotesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ branch?: string }>
+}) {
   const supabase = await createClient()
   const {
     data: { user },
@@ -20,21 +26,36 @@ export default async function QuotesPage() {
     redirect('/dashboard')
   }
 
-  const { data: quotes } = await supabase
+  const { branch } = await searchParams
+  const scope = await getBranchScope(profile as Profile, branch)
+
+  const { data: rawQuotes } = await supabase
     .from('quotes')
-    .select('*, client:clients(id, name), site:sites(id, name), preparer:profiles!quotes_created_by_fkey(id, full_name)')
+    .select(
+      '*, client:clients(id, name), site:sites(id, name, branch_id), preparer:profiles!quotes_created_by_fkey(id, full_name)',
+    )
     .order('created_at', { ascending: false })
+
+  // Scope by the quote's site branch when a branch is active.
+  const quotes = scope.activeBranchId
+    ? ((rawQuotes ?? []) as Quote[]).filter(
+        (q) => (q.site as { branch_id?: string | null } | null)?.branch_id === scope.activeBranchId,
+      )
+    : ((rawQuotes ?? []) as Quote[])
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Quotes</h1>
-        <p className="text-muted-foreground">
-          Quote supply, installation, commissioning, remedial work and service contracts.
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Quotes</h1>
+          <p className="text-muted-foreground">
+            Quote supply, installation, commissioning, remedial work and service contracts.
+          </p>
+        </div>
+        <BranchFilter branches={scope.branches} activeBranchId={scope.activeBranchId} />
       </div>
 
-      <QuotesTable quotes={(quotes ?? []) as Quote[]} />
+      <QuotesTable quotes={quotes} />
     </div>
   )
 }

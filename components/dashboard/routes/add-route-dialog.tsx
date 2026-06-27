@@ -24,7 +24,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Plus, Loader2 } from 'lucide-react'
+import { ServiceColorPicker } from '@/components/dashboard/service-types/service-color-picker'
 import type { Profile } from '@/lib/types/database'
+
+const DEFAULT_ROUTE_COLOR = '#2563eb'
 
 interface AddRouteDialogProps {
   engineers: Profile[]
@@ -37,6 +40,7 @@ export function AddRouteDialog({ engineers }: AddRouteDialogProps) {
     name: '',
     description: '',
     assigned_engineer_id: '',
+    color: DEFAULT_ROUTE_COLOR,
   })
   const router = useRouter()
   const supabase = createClient()
@@ -58,6 +62,7 @@ export function AddRouteDialog({ engineers }: AddRouteDialogProps) {
         name: '',
         description: '',
         assigned_engineer_id: '',
+        color: DEFAULT_ROUTE_COLOR,
       })
       router.refresh()
     }
@@ -117,6 +122,12 @@ export function AddRouteDialog({ engineers }: AddRouteDialogProps) {
                 </SelectContent>
               </Select>
             </div>
+            <ServiceColorPicker
+              value={formData.color}
+              onChange={(color) => setFormData({ ...formData, color })}
+              label="Calendar colour"
+              description="Distinguishes this route on the master calendar. Name the route with a weekday (e.g. 'Friday 01') to recur weekly."
+            />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

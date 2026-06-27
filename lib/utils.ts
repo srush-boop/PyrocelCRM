@@ -56,3 +56,34 @@ export function formatTimeUK(date: Date | string): string {
 export function formatNumberUK(value: number): string {
   return value.toLocaleString(UK_LOCALE)
 }
+
+// Format a "HH:MM[:SS]" time-of-day string (e.g. from a Postgres `time`
+// column) as a UK 24h time like "09:00". Returns '' for empty input.
+export function formatClockTime(time: string | null | undefined): string {
+  if (!time) return ''
+  const [h, m] = time.split(':')
+  if (h === undefined || m === undefined) return ''
+  return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`
+}
+
+// Format an optional booked slot as "09:00 – 11:00", or just a single time if
+// only one end is set. Returns '' when no times are provided.
+export function formatBookedSlot(
+  start: string | null | undefined,
+  end: string | null | undefined,
+): string {
+  const s = formatClockTime(start)
+  const e = formatClockTime(end)
+  if (s && e) return `${s} – ${e}`
+  return s || e || ''
+}
+
+// Format a pounds value as GBP currency (client-safe).
+export function formatGBP(value: number): string {
+  return new Intl.NumberFormat(UK_LOCALE, {
+    style: 'currency',
+    currency: 'GBP',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value || 0)
+}

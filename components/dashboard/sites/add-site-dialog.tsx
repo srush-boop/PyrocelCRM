@@ -26,13 +26,14 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Plus, Loader2, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import type { Client } from '@/lib/types/database'
+import type { Client, Branch } from '@/lib/types/database'
 
 interface AddSiteDialogProps {
   clients: Client[]
+  branches?: Branch[]
 }
 
-export function AddSiteDialog({ clients }: AddSiteDialogProps) {
+export function AddSiteDialog({ clients, branches = [] }: AddSiteDialogProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
@@ -43,6 +44,7 @@ export function AddSiteDialog({ clients }: AddSiteDialogProps) {
     contact_email: '',
     contact_phone: '',
     client_id: '',
+    branch_id: '',
     site_id_cash: '',
     uprn: '',
     status: 'live' as 'live' | 'dead',
@@ -84,6 +86,7 @@ export function AddSiteDialog({ clients }: AddSiteDialogProps) {
     const { error: insertError } = await supabase.from('sites').insert({
       ...formData,
       client_id: formData.client_id || null,
+      branch_id: formData.branch_id || null,
       remote_monitoring_type: formData.has_remote_monitoring
         ? formData.remote_monitoring_type || null
         : null,
@@ -112,6 +115,7 @@ export function AddSiteDialog({ clients }: AddSiteDialogProps) {
         contact_email: '',
         contact_phone: '',
         client_id: '',
+        branch_id: '',
         site_id_cash: '',
         uprn: '',
         status: 'live',
@@ -177,7 +181,7 @@ export function AddSiteDialog({ clients }: AddSiteDialogProps) {
                 Used as the access code for the site&apos;s QR fire safety log book.
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label htmlFor="contact_name">Contact Name</Label>
                 <Input
@@ -231,7 +235,30 @@ export function AddSiteDialog({ clients }: AddSiteDialogProps) {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            {branches.length > 0 && (
+              <div className="grid gap-2">
+                <Label htmlFor="branch">Branch</Label>
+                <Select
+                  value={formData.branch_id || 'none'}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, branch_id: value === 'none' ? '' : value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="No branch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No branch</SelectItem>
+                    {branches.map((branch) => (
+                      <SelectItem key={branch.id} value={branch.id}>
+                        {branch.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label htmlFor="site_id_cash">Site ID (CASH)</Label>
                 <Input

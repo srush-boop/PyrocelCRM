@@ -14,6 +14,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -33,6 +34,8 @@ interface CreateTaskDialogProps {
   engineers: Profile[]
 }
 
+const ALL_VISITS = '__all__'
+
 export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -40,19 +43,58 @@ export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogPr
     site_service_id: '',
     assigned_engineer_id: '',
     scheduled_date: new Date(),
+    booked_start_time: '',
+    booked_end_time: '',
   })
+  // Visit types for the currently-selected service (multi-visit services only),
+  // plus which visit the new task is for.
+  const [visitTypes, setVisitTypes] = useState<{ id: string; name: string }[]>([])
+  const [visitTypeId, setVisitTypeId] = useState<string>(ALL_VISITS)
+  const [timeError, setTimeError] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
+  // When a site service is picked, load its service type's visit types so the
+  // user can schedule a specific visit (e.g. Annual vs Periodic).
+  const handleServiceChange = async (siteServiceId: string) => {
+    setFormData({ ...formData, site_service_id: siteServiceId })
+    setVisitTypeId(ALL_VISITS)
+    const ss = siteServices.find((s) => s.id === siteServiceId)
+    if (!ss?.service_type_id) {
+      setVisitTypes([])
+      return
+    }
+    const { data } = await supabase
+      .from('service_visit_types')
+      .select('id, name, sort_order')
+      .eq('service_type_id', ss.service_type_id)
+      .order('sort_order', { ascending: true })
+    setVisitTypes((data as { id: string; name: string }[]) ?? [])
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // If both times are given, end must be after start.
+    if (
+      formData.booked_start_time &&
+      formData.booked_end_time &&
+      formData.booked_end_time <= formData.booked_start_time
+    ) {
+      setTimeError('End time must be after the start time')
+      return
+    }
+    setTimeError(null)
     setLoading(true)
 
     const { error } = await supabase.from('tasks').insert({
       site_service_id: formData.site_service_id,
       assigned_engineer_id: formData.assigned_engineer_id || null,
       scheduled_date: format(formData.scheduled_date, 'yyyy-MM-dd'),
+      booked_start_time: formData.booked_start_time || null,
+      booked_end_time: formData.booked_end_time || null,
       status: 'pending',
+      visit_type_id: visitTypeId === ALL_VISITS ? null : visitTypeId,
     })
 
     setLoading(false)
@@ -63,7 +105,11 @@ export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogPr
         site_service_id: '',
         assigned_engineer_id: '',
         scheduled_date: new Date(),
+        booked_start_time: '',
+        booked_end_time: '',
       })
+      setVisitTypes([])
+      setVisitTypeId(ALL_VISITS)
       router.refresh()
     }
   }
@@ -99,7 +145,7 @@ export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogPr
               <Label>Site & Service *</Label>
               <Select
                 value={formData.site_service_id}
-                onValueChange={(value) => setFormData({ ...formData, site_service_id: value })}
+                onValueChange={handleServiceChange}
                 required
               >
                 <SelectTrigger>
@@ -121,6 +167,25 @@ export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogPr
                 </SelectContent>
               </Select>
             </div>
+
+            {visitTypes.length > 0 && (
+              <div className="grid gap-2">
+                <Label>Visit</Label>
+                <Select value={visitTypeId} onValueChange={setVisitTypeId}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_VISITS}>Unspecified</SelectItem>
+                    {visitTypes.map((vt) => (
+                      <SelectItem key={vt.id} value={vt.id}>
+                        {vt.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="grid gap-2">
               <Label>Assign Engineer</Label>
@@ -169,6 +234,38 @@ export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogPr
                   />
                 </PopoverContent>
               </Popover>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Booked Time (optional)</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="time"
+                  aria-label="Booked start time"
+                  value={formData.booked_start_time}
+                  onChange={(e) =>
+                    setFormData({ ...formData, booked_start_time: e.target.value })
+                  }
+                  className="flex-1"
+                />
+                <span className="text-sm text-muted-foreground">to</span>
+                <Input
+                  type="time"
+                  aria-label="Booked end time"
+                  value={formData.booked_end_time}
+                  onChange={(e) =>
+                    setFormData({ ...formData, booked_end_time: e.target.value })
+                  }
+                  className="flex-1"
+                />
+              </div>
+              {timeError ? (
+                <p className="text-sm text-destructive">{timeError}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Add a start and end time to book an appointment slot on the calendar.
+                </p>
+              )}
             </div>
           </div>
           <DialogFooter>

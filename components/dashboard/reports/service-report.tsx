@@ -127,7 +127,10 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
           <div className="flex items-center gap-3">
             <div className="text-right">
               <p className="text-sm font-semibold uppercase tracking-wide">Service Report</p>
-              <p className="text-xs text-white/80">{serviceType?.name}</p>
+              <p className="text-xs text-white/80">
+                {serviceType?.name}
+                {task.visit_type?.name ? ` — ${task.visit_type.name}` : ''}
+              </p>
               {result?.reference_number && (
                 <p className="mt-1 font-mono text-sm font-bold">{result.reference_number}</p>
               )}
@@ -146,6 +149,7 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
           <Meta label="Address" value={site?.address} />
           <Meta label="Engineer" value={engineer?.full_name || engineer?.email} />
           <Meta label="Service" value={serviceType?.name} />
+          {task.visit_type?.name && <Meta label="Visit" value={task.visit_type.name} />}
           {sections.standards && <Meta label="Standards" value={sections.standards} />}
         </section>
 

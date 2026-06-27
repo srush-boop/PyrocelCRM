@@ -106,7 +106,7 @@ export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[
           Add Service Type
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Add Service Type</DialogTitle>

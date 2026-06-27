@@ -40,7 +40,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Pencil, Trash2, Loader2, PackageOpen, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Loader2,
+  PackageOpen,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Boxes,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { formatPence, penceToPounds, poundsToPence, sellFromCost } from '@/lib/sales'
 import type { QuoteCatalogueItem, ServiceType } from '@/lib/types/database'
@@ -48,6 +59,7 @@ import {
   saveCatalogueItem,
   deleteCatalogueItem,
   fetchCataloguePage,
+  addCatalogueItemsToStock,
 } from '@/app/(dashboard)/dashboard/sales/actions'
 
 const NO_SERVICE = '__none__'
@@ -82,11 +94,13 @@ function emptyForm(): FormState {
 export function CatalogueManager({
   initialItems,
   initialTotal,
+  initialStockedIds,
   pageSize,
   serviceTypes,
 }: {
   initialItems: QuoteCatalogueItem[]
   initialTotal: number
+  initialStockedIds: string[]
   pageSize: number
   serviceTypes: ServiceType[]
 }) {
@@ -96,6 +110,12 @@ export function CatalogueManager({
   const [deleteTarget, setDeleteTarget] = useState<QuoteCatalogueItem | null>(null)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
+
+  // Catalogue items already added to the stock inventory (shown as "In stock").
+  const [stockedIds, setStockedIds] = useState<Set<string>>(new Set(initialStockedIds))
+  // Currently ticked rows, for bulk "Add to stock".
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [addingToStock, setAddingToStock] = useState(false)
 
   // The catalogue can hold thousands of rows, so we fetch one page at a time
   // from the server (with the search term applied in SQL) instead of loading
@@ -119,10 +139,58 @@ export function CatalogueManager({
       })
       setItems(res.items)
       setTotal(res.total)
+      setStockedIds(new Set(res.stockedItemIds))
+      setSelectedIds(new Set())
       setLoading(false)
     },
     [PAGE_SIZE],
   )
+
+  // Items on this page that can still be added to stock (not already stocked).
+  const stockableItems = items.filter((i) => !stockedIds.has(i.id))
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) => {
+      // If every stockable item is already selected, clear; otherwise select all.
+      const allSelected =
+        stockableItems.length > 0 && stockableItems.every((i) => prev.has(i.id))
+      return allSelected ? new Set() : new Set(stockableItems.map((i) => i.id))
+    })
+  }
+
+  function handleAddToStock() {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    setAddingToStock(true)
+    startTransition(async () => {
+      const res = await addCatalogueItemsToStock(ids)
+      setAddingToStock(false)
+      if (res.ok) {
+        if (res.added > 0) {
+          toast.success(
+            `Added ${res.added} item${res.added === 1 ? '' : 's'} to stock${
+              res.skipped > 0 ? ` (${res.skipped} already stocked)` : ''
+            }`,
+          )
+        } else {
+          toast.info('Selected items are already in stock')
+        }
+        setStockedIds((prev) => new Set([...prev, ...ids]))
+        setSelectedIds(new Set())
+      } else {
+        toast.error(res.error ?? 'Could not add items to stock')
+      }
+    })
+  }
 
   // Debounce search; refetch immediately on page changes. We skip the very
   // first render because the server already supplied page 0 with no search.
@@ -219,10 +287,26 @@ export function CatalogueManager({
             aria-label="Search catalogue"
           />
         </div>
-        <Button onClick={openNew} className="shrink-0">
-          <Plus className="mr-2 h-4 w-4" />
-          Add Item
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          {selectedIds.size > 0 && (
+            <Button
+              variant="secondary"
+              onClick={handleAddToStock}
+              disabled={addingToStock || isPending}
+            >
+              {addingToStock ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Boxes className="mr-2 h-4 w-4" />
+              )}
+              Add {selectedIds.size} to stock
+            </Button>
+          )}
+          <Button onClick={openNew}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Item
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -246,6 +330,17 @@ export function CatalogueManager({
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={
+                      stockableItems.length > 0 &&
+                      stockableItems.every((i) => selectedIds.has(i.id))
+                    }
+                    onCheckedChange={toggleSelectAll}
+                    aria-label="Select all stockable items"
+                    disabled={stockableItems.length === 0}
+                  />
+                </TableHead>
                 <TableHead>Code</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Category</TableHead>
@@ -254,20 +349,28 @@ export function CatalogueManager({
                 <TableHead className="text-right">Margin</TableHead>
                 <TableHead className="text-right">Sell price</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Stock</TableHead>
                 <TableHead className="w-20" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.map((item) => (
+              {items.map((item) => {
+                const inStock = stockedIds.has(item.id)
+                return (
                 <TableRow key={item.id}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedIds.has(item.id)}
+                      onCheckedChange={() => toggleSelected(item.id)}
+                      disabled={inStock}
+                      aria-label={`Select ${item.name}`}
+                    />
+                  </TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">
                     {item.product_code ?? '—'}
                   </TableCell>
                   <TableCell>
                     <div className="font-medium">{item.name}</div>
-                    {item.description && (
-                      <div className="text-xs text-muted-foreground line-clamp-1">{item.description}</div>
-                    )}
                   </TableCell>
                   <TableCell className="text-sm">{item.category ?? '—'}</TableCell>
                   <TableCell className="text-sm">{item.default_unit ?? '—'}</TableCell>
@@ -282,6 +385,16 @@ export function CatalogueManager({
                     <Badge variant={item.active ? 'secondary' : 'outline'}>
                       {item.active ? 'Active' : 'Inactive'}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {inStock ? (
+                      <Badge variant="default" className="gap-1">
+                        <Boxes className="h-3 w-3" />
+                        In stock
+                      </Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-1">
@@ -301,7 +414,8 @@ export function CatalogueManager({
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
+                )
+              })}
             </TableBody>
           </Table>
         )}
@@ -375,7 +489,7 @@ export function CatalogueManager({
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="c-cat">Category</Label>
                 <Input
@@ -395,7 +509,7 @@ export function CatalogueManager({
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="c-cost">Unit cost (£)</Label>
                 <Input
@@ -417,7 +531,7 @@ export function CatalogueManager({
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label>Sell price</Label>
                 <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm tabular-nums">

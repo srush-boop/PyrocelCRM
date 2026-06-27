@@ -51,11 +51,22 @@ export interface Profile {
   status: 'active' | 'inactive'
   client_id: string | null
   department_id: string | null
+  // Branch this user belongs to; their views default to this branch.
+  branch_id: string | null
   invited_at: string | null
   accepted_at: string | null
+  // Optional working hours (24h "HH:MM[:SS]") and daily lunch allowance in
+  // minutes. Used for future timesheet calculations.
+  work_start_time: string | null
+  work_end_time: string | null
+  lunch_minutes: number | null
+  // Days normally worked, as ISO weekday numbers (1 = Monday ... 7 = Sunday).
+  // Supports part-time patterns. Defaults to Monday–Friday.
+  work_days: number[] | null
   created_at: string
   updated_at: string
   department?: Department | null
+  branch?: Branch | null
 }
 
 // A company department with its own default sales margin.
@@ -123,6 +134,20 @@ export interface ServiceType {
   status: 'live' | 'dead'
   created_at: string
   system_type?: SystemType | null
+  // Optional ordered set of distinct visits within one service cycle (e.g.
+  // Fire Alarm Maintenance = Annual, Periodic). Empty/length 1 = single visit.
+  visit_types?: ServiceVisitType[]
+}
+
+// A distinct visit within a multi-visit service cycle. Visits are evenly split
+// across the service frequency (2 visits over 12 months = 6 months apart).
+export interface ServiceVisitType {
+  id: string
+  service_type_id: string
+  name: string
+  sort_order: number
+  created_at: string
+  updated_at: string
 }
 
 // A reusable, global non-product service that can be added to any quote system
@@ -149,6 +174,9 @@ export interface ChecklistItem {
 export interface ChecklistTemplate {
   id: string
   service_type_id: string
+  // When set, this template applies only to the matching visit type. When null,
+  // it is the service-wide fallback used by visits with no specific template.
+  visit_type_id?: string | null
   name: string
   items: ChecklistItem[]
   created_at: string
@@ -161,6 +189,8 @@ export interface Route {
   name: string
   description: string | null
   assigned_engineer_id: string | null
+  // Colour used to render this route's recurring weekly band on the calendar.
+  color: string
   created_at: string
   updated_at: string
   assigned_engineer?: Profile | null
@@ -178,6 +208,7 @@ export interface Site {
   contact_phone: string | null
   route_id: string | null
   client_id: string | null
+  branch_id: string | null
   site_id_cash: string | null
   // Unique Property Reference Number (UK national property identifier).
   uprn: string | null
@@ -194,6 +225,7 @@ export interface Site {
   updated_at: string
   route?: Route
   client?: Client
+  branch?: Branch | null
   }
 
   export type LogbookEntryType =
@@ -339,6 +371,9 @@ export interface Task {
   site_service_id: string
   assigned_engineer_id: string | null
   scheduled_date: string
+  // Optional booked appointment slot on the scheduled date (24h "HH:MM[:SS]").
+  booked_start_time: string | null
+  booked_end_time: string | null
   status: TaskStatus
   started_at: string | null
   completed_at: string | null
@@ -346,8 +381,11 @@ export interface Task {
   public_token: string
   created_at: string
   updated_at: string
+  // The visit type this task fulfils (null = single/legacy service-wide visit).
+  visit_type_id?: string | null
   site_service?: SiteService
   assigned_engineer?: Profile | null
+  visit_type?: ServiceVisitType | null
   }
 
 export interface ChecklistResult {
@@ -357,6 +395,25 @@ export interface ChecklistResult {
   value: boolean | string | number
   passed: boolean | null
   notes?: string
+}
+
+// Defect tracking: one row per failed report (task_result with overall_status='fail').
+// Auto-maintained by a DB trigger; lifecycle open -> quoted -> resolved/dismissed.
+export type DefectStatus = 'open' | 'quoted' | 'resolved' | 'dismissed'
+
+export interface Defect {
+  id: string
+  task_result_id: string
+  task_id: string | null
+  site_id: string | null
+  client_id: string | null
+  reference_number: string | null
+  failed_count: number
+  status: DefectStatus
+  quote_id: string | null
+  resolved_at: string | null
+  created_at: string
+  updated_at: string
 }
 
 // 'no_access' is used when an engineer attended but could not gain access to
@@ -1003,6 +1060,14 @@ export interface QuoteBankValue {
   work_type: string
   subtotal_pence: number
   created_at: string
+  client_id: string | null
+  client_name: string | null
+  site_id: string | null
+  site_name: string | null
+  created_by: string | null
+  quoted_by_name: string | null
+  department_id: string | null
+  department_name: string | null
 }
 
 // Direct labour cost per role (hourly), used to underpin estimates.
@@ -1031,4 +1096,203 @@ export interface ProductSheet {
   imported_at: string | null
   imported_count: number | null
   is_current: boolean
+}
+
+// =====================================================================
+// Stock / Inventory
+// A "stock profile" is a part held at a location (stock_items row). Money
+// (unit_cost) is stored as pounds (numeric) on the part, not pence.
+// =====================================================================
+
+export type StockLocationKind = 'warehouse' | 'van' | 'other'
+
+export interface StockLocation {
+  id: string
+  name: string
+  kind: StockLocationKind
+  // When set, this is an engineer's personal (van) location.
+  engineer_id: string | null
+  branch_id: string | null
+  is_active: boolean
+  created_at: string
+  engineer?: Profile | null
+  branch?: Branch | null
+}
+
+export interface Part {
+  id: string
+  sku: string | null
+  name: string
+  description: string | null
+  unit: string
+  unit_cost: number
+  default_min_level: number
+  is_active: boolean
+  created_at: string
+}
+
+// A part held at a location, with its own minimum re-order level and the
+// target (ideal) quantity that defines the location's stock profile.
+export interface StockItem {
+  id: string
+  location_id: string
+  part_id: string
+  quantity: number
+  min_level: number
+  target_level: number
+  updated_at: string
+  part?: Part
+  location?: StockLocation
+}
+
+export type StockMovementType = 'transfer' | 'usage' | 'receipt' | 'adjustment'
+
+export interface StockMovement {
+  id: string
+  part_id: string
+  from_location_id: string | null
+  to_location_id: string | null
+  quantity: number
+  movement_type: StockMovementType
+  // When stock is used on a job, the task it was used on plus a reference.
+  task_id: string | null
+  job_reference: string | null
+  notes: string | null
+  created_by: string | null
+  created_at: string
+  part?: Part | null
+  from_location?: StockLocation | null
+  to_location?: StockLocation | null
+  created_by_profile?: Profile | null
+  task?: Task | null
+}
+
+// A location enriched with the rolled-up figures shown on the overview.
+export interface StockLocationSummary extends StockLocation {
+  itemCount: number
+  totalQuantity: number
+  heldValue: number
+  lowStockCount: number
+}
+
+// A low-stock alert row (a stock_item at or below its min level).
+export interface LowStockAlert {
+  stock_item_id: string
+  location_id: string
+  location_name: string
+  part_id: string
+  part_name: string
+  sku: string | null
+  unit: string
+  quantity: number
+  min_level: number
+}
+
+// =====================================================================
+// Calendar
+// A master calendar merges two sources: booked service tasks (with an
+// optional booked time slot) and general entries (annual leave, sickness,
+// training, etc.) whose types are configured by an admin.
+// =====================================================================
+
+// Admin-configurable entry type, e.g. "Annual Leave" rendered in a colour.
+export interface CalendarEntryType {
+  id: string
+  name: string
+  color: string
+  is_active: boolean
+  sort_order: number
+  created_at: string
+}
+
+export interface CalendarEntry {
+  id: string
+  entry_type_id: string
+  // null = a company-wide entry (e.g. bank holiday)
+  user_id: string | null
+  title: string | null
+  start_at: string
+  end_at: string
+  all_day: boolean
+  // Visible to all staff (incl. engineers) when true.
+  is_public: boolean
+  notes: string | null
+  created_by: string | null
+  // Non-null for imported entries (e.g. 'uk-bank-holiday'); `source_uid` keys
+  // the upsert so imports stay idempotent.
+  source: string | null
+  source_uid: string | null
+  created_at: string
+  updated_at: string
+  entry_type?: CalendarEntryType
+  user?: Profile | null
+}
+
+// A normalised item the calendar can render, derived from a booked task, a
+// general entry, or a recurring route. `start`/`end` are ISO datetime strings.
+export type CalendarItemKind = 'task' | 'entry' | 'route'
+
+export interface CalendarItem {
+  id: string
+  kind: CalendarItemKind
+  title: string
+  start: string
+  end: string
+  allDay: boolean
+  color: string
+  // The person this item belongs to (engineer for tasks/routes, user for entries).
+  ownerId: string | null
+  ownerName: string | null
+  // Extra context for the detail popover / list row.
+  subtitle: string | null
+  // Original source ids so the UI can link through.
+  taskId?: string
+  entryId?: string
+  routeId?: string
+  entryTypeName?: string
+  isPublic?: boolean
+}
+
+// A route that recurs weekly on the calendar. The weekday is derived from the
+// route's name (e.g. "Friday 01" recurs every Friday). `weekday` follows the
+// JS convention (0 = Sunday … 6 = Saturday); null means no weekday could be
+// parsed from the name, so the route is not shown as a recurrence.
+export interface RouteCalendarSource {
+  id: string
+  name: string
+  color: string
+  weekday: number | null
+  engineerId: string | null
+  engineerName: string | null
+}
+
+// =====================================================================
+// Employee Vault
+// An admin-configured launcher of titled sections containing buttons that
+// link out to pages, Jotform forms, Dropbox folders, etc. Visibility of each
+// section and button is gated by role.
+// =====================================================================
+
+export interface VaultButton {
+  id: string
+  section_id: string
+  label: string
+  url: string
+  description: string | null
+  // A lucide icon name (see VAULT_ICONS); null falls back to a default.
+  icon: string | null
+  open_in_new_tab: boolean
+  sort_order: number
+  visible_roles: UserRole[]
+  created_at: string
+}
+
+export interface VaultSection {
+  id: string
+  title: string
+  description: string | null
+  sort_order: number
+  visible_roles: UserRole[]
+  created_at: string
+  buttons?: VaultButton[]
 }

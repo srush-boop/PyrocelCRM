@@ -39,21 +39,22 @@ import {
 } from '@/components/ui/select'
 import { MoreHorizontal, Pencil, Trash2, Search, Building2, X } from 'lucide-react'
 import { EditSiteDialog } from './edit-site-dialog'
-import type { Site, Route, Client } from '@/lib/types/database'
+import type { Site, Route, Client, Branch } from '@/lib/types/database'
 import Link from 'next/link'
 
 interface SitesTableProps {
-  sites: (Site & { route: Route | null; client: Client | null })[]
+  sites: (Site & { route: Route | null; client: Client | null; branch?: Branch | null })[]
   routes: Route[]
   clients: Client[]
+  branches?: Branch[]
 }
 
-export function SitesTable({ sites, routes, clients }: SitesTableProps) {
+export function SitesTable({ sites, routes, clients, branches = [] }: SitesTableProps) {
   const [search, setSearch] = useState('')
   const [selectedRoute, setSelectedRoute] = useState<string>('all')
   const [selectedClient, setSelectedClient] = useState<string>('all')
   const [deleteId, setDeleteId] = useState<string | null>(null)
-  const [editSite, setEditSite] = useState<(Site & { route: Route | null; client: Client | null }) | null>(null)
+  const [editSite, setEditSite] = useState<(Site & { route: Route | null; client: Client | null; branch?: Branch | null }) | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -153,6 +154,9 @@ export function SitesTable({ sites, routes, clients }: SitesTableProps) {
               <TableHead className="hidden xl:table-cell">CASH ID</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Client</TableHead>
+              {branches.length > 0 && (
+                <TableHead className="hidden lg:table-cell">Branch</TableHead>
+              )}
               <TableHead className="hidden md:table-cell">Address</TableHead>
               <TableHead className="hidden lg:table-cell">Contact</TableHead>
               <TableHead className="hidden lg:table-cell">Route</TableHead>
@@ -162,7 +166,7 @@ export function SitesTable({ sites, routes, clients }: SitesTableProps) {
           <TableBody>
             {filteredSites.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center">
+                <TableCell colSpan={branches.length > 0 ? 9 : 8} className="h-24 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <Building2 className="h-8 w-8 text-muted-foreground/50 mb-2" />
                     <p className="text-muted-foreground">No sites found</p>
@@ -197,6 +201,15 @@ export function SitesTable({ sites, routes, clients }: SitesTableProps) {
                       <span className="text-muted-foreground text-sm">-</span>
                     )}
                   </TableCell>
+                  {branches.length > 0 && (
+                    <TableCell className="hidden lg:table-cell">
+                      {site.branch ? (
+                        <Badge variant="secondary">{site.branch.name}</Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">-</span>
+                      )}
+                    </TableCell>
+                  )}
                   <TableCell className="hidden max-w-[220px] truncate text-muted-foreground md:table-cell">
                     {site.address}
                   </TableCell>
@@ -266,6 +279,7 @@ export function SitesTable({ sites, routes, clients }: SitesTableProps) {
         <EditSiteDialog
           site={editSite}
           clients={clients}
+          branches={branches}
           open={!!editSite}
           onOpenChange={() => setEditSite(null)}
         />

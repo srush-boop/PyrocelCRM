@@ -389,6 +389,7 @@ export function DamperTaskExecution({
         assigned_engineer_id: task.assigned_engineer_id,
         scheduled_date: nextDateStr,
         status: 'pending',
+        visit_type_id: task.visit_type_id ?? null,
       })
       await supabase
         .from('site_services')
@@ -428,6 +429,9 @@ export function DamperTaskExecution({
               {status.replace('_', ' ')}
             </Badge>
             <Badge variant="outline">{serviceType?.name}</Badge>
+            {task.visit_type?.name && (
+              <Badge variant="secondary">{task.visit_type.name}</Badge>
+            )}
           </div>
           <h1 className="text-2xl font-bold">{site?.name}</h1>
         </div>

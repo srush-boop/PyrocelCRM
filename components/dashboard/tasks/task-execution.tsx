@@ -90,6 +90,14 @@ export function TaskExecution({
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [showSubmitDialog, setShowSubmitDialog] = useState(false)
+  // "Book Visit" lets the engineer place this task onto the calendar by setting
+  // a date and an optional appointment time slot.
+  const [bookedDate, setBookedDate] = useState(task.scheduled_date)
+  const [bookedStart, setBookedStart] = useState((task.booked_start_time || '').slice(0, 5))
+  const [bookedEnd, setBookedEnd] = useState((task.booked_end_time || '').slice(0, 5))
+  const [bookingVisit, setBookingVisit] = useState(false)
+  const [bookError, setBookError] = useState<string | null>(null)
+  const [bookSaved, setBookSaved] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -122,6 +130,39 @@ export function TaskExecution({
       .eq('id', task.id)
     
     setStatus('in_progress')
+    router.refresh()
+  }
+
+  const handleBookVisit = async () => {
+    if (!bookedDate) {
+      setBookError('Please choose a date for the visit.')
+      return
+    }
+    // If both times are given, the end must be after the start.
+    if (bookedStart && bookedEnd && bookedEnd <= bookedStart) {
+      setBookError('End time must be after the start time.')
+      return
+    }
+    setBookError(null)
+    setBookSaved(false)
+    setBookingVisit(true)
+
+    const { error } = await supabase
+      .from('tasks')
+      .update({
+        scheduled_date: bookedDate,
+        booked_start_time: bookedStart || null,
+        booked_end_time: bookedEnd || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', task.id)
+
+    setBookingVisit(false)
+    if (error) {
+      setBookError('Could not book the visit. Please try again.')
+      return
+    }
+    setBookSaved(true)
     router.refresh()
   }
 
@@ -238,12 +279,15 @@ export function TaskExecution({
       })
       const nextDateStr = toDateString(nextDate)
 
-      // Create the next recurring task
+      // Create the next recurring task. Carry the visit type forward so each
+      // visit in a multi-visit service (e.g. Annual, Periodic) recurs on its own
+      // track one full cycle later.
       await supabase.from('tasks').insert({
         site_service_id: task.site_service_id,
         assigned_engineer_id: task.assigned_engineer_id, // Keep same engineer
         scheduled_date: nextDateStr,
         status: 'pending',
+        visit_type_id: task.visit_type_id ?? null,
       })
 
       // Update next_service_date on site_service
@@ -295,6 +339,9 @@ export function TaskExecution({
               {status.replace('_', ' ')}
             </Badge>
             <Badge variant="outline">{serviceType?.name}</Badge>
+            {task.visit_type?.name && (
+              <Badge variant="secondary">{task.visit_type.name}</Badge>
+            )}
           </div>
           <h1 className="text-2xl font-bold">{site?.name}</h1>
         </div>
@@ -338,6 +385,83 @@ export function TaskExecution({
         </CardContent>
       </Card>
 
+      {/* Book Visit */}
+      {canEdit && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Calendar className="h-5 w-5" />
+              Book Visit
+            </CardTitle>
+            <CardDescription>
+              Set the date and time for this visit to add it to your calendar.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="booked-date">Date</Label>
+              <Input
+                id="booked-date"
+                type="date"
+                value={bookedDate}
+                onChange={(e) => {
+                  setBookedDate(e.target.value)
+                  setBookSaved(false)
+                }}
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="booked-start">Start time (optional)</Label>
+                <Input
+                  id="booked-start"
+                  type="time"
+                  value={bookedStart}
+                  onChange={(e) => {
+                    setBookedStart(e.target.value)
+                    setBookSaved(false)
+                  }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="booked-end">End time (optional)</Label>
+                <Input
+                  id="booked-end"
+                  type="time"
+                  value={bookedEnd}
+                  onChange={(e) => {
+                    setBookedEnd(e.target.value)
+                    setBookSaved(false)
+                  }}
+                />
+              </div>
+            </div>
+            {bookError ? (
+              <p className="text-sm text-destructive">{bookError}</p>
+            ) : bookSaved ? (
+              <p className="text-sm text-green-600">Visit booked and added to your calendar.</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Leave the times blank to book the whole day.
+              </p>
+            )}
+            <Button onClick={handleBookVisit} disabled={bookingVisit} className="w-full sm:w-auto">
+              {bookingVisit ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Booking...
+                </>
+              ) : (
+                <>
+                  <Calendar className="mr-2 h-4 w-4" />
+                  Book Visit
+                </>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Start Task Button */}
       {status === 'pending' && canEdit && (
         <Button onClick={handleStartTask} size="lg" className="w-full">
@@ -358,7 +482,7 @@ export function TaskExecution({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Start Time</Label>
                   <div className="flex gap-2">

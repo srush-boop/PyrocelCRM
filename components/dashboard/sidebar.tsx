@@ -32,6 +32,7 @@ import {
   Settings,
   Wrench,
   Calendar,
+  CalendarDays,
   FileText,
   Wind,
   FireExtinguisher,
@@ -54,6 +55,8 @@ import {
   LayoutList,
   Layers,
   Boxes,
+  AlertTriangle,
+  Vault,
 } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 import type { LucideIcon } from 'lucide-react'
@@ -149,23 +152,53 @@ const salesNavItem: NavItem = {
   ],
 }
 
+// Stock is visible to all staff. Admin/office get the Parts catalogue link;
+// engineers can view stock and record transfers/usage but not manage the
+// catalogue.
+const managerStockNavItem: NavItem = {
+  title: 'Stock',
+  icon: Boxes,
+  children: [
+    { title: 'Overview', href: '/dashboard/stock', icon: Boxes },
+    { title: 'Transfer Stock', href: '/dashboard/stock/transfer', icon: Route },
+    { title: 'Parts Catalogue', href: '/dashboard/stock/parts', icon: BookOpen },
+    { title: 'Transfers Report', href: '/dashboard/stock/report', icon: FileText },
+  ],
+}
+
+const engineerStockNavItem: NavItem = {
+  title: 'Stock',
+  icon: Boxes,
+  children: [
+    { title: 'Overview', href: '/dashboard/stock', icon: Boxes },
+    { title: 'Transfer Stock', href: '/dashboard/stock/transfer', icon: Route },
+  ],
+}
+
 const adminNavItems: NavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { title: 'Clients', href: '/dashboard/clients', icon: Building },
   sitesNavItem,
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
+  { title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   adminServiceManagementNavItem,
   { title: 'Users', href: '/dashboard/engineers', icon: Users },
   { title: 'Client Logins', href: '/dashboard/client-logins', icon: KeyRound },
   { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
   salesNavItem,
+  managerStockNavItem,
   { title: 'Reports', href: '/dashboard/reports', icon: FileText },
+  { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
   { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
+  { title: 'Employee Vault', href: '/dashboard/vault', icon: Vault },
 ]
 
 const engineerNavItems: NavItem[] = [
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
+  { title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
+  engineerStockNavItem,
+  { title: 'Employee Vault', href: '/dashboard/vault', icon: Vault },
 ]
 
 const officeNavItems: NavItem[] = [
@@ -173,12 +206,16 @@ const officeNavItems: NavItem[] = [
   { title: 'Clients', href: '/dashboard/clients', icon: Building },
   sitesNavItem,
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
+  { title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   officeServiceManagementNavItem,
   { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
   salesNavItem,
+  managerStockNavItem,
   { title: 'Reports', href: '/dashboard/reports', icon: FileText },
+  { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
   { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
+  { title: 'Employee Vault', href: '/dashboard/vault', icon: Vault },
 ]
 
 export function DashboardSidebar({ profile }: DashboardSidebarProps) {

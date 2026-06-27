@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
-import { formatDateUK } from '@/lib/utils'
+import { formatDateUK, formatBookedSlot } from '@/lib/utils'
 import {
   Select,
   SelectContent,
@@ -242,6 +242,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
               </CardTitle>
               <CardDescription>
                 {task.site_service?.service_type?.name}
+                {task.visit_type?.name ? ` · ${task.visit_type.name}` : ''}
               </CardDescription>
             </div>
             <Badge variant={config.variant} className="flex items-center gap-1">
@@ -260,6 +261,12 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                 <Calendar className="h-4 w-4" />
                 {formatDateUK(task.scheduled_date)}
               </div>
+              {formatBookedSlot(task.booked_start_time, task.booked_end_time) && (
+                <div className="flex items-center gap-1 text-muted-foreground">
+                  <Clock className="h-4 w-4" />
+                  {formatBookedSlot(task.booked_start_time, task.booked_end_time)}
+                </div>
+              )}
               {isOverdue && (
                 <Badge variant="destructive" className="text-xs">
                   Overdue
@@ -343,6 +350,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
             <p className="truncate text-sm font-medium">{task.site_service?.site?.name}</p>
             <p className="truncate text-xs text-muted-foreground">
               {task.site_service?.service_type?.name}
+              {task.visit_type?.name ? ` · ${task.visit_type.name}` : ''}
               {!isEngineer
                 ? ` · ${task.assigned_engineer ? (task.assigned_engineer.full_name || task.assigned_engineer.email) : 'Unassigned'}`
                 : ''}
@@ -356,6 +364,9 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
             )}
             <span className="hidden text-xs text-muted-foreground sm:inline">
               {formatDateUK(task.scheduled_date)}
+              {formatBookedSlot(task.booked_start_time, task.booked_end_time)
+                ? ` · ${formatBookedSlot(task.booked_start_time, task.booked_end_time)}`
+                : ''}
             </span>
             <Badge variant={config.variant} className="text-xs">
               {config.label}

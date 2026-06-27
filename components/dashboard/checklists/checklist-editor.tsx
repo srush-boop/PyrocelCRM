@@ -29,11 +29,16 @@ import {
   Hash,
   ToggleLeft
 } from 'lucide-react'
-import type { ChecklistTemplate, ServiceType, ChecklistItem } from '@/lib/types/database'
+import type { ChecklistTemplate, ServiceType, ChecklistItem, ServiceVisitType } from '@/lib/types/database'
 
 interface ChecklistEditorProps {
   checklist: ChecklistTemplate & { service_type: ServiceType }
+  visitTypes?: ServiceVisitType[]
 }
+
+// Sentinel used by the visit-type Select to represent "applies to all visits"
+// (stored as a null visit_type_id).
+const ALL_VISITS = '__all__'
 
 const itemTypeIcons = {
   pass_fail: CheckCircle,
@@ -49,9 +54,10 @@ const itemTypeLabels = {
   checkbox: 'Checkbox',
 }
 
-export function ChecklistEditor({ checklist }: ChecklistEditorProps) {
+export function ChecklistEditor({ checklist, visitTypes = [] }: ChecklistEditorProps) {
   const [items, setItems] = useState<ChecklistItem[]>(checklist.items || [])
   const [name, setName] = useState(checklist.name)
+  const [visitTypeId, setVisitTypeId] = useState<string>(checklist.visit_type_id || ALL_VISITS)
   const [saving, setSaving] = useState(false)
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
   const router = useRouter()
@@ -103,6 +109,7 @@ export function ChecklistEditor({ checklist }: ChecklistEditorProps) {
       .update({
         name,
         items,
+        visit_type_id: visitTypeId === ALL_VISITS ? null : visitTypeId,
         updated_at: new Date().toISOString(),
       })
       .eq('id', checklist.id)
@@ -147,14 +154,38 @@ export function ChecklistEditor({ checklist }: ChecklistEditorProps) {
           <CardTitle>Checklist Details</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-2 max-w-md">
-            <Label htmlFor="name">Checklist Name</Label>
-            <Input
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Enter checklist name"
-            />
+          <div className="grid gap-4 max-w-md">
+            <div className="grid gap-2">
+              <Label htmlFor="name">Checklist Name</Label>
+              <Input
+                id="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Enter checklist name"
+              />
+            </div>
+            {visitTypes.length > 0 && (
+              <div className="grid gap-2">
+                <Label htmlFor="visit-type">Applies to visit</Label>
+                <Select value={visitTypeId} onValueChange={setVisitTypeId}>
+                  <SelectTrigger id="visit-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_VISITS}>All visits (default)</SelectItem>
+                    {visitTypes.map((vt) => (
+                      <SelectItem key={vt.id} value={vt.id}>
+                        {vt.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Scope this checklist to a specific visit (e.g. Annual or Periodic). &quot;All
+                  visits&quot; is the fallback used by any visit without its own checklist.
+                </p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

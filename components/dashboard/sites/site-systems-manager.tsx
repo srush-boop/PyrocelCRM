@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Plus, Pencil, Trash2, Layers, Wrench } from 'lucide-react'
 import { toast } from 'sonner'
+import { buildSeedTaskRows, fetchVisitsByServiceType } from '@/lib/scheduling'
 import type { SiteSystem, SiteService, ServiceType, SystemType } from '@/lib/types/database'
 
 type ServiceWithType = SiteService & { service_type?: ServiceType }
@@ -214,7 +215,7 @@ export function SiteSystemsManager({
     const { data: inserted, error } = await supabase
       .from('site_services')
       .insert(insertData)
-      .select('id')
+      .select('id, service_type_id, frequency_value, frequency_unit')
 
     if (error) {
       setAddingServices(false)
@@ -222,13 +223,20 @@ export function SiteSystemsManager({
       return
     }
 
-    // Live sites get a scheduled task for each new service on the visit date.
+    // Live sites get scheduled tasks for each new service. Multi-visit services
+    // (e.g. Fire Alarm = Annual + Periodic) seed the whole first cycle up front.
     if (!isDead && inserted && inserted.length > 0) {
-      const taskData = (inserted as { id: string }[]).map((row) => ({
-        site_service_id: row.id,
-        scheduled_date: visitDateStr,
-        status: 'pending' as const,
-      }))
+      const rows = inserted as {
+        id: string
+        service_type_id: string
+        frequency_value: number
+        frequency_unit: 'weeks' | 'months'
+      }[]
+      const visitsByServiceType = await fetchVisitsByServiceType(
+        supabase,
+        rows.map((r) => r.service_type_id),
+      )
+      const taskData = buildSeedTaskRows(rows, visitDateStr, visitsByServiceType)
       await supabase.from('tasks').insert(taskData)
     }
 

@@ -54,6 +54,7 @@ export default async function CataloguePage() {
       <CatalogueManager
         initialItems={firstPage.items}
         initialTotal={firstPage.total}
+        initialStockedIds={firstPage.stockedItemIds}
         pageSize={50}
         serviceTypes={(serviceTypes ?? []) as ServiceType[]}
       />

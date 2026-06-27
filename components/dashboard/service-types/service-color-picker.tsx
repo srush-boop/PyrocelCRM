@@ -8,12 +8,19 @@ import { SERVICE_COLOR_OPTIONS } from '@/lib/service-colors'
 interface ServiceColorPickerProps {
   value: string
   onChange: (value: string) => void
+  label?: string
+  description?: string
 }
 
-export function ServiceColorPicker({ value, onChange }: ServiceColorPickerProps) {
+export function ServiceColorPicker({
+  value,
+  onChange,
+  label = 'Colour scheme',
+  description = "Used to colour this service's report headers and accents.",
+}: ServiceColorPickerProps) {
   return (
     <div className="grid gap-2">
-      <Label>Colour scheme</Label>
+      <Label>{label}</Label>
       <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Colour scheme">
         {SERVICE_COLOR_OPTIONS.map((option) => {
           const selected = option.value.toLowerCase() === value.toLowerCase()
@@ -37,9 +44,7 @@ export function ServiceColorPicker({ value, onChange }: ServiceColorPickerProps)
           )
         })}
       </div>
-      <p className="text-xs text-muted-foreground">
-        Used to colour this service&apos;s report headers and accents.
-      </p>
+      <p className="text-xs text-muted-foreground">{description}</p>
     </div>
   )
 }

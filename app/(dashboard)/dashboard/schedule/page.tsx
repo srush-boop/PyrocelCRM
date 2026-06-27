@@ -101,6 +101,7 @@ export default async function SchedulePage({
             <BranchFilter branches={scope.branches} activeBranchId={scope.activeBranchId} />
           )}
           <ScanQrButton />
+          {isAdminOrOffice && <GenerateCallsButton />}
           {isAdminOrOffice && (
             <CreateTaskDialog 
               siteServices={siteServices}

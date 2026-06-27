@@ -167,11 +167,19 @@ export async function generateMonthlyCalls(
       }
       if (!g.anchor) continue
 
-      // Roll the fixed cadence forward from the anchor to the target month.
+      // Roll the fixed cadence from the anchor toward the target month. The
+      // anchor (latest existing call) is usually before the month, so we roll
+      // forward; if it sits beyond the month we roll backward, so a genuine gap
+      // in the target month is still filled.
       let project = parseDateString(g.anchor)
       let guard = 0
       while (project < monthStart && guard < 1040) {
         project = addFrequency(project, svc.frequency_value, svc.frequency_unit)
+        guard += 1
+      }
+      guard = 0
+      while (project > monthEnd && guard < 1040) {
+        project = addFrequency(project, -svc.frequency_value, svc.frequency_unit)
         guard += 1
       }
 

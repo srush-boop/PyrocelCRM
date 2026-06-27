@@ -14,6 +14,8 @@ import {
   CalendarClock,
 } from 'lucide-react'
 import { SalesStatusChart, type SalesStatusDatum } from '@/components/dashboard/sales/sales-status-chart'
+import { BranchFilter } from '@/components/dashboard/branch-filter'
+import { getBranchScope } from '@/lib/branches'
 import { formatPence, QUOTE_STATUS_META, quoteTypeLabel } from '@/lib/sales'
 import { cn, formatDateUK } from '@/lib/utils'
 import type { Profile, Quote, QuoteStatus } from '@/lib/types/database'
@@ -56,7 +58,11 @@ function dedupeByReference(quotes: Quote[]): Quote[] {
   return out
 }
 
-export default async function SalesDashboardPage() {
+export default async function SalesDashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ branch?: string }>
+}) {
   const supabase = await createClient()
   const {
     data: { user },
@@ -68,12 +74,20 @@ export default async function SalesDashboardPage() {
     redirect('/dashboard')
   }
 
-  const { data: rawQuotes } = await supabase
+  const { branch } = await searchParams
+  const scope = await getBranchScope(profile as Profile, branch)
+
+  const { data: rawQuotesData } = await supabase
     .from('quotes')
-    .select('*, client:clients(id, name), site:sites(id, name)')
+    .select('*, client:clients(id, name), site:sites(id, name, branch_id)')
     .order('created_at', { ascending: false })
 
-  const allQuotes = (rawQuotes ?? []) as Quote[]
+  // Scope by the quote's site branch when a branch is active.
+  const allQuotes = scope.activeBranchId
+    ? ((rawQuotesData ?? []) as Quote[]).filter(
+        (q) => (q.site as { branch_id?: string | null } | null)?.branch_id === scope.activeBranchId,
+      )
+    : ((rawQuotesData ?? []) as Quote[])
   const quotes = dedupeByReference(allQuotes)
 
   // Aggregate counts and value (total_pence) per status.
@@ -156,12 +170,15 @@ export default async function SalesDashboardPage() {
             Pipeline, win rate and quoting activity across the portfolio.
           </p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/sales/new">
-            <Plus className="mr-2 h-4 w-4" />
-            New quote
-          </Link>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <BranchFilter branches={scope.branches} activeBranchId={scope.activeBranchId} />
+          <Button asChild>
+            <Link href="/dashboard/sales/new">
+              <Plus className="mr-2 h-4 w-4" />
+              New quote
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* KPI cards */}

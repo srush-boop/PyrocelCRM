@@ -3,9 +3,10 @@ import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { Profile, StockItem } from '@/lib/types/database'
+import type { Profile, StockItem, Branch } from '@/lib/types/database'
 import { getLocationWithItems, formatGBP } from '@/lib/stock'
 import { LocationStockTable } from '@/components/dashboard/stock/location-stock-table'
+import { LocationBranchSelect } from '@/components/dashboard/stock/location-branch-select'
 
 export default async function StockLocationPage({
   params,
@@ -34,6 +35,12 @@ export default async function StockLocationPage({
 
   const { location, items } = await getLocationWithItems(id)
   if (!location) notFound()
+
+  let branches: Branch[] = []
+  if (isManager) {
+    const { data } = await supabase.from('branches').select('*').order('name')
+    branches = (data as Branch[]) ?? []
+  }
 
   const heldValue = (items as StockItem[]).reduce(
     (sum, i) => sum + i.quantity * (i.part?.unit_cost ?? 0),
@@ -65,7 +72,14 @@ export default async function StockLocationPage({
               {lowCount > 0 ? ` · ${lowCount} low-stock` : ''}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {isManager && (
+              <LocationBranchSelect
+                locationId={location.id}
+                branchId={location.branch_id}
+                branches={branches}
+              />
+            )}
             <Button asChild>
               <Link href={`/dashboard/stock/transfer?toLocationId=${location.id}`}>
                 <Plus className="mr-2 h-4 w-4" />

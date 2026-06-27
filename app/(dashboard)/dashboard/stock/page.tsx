@@ -12,8 +12,14 @@ import {
 } from '@/lib/stock'
 import { LowStockAlerts } from '@/components/dashboard/stock/low-stock-alerts'
 import { LocationsOverview } from '@/components/dashboard/stock/locations-overview'
+import { BranchFilter } from '@/components/dashboard/branch-filter'
+import { getBranchScope } from '@/lib/branches'
 
-export default async function StockPage() {
+export default async function StockPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ branch?: string }>
+}) {
   const supabase = await createClient()
 
   const {
@@ -34,8 +40,11 @@ export default async function StockPage() {
 
   const isManager = profile.role === 'admin' || profile.role === 'office'
 
+  const { branch } = await searchParams
+  const scope = await getBranchScope(profile, branch)
+
   const [locations, lowStock] = await Promise.all([
-    getStockLocationSummaries(),
+    getStockLocationSummaries(scope.activeBranchId),
     getLowStockAlerts(),
   ])
 
@@ -51,7 +60,10 @@ export default async function StockPage() {
             Held stock across every location, with low-level alerts
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {isManager && (
+            <BranchFilter branches={scope.branches} activeBranchId={scope.activeBranchId} />
+          )}
           <Button asChild>
             <Link href="/dashboard/stock/transfer">
               <Plus className="mr-2 h-4 w-4" />

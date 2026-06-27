@@ -25,16 +25,23 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Loader2, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import type { Site, Route, Client } from '@/lib/types/database'
+import type { Site, Route, Client, Branch } from '@/lib/types/database'
 
 interface EditSiteDialogProps {
   site: Site & { route: Route | null; client?: Client | null }
   clients: Client[]
+  branches?: Branch[]
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-export function EditSiteDialog({ site, clients, open, onOpenChange }: EditSiteDialogProps) {
+export function EditSiteDialog({
+  site,
+  clients,
+  branches = [],
+  open,
+  onOpenChange,
+}: EditSiteDialogProps) {
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: site.name,
@@ -44,6 +51,7 @@ export function EditSiteDialog({ site, clients, open, onOpenChange }: EditSiteDi
     contact_email: site.contact_email || '',
     contact_phone: site.contact_phone || '',
     client_id: site.client_id || '',
+    branch_id: site.branch_id || '',
     uprn: site.uprn || '',
     status: site.status || 'live',
     notes: site.notes || '',
@@ -90,6 +98,7 @@ export function EditSiteDialog({ site, clients, open, onOpenChange }: EditSiteDi
       .update({
         ...formData,
         client_id: formData.client_id || null,
+        branch_id: formData.branch_id || null,
         remote_monitoring_type: formData.has_remote_monitoring
           ? formData.remote_monitoring_type || null
           : null,
@@ -218,6 +227,29 @@ export function EditSiteDialog({ site, clients, open, onOpenChange }: EditSiteDi
                 </SelectContent>
               </Select>
             </div>
+            {branches.length > 0 && (
+              <div className="grid gap-2">
+                <Label htmlFor="branch">Branch</Label>
+                <Select
+                  value={formData.branch_id || 'none'}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, branch_id: value === 'none' ? '' : value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="No branch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No branch</SelectItem>
+                    {branches.map((branch) => (
+                      <SelectItem key={branch.id} value={branch.id}>
+                        {branch.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="grid gap-2">
               <Label htmlFor="status">Site Status</Label>
               <Select

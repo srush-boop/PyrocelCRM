@@ -51,6 +51,8 @@ export interface Profile {
   status: 'active' | 'inactive'
   client_id: string | null
   department_id: string | null
+  // Branch this user belongs to; their views default to this branch.
+  branch_id: string | null
   invited_at: string | null
   accepted_at: string | null
   // Optional working hours (24h "HH:MM[:SS]") and daily lunch allowance in
@@ -61,6 +63,7 @@ export interface Profile {
   created_at: string
   updated_at: string
   department?: Department | null
+  branch?: Branch | null
 }
 
 // A company department with its own default sales margin.
@@ -202,6 +205,7 @@ export interface Site {
   contact_phone: string | null
   route_id: string | null
   client_id: string | null
+  branch_id: string | null
   site_id_cash: string | null
   // Unique Property Reference Number (UK national property identifier).
   uprn: string | null
@@ -218,6 +222,7 @@ export interface Site {
   updated_at: string
   route?: Route
   client?: Client
+  branch?: Branch | null
   }
 
   export type LogbookEntryType =
@@ -1104,9 +1109,11 @@ export interface StockLocation {
   kind: StockLocationKind
   // When set, this is an engineer's personal (van) location.
   engineer_id: string | null
+  branch_id: string | null
   is_active: boolean
   created_at: string
   engineer?: Profile | null
+  branch?: Branch | null
 }
 
 export interface Part {

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { syncUkBankHolidays } from '@/lib/bank-holidays'
+import { getBranchScope, type BranchScope } from '@/lib/branches'
 import type {
   CalendarItem,
   CalendarEntryType,
@@ -50,9 +51,9 @@ interface TaskRow {
   booked_end_time: string | null
   status: string
   assigned_engineer_id: string | null
-  assigned_engineer: { id: string; full_name: string | null; email: string } | null
+  assigned_engineer: { id: string; full_name: string | null; email: string; branch_id: string | null } | null
   site_service: {
-    site: { name: string } | null
+    site: { name: string; branch_id: string | null } | null
     service_type: { name: string } | null
   } | null
   visit_type: { name: string } | null
@@ -66,7 +67,7 @@ interface RouteRow {
   name: string
   color: string | null
   assigned_engineer_id: string | null
-  assigned_engineer: { id: string; full_name: string | null; email: string } | null
+  assigned_engineer: { id: string; full_name: string | null; email: string; branch_id: string | null } | null
 }
 
 interface EntryRow {
@@ -80,7 +81,7 @@ interface EntryRow {
   is_public: boolean
   notes: string | null
   entry_type: CalendarEntryType | null
-  user: { id: string; full_name: string | null; email: string } | null
+  user: { id: string; full_name: string | null; email: string; branch_id: string | null } | null
 }
 
 export interface CalendarData {
@@ -97,7 +98,7 @@ export interface CalendarData {
 // Fetches everything the master calendar needs, scoped by the viewer's role.
 // RLS already restricts what an engineer can read; we additionally constrain
 // the task query to their own jobs.
-export async function getCalendarData(): Promise<CalendarData | null> {
+export async function getCalendarData(branchId?: string | null): Promise<CalendarData | null> {
   const supabase = await createClient()
   const {
     data: { user },
@@ -122,9 +123,9 @@ export async function getCalendarData(): Promise<CalendarData | null> {
     .from('tasks')
     .select(
       `id, scheduled_date, booked_start_time, booked_end_time, status, assigned_engineer_id,
-       assigned_engineer:profiles(id, full_name, email),
+       assigned_engineer:profiles(id, full_name, email, branch_id),
        site_service:site_services(
-         site:sites(name),
+         site:sites(name, branch_id),
          service_type:service_types(name)
        ),
        visit_type:service_visit_types(name),
@@ -140,7 +141,7 @@ export async function getCalendarData(): Promise<CalendarData | null> {
   // --- Routes (recurring weekly). Engineers only see their own routes. ---
   let routeQuery = supabase
     .from('routes')
-    .select('id, name, color, assigned_engineer_id, assigned_engineer:profiles(id, full_name, email)')
+    .select('id, name, color, assigned_engineer_id, assigned_engineer:profiles(id, full_name, email, branch_id)')
     .order('name', { ascending: true })
 
   if (isEngineer) {
@@ -160,7 +161,7 @@ export async function getCalendarData(): Promise<CalendarData | null> {
       .select(
         `id, entry_type_id, user_id, title, start_at, end_at, all_day, is_public, notes,
            entry_type:calendar_entry_types(*),
-           user:profiles(id, full_name, email)`,
+           user:profiles(id, full_name, email, branch_id)`,
       )
       .order('start_at', { ascending: true }),
     supabase
@@ -171,10 +172,23 @@ export async function getCalendarData(): Promise<CalendarData | null> {
     routeQuery,
   ])
 
-  const tasks = (taskData || []) as unknown as TaskRow[]
+  let tasks = (taskData || []) as unknown as TaskRow[]
   const entries = (entryData || []) as unknown as EntryRow[]
   const entryTypes = (typeData || []) as CalendarEntryType[]
-  const routeRows = (routeData || []) as unknown as RouteRow[]
+  let routeRows = (routeData || []) as unknown as RouteRow[]
+
+  // When a branch is active, scope each source by its branch:
+  // - tasks: by the task's site branch
+  // - routes: by the assigned engineer's branch
+  // - entries: by the owning user's branch (company-wide entries always show)
+  let scopedEntries = entries
+  if (branchId) {
+    tasks = tasks.filter((t) => t.site_service?.site?.branch_id === branchId)
+    routeRows = routeRows.filter((r) => r.assigned_engineer?.branch_id === branchId)
+    scopedEntries = entries.filter(
+      (e) => e.user_id === null || e.user?.branch_id === branchId,
+    )
+  }
 
   // Build the recurring-route sources (weekday parsed from the name).
   const routes: RouteCalendarSource[] = routeRows.map((r) => ({
@@ -240,7 +254,7 @@ export async function getCalendarData(): Promise<CalendarData | null> {
     })
   }
 
-  for (const e of entries) {
+  for (const e of scopedEntries) {
     const ownerName = e.user
       ? e.user.full_name || e.user.email
       : 'Company-wide'

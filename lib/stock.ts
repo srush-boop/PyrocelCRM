@@ -14,19 +14,34 @@ export { formatGBP } from '@/lib/utils'
 // All locations, rolled up with held £ value, item/quantity counts and the
 // number of stock profiles at or below their minimum level. Visible to all
 // staff per the access rules.
-export async function getStockLocationSummaries(): Promise<StockLocationSummary[]> {
+export async function getStockLocationSummaries(
+  branchId?: string | null,
+): Promise<StockLocationSummary[]> {
   const supabase = await createClient()
 
+  let locationsQuery = supabase
+    .from('stock_locations')
+    .select(
+      '*, engineer:profiles!stock_locations_engineer_id_fkey(id, full_name, email, branch_id), branch:branches(*)',
+    )
+    .order('kind')
+    .order('name')
+
   const [{ data: locations }, { data: items }] = await Promise.all([
-    supabase
-      .from('stock_locations')
-      .select('*, engineer:profiles!stock_locations_engineer_id_fkey(id, full_name, email)')
-      .order('kind')
-      .order('name'),
+    locationsQuery,
     supabase.from('stock_items').select('*, part:parts(unit_cost)'),
   ])
 
-  const locs = (locations || []) as StockLocation[]
+  let locs = (locations || []) as StockLocation[]
+
+  // A location's effective branch is its own branch_id, falling back to the
+  // assigned engineer's branch for van locations.
+  if (branchId) {
+    locs = locs.filter((loc) => {
+      const effective = loc.branch_id ?? loc.engineer?.branch_id ?? null
+      return effective === branchId
+    })
+  }
   const stockItems = (items || []) as (StockItem & { part?: { unit_cost: number } })[]
 
   return locs.map((loc) => {
@@ -98,7 +113,9 @@ export async function getLocationWithItems(locationId: string): Promise<{
   const [{ data: location }, { data: items }] = await Promise.all([
     supabase
       .from('stock_locations')
-      .select('*, engineer:profiles!stock_locations_engineer_id_fkey(id, full_name, email)')
+      .select(
+        '*, engineer:profiles!stock_locations_engineer_id_fkey(id, full_name, email, branch_id), branch:branches(*)',
+      )
       .eq('id', locationId)
       .single(),
     supabase

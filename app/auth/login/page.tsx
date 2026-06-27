@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -101,12 +100,6 @@ export default function LoginPage() {
               )}
             </Button>
           </form>
-          <div className="mt-4 text-center text-xs text-muted-foreground">
-            Setting up for the first time?{' '}
-            <Link href="/auth/create-admin" className="text-primary hover:underline">
-              Create administrator account
-            </Link>
-          </div>
         </CardContent>
       </Card>
     </div>

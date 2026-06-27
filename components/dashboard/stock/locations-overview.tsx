@@ -9,6 +9,8 @@ import { formatGBP } from '@/lib/utils'
 
 interface LocationsOverviewProps {
   locations: StockLocationSummary[]
+  // When false (engineers), held £ values are hidden.
+  showValue?: boolean
 }
 
 const kindIcon: Record<StockLocationKind, typeof Warehouse> = {
@@ -23,7 +25,7 @@ const kindLabel: Record<StockLocationKind, string> = {
   other: 'Other',
 }
 
-export function LocationsOverview({ locations }: LocationsOverviewProps) {
+export function LocationsOverview({ locations, showValue = true }: LocationsOverviewProps) {
   return (
     <div className="space-y-3">
       <h2 className="text-lg font-semibold">Stock Locations</h2>
@@ -53,10 +55,20 @@ export function LocationsOverview({ locations }: LocationsOverviewProps) {
                     <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Held value</p>
-                      <p className="text-xl font-bold">{formatGBP(loc.heldValue)}</p>
-                    </div>
+                    {showValue ? (
+                      <div>
+                        <p className="text-xs text-muted-foreground">Held value</p>
+                        <p className="text-xl font-bold">{formatGBP(loc.heldValue)}</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-xs text-muted-foreground">In stock</p>
+                        <p className="text-xl font-bold">
+                          {loc.totalQuantity.toLocaleString()}{' '}
+                          <span className="text-sm font-normal text-muted-foreground">units</span>
+                        </p>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">
                         {loc.itemCount} {loc.itemCount === 1 ? 'part' : 'parts'} · {loc.totalQuantity} units

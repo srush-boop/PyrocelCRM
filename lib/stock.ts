@@ -4,6 +4,7 @@ import type {
   Part,
   StockItem,
   StockLocation,
+  StockLocationKind,
   StockLocationSummary,
   StockMovement,
 } from '@/lib/types/database'
@@ -65,18 +66,30 @@ export async function getStockLocationSummaries(
   })
 }
 
-// Every stock profile across all locations that is at or below its minimum
-// re-order level (min_level > 0). Drives the low-stock dashboard.
-export async function getLowStockAlerts(): Promise<LowStockAlert[]> {
+// Every stock profile at or below its minimum re-order level (min_level > 0).
+// Drives the low-stock dashboard. Pass `locationIds` to scope the alerts to a
+// specific set of locations (e.g. an engineer's own van); an empty array
+// returns no alerts, while `undefined` returns alerts across every location.
+export async function getLowStockAlerts(
+  locationIds?: string[],
+): Promise<LowStockAlert[]> {
+  if (Array.isArray(locationIds) && locationIds.length === 0) return []
+
   const supabase = await createClient()
 
-  const { data } = await supabase
+  let query = supabase
     .from('stock_items')
     .select(
       'id, location_id, part_id, quantity, min_level, location:stock_locations(name), part:parts(name, sku, unit)',
     )
     .gt('min_level', 0)
     .order('quantity')
+
+  if (Array.isArray(locationIds)) {
+    query = query.in('location_id', locationIds)
+  }
+
+  const { data } = await query
 
   type Row = {
     id: string
@@ -146,6 +159,93 @@ export async function getStockLocations(): Promise<StockLocation[]> {
     .order('kind')
     .order('name')
   return (data || []) as StockLocation[]
+}
+
+// The location ids a given engineer "owns" (e.g. their assigned van). Used to
+// scope low-stock alerts so engineers only see their own locations.
+export async function getEngineerLocationIds(engineerId: string): Promise<string[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('stock_locations')
+    .select('id')
+    .eq('engineer_id', engineerId)
+  return (data || []).map((l) => (l as { id: string }).id)
+}
+
+// A part matched by a free-text search, together with every location that
+// currently holds it (quantity > 0). Lets engineers find where a part lives.
+export interface PartLocationResult {
+  part_id: string
+  part_name: string
+  sku: string | null
+  unit: string
+  totalQuantity: number
+  locations: {
+    location_id: string
+    location_name: string
+    kind: StockLocationKind
+    quantity: number
+  }[]
+}
+
+export async function searchPartLocations(query: string): Promise<PartLocationResult[]> {
+  const q = query.trim()
+  if (q.length < 2) return []
+
+  const supabase = await createClient()
+
+  // Escape characters that have meaning inside a PostgREST `ilike` pattern.
+  const safe = q.replace(/[%_,]/g, (m) => `\\${m}`)
+
+  const { data: parts } = await supabase
+    .from('parts')
+    .select('id, name, sku, unit')
+    .or(`name.ilike.%${safe}%,sku.ilike.%${safe}%`)
+    .order('name')
+    .limit(25)
+
+  const partList = (parts || []) as {
+    id: string
+    name: string
+    sku: string | null
+    unit: string
+  }[]
+  if (partList.length === 0) return []
+
+  const partIds = partList.map((p) => p.id)
+  const { data: items } = await supabase
+    .from('stock_items')
+    .select('part_id, quantity, location:stock_locations(id, name, kind)')
+    .in('part_id', partIds)
+    .gt('quantity', 0)
+
+  type ItemRow = {
+    part_id: string
+    quantity: number
+    location: { id: string; name: string; kind: StockLocationKind } | null
+  }
+  const itemRows = (items || []) as unknown as ItemRow[]
+
+  return partList.map((p) => {
+    const locations = itemRows
+      .filter((i) => i.part_id === p.id && i.location)
+      .map((i) => ({
+        location_id: i.location!.id,
+        location_name: i.location!.name,
+        kind: i.location!.kind,
+        quantity: i.quantity,
+      }))
+      .sort((a, b) => b.quantity - a.quantity)
+
+    return {
+      part_id: p.id,
+      part_name: p.name,
+      sku: p.sku,
+      unit: p.unit,
+      totalQuantity: locations.reduce((sum, l) => sum + l.quantity, 0),
+      locations,
+    }
+  })
 }
 
 // A selectable job/task that stock can be booked against. Combines the task's

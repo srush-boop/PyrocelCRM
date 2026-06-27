@@ -22,9 +22,15 @@ interface LocationStockTableProps {
   items: StockItem[]
   locationId: string
   canManage: boolean
+  // When false (engineers), unit cost and held £ value columns are hidden.
+  showValue?: boolean
 }
 
-export function LocationStockTable({ items, canManage }: LocationStockTableProps) {
+export function LocationStockTable({
+  items,
+  canManage,
+  showValue = true,
+}: LocationStockTableProps) {
   const [search, setSearch] = useState('')
   const [editing, setEditing] = useState<Record<string, string>>({})
   const [savingId, setSavingId] = useState<string | null>(null)
@@ -74,15 +80,19 @@ export function LocationStockTable({ items, canManage }: LocationStockTableProps
               <TableHead className="hidden sm:table-cell">SKU</TableHead>
               <TableHead className="text-right">Qty</TableHead>
               <TableHead className="text-right">Min level</TableHead>
-              <TableHead className="hidden text-right md:table-cell">Unit cost</TableHead>
-              <TableHead className="text-right">Held value</TableHead>
+              {showValue && (
+                <>
+                  <TableHead className="hidden text-right md:table-cell">Unit cost</TableHead>
+                  <TableHead className="text-right">Held value</TableHead>
+                </>
+              )}
               <TableHead className="text-right">Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center">
+                <TableCell colSpan={showValue ? 7 : 5} className="h-24 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <Boxes className="mb-2 h-8 w-8 text-muted-foreground/50" />
                     <p className="text-muted-foreground">No stock held here yet</p>
@@ -136,12 +146,16 @@ export function LocationStockTable({ items, canManage }: LocationStockTableProps
                         <span className="tabular-nums">{item.min_level}</span>
                       )}
                     </TableCell>
-                    <TableCell className="hidden text-right tabular-nums md:table-cell">
-                      {formatGBP(unitCost)}
-                    </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">
-                      {formatGBP(item.quantity * unitCost)}
-                    </TableCell>
+                    {showValue && (
+                      <>
+                        <TableCell className="hidden text-right tabular-nums md:table-cell">
+                          {formatGBP(unitCost)}
+                        </TableCell>
+                        <TableCell className="text-right font-medium tabular-nums">
+                          {formatGBP(item.quantity * unitCost)}
+                        </TableCell>
+                      </>
+                    )}
                     <TableCell className="text-right">
                       {item.quantity === 0 ? (
                         <Badge variant="destructive">Out</Badge>

@@ -8,10 +8,12 @@ import type { Profile } from '@/lib/types/database'
 import {
   getStockLocationSummaries,
   getLowStockAlerts,
+  getEngineerLocationIds,
   formatGBP,
 } from '@/lib/stock'
 import { LowStockAlerts } from '@/components/dashboard/stock/low-stock-alerts'
 import { LocationsOverview } from '@/components/dashboard/stock/locations-overview'
+import { PartLocator } from '@/components/dashboard/stock/part-locator'
 import { BranchFilter } from '@/components/dashboard/branch-filter'
 import { getBranchScope } from '@/lib/branches'
 
@@ -43,9 +45,15 @@ export default async function StockPage({
   const { branch } = await searchParams
   const scope = await getBranchScope(profile, branch)
 
+  // Engineers only see low-stock alerts for the locations they own (their van);
+  // managers see alerts across every location.
+  const alertLocationIds = isManager
+    ? undefined
+    : await getEngineerLocationIds(profile.id)
+
   const [locations, lowStock] = await Promise.all([
     getStockLocationSummaries(scope.activeBranchId),
-    getLowStockAlerts(),
+    getLowStockAlerts(alertLocationIds),
   ])
 
   const totalHeldValue = locations.reduce((sum, l) => sum + l.heldValue, 0)
@@ -78,18 +86,22 @@ export default async function StockPage({
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total Held Value
-            </CardTitle>
-            <PoundSterling className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatGBP(totalHeldValue)}</div>
-          </CardContent>
-        </Card>
+      <div
+        className={`grid gap-4 sm:grid-cols-2 ${isManager ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}
+      >
+        {isManager && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Total Held Value
+              </CardTitle>
+              <PoundSterling className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatGBP(totalHeldValue)}</div>
+            </CardContent>
+          </Card>
+        )}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -131,9 +143,11 @@ export default async function StockPage({
         </Card>
       </div>
 
+      <PartLocator />
+
       <LowStockAlerts alerts={lowStock} />
 
-      <LocationsOverview locations={locations} />
+      <LocationsOverview locations={locations} showValue={isManager} />
     </div>
   )
 }

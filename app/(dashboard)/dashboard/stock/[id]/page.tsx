@@ -67,8 +67,8 @@ export default async function StockLocationPage({
                 ? `Engineer van · ${location.engineer.full_name}`
                 : location.kind === 'warehouse'
                   ? 'Warehouse'
-                  : 'Stock location'}{' '}
-              · Held value {formatGBP(heldValue)}
+                  : 'Stock location'}
+              {isManager ? ` · Held value ${formatGBP(heldValue)}` : ''}
               {lowCount > 0 ? ` · ${lowCount} low-stock` : ''}
             </p>
           </div>
@@ -94,6 +94,7 @@ export default async function StockLocationPage({
         items={items as StockItem[]}
         locationId={location.id}
         canManage={isManager}
+        showValue={isManager}
       />
     </div>
   )

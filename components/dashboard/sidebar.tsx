@@ -32,6 +32,7 @@ import {
   Settings,
   Wrench,
   Calendar,
+  CalendarDays,
   FileText,
   Wind,
   FireExtinguisher,
@@ -179,6 +180,7 @@ const adminNavItems: NavItem[] = [
   { title: 'Clients', href: '/dashboard/clients', icon: Building },
   sitesNavItem,
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
+  { title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   adminServiceManagementNavItem,
   { title: 'Users', href: '/dashboard/engineers', icon: Users },
   { title: 'Client Logins', href: '/dashboard/client-logins', icon: KeyRound },
@@ -193,6 +195,7 @@ const adminNavItems: NavItem[] = [
 
 const engineerNavItems: NavItem[] = [
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
+  { title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   engineerStockNavItem,
 ]
 
@@ -201,6 +204,7 @@ const officeNavItems: NavItem[] = [
   { title: 'Clients', href: '/dashboard/clients', icon: Building },
   sitesNavItem,
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
+  { title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   officeServiceManagementNavItem,
   { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
   salesNavItem,

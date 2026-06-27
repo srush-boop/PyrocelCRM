@@ -14,6 +14,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -42,11 +43,14 @@ export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogPr
     site_service_id: '',
     assigned_engineer_id: '',
     scheduled_date: new Date(),
+    booked_start_time: '',
+    booked_end_time: '',
   })
   // Visit types for the currently-selected service (multi-visit services only),
   // plus which visit the new task is for.
   const [visitTypes, setVisitTypes] = useState<{ id: string; name: string }[]>([])
   const [visitTypeId, setVisitTypeId] = useState<string>(ALL_VISITS)
+  const [timeError, setTimeError] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -70,12 +74,25 @@ export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogPr
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // If both times are given, end must be after start.
+    if (
+      formData.booked_start_time &&
+      formData.booked_end_time &&
+      formData.booked_end_time <= formData.booked_start_time
+    ) {
+      setTimeError('End time must be after the start time')
+      return
+    }
+    setTimeError(null)
     setLoading(true)
 
     const { error } = await supabase.from('tasks').insert({
       site_service_id: formData.site_service_id,
       assigned_engineer_id: formData.assigned_engineer_id || null,
       scheduled_date: format(formData.scheduled_date, 'yyyy-MM-dd'),
+      booked_start_time: formData.booked_start_time || null,
+      booked_end_time: formData.booked_end_time || null,
       status: 'pending',
       visit_type_id: visitTypeId === ALL_VISITS ? null : visitTypeId,
     })
@@ -88,6 +105,8 @@ export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogPr
         site_service_id: '',
         assigned_engineer_id: '',
         scheduled_date: new Date(),
+        booked_start_time: '',
+        booked_end_time: '',
       })
       setVisitTypes([])
       setVisitTypeId(ALL_VISITS)
@@ -215,6 +234,38 @@ export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogPr
                   />
                 </PopoverContent>
               </Popover>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Booked Time (optional)</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="time"
+                  aria-label="Booked start time"
+                  value={formData.booked_start_time}
+                  onChange={(e) =>
+                    setFormData({ ...formData, booked_start_time: e.target.value })
+                  }
+                  className="flex-1"
+                />
+                <span className="text-sm text-muted-foreground">to</span>
+                <Input
+                  type="time"
+                  aria-label="Booked end time"
+                  value={formData.booked_end_time}
+                  onChange={(e) =>
+                    setFormData({ ...formData, booked_end_time: e.target.value })
+                  }
+                  className="flex-1"
+                />
+              </div>
+              {timeError ? (
+                <p className="text-sm text-destructive">{timeError}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Add a start and end time to book an appointment slot on the calendar.
+                </p>
+              )}
             </div>
           </div>
           <DialogFooter>

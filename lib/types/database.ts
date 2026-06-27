@@ -356,6 +356,9 @@ export interface Task {
   site_service_id: string
   assigned_engineer_id: string | null
   scheduled_date: string
+  // Optional booked appointment slot on the scheduled date (24h "HH:MM[:SS]").
+  booked_start_time: string | null
+  booked_end_time: string | null
   status: TaskStatus
   started_at: string | null
   completed_at: string | null
@@ -1164,4 +1167,64 @@ export interface LowStockAlert {
   unit: string
   quantity: number
   min_level: number
+}
+
+// =====================================================================
+// Calendar
+// A master calendar merges two sources: booked service tasks (with an
+// optional booked time slot) and general entries (annual leave, sickness,
+// training, etc.) whose types are configured by an admin.
+// =====================================================================
+
+// Admin-configurable entry type, e.g. "Annual Leave" rendered in a colour.
+export interface CalendarEntryType {
+  id: string
+  name: string
+  color: string
+  is_active: boolean
+  sort_order: number
+  created_at: string
+}
+
+export interface CalendarEntry {
+  id: string
+  entry_type_id: string
+  // null = a company-wide entry (e.g. bank holiday)
+  user_id: string | null
+  title: string | null
+  start_at: string
+  end_at: string
+  all_day: boolean
+  // Visible to all staff (incl. engineers) when true.
+  is_public: boolean
+  notes: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  entry_type?: CalendarEntryType
+  user?: Profile | null
+}
+
+// A normalised item the calendar can render, derived from either a booked
+// task or a general entry. `start`/`end` are ISO datetime strings.
+export type CalendarItemKind = 'task' | 'entry'
+
+export interface CalendarItem {
+  id: string
+  kind: CalendarItemKind
+  title: string
+  start: string
+  end: string
+  allDay: boolean
+  color: string
+  // The person this item belongs to (engineer for tasks, user for entries).
+  ownerId: string | null
+  ownerName: string | null
+  // Extra context for the detail popover / list row.
+  subtitle: string | null
+  // Original source ids so the UI can link through.
+  taskId?: string
+  entryId?: string
+  entryTypeName?: string
+  isPublic?: boolean
 }

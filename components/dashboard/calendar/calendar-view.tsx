@@ -8,6 +8,7 @@ import {
   addMonths,
   addWeeks,
   eachDayOfInterval,
+  endOfDay,
   endOfMonth,
   endOfWeek,
   format,
@@ -58,7 +59,7 @@ import type {
 } from '@/lib/types/database'
 import { CalendarEntryDialog } from './calendar-entry-dialog'
 
-type ViewMode = 'month' | 'week' | 'list'
+type ViewMode = 'day' | 'week' | 'month' | 'list'
 
 interface PersonOption {
   id: string
@@ -163,6 +164,9 @@ export function CalendarView({
   // The visible date window for the current view, used to expand recurring
   // routes into concrete occurrences.
   const [rangeStart, rangeEnd] = useMemo<[Date, Date]>(() => {
+    if (view === 'day') {
+      return [startOfDay(cursor), endOfDay(cursor)]
+    }
     if (view === 'month') {
       return [
         startOfWeek(startOfMonth(cursor), { weekStartsOn: 1 }),
@@ -222,18 +226,21 @@ export function CalendarView({
 
   // ---- Header / navigation ----
   const periodLabel =
-    view === 'month'
-      ? format(cursor, 'MMMM yyyy')
-      : view === 'week'
-        ? `${format(startOfWeek(cursor, { weekStartsOn: 1 }), 'd MMM')} – ${format(
-            endOfWeek(cursor, { weekStartsOn: 1 }),
-            'd MMM yyyy',
-          )}`
-        : 'Upcoming'
+    view === 'day'
+      ? format(cursor, 'EEEE d MMMM yyyy')
+      : view === 'month'
+        ? format(cursor, 'MMMM yyyy')
+        : view === 'week'
+          ? `${format(startOfWeek(cursor, { weekStartsOn: 1 }), 'd MMM')} – ${format(
+              endOfWeek(cursor, { weekStartsOn: 1 }),
+              'd MMM yyyy',
+            )}`
+          : 'Upcoming'
 
   const navigate = (dir: -1 | 1) => {
     if (view === 'month') setCursor(addMonths(cursor, dir))
     else if (view === 'week') setCursor(addWeeks(cursor, dir))
+    else if (view === 'day') setCursor(addDays(cursor, dir))
     else setCursor(addDays(cursor, dir * 14))
   }
 
@@ -257,8 +264,9 @@ export function CalendarView({
         <div className="flex flex-wrap items-center gap-2">
           <Tabs value={view} onValueChange={(v) => setView(v as ViewMode)}>
             <TabsList>
-              <TabsTrigger value="month">Month</TabsTrigger>
+              <TabsTrigger value="day">Day</TabsTrigger>
               <TabsTrigger value="week">Week</TabsTrigger>
+              <TabsTrigger value="month">Month</TabsTrigger>
               <TabsTrigger value="list">List</TabsTrigger>
             </TabsList>
           </Tabs>
@@ -317,6 +325,9 @@ export function CalendarView({
       </div>
 
       {/* Views */}
+      {view === 'day' && (
+        <DayView cursor={cursor} items={filtered} onSelect={handleSelect} onAddDay={openNewEntry} />
+      )}
       {view === 'month' && (
         <MonthGrid
           cursor={cursor}
@@ -428,6 +439,101 @@ export function CalendarView({
         canManageOthers={canManageOthers}
       />
     </div>
+  )
+}
+
+// ---------------- Day view ----------------
+function DayView({
+  cursor,
+  items,
+  onSelect,
+  onAddDay,
+}: {
+  cursor: Date
+  items: CalendarItem[]
+  onSelect: (it: CalendarItem) => void
+  onAddDay: (d: Date) => void
+}) {
+  const dayItems = itemsForDay(items, cursor)
+  const allDayItems = dayItems.filter((it) => it.allDay)
+  const timedItems = dayItems.filter((it) => !it.allDay)
+  const isToday = isSameDay(cursor, new Date())
+
+  return (
+    <Card className={cn(isToday && 'border-primary')}>
+      <CardContent className="p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <p className="text-xs text-muted-foreground">{format(cursor, 'EEEE')}</p>
+            <p className={cn('text-2xl font-semibold', isToday && 'text-primary')}>
+              {format(cursor, 'd MMMM yyyy')}
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => onAddDay(cursor)}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Entry
+          </Button>
+        </div>
+
+        {dayItems.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <CalendarDays className="mb-2 h-8 w-8 text-muted-foreground/50" />
+            <p className="text-muted-foreground">Nothing scheduled for this day</p>
+          </div>
+        )}
+
+        {allDayItems.length > 0 && (
+          <div className="mb-4 space-y-1">
+            <p className="mb-1 text-xs font-medium text-muted-foreground">All day</p>
+            {allDayItems.map((it) => (
+              <button
+                key={it.id}
+                type="button"
+                onClick={() => onSelect(it)}
+                className="flex w-full items-center gap-2 rounded border-l-2 px-3 py-2 text-left text-sm hover:bg-accent"
+                style={{ borderLeftColor: it.color, backgroundColor: `${it.color}12` }}
+              >
+                <span className="font-medium">{it.title}</span>
+                {it.ownerName && (
+                  <span className="truncate text-xs text-muted-foreground">· {it.ownerName}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {timedItems.length > 0 && (
+          <div className="space-y-1">
+            {timedItems.map((it) => (
+              <button
+                key={it.id}
+                type="button"
+                onClick={() => onSelect(it)}
+                className="flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-accent"
+              >
+                <div className="w-20 shrink-0 text-xs font-medium text-muted-foreground">
+                  {timeLabel(it)}
+                </div>
+                <span
+                  className="h-8 w-1 shrink-0 rounded-full"
+                  style={{ backgroundColor: it.color }}
+                  aria-hidden="true"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{it.title}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {[it.subtitle, it.ownerName].filter(Boolean).join(' · ')}
+                  </p>
+                </div>
+                <Badge variant="outline" className="shrink-0 text-[10px]">
+                  {it.kind === 'task' ? 'Task' : it.kind === 'route' ? 'Route' : it.entryTypeName}
+                </Badge>
+              </button>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 

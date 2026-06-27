@@ -68,6 +68,17 @@ import { InviteEngineerDialog } from './invite-engineer-dialog'
 const NO_DEPARTMENT = '__none__'
 const NO_BRANCH = '__none__'
 
+// ISO weekday numbers (1 = Monday ... 7 = Sunday) used for working patterns.
+const WEEKDAYS: { value: number; label: string }[] = [
+  { value: 1, label: 'Mon' },
+  { value: 2, label: 'Tue' },
+  { value: 3, label: 'Wed' },
+  { value: 4, label: 'Thu' },
+  { value: 5, label: 'Fri' },
+  { value: 6, label: 'Sat' },
+  { value: 7, label: 'Sun' },
+]
+
 interface EngineersTableProps {
   users: Profile[]
   departments: Department[]
@@ -109,10 +120,16 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
   const [editError, setEditError] = useState<string | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
   const [hoursUser, setHoursUser] = useState<Profile | null>(null)
-  const [hoursForm, setHoursForm] = useState({
+  const [hoursForm, setHoursForm] = useState<{
+    work_start_time: string
+    work_end_time: string
+    lunch_minutes: string
+    work_days: number[]
+  }>({
     work_start_time: '',
     work_end_time: '',
     lunch_minutes: '',
+    work_days: [1, 2, 3, 4, 5],
   })
   const [hoursError, setHoursError] = useState<string | null>(null)
   const [savingHours, setSavingHours] = useState(false)
@@ -128,13 +145,17 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
       work_start_time: toTimeInput(user.work_start_time),
       work_end_time: toTimeInput(user.work_end_time),
       lunch_minutes: user.lunch_minutes != null ? String(user.lunch_minutes) : '',
+      work_days:
+        user.work_days && user.work_days.length > 0
+          ? [...user.work_days].sort((a, b) => a - b)
+          : [1, 2, 3, 4, 5],
     })
     setHoursError(null)
   }
 
   const handleSaveHours = async () => {
     if (!hoursUser) return
-    const { work_start_time, work_end_time, lunch_minutes } = hoursForm
+    const { work_start_time, work_end_time, lunch_minutes, work_days } = hoursForm
     // Either set both times or neither.
     if ((work_start_time && !work_end_time) || (!work_start_time && work_end_time)) {
       setHoursError('Please set both a start and end time, or leave both blank.')
@@ -149,6 +170,10 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
       setHoursError('Lunch allowance must be between 0 and 480 minutes.')
       return
     }
+    if (work_days.length === 0) {
+      setHoursError('Please select at least one working day.')
+      return
+    }
     setHoursError(null)
     setSavingHours(true)
     const { error } = await supabase
@@ -157,6 +182,7 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
         work_start_time: work_start_time || null,
         work_end_time: work_end_time || null,
         lunch_minutes: lunch,
+        work_days: [...work_days].sort((a, b) => a - b),
         updated_at: new Date().toISOString(),
       })
       .eq('id', hoursUser.id)
@@ -741,6 +767,36 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
                   }
                 />
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Days worked</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {WEEKDAYS.map((day) => {
+                  const active = hoursForm.work_days.includes(day.value)
+                  return (
+                    <Button
+                      key={day.value}
+                      type="button"
+                      size="sm"
+                      variant={active ? 'default' : 'outline'}
+                      aria-pressed={active}
+                      onClick={() =>
+                        setHoursForm((prev) => ({
+                          ...prev,
+                          work_days: active
+                            ? prev.work_days.filter((d) => d !== day.value)
+                            : [...prev.work_days, day.value],
+                        }))
+                      }
+                    >
+                      {day.label}
+                    </Button>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Select the days this employee normally works (supports part-time patterns).
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="lunch-minutes">Lunch allowance (minutes per day)</Label>

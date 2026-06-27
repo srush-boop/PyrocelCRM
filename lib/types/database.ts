@@ -60,6 +60,9 @@ export interface Profile {
   work_start_time: string | null
   work_end_time: string | null
   lunch_minutes: number | null
+  // Days normally worked, as ISO weekday numbers (1 = Monday ... 7 = Sunday).
+  // Supports part-time patterns. Defaults to Monday–Friday.
+  work_days: number[] | null
   created_at: string
   updated_at: string
   department?: Department | null

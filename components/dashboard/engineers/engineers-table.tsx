@@ -46,6 +46,7 @@ import {
   Trash2,
   Loader2,
   Clock,
+  CalendarClock,
   CheckCircle2,
   KeyRound,
   Send,
@@ -91,8 +92,66 @@ export function EngineersTable({ users, departments }: EngineersTableProps) {
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [savingPassword, setSavingPassword] = useState(false)
   const [resendingId, setResendingId] = useState<string | null>(null)
+  const [hoursUser, setHoursUser] = useState<Profile | null>(null)
+  const [hoursForm, setHoursForm] = useState({
+    work_start_time: '',
+    work_end_time: '',
+    lunch_minutes: '',
+  })
+  const [hoursError, setHoursError] = useState<string | null>(null)
+  const [savingHours, setSavingHours] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+
+  // Normalises a stored "HH:MM:SS" time to the "HH:MM" an <input type="time"> wants.
+  const toTimeInput = (t: string | null) => (t ? t.slice(0, 5) : '')
+
+  const openHoursDialog = (user: Profile) => {
+    setHoursUser(user)
+    setHoursForm({
+      work_start_time: toTimeInput(user.work_start_time),
+      work_end_time: toTimeInput(user.work_end_time),
+      lunch_minutes: user.lunch_minutes != null ? String(user.lunch_minutes) : '',
+    })
+    setHoursError(null)
+  }
+
+  const handleSaveHours = async () => {
+    if (!hoursUser) return
+    const { work_start_time, work_end_time, lunch_minutes } = hoursForm
+    // Either set both times or neither.
+    if ((work_start_time && !work_end_time) || (!work_start_time && work_end_time)) {
+      setHoursError('Please set both a start and end time, or leave both blank.')
+      return
+    }
+    if (work_start_time && work_end_time && work_end_time <= work_start_time) {
+      setHoursError('End time must be after the start time.')
+      return
+    }
+    const lunch = lunch_minutes === '' ? null : Number(lunch_minutes)
+    if (lunch != null && (Number.isNaN(lunch) || lunch < 0 || lunch > 480)) {
+      setHoursError('Lunch allowance must be between 0 and 480 minutes.')
+      return
+    }
+    setHoursError(null)
+    setSavingHours(true)
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        work_start_time: work_start_time || null,
+        work_end_time: work_end_time || null,
+        lunch_minutes: lunch,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', hoursUser.id)
+    setSavingHours(false)
+    if (error) {
+      setHoursError(error.message)
+      return
+    }
+    setHoursUser(null)
+    router.refresh()
+  }
 
   const openPasswordDialog = (user: Profile) => {
     setPasswordUser(user)
@@ -352,6 +411,10 @@ export function EngineersTable({ users, departments }: EngineersTableProps) {
                           <KeyRound className="mr-2 h-4 w-4" />
                           Change Password
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => openHoursDialog(user)}>
+                          <CalendarClock className="mr-2 h-4 w-4" />
+                          Working Hours
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="text-destructive focus:text-destructive"
@@ -425,6 +488,81 @@ export function EngineersTable({ users, departments }: EngineersTableProps) {
             <Button onClick={handleChangePassword} disabled={savingPassword}>
               {savingPassword && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {savingPassword ? 'Saving...' : 'Update Password'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!hoursUser}
+        onOpenChange={(open) => !open && !savingHours && setHoursUser(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Working Hours</DialogTitle>
+            <DialogDescription>
+              Set the standard working hours for{' '}
+              <strong>{hoursUser?.full_name || hoursUser?.email}</strong>. These are optional
+              and will be used for future timesheets.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="work-start">Start time</Label>
+                <Input
+                  id="work-start"
+                  type="time"
+                  value={hoursForm.work_start_time}
+                  onChange={(e) =>
+                    setHoursForm({ ...hoursForm, work_start_time: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="work-end">End time</Label>
+                <Input
+                  id="work-end"
+                  type="time"
+                  value={hoursForm.work_end_time}
+                  onChange={(e) =>
+                    setHoursForm({ ...hoursForm, work_end_time: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="lunch-minutes">Lunch allowance (minutes per day)</Label>
+              <Input
+                id="lunch-minutes"
+                type="number"
+                min={0}
+                max={480}
+                step={5}
+                inputMode="numeric"
+                value={hoursForm.lunch_minutes}
+                onChange={(e) =>
+                  setHoursForm({ ...hoursForm, lunch_minutes: e.target.value })
+                }
+                placeholder="e.g. 30"
+              />
+              <p className="text-xs text-muted-foreground">
+                Deducted from daily working time when calculating timesheets.
+              </p>
+            </div>
+            {hoursError && <p className="text-sm text-destructive">{hoursError}</p>}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setHoursUser(null)}
+              disabled={savingHours}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveHours} disabled={savingHours}>
+              {savingHours && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {savingHours ? 'Saving...' : 'Save Hours'}
             </Button>
           </DialogFooter>
         </DialogContent>

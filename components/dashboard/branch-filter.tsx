@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import type { Branch } from '@/lib/types/database'
-import { ALL_BRANCHES } from '@/lib/branches'
+import { ALL_BRANCHES } from '@/lib/branch-constants'
 
 interface BranchFilterProps {
   branches: Branch[]

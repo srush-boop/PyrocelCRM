@@ -1,13 +1,14 @@
 import 'server-only'
 import { createClient } from '@/lib/supabase/server'
 import type { Branch, Profile } from '@/lib/types/database'
+import { ALL_BRANCHES } from '@/lib/branch-constants'
+
+// Re-exported for server callers that already import from this module.
+export { ALL_BRANCHES }
 
 // Roles that are allowed to switch the branch filter to any branch (or "All").
 // Engineers and clients are locked to their own assigned branch.
 const CAN_SWITCH_ROLES = ['admin', 'office'] as const
-
-// Sentinel used in the URL/select to mean "show every branch".
-export const ALL_BRANCHES = 'all'
 
 export interface BranchScope {
   // Whether the current user may change which branch they're viewing.
@@ -33,7 +34,7 @@ export interface BranchScope {
  */
 export async function getBranchScope(
   profile: Profile,
-  selected?: string,
+  selected?: string | null,
 ): Promise<BranchScope> {
   const canSwitch = CAN_SWITCH_ROLES.includes(profile.role as 'admin' | 'office')
   const userBranchId = profile.branch_id ?? null

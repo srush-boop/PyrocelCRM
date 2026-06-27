@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { EngineersTable } from '@/components/dashboard/engineers/engineers-table'
-import type { Profile, Department } from '@/lib/types/database'
+import type { Profile, Department, Branch } from '@/lib/types/database'
 
 export default async function EngineersPage() {
   const supabase = await createClient()
@@ -19,9 +19,10 @@ export default async function EngineersPage() {
     redirect('/dashboard')
   }
 
-  const [{ data: users }, { data: departments }] = await Promise.all([
+  const [{ data: users }, { data: departments }, { data: branches }] = await Promise.all([
     supabase.from('profiles').select('*').neq('role', 'client').order('full_name'),
     supabase.from('departments').select('*').order('name'),
+    supabase.from('branches').select('*').order('name'),
   ])
 
   return (
@@ -38,6 +39,7 @@ export default async function EngineersPage() {
       <EngineersTable
         users={(users || []) as Profile[]}
         departments={(departments || []) as Department[]}
+        branches={(branches || []) as Branch[]}
       />
     </div>
   )

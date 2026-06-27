@@ -50,6 +50,7 @@ import {
   CheckCircle2,
   KeyRound,
   Send,
+  Pencil,
 } from 'lucide-react'
 import {
   Dialog,
@@ -60,15 +61,17 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import type { Profile, UserRole, Department } from '@/lib/types/database'
+import type { Profile, UserRole, Department, Branch } from '@/lib/types/database'
 import { formatDateUK } from '@/lib/utils'
 import { InviteEngineerDialog } from './invite-engineer-dialog'
 
 const NO_DEPARTMENT = '__none__'
+const NO_BRANCH = '__none__'
 
 interface EngineersTableProps {
   users: Profile[]
   departments: Department[]
+  branches?: Branch[]
 }
 
 const roleColors: Record<UserRole, string> = {
@@ -78,9 +81,11 @@ const roleColors: Record<UserRole, string> = {
   client: 'bg-muted text-muted-foreground',
 }
 
-export function EngineersTable({ users, departments }: EngineersTableProps) {
+export function EngineersTable({ users, departments, branches = [] }: EngineersTableProps) {
   const departmentName = (id: string | null) =>
     id ? departments.find((d) => d.id === id)?.name ?? null : null
+  const branchName = (id: string | null) =>
+    id ? branches.find((b) => b.id === id)?.name ?? null : null
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
   const [inviteOpen, setInviteOpen] = useState(false)
@@ -92,6 +97,17 @@ export function EngineersTable({ users, departments }: EngineersTableProps) {
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [savingPassword, setSavingPassword] = useState(false)
   const [resendingId, setResendingId] = useState<string | null>(null)
+  const [editUser, setEditUser] = useState<Profile | null>(null)
+  const [editForm, setEditForm] = useState({
+    full_name: '',
+    email: '',
+    role: 'engineer' as UserRole,
+    department_id: NO_DEPARTMENT,
+    branch_id: NO_BRANCH,
+    status: 'active' as 'active' | 'inactive',
+  })
+  const [editError, setEditError] = useState<string | null>(null)
+  const [savingEdit, setSavingEdit] = useState(false)
   const [hoursUser, setHoursUser] = useState<Profile | null>(null)
   const [hoursForm, setHoursForm] = useState({
     work_start_time: '',
@@ -158,6 +174,58 @@ export function EngineersTable({ users, departments }: EngineersTableProps) {
     setNewPassword('')
     setConfirmPassword('')
     setPasswordError(null)
+  }
+
+  const openEditDialog = (user: Profile) => {
+    setEditUser(user)
+    setEditForm({
+      full_name: user.full_name || '',
+      email: user.email,
+      role: user.role,
+      department_id: user.department_id ?? NO_DEPARTMENT,
+      branch_id: user.branch_id ?? NO_BRANCH,
+      status: user.status,
+    })
+    setEditError(null)
+  }
+
+  const handleSaveProfile = async () => {
+    if (!editUser) return
+    if (!editForm.full_name.trim()) {
+      setEditError('Please enter a name.')
+      return
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editForm.email.trim())) {
+      setEditError('Please enter a valid email address.')
+      return
+    }
+    setEditError(null)
+    setSavingEdit(true)
+    try {
+      const res = await fetch(`/api/users/${editUser.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          full_name: editForm.full_name.trim(),
+          email: editForm.email.trim(),
+          role: editForm.role,
+          department_id: editForm.department_id === NO_DEPARTMENT ? null : editForm.department_id,
+          branch_id: editForm.branch_id === NO_BRANCH ? null : editForm.branch_id,
+          status: editForm.status,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setEditError(data.error || 'Failed to update profile.')
+      } else {
+        setEditUser(null)
+        router.refresh()
+      }
+    } catch {
+      setEditError('An unexpected error occurred.')
+    } finally {
+      setSavingEdit(false)
+    }
   }
 
   const handleChangePassword = async () => {
@@ -303,6 +371,7 @@ export function EngineersTable({ users, departments }: EngineersTableProps) {
               <TableHead>Email</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Department</TableHead>
+              {branches.length > 0 && <TableHead>Branch</TableHead>}
               <TableHead>Status</TableHead>
               <TableHead className="hidden lg:table-cell">Invited</TableHead>
               <TableHead className="hidden lg:table-cell">Accepted</TableHead>
@@ -312,7 +381,7 @@ export function EngineersTable({ users, departments }: EngineersTableProps) {
           <TableBody>
             {filteredUsers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center">
+                <TableCell colSpan={branches.length > 0 ? 9 : 8} className="h-24 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <Users className="h-8 w-8 text-muted-foreground/50 mb-2" />
                     <p className="text-muted-foreground">No users found</p>
@@ -355,6 +424,15 @@ export function EngineersTable({ users, departments }: EngineersTableProps) {
                       </SelectContent>
                     </Select>
                   </TableCell>
+                  {branches.length > 0 && (
+                    <TableCell>
+                      {branchName(user.branch_id) ? (
+                        <Badge variant="secondary">{branchName(user.branch_id)}</Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">-</span>
+                      )}
+                    </TableCell>
+                  )}
                   <TableCell>
                     {user.accepted_at ? (
                       <span className="flex items-center gap-1.5 text-green-600">
@@ -384,6 +462,11 @@ export function EngineersTable({ users, departments }: EngineersTableProps) {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => openEditDialog(user)}>
+                          <Pencil className="mr-2 h-4 w-4" />
+                          Edit Profile
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => handleRoleChange(user.id, 'admin')}>
                           Set as Admin
                         </DropdownMenuItem>
@@ -438,6 +521,134 @@ export function EngineersTable({ users, departments }: EngineersTableProps) {
         onOpenChange={setInviteOpen}
         departments={departments}
       />
+
+      <Dialog
+        open={!!editUser}
+        onOpenChange={(open) => !open && !savingEdit && setEditUser(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Profile</DialogTitle>
+            <DialogDescription>
+              Update the details for{' '}
+              <strong>{editUser?.full_name || editUser?.email}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-name">Full name</Label>
+              <Input
+                id="edit-name"
+                value={editForm.full_name}
+                onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
+                placeholder="Full name"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-email">Email address</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                value={editForm.email}
+                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                placeholder="name@example.com"
+                autoComplete="off"
+              />
+              <p className="text-xs text-muted-foreground">
+                Changing this updates the address they sign in with.
+              </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-role">Role</Label>
+                <Select
+                  value={editForm.role}
+                  onValueChange={(value) => setEditForm({ ...editForm, role: value as UserRole })}
+                >
+                  <SelectTrigger id="edit-role">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="office">Office</SelectItem>
+                    <SelectItem value="engineer">Engineer</SelectItem>
+                    <SelectItem value="client">Client</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-status">Status</Label>
+                <Select
+                  value={editForm.status}
+                  onValueChange={(value) =>
+                    setEditForm({ ...editForm, status: value as 'active' | 'inactive' })
+                  }
+                >
+                  <SelectTrigger id="edit-status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-department">Department</Label>
+                <Select
+                  value={editForm.department_id}
+                  onValueChange={(value) => setEditForm({ ...editForm, department_id: value })}
+                >
+                  <SelectTrigger id="edit-department">
+                    <SelectValue placeholder="No department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_DEPARTMENT}>No department</SelectItem>
+                    {departments
+                      .filter((d) => d.active || d.id === editForm.department_id)
+                      .map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-branch">Branch</Label>
+                <Select
+                  value={editForm.branch_id}
+                  onValueChange={(value) => setEditForm({ ...editForm, branch_id: value })}
+                >
+                  <SelectTrigger id="edit-branch">
+                    <SelectValue placeholder="No branch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_BRANCH}>No branch</SelectItem>
+                    {branches.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {editError && <p className="text-sm text-destructive">{editError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditUser(null)} disabled={savingEdit}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveProfile} disabled={savingEdit}>
+              {savingEdit && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {savingEdit ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={!!passwordUser}

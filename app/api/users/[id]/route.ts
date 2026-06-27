@@ -51,6 +51,98 @@ export async function PATCH(
   }
 }
 
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params
+    const body = await req.json()
+    const {
+      full_name,
+      email,
+      role,
+      department_id,
+      branch_id,
+      status,
+    } = body as {
+      full_name?: string
+      email?: string
+      role?: string
+      department_id?: string | null
+      branch_id?: string | null
+      status?: string
+    }
+
+    // Verify the caller is an authenticated admin
+    const serverClient = await createClient()
+    const {
+      data: { user },
+    } = await serverClient.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorised.' }, { status: 401 })
+    }
+
+    const { data: callerProfile } = await serverClient
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (!callerProfile || callerProfile.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden.' }, { status: 403 })
+    }
+
+    const validRoles = ['admin', 'office', 'engineer', 'client']
+    if (role && !validRoles.includes(role)) {
+      return NextResponse.json({ error: 'Invalid role.' }, { status: 400 })
+    }
+    if (status && !['active', 'inactive'].includes(status)) {
+      return NextResponse.json({ error: 'Invalid status.' }, { status: 400 })
+    }
+    const trimmedEmail = typeof email === 'string' ? email.trim().toLowerCase() : undefined
+    if (trimmedEmail !== undefined && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      return NextResponse.json({ error: 'Please enter a valid email address.' }, { status: 400 })
+    }
+
+    const adminClient = createAdminClient()
+
+    // Update the auth email first (if changed); profile email mirrors it.
+    if (trimmedEmail) {
+      const { error: authError } = await adminClient.auth.admin.updateUserById(id, {
+        email: trimmedEmail,
+      })
+      if (authError) {
+        return NextResponse.json({ error: authError.message }, { status: 400 })
+      }
+    }
+
+    // Build the profile patch from provided fields only.
+    const profilePatch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    if (full_name !== undefined) profilePatch.full_name = full_name
+    if (trimmedEmail) profilePatch.email = trimmedEmail
+    if (role !== undefined) profilePatch.role = role
+    if (department_id !== undefined) profilePatch.department_id = department_id || null
+    if (branch_id !== undefined) profilePatch.branch_id = branch_id || null
+    if (status !== undefined) profilePatch.status = status
+
+    const { error: profileError } = await adminClient
+      .from('profiles')
+      .update(profilePatch)
+      .eq('id', id)
+
+    if (profileError) {
+      return NextResponse.json({ error: profileError.message }, { status: 400 })
+    }
+
+    return NextResponse.json({ message: 'Profile updated successfully.' })
+  } catch (err) {
+    console.error('[v0] update-profile error:', err)
+    return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
+  }
+}
+
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },

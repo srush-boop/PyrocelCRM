@@ -93,6 +93,7 @@ export interface CalendarData {
   people: Pick<Profile, 'id' | 'full_name' | 'email' | 'role'>[]
   profile: Profile
   canManageOthers: boolean
+  branchScope: BranchScope
 }
 
 // Fetches everything the master calendar needs, scoped by the viewer's role.
@@ -114,6 +115,10 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
   const profile = profileData as Profile
   const isEngineer = profile.role === 'engineer'
   const canManageOthers = profile.role === 'admin' || profile.role === 'office'
+
+  // Resolve the active branch (respects role: engineers are locked to theirs).
+  const branchScope = await getBranchScope(profile, branchId)
+  const activeBranchId = branchScope.activeBranchId
 
   // Ensure UK bank holidays are imported (throttled + idempotent internally).
   await syncUkBankHolidays()
@@ -182,11 +187,11 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
   // - routes: by the assigned engineer's branch
   // - entries: by the owning user's branch (company-wide entries always show)
   let scopedEntries = entries
-  if (branchId) {
-    tasks = tasks.filter((t) => t.site_service?.site?.branch_id === branchId)
-    routeRows = routeRows.filter((r) => r.assigned_engineer?.branch_id === branchId)
+  if (activeBranchId) {
+    tasks = tasks.filter((t) => t.site_service?.site?.branch_id === activeBranchId)
+    routeRows = routeRows.filter((r) => r.assigned_engineer?.branch_id === activeBranchId)
     scopedEntries = entries.filter(
-      (e) => e.user_id === null || e.user?.branch_id === branchId,
+      (e) => e.user_id === null || e.user?.branch_id === activeBranchId,
     )
   }
 
@@ -285,5 +290,5 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
     people = (peopleData || []) as CalendarData['people']
   }
 
-  return { items, routes, entryTypes, people, profile, canManageOthers }
+  return { items, routes, entryTypes, people, profile, canManageOthers, branchScope }
 }

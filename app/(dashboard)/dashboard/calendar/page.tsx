@@ -15,7 +15,8 @@ export default async function CalendarPage({
   const data = await getCalendarData(branch)
   if (!data) redirect('/auth/login')
 
-  const { items, routes, entryTypes, people, profile, canManageOthers, branchScope } = data
+  const { items, routes, entryTypes, people, departments, profile, canManageOthers, branchScope } =
+    data
   const isAdmin = profile.role === 'admin'
 
   return (
@@ -47,6 +48,7 @@ export default async function CalendarPage({
         routes={routes}
         entryTypes={entryTypes}
         people={people}
+        departments={departments}
         profile={profile}
         canManageOthers={canManageOthers}
       />

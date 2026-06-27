@@ -10,6 +10,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
@@ -46,6 +49,11 @@ interface PersonOption {
   role: string
 }
 
+interface DepartmentOption {
+  id: string
+  name: string
+}
+
 interface CalendarEntryDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -54,16 +62,19 @@ interface CalendarEntryDialogProps {
   defaultDate: Date | null
   entryTypes: CalendarEntryType[]
   people: PersonOption[]
+  departments: DepartmentOption[]
   profile: Profile
   canManageOthers: boolean
 }
 
-const COMPANY = '__company__'
-
 interface FormState {
   entry_type_id: string
-  // target: own user id, another user id, or COMPANY (managers only)
-  target: string
+  // Company-wide entries belong to no specific person (managers only).
+  company_wide: boolean
+  // People invited directly. The entry appears on each of their calendars.
+  attendee_ids: string[]
+  // Whole departments to invite; expanded to their members on save.
+  department_ids: string[]
   title: string
   all_day: boolean
   start_date: string
@@ -83,7 +94,10 @@ function buildDefault(
   const dateStr = format(d, 'yyyy-MM-dd')
   return {
     entry_type_id: entryTypes[0]?.id ?? '',
-    target: profile.id,
+    company_wide: false,
+    // Default to the creator so it lands on their own calendar.
+    attendee_ids: [profile.id],
+    department_ids: [],
     title: '',
     all_day: true,
     start_date: dateStr,
@@ -102,6 +116,7 @@ export function CalendarEntryDialog({
   defaultDate,
   entryTypes,
   people,
+  departments,
   profile,
   canManageOthers,
 }: CalendarEntryDialogProps) {
@@ -128,26 +143,31 @@ export function CalendarEntryDialog({
       return
     }
 
-    // Editing: fetch the entry.
+    // Editing: fetch the entry and its attendees.
     let cancelled = false
     setLoadingEntry(true)
     ;(async () => {
-      const { data } = await supabase
-        .from('calendar_entries')
-        .select('*')
-        .eq('id', entryId)
-        .single()
+      const [{ data }, { data: attendees }] = await Promise.all([
+        supabase.from('calendar_entries').select('*').eq('id', entryId).single(),
+        supabase
+          .from('calendar_entry_attendees')
+          .select('user_id')
+          .eq('entry_id', entryId),
+      ])
       if (cancelled) return
       setLoadingEntry(false)
       if (!data) {
         setError('This entry could not be loaded.')
         return
       }
+      const attendeeIds = (attendees || []).map((a) => a.user_id as string)
       const start = new Date(data.start_at)
       const end = new Date(data.end_at)
       setForm({
         entry_type_id: data.entry_type_id,
-        target: data.user_id ?? COMPANY,
+        company_wide: data.user_id === null && attendeeIds.length === 0,
+        attendee_ids: attendeeIds.length > 0 ? attendeeIds : data.user_id ? [data.user_id] : [],
+        department_ids: [],
         title: data.title ?? '',
         all_day: data.all_day,
         start_date: format(start, 'yyyy-MM-dd'),
@@ -171,6 +191,22 @@ export function CalendarEntryDialog({
   }, [open, entryId])
 
   const update = (patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch }))
+
+  const toggleAttendee = (id: string) =>
+    setForm((f) => ({
+      ...f,
+      attendee_ids: f.attendee_ids.includes(id)
+        ? f.attendee_ids.filter((x) => x !== id)
+        : [...f.attendee_ids, id],
+    }))
+
+  const toggleDepartment = (id: string) =>
+    setForm((f) => ({
+      ...f,
+      department_ids: f.department_ids.includes(id)
+        ? f.department_ids.filter((x) => x !== id)
+        : [...f.department_ids, id],
+    }))
 
   // Build ISO timestamps from the date + optional time fields.
   const toTimestamps = () => {
@@ -200,13 +236,41 @@ export function CalendarEntryDialog({
       return
     }
 
-    // Resolve the owner. Engineers can only create for themselves.
-    const userId =
-      form.target === COMPANY ? null : form.target
-    if (!canManageOthers && userId !== profile.id) {
-      setError('You can only add entries to your own calendar.')
+    // Engineers can only ever add entries to their own calendar.
+    const companyWide = canManageOthers && form.company_wide
+
+    // Resolve the final attendee set: directly-picked people plus everyone in
+    // any selected department.
+    const resolved = new Set<string>()
+    if (!companyWide) {
+      if (canManageOthers) {
+        form.attendee_ids.forEach((id) => resolved.add(id))
+        if (form.department_ids.length > 0) {
+          const { data: members } = await supabase
+            .from('profiles')
+            .select('id')
+            .in('department_id', form.department_ids)
+          ;(members || []).forEach((m) => resolved.add(m.id as string))
+        }
+      } else {
+        // Engineer: themselves only.
+        resolved.add(profile.id)
+      }
+    }
+
+    if (!companyWide && resolved.size === 0) {
+      setError('Add at least one person, or mark the entry company-wide.')
       return
     }
+
+    const attendeeIds = Array.from(resolved)
+    // The primary owner keeps legacy single-owner behaviour working and
+    // satisfies the insert policy for engineers (must equal their own id).
+    const userId = companyWide
+      ? null
+      : canManageOthers
+        ? attendeeIds[0] ?? null
+        : profile.id
 
     setSaving(true)
     const payload = {
@@ -220,6 +284,7 @@ export function CalendarEntryDialog({
       notes: form.notes.trim() || null,
     }
 
+    let targetId = entryId
     let dbError
     if (entryId) {
       const { error: err } = await supabase
@@ -228,17 +293,37 @@ export function CalendarEntryDialog({
         .eq('id', entryId)
       dbError = err
     } else {
-      const { error: err } = await supabase
+      const { data: inserted, error: err } = await supabase
         .from('calendar_entries')
         .insert({ ...payload, created_by: profile.id })
+        .select('id')
+        .single()
       dbError = err
+      targetId = inserted?.id ?? null
+    }
+
+    if (dbError || !targetId) {
+      setSaving(false)
+      setError(dbError?.message ?? 'Could not save the entry.')
+      return
+    }
+
+    // Sync attendees: replace the set for this entry.
+    if (entryId) {
+      await supabase.from('calendar_entry_attendees').delete().eq('entry_id', targetId)
+    }
+    if (attendeeIds.length > 0) {
+      const { error: attErr } = await supabase
+        .from('calendar_entry_attendees')
+        .insert(attendeeIds.map((uid) => ({ entry_id: targetId, user_id: uid })))
+      if (attErr) {
+        setSaving(false)
+        setError(`Entry saved, but inviting people failed: ${attErr.message}`)
+        return
+      }
     }
 
     setSaving(false)
-    if (dbError) {
-      setError(dbError.message)
-      return
-    }
     toast.success(entryId ? 'Entry updated' : 'Entry added')
     onOpenChange(false)
     router.refresh()
@@ -260,6 +345,7 @@ export function CalendarEntryDialog({
   }
 
   const readOnly = !editable
+  const attendeeCount = form.attendee_ids.length
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -307,22 +393,76 @@ export function CalendarEntryDialog({
               </div>
 
               {canManageOthers && (
-                <div className="grid gap-2">
-                  <Label>Who is this for?</Label>
-                  <Select value={form.target} onValueChange={(v) => update({ target: v })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={COMPANY}>Company-wide</SelectItem>
-                      {people.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.full_name || p.email}
-                          {p.id === profile.id ? ' (you)' : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="grid gap-3 rounded-lg border p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="entry-company">Company-wide</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Applies to everyone instead of specific people.
+                      </p>
+                    </div>
+                    <Switch
+                      id="entry-company"
+                      checked={form.company_wide}
+                      onCheckedChange={(v) => update({ company_wide: v })}
+                    />
+                  </div>
+
+                  {!form.company_wide && (
+                    <>
+                      <div className="grid gap-2">
+                        <div className="flex items-center justify-between">
+                          <Label>People</Label>
+                          <Badge variant="secondary">{attendeeCount} selected</Badge>
+                        </div>
+                        <ScrollArea className="h-40 rounded-md border">
+                          <div className="grid gap-1 p-2">
+                            {people.map((p) => (
+                              <label
+                                key={p.id}
+                                className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent"
+                              >
+                                <Checkbox
+                                  checked={form.attendee_ids.includes(p.id)}
+                                  onCheckedChange={() => toggleAttendee(p.id)}
+                                />
+                                <span>
+                                  {p.full_name || p.email}
+                                  {p.id === profile.id ? ' (you)' : ''}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </ScrollArea>
+                      </div>
+
+                      {departments.length > 0 && (
+                        <div className="grid gap-2">
+                          <Label>Add whole departments</Label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {departments.map((d) => {
+                              const active = form.department_ids.includes(d.id)
+                              return (
+                                <Button
+                                  key={d.id}
+                                  type="button"
+                                  size="sm"
+                                  variant={active ? 'default' : 'outline'}
+                                  aria-pressed={active}
+                                  onClick={() => toggleDepartment(d.id)}
+                                >
+                                  {d.name}
+                                </Button>
+                              )
+                            })}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Everyone in a selected department is invited when you save.
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
 
@@ -401,7 +541,7 @@ export function CalendarEntryDialog({
                 <div className="space-y-0.5">
                   <Label htmlFor="entry-public">Visible to all staff</Label>
                   <p className="text-xs text-muted-foreground">
-                    When off, only the owner and admin/office can see it.
+                    When off, only the people invited and admin/office can see it.
                   </p>
                 </div>
                 <Switch

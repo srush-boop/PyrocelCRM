@@ -68,11 +68,17 @@ interface PersonOption {
   role: string
 }
 
+interface DepartmentOption {
+  id: string
+  name: string
+}
+
 interface CalendarViewProps {
   items: CalendarItem[]
   routes: RouteCalendarSource[]
   entryTypes: CalendarEntryType[]
   people: PersonOption[]
+  departments: DepartmentOption[]
   profile: Profile
   canManageOthers: boolean
 }
@@ -143,9 +149,10 @@ export function CalendarView({
   routes,
   entryTypes,
   people,
+  departments,
   profile,
   canManageOthers,
-}: CalendarViewProps) {
+  }: CalendarViewProps) {
   const router = useRouter()
   const [view, setView] = useState<ViewMode>('month')
   const [cursor, setCursor] = useState<Date>(new Date())
@@ -435,6 +442,7 @@ export function CalendarView({
         defaultDate={defaultDate}
         entryTypes={entryTypes}
         people={people}
+        departments={departments}
         profile={profile}
         canManageOthers={canManageOthers}
       />

@@ -75,6 +75,13 @@ interface RouteRow {
   assigned_engineer: { id: string; full_name: string | null; email: string; branch_id: string | null } | null
 }
 
+type AttendeeProfile = {
+  id: string
+  full_name: string | null
+  email: string
+  branch_id: string | null
+}
+
 interface EntryRow {
   id: string
   entry_type_id: string
@@ -86,7 +93,9 @@ interface EntryRow {
   is_public: boolean
   notes: string | null
   entry_type: CalendarEntryType | null
-  user: { id: string; full_name: string | null; email: string; branch_id: string | null } | null
+  user: AttendeeProfile | null
+  // Every person invited to this entry (the entry shows on each of their calendars).
+  attendees: { user: AttendeeProfile | null }[] | null
 }
 
 export interface CalendarData {
@@ -96,6 +105,8 @@ export interface CalendarData {
   entryTypes: CalendarEntryType[]
   // Staff who can own items (for the user filter). Engineers get an empty list.
   people: Pick<Profile, 'id' | 'full_name' | 'email' | 'role'>[]
+  // Active departments, used to invite a whole team at once. Managers only.
+  departments: { id: string; name: string }[]
   profile: Profile
   canManageOthers: boolean
   branchScope: BranchScope
@@ -171,7 +182,8 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
       .select(
         `id, entry_type_id, user_id, title, start_at, end_at, all_day, is_public, notes,
            entry_type:calendar_entry_types(*),
-           user:profiles(id, full_name, email, branch_id)`,
+           user:profiles(id, full_name, email, branch_id),
+           attendees:calendar_entry_attendees(user:profiles(id, full_name, email, branch_id))`,
       )
       .order('start_at', { ascending: true }),
     supabase
@@ -190,15 +202,12 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
   // When a branch is active, scope each source by its branch:
   // - tasks: by the task's site branch
   // - routes: by the assigned engineer's branch
-  // - entries: by the owning user's branch (company-wide entries always show)
-  let scopedEntries = entries
+  // - entries: scoped per attendee below (company-wide entries always show)
   if (activeBranchId) {
     tasks = tasks.filter((t) => t.site_service?.site?.branch_id === activeBranchId)
     routeRows = routeRows.filter((r) => r.assigned_engineer?.branch_id === activeBranchId)
-    scopedEntries = entries.filter(
-      (e) => e.user_id === null || e.user?.branch_id === activeBranchId,
-    )
   }
+  const scopedEntries = entries
 
   // Build the recurring-route sources (weekday parsed from the name).
   const routes: RouteCalendarSource[] = routeRows.map((r) => ({
@@ -270,35 +279,63 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
   }
 
   for (const e of scopedEntries) {
-    const ownerName = e.user
-      ? e.user.full_name || e.user.email
-      : 'Company-wide'
-    items.push({
-      id: `entry-${e.id}`,
-      kind: 'entry',
+    // Resolve the people this entry sits with. Each attendee gets their own
+    // calendar block so the entry appears on every invited person's calendar.
+    const attendeeProfiles = (e.attendees || [])
+      .map((a) => a.user)
+      .filter((u): u is AttendeeProfile => Boolean(u))
+
+    // Legacy / company-wide entries with no attendee rows fall back to a single
+    // block owned by the entry's user (or company-wide when unowned).
+    const owners: (AttendeeProfile | null)[] =
+      attendeeProfiles.length > 0 ? attendeeProfiles : [e.user]
+
+    const base = {
+      kind: 'entry' as const,
       title: e.title || e.entry_type?.name || 'Entry',
       start: e.start_at,
       end: e.end_at,
       allDay: e.all_day,
       color: e.entry_type?.color || '#64748b',
-      ownerId: e.user_id,
-      ownerName,
       subtitle: e.entry_type?.name ?? null,
       entryId: e.id,
       entryTypeName: e.entry_type?.name,
       isPublic: e.is_public,
-    })
+    }
+
+    for (const owner of owners) {
+      // Branch scope: hide attendees outside the active branch, but always keep
+      // company-wide (unowned) entries visible.
+      if (activeBranchId && owner && owner.branch_id !== activeBranchId) continue
+
+      items.push({
+        ...base,
+        id: owner ? `entry-${e.id}-${owner.id}` : `entry-${e.id}`,
+        ownerId: owner?.id ?? null,
+        ownerName: owner ? owner.full_name || owner.email : 'Company-wide',
+      })
+    }
   }
 
-  // People list for the user filter (managers only).
+  // People + departments lists for the user filter and the invite picker
+  // (managers only).
   let people: CalendarData['people'] = []
+  let departments: CalendarData['departments'] = []
   if (canManageOthers) {
-    const { data: peopleData } = await supabase
-      .from('profiles')
-      .select('id, full_name, email, role')
-      .order('full_name', { ascending: true })
+    const [{ data: peopleData }, { data: deptData }] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('id, full_name, email, role')
+        .order('full_name', { ascending: true }),
+      supabase
+        .from('departments')
+        .select('id, name')
+        .eq('active', true)
+        .order('name', { ascending: true }),
+    ])
     people = (peopleData || []) as CalendarData['people']
+    departments = (deptData || []) as CalendarData['departments']
   }
 
-  return { items, routes, entryTypes, people, profile, canManageOthers, branchScope }
+  return { items, routes, entryTypes, people, departments, profile, canManageOthers, branchScope }
 }

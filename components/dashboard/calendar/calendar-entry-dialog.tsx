@@ -85,6 +85,10 @@ interface FormState {
   notes: string
 }
 
+// Sentinel for the "None (free text)" option, since Radix Select items cannot
+// use an empty string value.
+const NO_TYPE = '__none__'
+
 function buildDefault(
   profile: Profile,
   entryTypes: CalendarEntryType[],
@@ -226,8 +230,9 @@ export function CalendarEntryDialog({
     e.preventDefault()
     setError(null)
 
-    if (!form.entry_type_id) {
-      setError('Please choose an entry type.')
+    // Free-text entries are allowed: require either a type or a title.
+    if (!form.entry_type_id && !form.title.trim()) {
+      setError('Add a title, or choose an entry type.')
       return
     }
     const { start_at, end_at } = toTimestamps()
@@ -274,7 +279,7 @@ export function CalendarEntryDialog({
 
     setSaving(true)
     const payload = {
-      entry_type_id: form.entry_type_id,
+      entry_type_id: form.entry_type_id || null,
       user_id: userId,
       title: form.title.trim() || null,
       all_day: form.all_day,
@@ -367,16 +372,18 @@ export function CalendarEntryDialog({
           ) : (
             <fieldset disabled={readOnly} className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label>Type *</Label>
+                <Label>Type</Label>
                 <Select
-                  value={form.entry_type_id}
-                  onValueChange={(v) => update({ entry_type_id: v })}
-                  required
+                  value={form.entry_type_id || NO_TYPE}
+                  onValueChange={(v) => update({ entry_type_id: v === NO_TYPE ? '' : v })}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a type" />
+                    <SelectValue placeholder="None (free text)" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value={NO_TYPE}>
+                      <span className="text-muted-foreground">None (free text)</span>
+                    </SelectItem>
                     {entryTypes.map((t) => (
                       <SelectItem key={t.id} value={t.id}>
                         <span className="flex items-center gap-2">
@@ -390,6 +397,9 @@ export function CalendarEntryDialog({
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  Leave as &ldquo;None&rdquo; to create a free-text entry using the title below.
+                </p>
               </div>
 
               {canManageOthers && (

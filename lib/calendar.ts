@@ -304,9 +304,17 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
     }
 
     for (const owner of owners) {
-      // Branch scope: hide attendees outside the active branch, but always keep
-      // company-wide (unowned) entries visible.
-      if (activeBranchId && owner && owner.branch_id !== activeBranchId) continue
+      // Branch scope: hide attendees who belong to a different branch, but never
+      // hide the viewer's own entries or entries owned by someone with no branch
+      // (e.g. admins/office) — otherwise a branch filter would make them vanish.
+      if (
+        activeBranchId &&
+        owner &&
+        owner.id !== user.id &&
+        owner.branch_id != null &&
+        owner.branch_id !== activeBranchId
+      )
+        continue
 
       items.push({
         ...base,

@@ -371,9 +371,6 @@ export function CatalogueManager({
                   </TableCell>
                   <TableCell>
                     <div className="font-medium">{item.name}</div>
-                    {item.description && (
-                      <div className="text-xs text-muted-foreground line-clamp-1">{item.description}</div>
-                    )}
                   </TableCell>
                   <TableCell className="text-sm">{item.category ?? '—'}</TableCell>
                   <TableCell className="text-sm">{item.default_unit ?? '—'}</TableCell>

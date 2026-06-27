@@ -53,6 +53,11 @@ export interface Profile {
   department_id: string | null
   invited_at: string | null
   accepted_at: string | null
+  // Optional working hours (24h "HH:MM[:SS]") and daily lunch allowance in
+  // minutes. Used for future timesheet calculations.
+  work_start_time: string | null
+  work_end_time: string | null
+  lunch_minutes: number | null
   created_at: string
   updated_at: string
   department?: Department | null
@@ -1201,6 +1206,10 @@ export interface CalendarEntry {
   is_public: boolean
   notes: string | null
   created_by: string | null
+  // Non-null for imported entries (e.g. 'uk-bank-holiday'); `source_uid` keys
+  // the upsert so imports stay idempotent.
+  source: string | null
+  source_uid: string | null
   created_at: string
   updated_at: string
   entry_type?: CalendarEntryType
@@ -1243,4 +1252,35 @@ export interface RouteCalendarSource {
   weekday: number | null
   engineerId: string | null
   engineerName: string | null
+}
+
+// =====================================================================
+// Employee Vault
+// An admin-configured launcher of titled sections containing buttons that
+// link out to pages, Jotform forms, Dropbox folders, etc. Visibility of each
+// section and button is gated by role.
+// =====================================================================
+
+export interface VaultButton {
+  id: string
+  section_id: string
+  label: string
+  url: string
+  description: string | null
+  // A lucide icon name (see VAULT_ICONS); null falls back to a default.
+  icon: string | null
+  open_in_new_tab: boolean
+  sort_order: number
+  visible_roles: UserRole[]
+  created_at: string
+}
+
+export interface VaultSection {
+  id: string
+  title: string
+  description: string | null
+  sort_order: number
+  visible_roles: UserRole[]
+  created_at: string
+  buttons?: VaultButton[]
 }

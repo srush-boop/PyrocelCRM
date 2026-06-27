@@ -56,6 +56,7 @@ import {
   Layers,
   Boxes,
   AlertTriangle,
+  Vault,
 } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 import type { LucideIcon } from 'lucide-react'
@@ -191,12 +192,14 @@ const adminNavItems: NavItem[] = [
   { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
   { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
+  { title: 'Employee Vault', href: '/dashboard/vault', icon: Vault },
 ]
 
 const engineerNavItems: NavItem[] = [
   { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
   { title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   engineerStockNavItem,
+  { title: 'Employee Vault', href: '/dashboard/vault', icon: Vault },
 ]
 
 const officeNavItems: NavItem[] = [
@@ -213,6 +216,7 @@ const officeNavItems: NavItem[] = [
   { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
   { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
+  { title: 'Employee Vault', href: '/dashboard/vault', icon: Vault },
 ]
 
 export function DashboardSidebar({ profile }: DashboardSidebarProps) {

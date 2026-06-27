@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { syncUkBankHolidays } from '@/lib/bank-holidays'
 import type {
   CalendarItem,
   CalendarEntryType,
@@ -112,6 +113,9 @@ export async function getCalendarData(): Promise<CalendarData | null> {
   const profile = profileData as Profile
   const isEngineer = profile.role === 'engineer'
   const canManageOthers = profile.role === 'admin' || profile.role === 'office'
+
+  // Ensure UK bank holidays are imported (throttled + idempotent internally).
+  await syncUkBankHolidays()
 
   // --- Tasks (only those with a scheduled date) ---
   let taskQuery = supabase

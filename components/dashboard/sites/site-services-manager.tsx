@@ -502,7 +502,7 @@ export function SiteServicesManager({
 
       {/* Add Multiple Services Dialog */}
       <Dialog open={addServicesOpen} onOpenChange={setAddServicesOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Services to Site</DialogTitle>
             <DialogDescription>
@@ -610,7 +610,7 @@ export function SiteServicesManager({
 
       {/* Schedule One-off Task Dialog */}
       <Dialog open={!!scheduleServiceId} onOpenChange={() => setScheduleServiceId(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Schedule Service Task</DialogTitle>
             <DialogDescription>

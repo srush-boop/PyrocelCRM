@@ -23,6 +23,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Calendar as CalendarComponent } from '@/components/ui/calendar'
 import { 
   Calendar,
@@ -43,6 +51,12 @@ import {
   ChevronRight,
   UserCheck,
   ArrowUpDown,
+  Eye,
+  MapPin,
+  Phone,
+  User,
+  FileText,
+  Wrench,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
@@ -75,6 +89,8 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined)
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined)
   const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null)
+  // Call selected for the read-only "View Call" preview dialog.
+  const [viewTask, setViewTask] = useState<TaskWithDetails | null>(null)
 
   // Bulk assignment state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -295,11 +311,23 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
           </div>
           <AssignControl task={task} className="mt-4" />
           {(isEngineer || profile.role === 'admin') && task.status !== 'completed' && task.status !== 'cancelled' && (
-            <Button asChild className="w-full mt-4" size="sm">
-              <Link href={`/dashboard/tasks/${task.id}`}>
-                {task.status === 'pending' ? 'Start Task' : 'Continue Task'}
-              </Link>
-            </Button>
+            <div className="mt-4 flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                size="sm"
+                onClick={() => setViewTask(task)}
+              >
+                <Eye className="mr-2 h-4 w-4" />
+                View Call
+              </Button>
+              <Button asChild className="flex-1" size="sm">
+                <Link href={`/dashboard/tasks/${task.id}`}>
+                  {task.status === 'pending' ? 'Start Task' : 'Continue Task'}
+                </Link>
+              </Button>
+            </div>
           )}
           {task.status === 'completed' && (
             <Button asChild variant="outline" className="w-full mt-4" size="sm">
@@ -371,6 +399,22 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
             <Badge variant={config.variant} className="text-xs">
               {config.label}
             </Badge>
+            {actionable && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                aria-label={`View call at ${task.site_service?.site?.name}`}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setViewTask(task)
+                }}
+              >
+                <Eye className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            )}
             {actionable && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
           </div>
         </Link>
@@ -726,6 +770,118 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
           </div>
         </div>
       )}
+
+      <Dialog open={!!viewTask} onOpenChange={(open) => !open && setViewTask(null)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+          {viewTask && (() => {
+            const site = viewTask.site_service?.site
+            const config = statusConfig[viewTask.status]
+            const StatusIcon = config.icon
+            const slot = formatBookedSlot(viewTask.booked_start_time, viewTask.booked_end_time)
+            const canStart = viewTask.status !== 'completed' && viewTask.status !== 'cancelled'
+            return (
+              <>
+                <DialogHeader>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <DialogTitle className="truncate">{site?.name}</DialogTitle>
+                      <DialogDescription>
+                        {viewTask.site_service?.service_type?.name}
+                        {viewTask.visit_type?.name ? ` · ${viewTask.visit_type.name}` : ''}
+                      </DialogDescription>
+                    </div>
+                    <Badge variant={config.variant} className="flex shrink-0 items-center gap-1">
+                      <StatusIcon className="h-3 w-3" />
+                      {config.label}
+                    </Badge>
+                  </div>
+                </DialogHeader>
+
+                <div className="space-y-4 text-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <Calendar className="h-4 w-4" />
+                      {formatDateUK(viewTask.scheduled_date)}
+                    </div>
+                    {slot && (
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <Clock className="h-4 w-4" />
+                        {slot}
+                      </div>
+                    )}
+                  </div>
+
+                  {site?.address && (
+                    <div className="flex items-start gap-2">
+                      <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span>
+                        {site.address}
+                        {site.postcode ? `, ${site.postcode}` : ''}
+                      </span>
+                    </div>
+                  )}
+
+                  {site?.contact_name && (
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span>{site.contact_name}</span>
+                    </div>
+                  )}
+
+                  {site?.contact_phone && (
+                    <div className="flex items-center gap-2">
+                      <Phone className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <a href={`tel:${site.contact_phone}`} className="text-primary hover:underline">
+                        {site.contact_phone}
+                      </a>
+                    </div>
+                  )}
+
+                  {!isEngineer && viewTask.site_service?.worker_type && (
+                    <div className="flex items-center gap-2">
+                      <Wrench className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span>{WORKER_TYPE_LABELS[viewTask.site_service.worker_type]}</span>
+                    </div>
+                  )}
+
+                  {viewTask.notes && (
+                    <div className="flex items-start gap-2 rounded-md border bg-muted/40 p-3">
+                      <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                      <div>
+                        <p className="font-medium">Call notes</p>
+                        <p className="text-muted-foreground whitespace-pre-wrap">{viewTask.notes}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {site?.notes && (
+                    <div className="flex items-start gap-2 rounded-md border bg-muted/40 p-3">
+                      <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                      <div>
+                        <p className="font-medium">Site notes</p>
+                        <p className="text-muted-foreground whitespace-pre-wrap">{site.notes}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <DialogFooter className="gap-2 sm:gap-2">
+                  <Button variant="outline" onClick={() => setViewTask(null)}>
+                    Close
+                  </Button>
+                  {(isEngineer || profile.role === 'admin') && canStart && (
+                    <Button asChild>
+                      <Link href={`/dashboard/tasks/${viewTask.id}`}>
+                        {viewTask.status === 'pending' ? 'Start Call' : 'Continue Call'}
+                      </Link>
+                    </Button>
+                  )}
+                </DialogFooter>
+              </>
+            )
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

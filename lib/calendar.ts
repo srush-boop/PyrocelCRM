@@ -59,7 +59,12 @@ interface TaskRow {
   visit_type: { name: string } | null
   // Actual on-site times submitted when the task is executed. Used to place
   // completed tasks on the calendar "in hindsight" even without a booked slot.
-  task_results: { testing_start_time: string | null; testing_end_time: string | null }[] | null
+  // Supabase may return this embed as an array (to-many) or a single object
+  // (to-one), so it is normalised before use.
+  task_results:
+    | { testing_start_time: string | null; testing_end_time: string | null }[]
+    | { testing_start_time: string | null; testing_end_time: string | null }
+    | null
 }
 
 interface RouteRow {
@@ -213,7 +218,12 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
     // Prefer a forward-booked slot; otherwise fall back to the actual on-site
     // times submitted when the task was executed, so completed tasks are added
     // to the calendar "in hindsight".
-    const result = (t.task_results || []).find((r) => r.testing_start_time)
+    const taskResults = Array.isArray(t.task_results)
+      ? t.task_results
+      : t.task_results
+        ? [t.task_results]
+        : []
+    const result = taskResults.find((r) => r.testing_start_time)
     const hasSlot = !!t.booked_start_time
     const hasActual = !!result?.testing_start_time
 

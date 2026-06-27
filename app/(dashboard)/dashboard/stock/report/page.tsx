@@ -20,7 +20,9 @@ export default async function StockReportPage() {
     .eq('id', user.id)
     .single()
 
-  if (!profile || !['admin', 'office', 'engineer'].includes(profile.role)) {
+  // The transfers report exposes stock values, so it is restricted to
+  // managers. Engineers are redirected away.
+  if (!profile || !['admin', 'office'].includes(profile.role)) {
     redirect('/dashboard')
   }
 

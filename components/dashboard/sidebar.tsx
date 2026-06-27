@@ -172,7 +172,6 @@ const engineerStockNavItem: NavItem = {
   children: [
     { title: 'Overview', href: '/dashboard/stock', icon: Boxes },
     { title: 'Transfer Stock', href: '/dashboard/stock/transfer', icon: Route },
-    { title: 'Transfers Report', href: '/dashboard/stock/report', icon: FileText },
   ],
 }
 

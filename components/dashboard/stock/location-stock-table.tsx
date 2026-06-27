@@ -32,7 +32,8 @@ export function LocationStockTable({
   showValue = true,
 }: LocationStockTableProps) {
   const [search, setSearch] = useState('')
-  const [editing, setEditing] = useState<Record<string, string>>({})
+  // In-progress edits to a row's stock profile (min level + target level).
+  const [edits, setEdits] = useState<Record<string, { min: string; target: string }>>({})
   const [savingId, setSavingId] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
@@ -45,14 +46,36 @@ export function LocationStockTable({
     )
   })
 
-  const saveMinLevel = async (item: StockItem) => {
-    const raw = editing[item.id]
-    if (raw === undefined) return
-    const value = Math.max(0, Number.parseInt(raw, 10) || 0)
+  const getEdit = (item: StockItem) =>
+    edits[item.id] ?? { min: String(item.min_level), target: String(item.target_level) }
+
+  const setField = (item: StockItem, field: 'min' | 'target', value: string) =>
+    setEdits((prev) => ({
+      ...prev,
+      [item.id]: { ...getEdit(item), [field]: value },
+    }))
+
+  const isDirty = (item: StockItem) => {
+    const e = edits[item.id]
+    if (!e) return false
+    return (
+      (Number.parseInt(e.min, 10) || 0) !== item.min_level ||
+      (Number.parseInt(e.target, 10) || 0) !== item.target_level
+    )
+  }
+
+  const saveProfile = async (item: StockItem) => {
+    const e = edits[item.id]
+    if (!e) return
+    const min = Math.max(0, Number.parseInt(e.min, 10) || 0)
+    const target = Math.max(0, Number.parseInt(e.target, 10) || 0)
     setSavingId(item.id)
-    await supabase.from('stock_items').update({ min_level: value }).eq('id', item.id)
+    await supabase
+      .from('stock_items')
+      .update({ min_level: min, target_level: target })
+      .eq('id', item.id)
     setSavingId(null)
-    setEditing((prev) => {
+    setEdits((prev) => {
       const next = { ...prev }
       delete next[item.id]
       return next
@@ -80,6 +103,7 @@ export function LocationStockTable({
               <TableHead className="hidden sm:table-cell">SKU</TableHead>
               <TableHead className="text-right">Qty</TableHead>
               <TableHead className="text-right">Min level</TableHead>
+              <TableHead className="text-right">Target</TableHead>
               {showValue && (
                 <>
                   <TableHead className="hidden text-right md:table-cell">Unit cost</TableHead>
@@ -92,7 +116,7 @@ export function LocationStockTable({
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={showValue ? 7 : 5} className="h-24 text-center">
+                <TableCell colSpan={showValue ? 8 : 6} className="h-24 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <Boxes className="mb-2 h-8 w-8 text-muted-foreground/50" />
                     <p className="text-muted-foreground">No stock held here yet</p>
@@ -103,7 +127,12 @@ export function LocationStockTable({
               filtered.map((item) => {
                 const unitCost = item.part?.unit_cost ?? 0
                 const low = item.min_level > 0 && item.quantity <= item.min_level
-                const editValue = editing[item.id]
+                const restockBy =
+                  item.target_level > 0 && item.quantity < item.target_level
+                    ? item.target_level - item.quantity
+                    : 0
+                const edit = getEdit(item)
+                const dirty = isDirty(item)
                 return (
                   <TableRow key={item.id}>
                     <TableCell className="font-medium">
@@ -118,32 +147,46 @@ export function LocationStockTable({
                     <TableCell className="text-right tabular-nums">{item.quantity}</TableCell>
                     <TableCell className="text-right">
                       {canManage ? (
+                        <Input
+                          type="number"
+                          min={0}
+                          inputMode="numeric"
+                          value={edit.min}
+                          onChange={(e) => setField(item, 'min', e.target.value)}
+                          className="ml-auto h-8 w-16 text-right"
+                          aria-label="Minimum level"
+                        />
+                      ) : (
+                        <span className="tabular-nums">{item.min_level}</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {canManage ? (
                         <div className="flex items-center justify-end gap-1">
                           <Input
                             type="number"
                             min={0}
                             inputMode="numeric"
-                            value={editValue ?? String(item.min_level)}
-                            onChange={(e) =>
-                              setEditing((prev) => ({ ...prev, [item.id]: e.target.value }))
-                            }
+                            value={edit.target}
+                            onChange={(e) => setField(item, 'target', e.target.value)}
                             className="h-8 w-16 text-right"
+                            aria-label="Target level"
                           />
-                          {editValue !== undefined && (
+                          {dirty && (
                             <Button
                               size="icon"
                               variant="ghost"
                               className="h-8 w-8"
                               disabled={savingId === item.id}
-                              onClick={() => saveMinLevel(item)}
-                              aria-label="Save minimum level"
+                              onClick={() => saveProfile(item)}
+                              aria-label="Save stock profile"
                             >
                               <Check className="h-4 w-4" />
                             </Button>
                           )}
                         </div>
                       ) : (
-                        <span className="tabular-nums">{item.min_level}</span>
+                        <span className="tabular-nums">{item.target_level || '-'}</span>
                       )}
                     </TableCell>
                     {showValue && (
@@ -161,6 +204,10 @@ export function LocationStockTable({
                         <Badge variant="destructive">Out</Badge>
                       ) : low ? (
                         <Badge variant="secondary">Low</Badge>
+                      ) : restockBy > 0 ? (
+                        <Badge variant="outline" className="text-amber-600">
+                          Restock {restockBy}
+                        </Badge>
                       ) : (
                         <Badge variant="outline">OK</Badge>
                       )}

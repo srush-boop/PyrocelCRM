@@ -49,6 +49,9 @@ export default async function StockLocationPage({
   const lowCount = (items as StockItem[]).filter(
     (i) => i.min_level > 0 && i.quantity <= i.min_level,
   ).length
+  const restockCount = (items as StockItem[]).filter(
+    (i) => i.target_level > 0 && i.quantity < i.target_level,
+  ).length
 
   return (
     <div className="space-y-6">
@@ -70,6 +73,7 @@ export default async function StockLocationPage({
                   : 'Stock location'}
               {isManager ? ` · Held value ${formatGBP(heldValue)}` : ''}
               {lowCount > 0 ? ` · ${lowCount} low-stock` : ''}
+              {restockCount > 0 ? ` · ${restockCount} below target` : ''}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

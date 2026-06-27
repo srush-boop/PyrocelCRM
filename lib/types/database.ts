@@ -1131,13 +1131,15 @@ export interface Part {
   created_at: string
 }
 
-// A part held at a location, with its own minimum re-order level.
+// A part held at a location, with its own minimum re-order level and the
+// target (ideal) quantity that defines the location's stock profile.
 export interface StockItem {
   id: string
   location_id: string
   part_id: string
   quantity: number
   min_level: number
+  target_level: number
   updated_at: string
   part?: Part
   location?: StockLocation

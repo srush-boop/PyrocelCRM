@@ -420,9 +420,9 @@ export async function fetchCataloguePage(options: {
   search?: string
   page?: number
   pageSize?: number
-}): Promise<{ items: QuoteCatalogueItem[]; total: number }> {
+}): Promise<{ items: QuoteCatalogueItem[]; total: number; stockedItemIds: string[] }> {
   const { supabase, error } = await requireStaff()
-  if (error) return { items: [], total: 0 }
+  if (error) return { items: [], total: 0, stockedItemIds: [] }
 
   const pageSize = Math.min(Math.max(options.pageSize ?? 50, 1), 100)
   const page = Math.max(options.page ?? 0, 0)
@@ -440,8 +440,94 @@ export async function fetchCataloguePage(options: {
   }
 
   const { data, count, error: dbError } = await q.order('name').range(from, to)
-  if (dbError || !data) return { items: [], total: 0 }
-  return { items: data as QuoteCatalogueItem[], total: count ?? 0 }
+  if (dbError || !data) return { items: [], total: 0, stockedItemIds: [] }
+
+  // Flag which of these catalogue items already exist as stock parts so the UI
+  // can show an "In stock" badge and avoid adding them twice.
+  const items = data as QuoteCatalogueItem[]
+  let stockedItemIds: string[] = []
+  if (items.length > 0) {
+    const { data: parts } = await supabase
+      .from('parts')
+      .select('catalogue_item_id')
+      .in(
+        'catalogue_item_id',
+        items.map((i) => i.id),
+      )
+    stockedItemIds = (parts || [])
+      .map((p) => (p as { catalogue_item_id: string | null }).catalogue_item_id)
+      .filter((id): id is string => Boolean(id))
+  }
+
+  return { items, total: count ?? 0, stockedItemIds }
+}
+
+// Create stock parts from selected sales-catalogue items so they can be issued
+// to locations. Each part links back to its catalogue item; items already
+// stocked are skipped so nothing is added twice.
+export async function addCatalogueItemsToStock(
+  itemIds: string[],
+): Promise<{ ok: boolean; added: number; skipped: number; error?: string }> {
+  const { supabase, user, error } = await requireStaff()
+  if (error || !user) return { ok: false, added: 0, skipped: 0, error: error ?? 'Not authorised.' }
+
+  const ids = Array.from(new Set(itemIds.filter(Boolean)))
+  if (ids.length === 0) return { ok: false, added: 0, skipped: 0, error: 'No items selected.' }
+
+  // Load the chosen catalogue items.
+  const { data: catItems, error: catErr } = await supabase
+    .from('quote_catalogue_items')
+    .select('id, name, product_code, description, default_unit, unit_cost_pence')
+    .in('id', ids)
+  if (catErr || !catItems) {
+    return { ok: false, added: 0, skipped: 0, error: 'Could not load catalogue items.' }
+  }
+
+  // Skip any already linked to a stock part.
+  const { data: existing } = await supabase
+    .from('parts')
+    .select('catalogue_item_id')
+    .in('catalogue_item_id', ids)
+  const alreadyStocked = new Set(
+    (existing || [])
+      .map((p) => (p as { catalogue_item_id: string | null }).catalogue_item_id)
+      .filter(Boolean),
+  )
+
+  const rows = (
+    catItems as {
+      id: string
+      name: string
+      product_code: string | null
+      description: string | null
+      default_unit: string | null
+      unit_cost_pence: number
+    }[]
+  )
+    .filter((c) => !alreadyStocked.has(c.id))
+    .map((c) => ({
+      name: c.name,
+      sku: c.product_code?.trim() || null,
+      unit: c.default_unit?.trim() || 'each',
+      // parts.unit_cost is stored in pounds; catalogue cost is in pence.
+      unit_cost: Math.round(c.unit_cost_pence) / 100,
+      default_min_level: 0,
+      description: c.description?.trim() || null,
+      catalogue_item_id: c.id,
+      is_active: true,
+    }))
+
+  const skipped = ids.length - rows.length
+  if (rows.length === 0) return { ok: true, added: 0, skipped }
+
+  const { error: insErr } = await supabase.from('parts').insert(rows)
+  if (insErr) {
+    return { ok: false, added: 0, skipped, error: 'Could not add the selected items to stock.' }
+  }
+
+  revalidatePath('/dashboard/stock/parts')
+  revalidatePath('/dashboard/sales/catalogue')
+  return { ok: true, added: rows.length, skipped }
 }
 
 // Resolve a single catalogue item by exact product code (used when a user types

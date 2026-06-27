@@ -1079,3 +1079,89 @@ export interface ProductSheet {
   imported_count: number | null
   is_current: boolean
 }
+
+// =====================================================================
+// Stock / Inventory
+// A "stock profile" is a part held at a location (stock_items row). Money
+// (unit_cost) is stored as pounds (numeric) on the part, not pence.
+// =====================================================================
+
+export type StockLocationKind = 'warehouse' | 'van' | 'other'
+
+export interface StockLocation {
+  id: string
+  name: string
+  kind: StockLocationKind
+  // When set, this is an engineer's personal (van) location.
+  engineer_id: string | null
+  is_active: boolean
+  created_at: string
+  engineer?: Profile | null
+}
+
+export interface Part {
+  id: string
+  sku: string | null
+  name: string
+  description: string | null
+  unit: string
+  unit_cost: number
+  default_min_level: number
+  is_active: boolean
+  created_at: string
+}
+
+// A part held at a location, with its own minimum re-order level.
+export interface StockItem {
+  id: string
+  location_id: string
+  part_id: string
+  quantity: number
+  min_level: number
+  updated_at: string
+  part?: Part
+  location?: StockLocation
+}
+
+export type StockMovementType = 'transfer' | 'usage' | 'receipt' | 'adjustment'
+
+export interface StockMovement {
+  id: string
+  part_id: string
+  from_location_id: string | null
+  to_location_id: string | null
+  quantity: number
+  movement_type: StockMovementType
+  // When stock is used on a job, the task it was used on plus a reference.
+  task_id: string | null
+  job_reference: string | null
+  notes: string | null
+  created_by: string | null
+  created_at: string
+  part?: Part | null
+  from_location?: StockLocation | null
+  to_location?: StockLocation | null
+  created_by_profile?: Profile | null
+  task?: Task | null
+}
+
+// A location enriched with the rolled-up figures shown on the overview.
+export interface StockLocationSummary extends StockLocation {
+  itemCount: number
+  totalQuantity: number
+  heldValue: number
+  lowStockCount: number
+}
+
+// A low-stock alert row (a stock_item at or below its min level).
+export interface LowStockAlert {
+  stock_item_id: string
+  location_id: string
+  location_name: string
+  part_id: string
+  part_name: string
+  sku: string | null
+  unit: string
+  quantity: number
+  min_level: number
+}

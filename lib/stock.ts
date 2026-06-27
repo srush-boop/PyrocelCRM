@@ -8,15 +8,8 @@ import type {
   StockMovement,
 } from '@/lib/types/database'
 
-// Format a pounds value as GBP currency.
-export function formatGBP(value: number): string {
-  return new Intl.NumberFormat('en-GB', {
-    style: 'currency',
-    currency: 'GBP',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value || 0)
-}
+// Re-exported for server-side callers; defined in client-safe lib/utils.
+export { formatGBP } from '@/lib/utils'
 
 // All locations, rolled up with held £ value, item/quantity counts and the
 // number of stock profiles at or below their minimum level. Visible to all
@@ -80,7 +73,7 @@ export async function getLowStockAlerts(): Promise<LowStockAlert[]> {
     part: { name: string; sku: string | null; unit: string } | null
   }
 
-  return ((data || []) as Row[])
+  return ((data || []) as unknown as Row[])
     .filter((r) => r.quantity <= r.min_level)
     .map((r) => ({
       stock_item_id: r.id,
@@ -136,6 +129,60 @@ export async function getStockLocations(): Promise<StockLocation[]> {
     .order('kind')
     .order('name')
   return (data || []) as StockLocation[]
+}
+
+// A selectable job/task that stock can be booked against. Combines the task's
+// site, scheduled date and (if generated) its report reference number.
+export interface JobOption {
+  taskId: string
+  label: string
+  reference: string | null
+  siteName: string
+  scheduledDate: string | null
+}
+
+export async function getJobOptions(limit = 200): Promise<JobOption[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('tasks')
+    .select(
+      `id, scheduled_date, status,
+       site_services(sites(name), service_types(name)),
+       task_results(reference_number)`,
+    )
+    .order('scheduled_date', { ascending: false })
+    .limit(limit)
+
+  type Row = {
+    id: string
+    scheduled_date: string | null
+    status: string | null
+    site_services: {
+      sites: { name: string } | null
+      service_types: { name: string } | null
+    } | null
+    task_results: { reference_number: string | null }[] | null
+  }
+
+  return ((data || []) as unknown as Row[]).map((t) => {
+    const siteName = t.site_services?.sites?.name ?? 'Unknown site'
+    const serviceName = t.site_services?.service_types?.name ?? ''
+    const reference = t.task_results?.[0]?.reference_number ?? null
+    const datePart = t.scheduled_date
+      ? new Date(t.scheduled_date).toLocaleDateString('en-GB')
+      : ''
+    const refPart = reference ? `${reference} · ` : ''
+    const label = `${refPart}${siteName}${serviceName ? ` — ${serviceName}` : ''}${
+      datePart ? ` (${datePart})` : ''
+    }`
+    return {
+      taskId: t.id,
+      label,
+      reference,
+      siteName,
+      scheduledDate: t.scheduled_date,
+    }
+  })
 }
 
 // Recent stock movements with related part / location / user / task details.

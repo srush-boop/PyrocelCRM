@@ -33,7 +33,7 @@ import {
 import { MoreHorizontal, Pencil, Trash2, Search, Package } from 'lucide-react'
 import { EditPartDialog } from './edit-part-dialog'
 import type { Part } from '@/lib/types/database'
-import { formatGBP } from '@/lib/stock'
+import { formatGBP } from '@/lib/utils'
 
 interface PartsTableProps {
   parts: Part[]

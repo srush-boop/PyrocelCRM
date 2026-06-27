@@ -5,7 +5,7 @@ import { Warehouse, Truck, Package, AlertTriangle, ChevronRight } from 'lucide-r
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import type { StockLocationSummary, StockLocationKind } from '@/lib/types/database'
-import { formatGBP } from '@/lib/stock'
+import { formatGBP } from '@/lib/utils'
 
 interface LocationsOverviewProps {
   locations: StockLocationSummary[]

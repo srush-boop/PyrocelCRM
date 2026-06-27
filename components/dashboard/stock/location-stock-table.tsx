@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Boxes, Search, Check } from 'lucide-react'
 import type { StockItem } from '@/lib/types/database'
-import { formatGBP } from '@/lib/stock'
+import { formatGBP } from '@/lib/utils'
 
 interface LocationStockTableProps {
   items: StockItem[]

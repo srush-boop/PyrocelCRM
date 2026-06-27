@@ -56,3 +56,13 @@ export function formatTimeUK(date: Date | string): string {
 export function formatNumberUK(value: number): string {
   return value.toLocaleString(UK_LOCALE)
 }
+
+// Format a pounds value as GBP currency (client-safe).
+export function formatGBP(value: number): string {
+  return new Intl.NumberFormat(UK_LOCALE, {
+    style: 'currency',
+    currency: 'GBP',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value || 0)
+}

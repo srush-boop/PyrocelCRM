@@ -178,6 +178,8 @@ export interface Route {
   name: string
   description: string | null
   assigned_engineer_id: string | null
+  // Colour used to render this route's recurring weekly band on the calendar.
+  color: string
   created_at: string
   updated_at: string
   assigned_engineer?: Profile | null
@@ -1205,9 +1207,9 @@ export interface CalendarEntry {
   user?: Profile | null
 }
 
-// A normalised item the calendar can render, derived from either a booked
-// task or a general entry. `start`/`end` are ISO datetime strings.
-export type CalendarItemKind = 'task' | 'entry'
+// A normalised item the calendar can render, derived from a booked task, a
+// general entry, or a recurring route. `start`/`end` are ISO datetime strings.
+export type CalendarItemKind = 'task' | 'entry' | 'route'
 
 export interface CalendarItem {
   id: string
@@ -1217,7 +1219,7 @@ export interface CalendarItem {
   end: string
   allDay: boolean
   color: string
-  // The person this item belongs to (engineer for tasks, user for entries).
+  // The person this item belongs to (engineer for tasks/routes, user for entries).
   ownerId: string | null
   ownerName: string | null
   // Extra context for the detail popover / list row.
@@ -1225,6 +1227,20 @@ export interface CalendarItem {
   // Original source ids so the UI can link through.
   taskId?: string
   entryId?: string
+  routeId?: string
   entryTypeName?: string
   isPublic?: boolean
+}
+
+// A route that recurs weekly on the calendar. The weekday is derived from the
+// route's name (e.g. "Friday 01" recurs every Friday). `weekday` follows the
+// JS convention (0 = Sunday … 6 = Saturday); null means no weekday could be
+// parsed from the name, so the route is not shown as a recurrence.
+export interface RouteCalendarSource {
+  id: string
+  name: string
+  color: string
+  weekday: number | null
+  engineerId: string | null
+  engineerName: string | null
 }

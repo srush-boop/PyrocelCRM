@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   addDays,
   addMonths,
@@ -10,6 +11,7 @@ import {
   endOfMonth,
   endOfWeek,
   format,
+  getDay,
   isSameDay,
   isSameMonth,
   isWithinInterval,
@@ -52,6 +54,7 @@ import type {
   CalendarItem,
   CalendarEntryType,
   Profile,
+  RouteCalendarSource,
 } from '@/lib/types/database'
 import { CalendarEntryDialog } from './calendar-entry-dialog'
 
@@ -66,6 +69,7 @@ interface PersonOption {
 
 interface CalendarViewProps {
   items: CalendarItem[]
+  routes: RouteCalendarSource[]
   entryTypes: CalendarEntryType[]
   people: PersonOption[]
   profile: Profile
@@ -73,6 +77,40 @@ interface CalendarViewProps {
 }
 
 const ALL = '__all__'
+
+// Expands recurring weekly routes into all-day calendar items for every
+// matching weekday within [rangeStart, rangeEnd].
+function buildRouteItems(
+  routes: RouteCalendarSource[],
+  rangeStart: Date,
+  rangeEnd: Date,
+): CalendarItem[] {
+  const recurring = routes.filter((r) => r.weekday !== null)
+  if (recurring.length === 0) return []
+  const days = eachDayOfInterval({ start: rangeStart, end: rangeEnd })
+  const out: CalendarItem[] = []
+  for (const day of days) {
+    const dow = getDay(day)
+    for (const r of recurring) {
+      if (r.weekday !== dow) continue
+      const key = format(day, 'yyyy-MM-dd')
+      out.push({
+        id: `route-${r.id}-${key}`,
+        kind: 'route',
+        title: r.name,
+        start: `${key}T00:00:00`,
+        end: `${key}T23:59:00`,
+        allDay: true,
+        color: r.color,
+        ownerId: r.engineerId,
+        ownerName: r.engineerName,
+        subtitle: r.engineerName ? `Route · ${r.engineerName}` : 'Route',
+        routeId: r.id,
+      })
+    }
+  }
+  return out
+}
 
 function itemsForDay(items: CalendarItem[], day: Date): CalendarItem[] {
   return items
@@ -101,11 +139,13 @@ function timeLabel(item: CalendarItem): string {
 
 export function CalendarView({
   items,
+  routes,
   entryTypes,
   people,
   profile,
   canManageOthers,
 }: CalendarViewProps) {
+  const router = useRouter()
   const [view, setView] = useState<ViewMode>('month')
   const [cursor, setCursor] = useState<Date>(new Date())
   const [selected, setSelected] = useState<CalendarItem | null>(null)
@@ -120,8 +160,32 @@ export function CalendarView({
   const [editEntryId, setEditEntryId] = useState<string | null>(null)
   const [defaultDate, setDefaultDate] = useState<Date | null>(null)
 
+  // The visible date window for the current view, used to expand recurring
+  // routes into concrete occurrences.
+  const [rangeStart, rangeEnd] = useMemo<[Date, Date]>(() => {
+    if (view === 'month') {
+      return [
+        startOfWeek(startOfMonth(cursor), { weekStartsOn: 1 }),
+        endOfWeek(endOfMonth(cursor), { weekStartsOn: 1 }),
+      ]
+    }
+    if (view === 'week') {
+      return [
+        startOfWeek(cursor, { weekStartsOn: 1 }),
+        endOfWeek(cursor, { weekStartsOn: 1 }),
+      ]
+    }
+    // list/agenda: from the cursor day for the next eight weeks
+    return [startOfDay(cursor), addWeeks(cursor, 8)]
+  }, [view, cursor])
+
+  // Tasks/entries combined with the route occurrences for the visible window.
+  const allItems = useMemo(() => {
+    return [...items, ...buildRouteItems(routes, rangeStart, rangeEnd)]
+  }, [items, routes, rangeStart, rangeEnd])
+
   const filtered = useMemo(() => {
-    return items.filter((it) => {
+    return allItems.filter((it) => {
       if (kindFilter !== ALL && it.kind !== kindFilter) return false
       if (personFilter !== ALL) {
         if (personFilter === 'company' ? it.ownerId !== null : it.ownerId !== personFilter)
@@ -132,7 +196,16 @@ export function CalendarView({
       }
       return true
     })
-  }, [items, kindFilter, personFilter, typeFilter])
+  }, [allItems, kindFilter, personFilter, typeFilter])
+
+  // Selecting a task opens it directly; routes and entries open the detail sheet.
+  const handleSelect = (it: CalendarItem) => {
+    if (it.kind === 'task' && it.taskId) {
+      router.push(`/dashboard/tasks/${it.taskId}`)
+      return
+    }
+    setSelected(it)
+  }
 
   const openNewEntry = (date?: Date) => {
     setEditEntryId(null)
@@ -205,6 +278,7 @@ export function CalendarView({
           <SelectContent>
             <SelectItem value={ALL}>All items</SelectItem>
             <SelectItem value="task">Booked tasks</SelectItem>
+            <SelectItem value="route">Routes</SelectItem>
             <SelectItem value="entry">General entries</SelectItem>
           </SelectContent>
         </Select>
@@ -247,15 +321,15 @@ export function CalendarView({
         <MonthGrid
           cursor={cursor}
           items={filtered}
-          onSelect={setSelected}
+          onSelect={handleSelect}
           onAddDay={openNewEntry}
         />
       )}
       {view === 'week' && (
-        <WeekGrid cursor={cursor} items={filtered} onSelect={setSelected} onAddDay={openNewEntry} />
+        <WeekGrid cursor={cursor} items={filtered} onSelect={handleSelect} onAddDay={openNewEntry} />
       )}
       {view === 'list' && (
-        <AgendaList cursor={cursor} items={filtered} onSelect={setSelected} />
+        <AgendaList cursor={cursor} items={filtered} onSelect={handleSelect} />
       )}
 
       {/* Detail sheet */}
@@ -273,7 +347,11 @@ export function CalendarView({
                   {selected.title}
                 </SheetTitle>
                 <SheetDescription>
-                  {selected.kind === 'task' ? 'Booked service task' : selected.entryTypeName}
+                  {selected.kind === 'task'
+                    ? 'Booked service task'
+                    : selected.kind === 'route'
+                      ? 'Recurring route'
+                      : selected.entryTypeName}
                 </SheetDescription>
               </SheetHeader>
 
@@ -311,6 +389,14 @@ export function CalendarView({
                       <Link href={`/dashboard/tasks/${selected.taskId}`}>
                         <ExternalLink className="mr-2 h-4 w-4" />
                         Open task
+                      </Link>
+                    </Button>
+                  )}
+                  {selected.kind === 'route' && (
+                    <Button asChild variant="outline" size="sm">
+                      <Link href="/dashboard/routes">
+                        <ExternalLink className="mr-2 h-4 w-4" />
+                        Manage route
                       </Link>
                     </Button>
                   )}
@@ -581,7 +667,11 @@ function AgendaList({
                   <div className="shrink-0 text-right">
                     <p className="text-xs font-medium">{timeLabel(it)}</p>
                     <Badge variant="outline" className="mt-1 text-[10px]">
-                      {it.kind === 'task' ? 'Task' : it.entryTypeName}
+                      {it.kind === 'task'
+                        ? 'Task'
+                        : it.kind === 'route'
+                          ? 'Route'
+                          : it.entryTypeName}
                     </Badge>
                   </div>
                 </button>

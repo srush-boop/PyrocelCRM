@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Loader2 } from 'lucide-react'
+import { ServiceColorPicker } from '@/components/dashboard/service-types/service-color-picker'
 import type { Route, Profile } from '@/lib/types/database'
 
 interface EditRouteDialogProps {
@@ -38,6 +39,7 @@ export function EditRouteDialog({ route, engineers, open, onOpenChange }: EditRo
     name: route.name,
     description: route.description || '',
     assigned_engineer_id: route.assigned_engineer_id || '',
+    color: route.color || '#2563eb',
   })
   const router = useRouter()
   const supabase = createClient()
@@ -132,6 +134,12 @@ export function EditRouteDialog({ route, engineers, open, onOpenChange }: EditRo
                 </SelectContent>
               </Select>
             </div>
+            <ServiceColorPicker
+              value={formData.color}
+              onChange={(color) => setFormData({ ...formData, color })}
+              label="Calendar colour"
+              description="Distinguishes this route on the master calendar. Name the route with a weekday (e.g. 'Friday 01') to recur weekly."
+            />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

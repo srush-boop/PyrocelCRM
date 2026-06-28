@@ -45,6 +45,7 @@ import {
   Plus,
   CheckCheck,
   Ban,
+  ExternalLink,
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'

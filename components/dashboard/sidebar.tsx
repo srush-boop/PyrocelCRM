@@ -34,13 +34,10 @@ import {
   Calendar,
   CalendarDays,
   FileText,
-  Wind,
-  FireExtinguisher,
   MapPinned,
   HardHat,
   KeyRound,
   FolderOpen,
-  Lightbulb,
   Gauge,
   ChevronRight,
   HelpCircle,
@@ -79,24 +76,13 @@ type NavItem = {
   children?: NavChild[]
 }
 
-// Sites acts as a parent: "Open Sites" links to the sites list, while the
-// individual asset registers (dampers, extinguishers, emergency lights) are
-// condensed into a nested "Assets" group.
+// Sites is a simple link that opens the sites list. Asset registers (dampers,
+// extinguishers, emergency lights) are accessed from within each site rather
+// than the main menu.
 const sitesNavItem: NavItem = {
   title: 'Sites',
+  href: '/dashboard/sites',
   icon: Building2,
-  children: [
-    { title: 'Open Sites', href: '/dashboard/sites', icon: Building2 },
-    {
-      title: 'Assets',
-      icon: Boxes,
-      children: [
-        { title: 'Dampers', href: '/dashboard/dampers', icon: Wind },
-        { title: 'Extinguishers', href: '/dashboard/extinguishers', icon: FireExtinguisher },
-        { title: 'Emergency Lights', href: '/dashboard/emergency-lights', icon: Lightbulb },
-      ],
-    },
-  ],
 }
 
 // Service Management groups the operational setup of how services are

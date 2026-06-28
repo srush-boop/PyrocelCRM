@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ExternalLink, Vault } from 'lucide-react'
+import { ChevronRight, ExternalLink, Vault } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { getVaultIcon } from '@/lib/vault-icons'
 import type { VaultSection } from '@/lib/types/database'
@@ -33,15 +33,24 @@ export function VaultGrid({ sections, isAdmin }: VaultGridProps) {
   return (
     <div className="space-y-8">
       {populated.map((section) => (
-        <section key={section.id} aria-label={section.title} className="space-y-3">
-          <div>
-            <h2 className="text-lg font-semibold">{section.title}</h2>
-            {section.description && (
-              <p className="text-sm text-muted-foreground text-pretty">{section.description}</p>
-            )}
-          </div>
+        <details
+          key={section.id}
+          className="group rounded-lg border bg-card [&[open]>summary_.vault-chevron]:rotate-90"
+        >
+          <summary className="flex cursor-pointer list-none items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
+            <ChevronRight className="vault-chevron h-4 w-4 shrink-0 text-muted-foreground transition-transform" />
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold leading-tight">{section.title}</h2>
+              {section.description && (
+                <p className="text-sm text-muted-foreground text-pretty">
+                  {section.description}
+                </p>
+              )}
+            </div>
+          </summary>
 
-          {section.buttons && section.buttons.length > 0 ? (
+          <div className="border-t p-4">
+            {section.buttons && section.buttons.length > 0 ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {section.buttons.map((button) => {
                 const Icon = getVaultIcon(button.icon)
@@ -77,8 +86,9 @@ export function VaultGrid({ sections, isAdmin }: VaultGridProps) {
             <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
               No buttons in this section yet.
             </p>
-          )}
-        </section>
+            )}
+          </div>
+        </details>
       ))}
     </div>
   )

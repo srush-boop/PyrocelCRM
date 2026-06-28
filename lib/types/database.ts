@@ -295,6 +295,8 @@ export interface Site {
     description: string | null
     location: string | null
     install_date: string | null
+    /** URL to the Nimbus fire alarm monitoring portal for this system. */
+    nimbus_url: string | null
     active: boolean
     position: number
     created_at: string

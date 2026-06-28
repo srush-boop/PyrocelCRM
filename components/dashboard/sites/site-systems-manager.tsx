@@ -75,6 +75,7 @@ export function SiteSystemsManager({
     system_type_id: '',
     description: '',
     install_date: '',
+    nimbus_url: '',
   })
 
   // Add-services-to-a-system flow
@@ -86,6 +87,13 @@ export function SiteSystemsManager({
   function systemTypeName(id: string | null): string | null {
     if (!id) return null
     return systemTypes.find((s) => s.id === id)?.name ?? null
+  }
+
+  // Nimbus is the fire alarm remote-monitoring portal, so the URL field is only
+  // relevant for fire alarm systems.
+  function isFireAlarmSystemType(id: string | null): boolean {
+    const name = systemTypeName(id)?.toLowerCase() ?? ''
+    return name.includes('fire alarm')
   }
 
   function systemTypeLabel(id: string | null): string | null {

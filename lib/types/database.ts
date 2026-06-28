@@ -184,6 +184,22 @@ export interface ChecklistTemplate {
   service_type?: ServiceType
 }
 
+// Client-specific checklist items appended to the engineer's checklist. Scoped
+// by client and, optionally, by system type(s) and service type(s). An empty
+// array for either scope means "applies to all" of that dimension.
+export interface ClientChecklistItem {
+  id: string
+  client_id: string
+  label: string
+  type: 'pass_fail' | 'text' | 'number' | 'checkbox'
+  required: boolean
+  system_type_ids: string[]
+  service_type_ids: string[]
+  position: number
+  created_at: string
+  updated_at: string
+}
+
 export interface Route {
   id: string
   name: string

@@ -13,6 +13,7 @@ import type {
   Profile,
   TaskWithDetails,
   ChecklistTemplate,
+  ClientChecklistItem,
   Damper,
   DamperInspection,
   Mcp,
@@ -200,13 +201,66 @@ export default async function TaskPage({ params }: PageProps) {
     .eq('service_type_id', task.site_service.service_type_id)
 
   const templates = (checklistTemplates || []) as ChecklistTemplate[]
-  const checklistTemplate =
+  let checklistTemplate =
     (task.visit_type_id
       ? templates.find((t) => t.visit_type_id === task.visit_type_id)
       : undefined) ??
     templates.find((t) => !t.visit_type_id) ??
     templates[0] ??
     null
+
+  // Append any client-specific checklist items that match this task's system
+  // type and service type. Items with an empty scope array apply to all.
+  const clientId = task.site_service?.site?.client_id
+  if (clientId) {
+    // The system type comes from the system this service is attached to.
+    let systemTypeId: string | null = null
+    if (task.site_service?.site_system_id) {
+      const { data: linkedSystem } = await supabase
+        .from('site_systems')
+        .select('system_type_id')
+        .eq('id', task.site_service.site_system_id)
+        .maybeSingle()
+      systemTypeId = linkedSystem?.system_type_id ?? null
+    }
+
+    const { data: clientItems } = await supabase
+      .from('client_checklist_items')
+      .select('*')
+      .eq('client_id', clientId)
+      .order('position', { ascending: true })
+
+    const serviceTypeId = task.site_service?.service_type_id
+    const matched = ((clientItems || []) as ClientChecklistItem[]).filter((item) => {
+      const systemOk =
+        item.system_type_ids.length === 0 ||
+        (systemTypeId !== null && item.system_type_ids.includes(systemTypeId))
+      const serviceOk =
+        item.service_type_ids.length === 0 ||
+        (serviceTypeId != null && item.service_type_ids.includes(serviceTypeId))
+      return systemOk && serviceOk
+    })
+
+    if (matched.length > 0) {
+      const extraItems = matched.map((item) => ({
+        id: `client-${item.id}`,
+        label: item.label,
+        type: item.type,
+        required: item.required,
+      }))
+      // Merge onto the existing template, or synthesise one if none exists so the
+      // client items still reach the engineer.
+      checklistTemplate = {
+        id: checklistTemplate?.id ?? `synthetic-${task.site_service.service_type_id}`,
+        service_type_id: task.site_service.service_type_id,
+        visit_type_id: checklistTemplate?.visit_type_id ?? task.visit_type_id ?? null,
+        name: checklistTemplate?.name ?? 'Checklist',
+        items: [...(checklistTemplate?.items ?? []), ...extraItems],
+        created_at: checklistTemplate?.created_at ?? new Date().toISOString(),
+        updated_at: checklistTemplate?.updated_at ?? new Date().toISOString(),
+      } as ChecklistTemplate
+    }
+  }
 
   // Fetch existing task result if any
   const { data: taskResult } = await supabase

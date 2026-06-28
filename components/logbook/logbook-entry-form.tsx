@@ -21,6 +21,9 @@ export interface LogbookEntryFormValues {
   entry_date: string
   title: string
   details: string
+  result: string
+  call_point_ref: string
+  call_point_location: string
   performed_by: string
 }
 
@@ -40,10 +43,16 @@ export function LogbookEntryForm({ onSubmit, performedByLabel = 'Performed by' }
   const [entryDate, setEntryDate] = useState(today())
   const [title, setTitle] = useState('')
   const [details, setDetails] = useState('')
+  const [result, setResult] = useState('')
+  const [callPointRef, setCallPointRef] = useState('')
+  const [callPointLocation, setCallPointLocation] = useState('')
   const [performedBy, setPerformedBy] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   const meta = getLogbookEntryMeta(entryType)
+  // Weekly fire alarm tests rotate through call points, so capture which one
+  // was tested (number + location) in addition to the result.
+  const isAlarmTest = entryType === 'weekly_alarm_test'
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -53,6 +62,9 @@ export function LogbookEntryForm({ onSubmit, performedByLabel = 'Performed by' }
       entry_date: entryDate,
       title: title.trim(),
       details: details.trim(),
+      result: result.trim(),
+      call_point_ref: isAlarmTest ? callPointRef.trim() : '',
+      call_point_location: isAlarmTest ? callPointLocation.trim() : '',
       performed_by: performedBy.trim(),
     })
     setSubmitting(false)
@@ -63,6 +75,9 @@ export function LogbookEntryForm({ onSubmit, performedByLabel = 'Performed by' }
     toast.success('Log book entry added')
     setTitle('')
     setDetails('')
+    setResult('')
+    setCallPointRef('')
+    setCallPointLocation('')
     setPerformedBy('')
     setEntryDate(today())
   }
@@ -108,7 +123,40 @@ export function LogbookEntryForm({ onSubmit, performedByLabel = 'Performed by' }
           id="title"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="e.g. Weekly test - call point 3 (reception)"
+          placeholder="e.g. Weekly fire alarm test"
+        />
+      </div>
+
+      {isAlarmTest && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="call_point_ref">Call point number</Label>
+            <Input
+              id="call_point_ref"
+              value={callPointRef}
+              onChange={(e) => setCallPointRef(e.target.value)}
+              placeholder="e.g. MCP 3"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="call_point_location">Call point description / location</Label>
+            <Input
+              id="call_point_location"
+              value={callPointLocation}
+              onChange={(e) => setCallPointLocation(e.target.value)}
+              placeholder="e.g. Reception, main entrance"
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <Label htmlFor="result">Result</Label>
+        <Input
+          id="result"
+          value={result}
+          onChange={(e) => setResult(e.target.value)}
+          placeholder="e.g. Pass — alarm sounded correctly"
         />
       </div>
 
@@ -118,7 +166,7 @@ export function LogbookEntryForm({ onSubmit, performedByLabel = 'Performed by' }
           id="details"
           value={details}
           onChange={(e) => setDetails(e.target.value)}
-          placeholder="Result, observations, faults found, remedial action…"
+          placeholder="Observations, faults found, remedial action…"
           rows={3}
         />
       </div>

@@ -323,6 +323,14 @@ export function DashboardSidebar({ profile }: DashboardSidebarProps) {
       <SidebarFooter className="border-t border-sidebar-border p-4">
         <SidebarMenu>
           <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname === '/dashboard/about'}>
+              <Link href="/dashboard/about">
+                <BookOpen className="h-4 w-4" />
+                <span>About</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname === '/dashboard/help'}>
               <Link href="/dashboard/help">
                 <HelpCircle className="h-4 w-4" />

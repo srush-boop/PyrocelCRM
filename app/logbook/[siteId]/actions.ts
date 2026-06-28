@@ -148,6 +148,9 @@ export async function addOccupierEntry(
     entry_date: string
     title: string
     details: string
+    result: string
+    call_point_ref: string
+    call_point_location: string
     performed_by: string
   },
 ): Promise<{ ok: boolean; error?: string }> {
@@ -169,6 +172,9 @@ export async function addOccupierEntry(
     entry_date: values.entry_date,
     title: values.title || null,
     details: values.details || null,
+    result: values.result || null,
+    call_point_ref: values.call_point_ref || null,
+    call_point_location: values.call_point_location || null,
     performed_by: values.performed_by || null,
     source: 'occupier',
   })

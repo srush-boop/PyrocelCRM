@@ -247,6 +247,12 @@ export interface Site {
     entry_date: string
     title: string | null
     details: string | null
+    /** Outcome of the check, e.g. Pass / Fail / observation summary. */
+    result: string | null
+    /** Manual call point number/URN tested (weekly fire alarm test). */
+    call_point_ref: string | null
+    /** Description/location of the call point tested (weekly fire alarm test). */
+    call_point_location: string | null
     performed_by: string | null
     source: 'occupier' | 'staff'
     created_by: string | null

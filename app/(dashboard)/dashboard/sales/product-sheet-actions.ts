@@ -198,35 +198,40 @@ export async function importProductSheet(sheetId?: string): Promise<ImportResult
     return { ok: false, error: 'No valid product rows were found in the spreadsheet.' }
   }
 
-  // Match against existing catalogue items by lowercased name, keeping their
-  // current margin so re-importing supplier costs doesn't wipe set margins.
+  // Match against existing catalogue items, keeping their current margin so
+  // re-importing supplier costs doesn't wipe set margins. The match key mirrors
+  // the unique index on the table: lower(name) + lower(product_code). Matching
+  // on this exact key guarantees an existing row is always updated rather than
+  // re-inserted, so a repeated import can never trip the unique constraint.
+  const dedupeKey = (name: string, code: string | null) =>
+    `${name.trim().toLowerCase()}|${(code ?? '').trim().toLowerCase()}`
+
   const { data: existingData } = await supabase
     .from('quote_catalogue_items')
     .select('id, name, product_code, margin_percent')
-  // Index existing items by product code (preferred) and by lowercased name
-  // (fallback) so re-imports update the right rows rather than duplicating.
   type ExistingItem = { id: string; margin_percent: number }
-  const byCode = new Map<string, ExistingItem>()
-  const byName = new Map<string, ExistingItem>()
+  const byKey = new Map<string, ExistingItem>()
   for (const item of (existingData ?? []) as Array<{
     id: string
     name: string
     product_code: string | null
     margin_percent: number
   }>) {
-    const ref = { id: item.id, margin_percent: item.margin_percent ?? 0 }
-    if (item.product_code) byCode.set(item.product_code.toLowerCase(), ref)
-    byName.set(item.name.toLowerCase(), ref)
+    byKey.set(dedupeKey(item.name, item.product_code), {
+      id: item.id,
+      margin_percent: item.margin_percent ?? 0,
+    })
   }
 
   let imported = 0
   let updated = 0
-  const toInsert: Array<Record<string, unknown>> = []
+  // Collapse rows that repeat within the spreadsheet itself (last one wins) so
+  // a single import never tries to insert two rows with the same natural key.
+  const toInsert = new Map<string, Record<string, unknown>>()
 
   for (const p of parsed) {
-    const match =
-      (p.product_code ? byCode.get(p.product_code.toLowerCase()) : undefined) ??
-      byName.get(p.name.toLowerCase())
+    const key = dedupeKey(p.name, p.product_code)
+    const match = byKey.get(key)
     if (match) {
       const margin = match.margin_percent ?? 0
       const { error: upErr } = await supabase
@@ -245,19 +250,19 @@ export async function importProductSheet(sheetId?: string): Promise<ImportResult
         .eq('id', match.id)
       if (!upErr) updated++
     } else {
-      toInsert.push({ ...p, active: true, created_by: user.id })
+      toInsert.set(key, { ...p, active: true, created_by: user.id })
     }
   }
 
-  if (toInsert.length > 0) {
+  if (toInsert.size > 0) {
     const { error: insErr, count } = await supabase
       .from('quote_catalogue_items')
-      .insert(toInsert, { count: 'exact' })
+      .insert(Array.from(toInsert.values()), { count: 'exact' })
     if (insErr) {
       console.error('[v0] Catalogue insert error:', insErr)
       return { ok: false, error: 'Could not import all products into the catalogue.' }
     }
-    imported = count ?? toInsert.length
+    imported = count ?? toInsert.size
   }
 
   // Record import stats on the sheet.

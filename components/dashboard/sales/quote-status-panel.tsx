@@ -72,7 +72,7 @@ export function QuoteStatusPanel({ quote }: { quote: Quote }) {
 
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" size="sm" asChild>
-          <Link href={`/dashboard/sales/${quote.id}/print`} target="_blank">
+          <Link href={`/dashboard/sales/${quote.id}/print`}>
             <Printer className="mr-2 h-4 w-4" />
             View / PDF
           </Link>
@@ -81,7 +81,7 @@ export function QuoteStatusPanel({ quote }: { quote: Quote }) {
         {/* Staff can always generate the full equipment specification (part
             numbers + standard descriptions + spec detail) for the client. */}
         <Button variant="outline" size="sm" asChild>
-          <Link href={`/dashboard/sales/${quote.id}/spec`} target="_blank">
+          <Link href={`/dashboard/sales/${quote.id}/spec`}>
             <FileText className="mr-2 h-4 w-4" />
             Equipment spec
           </Link>

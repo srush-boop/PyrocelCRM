@@ -179,7 +179,7 @@ const adminNavItems: NavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { title: 'Clients', href: '/dashboard/clients', icon: Building },
   sitesNavItem,
-  { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
+  { title: 'Calls', href: '/dashboard/schedule', icon: Calendar },
   { title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   adminServiceManagementNavItem,
   { title: 'Users', href: '/dashboard/engineers', icon: Users },
@@ -194,8 +194,8 @@ const adminNavItems: NavItem[] = [
   { title: 'Employee Vault', href: '/dashboard/vault', icon: Vault },
 ]
 
-const engineerNavItems: NavItem[] = [
-  { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
+  const engineerNavItems: NavItem[] = [
+  { title: 'Calls', href: '/dashboard/schedule', icon: Calendar },
   { title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   engineerStockNavItem,
   { title: 'Employee Vault', href: '/dashboard/vault', icon: Vault },
@@ -205,7 +205,7 @@ const officeNavItems: NavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { title: 'Clients', href: '/dashboard/clients', icon: Building },
   sitesNavItem,
-  { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
+  { title: 'Calls', href: '/dashboard/schedule', icon: Calendar },
   { title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   officeServiceManagementNavItem,
   { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },

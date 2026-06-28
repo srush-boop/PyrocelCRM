@@ -4,6 +4,10 @@ import { redirect } from 'next/navigation'
 import { ClientsTable } from '@/components/dashboard/clients/clients-table'
 import type { Client, Profile, Site } from '@/lib/types/database'
 
+// Always read fresh client data so a newly added client appears immediately
+// after the add dialog refreshes the route.
+export const dynamic = 'force-dynamic'
+
 export default async function ClientsPage() {
   const supabase = await createClient()
   

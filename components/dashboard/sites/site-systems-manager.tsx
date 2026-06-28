@@ -111,7 +111,7 @@ export function SiteSystemsManager({
 
   function openAdd() {
     setEditing(null)
-    setForm({ system_type_id: '', description: '', install_date: '' })
+    setForm({ system_type_id: '', description: '', install_date: '', nimbus_url: '' })
     setDialogOpen(true)
   }
 
@@ -121,6 +121,7 @@ export function SiteSystemsManager({
       system_type_id: system.system_type_id ?? '',
       description: system.description ?? '',
       install_date: system.install_date ?? '',
+      nimbus_url: system.nimbus_url ?? '',
     })
     setDialogOpen(true)
   }
@@ -138,6 +139,10 @@ export function SiteSystemsManager({
       system_type_id: form.system_type_id,
       description: form.description.trim() || null,
       install_date: form.install_date || null,
+      // Nimbus only applies to fire alarm systems; clear it otherwise.
+      nimbus_url: isFireAlarmSystemType(form.system_type_id)
+        ? form.nimbus_url.trim() || null
+        : null,
     }
     const { error } = editing
       ? await supabase.from('site_systems').update(payload).eq('id', editing.id)
@@ -332,6 +337,17 @@ export function SiteSystemsManager({
                     {system.description && (
                       <CardDescription>{system.description}</CardDescription>
                     )}
+                    {system.nimbus_url && (
+                      <a
+                        href={system.nimbus_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Open Nimbus
+                      </a>
+                    )}
                   </div>
                   <div className="flex gap-1">
                     <Button variant="ghost" size="icon" onClick={() => openEdit(system)}>
@@ -477,6 +493,25 @@ export function SiteSystemsManager({
                 onChange={(e) => setForm({ ...form, install_date: e.target.value })}
               />
             </div>
+            {isFireAlarmSystemType(form.system_type_id) && (
+              <div className="grid gap-2">
+                <Label htmlFor="system-nimbus">
+                  Nimbus URL <span className="text-muted-foreground">(optional)</span>
+                </Label>
+                <Input
+                  id="system-nimbus"
+                  type="url"
+                  inputMode="url"
+                  value={form.nimbus_url}
+                  onChange={(e) => setForm({ ...form, nimbus_url: e.target.value })}
+                  placeholder="https://nimbus.example.com/site/..."
+                />
+                <p className="text-xs text-muted-foreground">
+                  Link to the Nimbus monitoring portal. Shown to engineers working on this
+                  fire alarm system.
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>

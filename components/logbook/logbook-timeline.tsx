@@ -206,6 +206,23 @@ export function LogbookTimeline({ reports, entries }: LogbookTimelineProps) {
                   <span className="font-medium">{getLogbookEntryMeta(item.data.entry_type).label}</span>
                 </div>
                 {item.data.title && <p className="text-sm font-medium">{item.data.title}</p>}
+                {item.data.entry_type === 'weekly_alarm_test' &&
+                  (item.data.call_point_ref || item.data.call_point_location) && (
+                    <p className="text-sm">
+                      <span className="font-medium">Call point tested: </span>
+                      <span className="text-muted-foreground">
+                        {[item.data.call_point_ref, item.data.call_point_location]
+                          .filter(Boolean)
+                          .join(' — ')}
+                      </span>
+                    </p>
+                  )}
+                {item.data.result && (
+                  <p className="text-sm">
+                    <span className="font-medium">Result: </span>
+                    <span className="text-muted-foreground">{item.data.result}</span>
+                  </p>
+                )}
                 {item.data.details && (
                   <p className="whitespace-pre-wrap text-sm text-muted-foreground">{item.data.details}</p>
                 )}

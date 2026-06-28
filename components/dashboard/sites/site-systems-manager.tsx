@@ -35,7 +35,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Pencil, Trash2, Layers, Wrench } from 'lucide-react'
+import { Plus, Pencil, Trash2, Layers, Wrench, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
 import { buildSeedTaskRows, fetchVisitsByServiceType } from '@/lib/scheduling'
 import type { SiteSystem, SiteService, ServiceType, SystemType } from '@/lib/types/database'

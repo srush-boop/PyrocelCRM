@@ -111,6 +111,30 @@ export default async function TaskPage({ params }: PageProps) {
       supabase.from('mcp_inspections').select('*').eq('task_id', id),
     ])
 
+    // Surface the Nimbus monitoring URL to the engineer. Prefer the system this
+    // service is attached to, falling back to any fire alarm system on the site
+    // that has a Nimbus link configured.
+    let nimbusUrl: string | null = null
+    const linkedSystemId = task.site_service?.site_system_id
+    if (linkedSystemId) {
+      const { data: linkedSystem } = await supabase
+        .from('site_systems')
+        .select('nimbus_url')
+        .eq('id', linkedSystemId)
+        .maybeSingle()
+      nimbusUrl = linkedSystem?.nimbus_url ?? null
+    }
+    if (!nimbusUrl && siteId) {
+      const { data: anySystem } = await supabase
+        .from('site_systems')
+        .select('nimbus_url')
+        .eq('site_id', siteId)
+        .not('nimbus_url', 'is', null)
+        .limit(1)
+        .maybeSingle()
+      nimbusUrl = anySystem?.nimbus_url ?? null
+    }
+
     // The weekly test rotates through call points: find the most recently
     // tested MCP from any *previous* task so we can point the engineer at the
     // next one in the list.
@@ -139,6 +163,7 @@ export default async function TaskPage({ params }: PageProps) {
         existingInspections={(inspectionsData || []) as McpInspection[]}
         lastTestedMcpId={lastTestedMcpId}
         lastTestedDate={lastTestedDate}
+        nimbusUrl={nimbusUrl}
       />
     )
   }

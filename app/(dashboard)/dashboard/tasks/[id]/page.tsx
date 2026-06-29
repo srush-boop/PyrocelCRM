@@ -14,6 +14,7 @@ import type {
   TaskWithDetails,
   ChecklistTemplate,
   ClientChecklistItem,
+  ClientLink,
   Damper,
   DamperInspection,
   Mcp,
@@ -212,6 +213,7 @@ export default async function TaskPage({ params }: PageProps) {
   // Append any client-specific checklist items that match this task's system
   // type and service type. Items with an empty scope array apply to all.
   const clientId = task.site_service?.site?.client_id
+  let clientLinks: ClientLink[] = []
   if (clientId) {
     // The system type comes from the system this service is attached to.
     let systemTypeId: string | null = null
@@ -260,6 +262,25 @@ export default async function TaskPage({ params }: PageProps) {
         updated_at: checklistTemplate?.updated_at ?? new Date().toISOString(),
       } as ChecklistTemplate
     }
+
+    // Reference links the office has marked as visible to engineers, scoped the
+    // same way as checklist items (empty scope array = applies to all).
+    const { data: linkRows } = await supabase
+      .from('client_links')
+      .select('*')
+      .eq('client_id', clientId)
+      .eq('sendable_to_engineers', true)
+      .order('position', { ascending: true })
+
+    clientLinks = ((linkRows || []) as ClientLink[]).filter((link) => {
+      const systemOk =
+        link.system_type_ids.length === 0 ||
+        (systemTypeId !== null && link.system_type_ids.includes(systemTypeId))
+      const serviceOk =
+        link.service_type_ids.length === 0 ||
+        (serviceTypeId != null && link.service_type_ids.includes(serviceTypeId))
+      return systemOk && serviceOk
+    })
   }
 
   // Fetch existing task result if any
@@ -275,6 +296,7 @@ export default async function TaskPage({ params }: PageProps) {
       checklistTemplate={checklistTemplate as ChecklistTemplate | null}
       existingResult={taskResult}
       profile={profile as Profile}
+      clientLinks={clientLinks}
     />
   )
 }

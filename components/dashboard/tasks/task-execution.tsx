@@ -39,7 +39,9 @@ import {
   Play,
   Building2,
   Clock,
-  StopCircle
+  StopCircle,
+  Link2,
+  ExternalLink
 } from 'lucide-react'
 import type { 
   Profile, 
@@ -48,7 +50,8 @@ import type {
   ChecklistItem,
   ChecklistResult,
   TaskResult,
-  TaskResultStatus
+  TaskResultStatus,
+  ClientLink
 } from '@/lib/types/database'
 
 interface TaskExecutionProps {
@@ -56,13 +59,15 @@ interface TaskExecutionProps {
   checklistTemplate: ChecklistTemplate | null
   existingResult: TaskResult | null
   profile: Profile
+  clientLinks?: ClientLink[]
 }
 
 export function TaskExecution({ 
   task, 
   checklistTemplate, 
   existingResult,
-  profile 
+  profile,
+  clientLinks = []
 }: TaskExecutionProps) {
   const [status, setStatus] = useState(task.status)
   const [checklistResults, setChecklistResults] = useState<ChecklistResult[]>(() => {
@@ -384,6 +389,41 @@ export function TaskExecution({
           </div>
         </CardContent>
       </Card>
+
+      {/* Client reference links scoped to this task's system/service */}
+      {clientLinks.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Link2 className="h-5 w-5" />
+              Reference links
+            </CardTitle>
+            <CardDescription>
+              Resources provided by the client for this visit.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {clientLinks.map((link) => (
+              <a
+                key={link.id}
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-start justify-between gap-3 rounded-md border bg-background px-3 py-2 transition-colors hover:border-primary hover:bg-primary/5"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{link.label}</p>
+                  {link.description && (
+                    <p className="text-xs text-muted-foreground">{link.description}</p>
+                  )}
+                  <p className="truncate text-xs text-muted-foreground">{link.url}</p>
+                </div>
+                <ExternalLink className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              </a>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Book Visit */}
       {canEdit && (

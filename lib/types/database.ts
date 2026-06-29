@@ -200,6 +200,23 @@ export interface ClientChecklistItem {
   updated_at: string
 }
 
+// Client-specific reference URL link. When sendable_to_engineers is true and
+// the (optional) system/service scope matches a task, the link is surfaced to
+// the engineer on that task. Empty scope arrays mean "applies to all".
+export interface ClientLink {
+  id: string
+  client_id: string
+  label: string
+  url: string
+  description: string | null
+  sendable_to_engineers: boolean
+  system_type_ids: string[]
+  service_type_ids: string[]
+  position: number
+  created_at: string
+  updated_at: string
+}
+
 // Per-recipient in-app notification. Browser push is a best-effort mirror.
 export interface AppNotification {
   id: string

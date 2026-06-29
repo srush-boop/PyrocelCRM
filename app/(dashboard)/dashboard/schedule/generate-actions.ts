@@ -17,6 +17,7 @@ interface ServiceRow {
   frequency_value: number
   frequency_unit: 'weeks' | 'months'
   next_service_date: string | null
+  active: boolean | null
   site: { status: string | null } | null
   service_type: { status: string | null } | null
 }
@@ -89,7 +90,7 @@ export async function generateMonthlyCalls(
   const { data: serviceData, error: svcError } = await supabase
     .from('site_services')
     .select(
-      `id, frequency_value, frequency_unit, next_service_date,
+      `id, frequency_value, frequency_unit, next_service_date, active,
        site:sites(status),
        service_type:service_types(status)`,
     )
@@ -98,7 +99,7 @@ export async function generateMonthlyCalls(
   }
 
   const services = ((serviceData || []) as unknown as ServiceRow[]).filter(
-    (s) => s.site?.status !== 'dead' && s.service_type?.status !== 'dead',
+    (s) => s.active !== false && s.site?.status !== 'dead' && s.service_type?.status !== 'dead',
   )
   if (services.length === 0) {
     return { ok: true, ...empty }

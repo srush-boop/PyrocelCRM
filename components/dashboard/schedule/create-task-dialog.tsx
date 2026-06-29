@@ -114,8 +114,11 @@ export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogPr
     }
   }
 
+  // Inactive services cannot have new calls scheduled — hide them from the picker.
+  const schedulableServices = siteServices.filter((ss) => ss.active !== false)
+
   // Group site services by site
-  const siteServicesBySite = siteServices.reduce((acc, ss) => {
+  const siteServicesBySite = schedulableServices.reduce((acc, ss) => {
     const siteName = ss.site?.name || 'Unknown'
     if (!acc[siteName]) {
       acc[siteName] = []

@@ -399,6 +399,9 @@ export interface Site {
   // When true (default) the next recurring task anchors to the original
   // scheduled date (fixed cadence); when false it anchors to completion date.
   anchor_next_to_schedule: boolean
+  // When false, the service is inactive: no new calls are generated for it
+  // (recurrence, bulk generation, manual scheduling all suppressed).
+  active: boolean
   created_at: string
   site?: Site
   site_system?: SiteSystem | null

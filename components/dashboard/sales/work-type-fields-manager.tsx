@@ -40,6 +40,7 @@ import {
 } from '@/app/(dashboard)/dashboard/sales/quote-config-actions'
 import { WORK_TYPES } from '@/lib/sales'
 import type { WorkTypeField, SystemType } from '@/lib/types/database'
+import { SystemBadge, SystemIcon } from '@/lib/system-types'
 
 type FieldType = 'text' | 'number' | 'select' | 'boolean'
 
@@ -197,7 +198,11 @@ export function WorkTypeFieldsManager({
         <div className="grid gap-6">
           {bySystemType.map((sys) => (
             <div key={sys.systemType.id} className="space-y-3">
-              <h2 className="text-lg font-semibold tracking-tight">{sys.systemType.name}</h2>
+              <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight">
+                <SystemIcon system={sys.systemType} />
+                {sys.systemType.name}
+                {sys.systemType.code && <SystemBadge system={sys.systemType} codeOnly />}
+              </h2>
               <div className="grid gap-4">
                 {sys.groups.map((group) => (
                   <Card key={group.def.code}>

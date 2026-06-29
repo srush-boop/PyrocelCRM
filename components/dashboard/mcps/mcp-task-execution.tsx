@@ -45,6 +45,7 @@ import {
   Plus,
   CheckCheck,
   Ban,
+  ExternalLink,
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
@@ -61,6 +62,8 @@ interface McpTaskExecutionProps {
   lastTestedMcpId?: string | null
   /** Date of that previous test, for display. */
   lastTestedDate?: string | null
+  /** Nimbus monitoring portal URL for this fire alarm system, if configured. */
+  nimbusUrl?: string | null
 }
 
 function blankState(): McpInspectionState {
@@ -84,6 +87,7 @@ export function McpTaskExecution({
   existingInspections,
   lastTestedMcpId,
   lastTestedDate,
+  nimbusUrl,
 }: McpTaskExecutionProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
@@ -437,6 +441,17 @@ export function McpTaskExecution({
             <Calendar className="h-4 w-4" />
             Scheduled: {formatDateUK(task.scheduled_date)}
           </div>
+          {nimbusUrl && (
+            <a
+              href={nimbusUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+            >
+              <ExternalLink className="h-4 w-4 shrink-0" />
+              Open Nimbus monitoring portal
+            </a>
+          )}
         </CardContent>
       </Card>
 

@@ -31,20 +31,35 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { MoreHorizontal, Pencil, Trash2, Search, Building, Plus, ChevronRight, ChevronDown, MapPin, ExternalLink } from 'lucide-react'
-import type { Client, Site } from '@/lib/types/database'
+import { MoreHorizontal, Pencil, Trash2, Search, Building, Plus, ChevronRight, ChevronDown, MapPin, ExternalLink, ListChecks, Link2 } from 'lucide-react'
+import type { Client, Site, SystemType, ServiceType } from '@/lib/types/database'
 import { AddClientDialog } from './add-client-dialog'
 import { EditClientDialog } from './edit-client-dialog'
+import { ClientChecklistDialog } from './client-checklist-dialog'
+import { ClientLinksDialog } from './client-links-dialog'
 
 interface ClientsTableProps {
   clients: Client[]
   sitesByClient?: Record<string, Site[]>
+  systemTypes?: SystemType[]
+  serviceTypes?: ServiceType[]
+  checklistCountByClient?: Record<string, number>
+  linkCountByClient?: Record<string, number>
 }
 
-export function ClientsTable({ clients, sitesByClient = {} }: ClientsTableProps) {
+export function ClientsTable({
+  clients,
+  sitesByClient = {},
+  systemTypes = [],
+  serviceTypes = [],
+  checklistCountByClient = {},
+  linkCountByClient = {},
+}: ClientsTableProps) {
   const [search, setSearch] = useState('')
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [editClient, setEditClient] = useState<Client | null>(null)
+  const [checklistClient, setChecklistClient] = useState<Client | null>(null)
+  const [linksClient, setLinksClient] = useState<Client | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const searchParams = useSearchParams()
   const focusedClientId = searchParams.get('client')
@@ -168,6 +183,14 @@ export function ClientsTable({ clients, sitesByClient = {} }: ClientsTableProps)
                               <Pencil className="mr-2 h-4 w-4" />
                               Edit
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setChecklistClient(client)}>
+                              <ListChecks className="mr-2 h-4 w-4" />
+                              Checklist items
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setLinksClient(client)}>
+                              <Link2 className="mr-2 h-4 w-4" />
+                              Links
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => setDeleteId(client.id)}
                               className="text-destructive"
@@ -218,6 +241,38 @@ export function ClientsTable({ clients, sitesByClient = {} }: ClientsTableProps)
                                 ))}
                               </div>
                             )}
+                            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <ListChecks className="h-4 w-4" />
+                                {checklistCountByClient[client.id] || 0} client-specific checklist item
+                                {(checklistCountByClient[client.id] || 0) === 1 ? '' : 's'}
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-2"
+                                onClick={() => setChecklistClient(client)}
+                              >
+                                <ListChecks className="h-4 w-4" />
+                                Manage checklist items
+                              </Button>
+                            </div>
+                            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <Link2 className="h-4 w-4" />
+                                {linkCountByClient[client.id] || 0} link
+                                {(linkCountByClient[client.id] || 0) === 1 ? '' : 's'}
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-2"
+                                onClick={() => setLinksClient(client)}
+                              >
+                                <Link2 className="h-4 w-4" />
+                                Manage links
+                              </Button>
+                            </div>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -237,6 +292,26 @@ export function ClientsTable({ clients, sitesByClient = {} }: ClientsTableProps)
           client={editClient}
           open={!!editClient}
           onOpenChange={(open) => !open && setEditClient(null)}
+        />
+      )}
+
+      {checklistClient && (
+        <ClientChecklistDialog
+          client={checklistClient}
+          open={!!checklistClient}
+          onOpenChange={(open) => !open && setChecklistClient(null)}
+          systemTypes={systemTypes}
+          serviceTypes={serviceTypes}
+        />
+      )}
+
+      {linksClient && (
+        <ClientLinksDialog
+          client={linksClient}
+          open={!!linksClient}
+          onOpenChange={(open) => !open && setLinksClient(null)}
+          systemTypes={systemTypes}
+          serviceTypes={serviceTypes}
         />
       )}
 

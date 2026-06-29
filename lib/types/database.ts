@@ -184,6 +184,66 @@ export interface ChecklistTemplate {
   service_type?: ServiceType
 }
 
+// Client-specific checklist items appended to the engineer's checklist. Scoped
+// by client and, optionally, by system type(s) and service type(s). An empty
+// array for either scope means "applies to all" of that dimension.
+export interface ClientChecklistItem {
+  id: string
+  client_id: string
+  label: string
+  type: 'pass_fail' | 'text' | 'number' | 'checkbox'
+  required: boolean
+  system_type_ids: string[]
+  service_type_ids: string[]
+  position: number
+  created_at: string
+  updated_at: string
+}
+
+// Client-specific reference URL link. When sendable_to_engineers is true and
+// the (optional) system/service scope matches a task, the link is surfaced to
+// the engineer on that task. Empty scope arrays mean "applies to all".
+export interface ClientLink {
+  id: string
+  client_id: string
+  label: string
+  url: string
+  description: string | null
+  sendable_to_engineers: boolean
+  system_type_ids: string[]
+  service_type_ids: string[]
+  position: number
+  created_at: string
+  updated_at: string
+}
+
+// Engineer-initiated request to take over a nearby open call.
+export interface TaskTransferRequest {
+  id: string
+  task_id: string
+  requested_by: string
+  current_engineer_id: string | null
+  status: 'pending' | 'approved' | 'declined' | 'cancelled'
+  message: string | null
+  resolved_by: string | null
+  resolved_at: string | null
+  created_at: string
+}
+
+// Per-recipient in-app notification. Browser push is a best-effort mirror.
+export interface AppNotification {
+  id: string
+  user_id: string
+  title: string
+  body: string | null
+  url: string | null
+  category: string
+  data: Record<string, unknown>
+  read_at: string | null
+  created_by: string | null
+  created_at: string
+}
+
 export interface Route {
   id: string
   name: string
@@ -221,6 +281,10 @@ export interface Site {
   monitoring_station_phone: string | null
   monitoring_station_url: string | null
   route_position: number | null
+  // Cached geocode of the postcode (via postcodes.io), used for "nearby calls".
+  latitude: number | null
+  longitude: number | null
+  geocoded_at: string | null
   created_at: string
   updated_at: string
   route?: Route
@@ -295,6 +359,8 @@ export interface Site {
     description: string | null
     location: string | null
     install_date: string | null
+    /** URL to the Nimbus fire alarm monitoring portal for this system. */
+    nimbus_url: string | null
     active: boolean
     position: number
     created_at: string

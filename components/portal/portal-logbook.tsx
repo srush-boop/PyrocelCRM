@@ -8,6 +8,7 @@ import { LogbookTimeline } from '@/components/logbook/logbook-timeline'
 import { BuildingInfoView } from '@/components/logbook/building-info-view'
 import { LogbookEntryForm, type LogbookEntryFormValues } from '@/components/logbook/logbook-entry-form'
 import { addClientLogbookEntry, type ClientLogbookData } from '@/app/portal/logbook/actions'
+import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
 
 export function PortalLogbook({ data }: { data: ClientLogbookData }) {
@@ -50,11 +51,16 @@ export function PortalLogbook({ data }: { data: ClientLogbookData }) {
             <CardHeader>
               <CardTitle className="text-base">Log book records</CardTitle>
               <CardDescription>
-                Professional service reports and routine checks, most recent first.
+                Professional service reports and routine checks, most recent first. Filter by date,
+                then print or save the selected range as a PDF.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <LogbookTimeline reports={data.reports} entries={data.entries} />
+              <LogbookTimeline
+                reports={data.reports}
+                entries={data.entries}
+                printHrefBase={`/portal/logbook/${data.site.id}/print`}
+              />
             </CardContent>
           </Card>
         </TabsContent>

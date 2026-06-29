@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { cn, formatDateUK } from '@/lib/utils'
 import {
   getLogbookEntryMeta,
@@ -25,6 +27,8 @@ import {
   ClipboardList,
   DoorClosed,
   GraduationCap,
+  Printer,
+  X,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -52,6 +56,11 @@ export interface ReportTimelineItem {
 export interface LogbookTimelineProps {
   reports: ReportTimelineItem[]
   entries: LogbookEntry[]
+  /**
+   * When provided, a "Print this range" button is shown that links to this
+   * path with the active from/to dates appended as query params.
+   */
+  printHrefBase?: string
 }
 
 type MergedItem =
@@ -65,8 +74,11 @@ function statusBadge(status: ReportTimelineItem['status']) {
   return null
 }
 
-export function LogbookTimeline({ reports, entries }: LogbookTimelineProps) {
+export function LogbookTimeline({ reports, entries, printHrefBase }: LogbookTimelineProps) {
   const [activeSystem, setActiveSystem] = useState<LogbookSystemId | 'all'>('all')
+  // Optional date range (inclusive). Empty string = unbounded on that end.
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
 
   const merged: MergedItem[] = useMemo(
     () =>
@@ -89,12 +101,26 @@ export function LogbookTimeline({ reports, entries }: LogbookTimelineProps) {
     [reports, entries],
   )
 
+  // Apply the optional date range first; system counts and the list reflect it.
+  const dateFiltered = useMemo(() => {
+    if (!fromDate && !toDate) return merged
+    // Compare on calendar date (YYYY-MM-DD) to avoid timezone drift.
+    const fromKey = fromDate || null
+    const toKey = toDate || null
+    return merged.filter((item) => {
+      const day = item.date.slice(0, 10)
+      if (fromKey && day < fromKey) return false
+      if (toKey && day > toKey) return false
+      return true
+    })
+  }, [merged, fromDate, toDate])
+
   // Only offer filters for systems that actually have records, with counts.
   const systemCounts = useMemo(() => {
     const counts = new Map<LogbookSystemId, number>()
-    for (const item of merged) counts.set(item.system, (counts.get(item.system) ?? 0) + 1)
+    for (const item of dateFiltered) counts.set(item.system, (counts.get(item.system) ?? 0) + 1)
     return counts
-  }, [merged])
+  }, [dateFiltered])
 
   const availableSystems = useMemo(
     () => LOGBOOK_SYSTEMS.filter((s) => systemCounts.has(s.id)),
@@ -110,10 +136,76 @@ export function LogbookTimeline({ reports, entries }: LogbookTimelineProps) {
   }
 
   const visible =
-    activeSystem === 'all' ? merged : merged.filter((item) => item.system === activeSystem)
+    activeSystem === 'all'
+      ? dateFiltered
+      : dateFiltered.filter((item) => item.system === activeSystem)
+
+  const hasDateFilter = Boolean(fromDate || toDate)
+
+  // Build the print link for the active range (portal staff/client print view).
+  const printHref = useMemo(() => {
+    if (!printHrefBase) return null
+    const params = new URLSearchParams()
+    if (fromDate) params.set('from', fromDate)
+    if (toDate) params.set('to', toDate)
+    const qs = params.toString()
+    return qs ? `${printHrefBase}?${qs}` : printHrefBase
+  }, [printHrefBase, fromDate, toDate])
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-muted/30 p-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="logbook-from" className="text-xs">
+            From
+          </Label>
+          <Input
+            id="logbook-from"
+            type="date"
+            value={fromDate}
+            max={toDate || undefined}
+            onChange={(e) => setFromDate(e.target.value)}
+            className="h-9 w-auto"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="logbook-to" className="text-xs">
+            To
+          </Label>
+          <Input
+            id="logbook-to"
+            type="date"
+            value={toDate}
+            min={fromDate || undefined}
+            onChange={(e) => setToDate(e.target.value)}
+            className="h-9 w-auto"
+          />
+        </div>
+        {hasDateFilter && (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setFromDate('')
+              setToDate('')
+            }}
+            className="h-9 gap-1.5"
+          >
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
+            Clear dates
+          </Button>
+        )}
+        {printHref && (
+          <Button asChild size="sm" variant="outline" className="ml-auto h-9 gap-2">
+            <Link href={printHref}>
+              <Printer className="h-3.5 w-3.5" aria-hidden="true" />
+              {hasDateFilter ? 'Print this range' : 'Print log book'}
+            </Link>
+          </Button>
+        )}
+      </div>
+
       {availableSystems.length > 1 && (
         <div className="flex flex-wrap gap-2" role="group" aria-label="Filter records by system">
           <Button
@@ -125,7 +217,7 @@ export function LogbookTimeline({ reports, entries }: LogbookTimelineProps) {
           >
             All
             <Badge variant="secondary" className="ml-0.5 px-1.5 py-0 text-xs">
-              {merged.length}
+              {dateFiltered.length}
             </Badge>
           </Button>
           {availableSystems.map((system) => {
@@ -240,7 +332,9 @@ export function LogbookTimeline({ reports, entries }: LogbookTimelineProps) {
 
       {visible.length === 0 && (
         <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-          No records for this system yet.
+          {hasDateFilter
+            ? 'No records match the selected dates.'
+            : 'No records for this system yet.'}
         </div>
       )}
     </div>

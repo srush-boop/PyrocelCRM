@@ -13,6 +13,8 @@ import type {
   Profile,
   TaskWithDetails,
   ChecklistTemplate,
+  ClientChecklistItem,
+  ClientLink,
   Damper,
   DamperInspection,
   Mcp,
@@ -111,6 +113,30 @@ export default async function TaskPage({ params }: PageProps) {
       supabase.from('mcp_inspections').select('*').eq('task_id', id),
     ])
 
+    // Surface the Nimbus monitoring URL to the engineer. Prefer the system this
+    // service is attached to, falling back to any fire alarm system on the site
+    // that has a Nimbus link configured.
+    let nimbusUrl: string | null = null
+    const linkedSystemId = task.site_service?.site_system_id
+    if (linkedSystemId) {
+      const { data: linkedSystem } = await supabase
+        .from('site_systems')
+        .select('nimbus_url')
+        .eq('id', linkedSystemId)
+        .maybeSingle()
+      nimbusUrl = linkedSystem?.nimbus_url ?? null
+    }
+    if (!nimbusUrl && siteId) {
+      const { data: anySystem } = await supabase
+        .from('site_systems')
+        .select('nimbus_url')
+        .eq('site_id', siteId)
+        .not('nimbus_url', 'is', null)
+        .limit(1)
+        .maybeSingle()
+      nimbusUrl = anySystem?.nimbus_url ?? null
+    }
+
     // The weekly test rotates through call points: find the most recently
     // tested MCP from any *previous* task so we can point the engineer at the
     // next one in the list.
@@ -139,6 +165,7 @@ export default async function TaskPage({ params }: PageProps) {
         existingInspections={(inspectionsData || []) as McpInspection[]}
         lastTestedMcpId={lastTestedMcpId}
         lastTestedDate={lastTestedDate}
+        nimbusUrl={nimbusUrl}
       />
     )
   }
@@ -175,13 +202,86 @@ export default async function TaskPage({ params }: PageProps) {
     .eq('service_type_id', task.site_service.service_type_id)
 
   const templates = (checklistTemplates || []) as ChecklistTemplate[]
-  const checklistTemplate =
+  let checklistTemplate =
     (task.visit_type_id
       ? templates.find((t) => t.visit_type_id === task.visit_type_id)
       : undefined) ??
     templates.find((t) => !t.visit_type_id) ??
     templates[0] ??
     null
+
+  // Append any client-specific checklist items that match this task's system
+  // type and service type. Items with an empty scope array apply to all.
+  const clientId = task.site_service?.site?.client_id
+  let clientLinks: ClientLink[] = []
+  if (clientId) {
+    // The system type comes from the system this service is attached to.
+    let systemTypeId: string | null = null
+    if (task.site_service?.site_system_id) {
+      const { data: linkedSystem } = await supabase
+        .from('site_systems')
+        .select('system_type_id')
+        .eq('id', task.site_service.site_system_id)
+        .maybeSingle()
+      systemTypeId = linkedSystem?.system_type_id ?? null
+    }
+
+    const { data: clientItems } = await supabase
+      .from('client_checklist_items')
+      .select('*')
+      .eq('client_id', clientId)
+      .order('position', { ascending: true })
+
+    const serviceTypeId = task.site_service?.service_type_id
+    const matched = ((clientItems || []) as ClientChecklistItem[]).filter((item) => {
+      const systemOk =
+        item.system_type_ids.length === 0 ||
+        (systemTypeId !== null && item.system_type_ids.includes(systemTypeId))
+      const serviceOk =
+        item.service_type_ids.length === 0 ||
+        (serviceTypeId != null && item.service_type_ids.includes(serviceTypeId))
+      return systemOk && serviceOk
+    })
+
+    if (matched.length > 0) {
+      const extraItems = matched.map((item) => ({
+        id: `client-${item.id}`,
+        label: item.label,
+        type: item.type,
+        required: item.required,
+      }))
+      // Merge onto the existing template, or synthesise one if none exists so the
+      // client items still reach the engineer.
+      checklistTemplate = {
+        id: checklistTemplate?.id ?? `synthetic-${task.site_service.service_type_id}`,
+        service_type_id: task.site_service.service_type_id,
+        visit_type_id: checklistTemplate?.visit_type_id ?? task.visit_type_id ?? null,
+        name: checklistTemplate?.name ?? 'Checklist',
+        items: [...(checklistTemplate?.items ?? []), ...extraItems],
+        created_at: checklistTemplate?.created_at ?? new Date().toISOString(),
+        updated_at: checklistTemplate?.updated_at ?? new Date().toISOString(),
+      } as ChecklistTemplate
+    }
+
+    // Reference links the office has marked as visible to engineers, scoped the
+    // same way as checklist items (empty scope array = applies to all).
+    const { data: linkRows } = await supabase
+      .from('client_links')
+      .select('*')
+      .eq('client_id', clientId)
+      .eq('sendable_to_engineers', true)
+      .order('position', { ascending: true })
+
+    clientLinks = ((linkRows || []) as ClientLink[]).filter((link) => {
+      const systemOk =
+        link.system_type_ids.length === 0 ||
+        (systemTypeId !== null && link.system_type_ids.includes(systemTypeId))
+      const serviceOk =
+        link.service_type_ids.length === 0 ||
+        (serviceTypeId != null && link.service_type_ids.includes(serviceTypeId))
+      return systemOk && serviceOk
+    })
+  }
 
   // Fetch existing task result if any
   const { data: taskResult } = await supabase
@@ -196,6 +296,7 @@ export default async function TaskPage({ params }: PageProps) {
       checklistTemplate={checklistTemplate as ChecklistTemplate | null}
       existingResult={taskResult}
       profile={profile as Profile}
+      clientLinks={clientLinks}
     />
   )
 }

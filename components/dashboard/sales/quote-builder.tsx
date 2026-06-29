@@ -40,6 +40,7 @@ import { Plus, Trash2, BookOpen, Save, TrendingUp, Calculator, Wrench, Check, Ch
 import { toast } from 'sonner'
 import { PpmCalculatorDialog, type PpmDraft } from '@/components/dashboard/sales/ppm-calculator-dialog'
 import { QuoteSectionRenderer } from '@/components/dashboard/sales/quote-section-renderer'
+import { SystemBadge, SystemIcon, SystemColorDot, systemAccentStyle } from '@/lib/system-types'
 import {
   computeQuoteTotals,
   computeBankStats,
@@ -1230,8 +1231,10 @@ function SystemCard({
     onUpdate({ conditional_values: { ...system.conditional_values, [key]: value } })
   }
 
+  const systemType = systemTypes.find((s) => s.id === system.system_type_id)
+
   return (
-    <Card>
+    <Card className={systemType ? 'border-l-4' : undefined} style={systemType ? systemAccentStyle(systemType.color) : undefined}>
       <Collapsible open={open} onOpenChange={setOpen}>
         <div className="flex items-center gap-2 px-6 py-4">
           <CollapsibleTrigger asChild>
@@ -1242,13 +1245,18 @@ function SystemCard({
                   open && 'rotate-180',
                 )}
               />
+              {systemType && <SystemIcon system={systemType} />}
               <span className="truncate font-medium">
                 {system.system_name?.trim() || 'Untitled system'}
               </span>
               {system.system_code && (
-                <Badge variant="outline" className="shrink-0 font-mono">
-                  {system.system_code}
-                </Badge>
+                systemType ? (
+                  <SystemBadge system={systemType} codeOnly className="shrink-0" />
+                ) : (
+                  <Badge variant="outline" className="shrink-0 font-mono">
+                    {system.system_code}
+                  </Badge>
+                )
               )}
               <Badge variant="secondary" className="shrink-0">
                 {WORK_TYPES.find((w) => w.code === system.work_type)?.code ?? system.work_type}
@@ -1293,8 +1301,11 @@ function SystemCard({
                   <SelectContent>
                     {systemTypes.map((st) => (
                       <SelectItem key={st.id} value={st.id}>
-                        {st.name}
-                        {st.code ? ` (${st.code})` : ''}
+                        <span className="flex items-center gap-2">
+                          <SystemColorDot color={st.color} />
+                          {st.name}
+                          {st.code ? ` (${st.code})` : ''}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>

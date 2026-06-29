@@ -18,6 +18,7 @@ import { toast } from 'sonner'
 import { saveSpecTemplate } from '@/app/(dashboard)/dashboard/sales/quote-config-actions'
 import { WORK_TYPES, workTypeLabel } from '@/lib/sales'
 import type { SystemType, SystemSpecTemplate } from '@/lib/types/database'
+import { SystemColorDot } from '@/lib/system-types'
 
 export function SpecTemplatesManager({
   systemTypes,
@@ -96,7 +97,10 @@ export function SpecTemplatesManager({
               <SelectContent>
                 {systemTypes.map((st) => (
                   <SelectItem key={st.id} value={st.id}>
-                    {st.code ? `${st.code} — ${st.name}` : st.name}
+                    <span className="flex items-center gap-2">
+                      <SystemColorDot color={st.color} />
+                      {st.code ? `${st.code} — ${st.name}` : st.name}
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>

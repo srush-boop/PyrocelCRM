@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
+import { SystemBadge, SystemIcon, systemAccentStyle } from '@/lib/system-types'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
@@ -35,7 +36,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Pencil, Trash2, Layers, Wrench } from 'lucide-react'
+import { Plus, Pencil, Trash2, Layers, Wrench, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
 import { buildSeedTaskRows, fetchVisitsByServiceType } from '@/lib/scheduling'
 import type { SiteSystem, SiteService, ServiceType, SystemType } from '@/lib/types/database'
@@ -75,6 +76,7 @@ export function SiteSystemsManager({
     system_type_id: '',
     description: '',
     install_date: '',
+    nimbus_url: '',
   })
 
   // Add-services-to-a-system flow
@@ -86,6 +88,13 @@ export function SiteSystemsManager({
   function systemTypeName(id: string | null): string | null {
     if (!id) return null
     return systemTypes.find((s) => s.id === id)?.name ?? null
+  }
+
+  // Nimbus is the fire alarm remote-monitoring portal, so the URL field is only
+  // relevant for fire alarm systems.
+  function isFireAlarmSystemType(id: string | null): boolean {
+    const name = systemTypeName(id)?.toLowerCase() ?? ''
+    return name.includes('fire alarm')
   }
 
   function systemTypeLabel(id: string | null): string | null {
@@ -103,7 +112,7 @@ export function SiteSystemsManager({
 
   function openAdd() {
     setEditing(null)
-    setForm({ system_type_id: '', description: '', install_date: '' })
+    setForm({ system_type_id: '', description: '', install_date: '', nimbus_url: '' })
     setDialogOpen(true)
   }
 
@@ -113,6 +122,7 @@ export function SiteSystemsManager({
       system_type_id: system.system_type_id ?? '',
       description: system.description ?? '',
       install_date: system.install_date ?? '',
+      nimbus_url: system.nimbus_url ?? '',
     })
     setDialogOpen(true)
   }
@@ -130,6 +140,10 @@ export function SiteSystemsManager({
       system_type_id: form.system_type_id,
       description: form.description.trim() || null,
       install_date: form.install_date || null,
+      // Nimbus only applies to fire alarm systems; clear it otherwise.
+      nimbus_url: isFireAlarmSystemType(form.system_type_id)
+        ? form.nimbus_url.trim() || null
+        : null,
     }
     const { error } = editing
       ? await supabase.from('site_systems').update(payload).eq('id', editing.id)
@@ -308,21 +322,39 @@ export function SiteSystemsManager({
           {siteSystems.map((system) => {
             const services = servicesBySystem.get(system.id) ?? []
             const typeLabel = systemTypeLabel(system.system_type_id)
+            const st = systemTypes.find((s) => s.id === system.system_type_id)
             return (
-              <Card key={system.id}>
+              <Card
+                key={system.id}
+                className={st ? 'border-l-4' : undefined}
+                style={st ? systemAccentStyle(st.color) : undefined}
+              >
                 <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
                   <div className="space-y-1">
                     <CardTitle className="flex items-center gap-2 text-base">
-                      <Layers className="h-4 w-4 text-muted-foreground" />
+                      {st ? (
+                        <SystemIcon system={st} />
+                      ) : (
+                        <Layers className="h-4 w-4 text-muted-foreground" />
+                      )}
                       {systemTitle(system)}
-                      {typeLabel && system.system_type_id && (
-                        <Badge variant="outline" className="font-mono text-xs">
-                          {systemTypes.find((s) => s.id === system.system_type_id)?.code ?? ''}
-                        </Badge>
+                      {typeLabel && system.system_type_id && st?.code && (
+                        <SystemBadge system={st} codeOnly />
                       )}
                     </CardTitle>
                     {system.description && (
                       <CardDescription>{system.description}</CardDescription>
+                    )}
+                    {system.nimbus_url && (
+                      <a
+                        href={system.nimbus_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Open Nimbus
+                      </a>
                     )}
                   </div>
                   <div className="flex gap-1">
@@ -469,6 +501,25 @@ export function SiteSystemsManager({
                 onChange={(e) => setForm({ ...form, install_date: e.target.value })}
               />
             </div>
+            {isFireAlarmSystemType(form.system_type_id) && (
+              <div className="grid gap-2">
+                <Label htmlFor="system-nimbus">
+                  Nimbus URL <span className="text-muted-foreground">(optional)</span>
+                </Label>
+                <Input
+                  id="system-nimbus"
+                  type="url"
+                  inputMode="url"
+                  value={form.nimbus_url}
+                  onChange={(e) => setForm({ ...form, nimbus_url: e.target.value })}
+                  placeholder="https://nimbus.example.com/site/..."
+                />
+                <p className="text-xs text-muted-foreground">
+                  Link to the Nimbus monitoring portal. Shown to engineers working on this
+                  fire alarm system.
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>

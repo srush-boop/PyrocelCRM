@@ -32,11 +32,12 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, ChevronUp, ChevronDown } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   saveWorkTypeField,
   deleteWorkTypeField,
+  reorderWorkTypeFields,
 } from '@/app/(dashboard)/dashboard/sales/quote-config-actions'
 import { WORK_TYPES } from '@/lib/sales'
 import type { WorkTypeField, SystemType } from '@/lib/types/database'
@@ -167,6 +168,24 @@ export function WorkTypeFieldsManager({
     })
   }
 
+  // Move a field up or down within its system type x work type group, then
+  // persist the new order of that group only.
+  function handleMove(groupItems: WorkTypeField[], index: number, direction: -1 | 1) {
+    const target = index + direction
+    if (target < 0 || target >= groupItems.length) return
+    const reordered = [...groupItems]
+    const [moved] = reordered.splice(index, 1)
+    reordered.splice(target, 0, moved)
+    startTransition(async () => {
+      const res = await reorderWorkTypeFields(reordered.map((f) => f.id))
+      if (res.ok) {
+        router.refresh()
+      } else {
+        toast.error(res.error ?? 'Could not reorder fields')
+      }
+    })
+  }
+
   // Group fields by system type, then by work type within each.
   const bySystemType = systemTypes
     .map((st) => ({
@@ -215,19 +234,43 @@ export function WorkTypeFieldsManager({
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-2">
-                      {group.items.map((f) => (
+                      {group.items.map((f, index) => (
                         <div
                           key={f.id}
                           className="flex items-center justify-between gap-4 rounded-md border p-3"
                         >
-                          <div className="min-w-0">
-                            <div className="font-medium">{f.label}</div>
-                            <div className="text-xs text-muted-foreground">
-                              <span className="font-mono">{f.field_key}</span> ·{' '}
-                              {FIELD_TYPES.find((t) => t.value === f.field_type)?.label}
-                              {f.field_type === 'select' && f.options.length > 0
-                                ? ` · ${f.options.join(', ')}`
-                                : ''}
+                          <div className="flex min-w-0 items-center gap-2">
+                            <div className="flex shrink-0 flex-col">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-6"
+                                disabled={isPending || index === 0}
+                                onClick={() => handleMove(group.items, index, -1)}
+                              >
+                                <ChevronUp className="h-4 w-4" />
+                                <span className="sr-only">Move up</span>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-6"
+                                disabled={isPending || index === group.items.length - 1}
+                                onClick={() => handleMove(group.items, index, 1)}
+                              >
+                                <ChevronDown className="h-4 w-4" />
+                                <span className="sr-only">Move down</span>
+                              </Button>
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-medium">{f.label}</div>
+                              <div className="text-xs text-muted-foreground">
+                                <span className="font-mono">{f.field_key}</span> ·{' '}
+                                {FIELD_TYPES.find((t) => t.value === f.field_type)?.label}
+                                {f.field_type === 'select' && f.options.length > 0
+                                  ? ` · ${f.options.join(', ')}`
+                                  : ''}
+                              </div>
                             </div>
                           </div>
                           <div className="flex shrink-0 gap-1">

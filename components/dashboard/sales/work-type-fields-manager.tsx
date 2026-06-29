@@ -29,16 +29,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Pencil, Trash2, ChevronUp, ChevronDown } from 'lucide-react'
+import { Plus, Pencil, Trash2, ChevronUp, ChevronDown, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   saveWorkTypeField,
   deleteWorkTypeField,
   reorderWorkTypeFields,
 } from '@/app/(dashboard)/dashboard/sales/quote-config-actions'
+import { cn } from '@/lib/utils'
 import { WORK_TYPES } from '@/lib/sales'
 import type { WorkTypeField, SystemType } from '@/lib/types/database'
 import { SystemBadge, SystemIcon } from '@/lib/system-types'
@@ -72,6 +78,8 @@ export function WorkTypeFieldsManager({
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<WorkTypeField | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  // Which system type sections are expanded. Default: all collapsed.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
   const [systemTypeId, setSystemTypeId] = useState<string>(systemTypes[0]?.id ?? '')
   const [workType, setWorkType] = useState<string>(WORK_TYPES[0].code)
@@ -197,9 +205,25 @@ export function WorkTypeFieldsManager({
     }))
     .filter((s) => s.groups.length > 0)
 
+  const allExpanded =
+    bySystemType.length > 0 && bySystemType.every((sys) => expanded[sys.systemType.id])
+
+  function toggleAll() {
+    if (allExpanded) {
+      setExpanded({})
+    } else {
+      setExpanded(Object.fromEntries(bySystemType.map((sys) => [sys.systemType.id, true])))
+    }
+  }
+
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        {bySystemType.length > 0 && (
+          <Button variant="outline" onClick={toggleAll}>
+            {allExpanded ? 'Collapse all' : 'Expand all'}
+          </Button>
+        )}
         <Button onClick={openNew}>
           <Plus className="mr-2 h-4 w-4" />
           Add field
@@ -215,13 +239,38 @@ export function WorkTypeFieldsManager({
         </Card>
       ) : (
         <div className="grid gap-6">
-          {bySystemType.map((sys) => (
-            <div key={sys.systemType.id} className="space-y-3">
-              <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-                <SystemIcon system={sys.systemType} />
-                {sys.systemType.name}
-                {sys.systemType.code && <SystemBadge system={sys.systemType} codeOnly />}
-              </h2>
+          {bySystemType.map((sys) => {
+            const fieldCount = sys.groups.reduce((n, g) => n + g.items.length, 0)
+            const isOpen = !!expanded[sys.systemType.id]
+            return (
+            <Collapsible
+              key={sys.systemType.id}
+              open={isOpen}
+              onOpenChange={(o) =>
+                setExpanded((prev) => ({ ...prev, [sys.systemType.id]: o }))
+              }
+              className="space-y-3"
+            >
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-md text-lg font-semibold tracking-tight"
+                >
+                  <ChevronRight
+                    className={cn(
+                      'h-5 w-5 shrink-0 text-muted-foreground transition-transform',
+                      isOpen && 'rotate-90',
+                    )}
+                  />
+                  <SystemIcon system={sys.systemType} />
+                  {sys.systemType.name}
+                  {sys.systemType.code && <SystemBadge system={sys.systemType} codeOnly />}
+                  <Badge variant="secondary" className="ml-1 font-normal">
+                    {fieldCount} {fieldCount === 1 ? 'field' : 'fields'}
+                  </Badge>
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
               <div className="grid gap-4">
                 {sys.groups.map((group) => (
                   <Card key={group.def.code}>
@@ -289,8 +338,10 @@ export function WorkTypeFieldsManager({
                   </Card>
                 ))}
               </div>
-            </div>
-          ))}
+              </CollapsibleContent>
+            </Collapsible>
+            )
+          })}
         </div>
       )}
 

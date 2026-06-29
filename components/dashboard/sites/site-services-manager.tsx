@@ -35,7 +35,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Plus, Trash2, Wrench, Loader2, Calendar as CalendarIcon, Edit2, Clock, X, MapPin, MapPinned, User, HardHat } from 'lucide-react'
+import { Plus, Trash2, Wrench, Loader2, Calendar as CalendarIcon, Edit2, Clock, X, MapPin, MapPinned, User, HardHat, Power, PowerOff } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { format } from 'date-fns'
@@ -113,6 +113,8 @@ export function SiteServicesManager({
   const [scheduleDate, setScheduleDate] = useState<Date>(new Date())
   const [scheduleEngineerId, setScheduleEngineerId] = useState<string>('')
   const [scheduling, setScheduling] = useState(false)
+  // Which service is mid-toggle (active <-> inactive), for a spinner/disabled state.
+  const [togglingId, setTogglingId] = useState<string | null>(null)
 
   const router = useRouter()
   const pathname = usePathname()
@@ -321,6 +323,19 @@ export function SiteServicesManager({
     router.refresh()
   }
 
+  // Toggle a service between active and inactive. When inactive, no new calls are
+  // generated for it (recurrence, bulk generation, manual scheduling all stop).
+  // Existing pending calls are intentionally left untouched.
+  const handleToggleActive = async (serviceId: string, nextActive: boolean) => {
+    setTogglingId(serviceId)
+    await supabase
+      .from('site_services')
+      .update({ active: nextActive })
+      .eq('id', serviceId)
+    setTogglingId(null)
+    router.refresh()
+  }
+
   const getServiceTaskCount = (serviceId: string) => {
     return tasks.filter(t => t.site_service_id === serviceId && t.status === 'pending').length
   }
@@ -361,6 +376,7 @@ export function SiteServicesManager({
             <div className="space-y-3">
               {siteServices.map((ss) => {
                 const pendingTasks = getServiceTaskCount(ss.id)
+                const isInactive = ss.active === false
                 const workerType = (ss.worker_type as WorkerType) || 'cdo'
                 const route = ss.route
                 const area = ss.area
@@ -370,7 +386,10 @@ export function SiteServicesManager({
                 return (
                   <div
                     key={ss.id}
-                    className="flex items-start justify-between p-3 border rounded-lg gap-2 border-l-4"
+                    className={cn(
+                      'flex items-start justify-between p-3 border rounded-lg gap-2 border-l-4',
+                      isInactive && 'opacity-60',
+                    )}
                     style={{ borderLeftColor: ss.service_type?.color || 'var(--border)' }}
                   >
                     <div className="flex-1 space-y-1">
@@ -381,6 +400,11 @@ export function SiteServicesManager({
                           aria-hidden="true"
                         />
                         <p className="font-medium">{ss.service_type?.name}</p>
+                        {isInactive && (
+                          <Badge variant="outline" className="border-amber-500 text-xs text-amber-600">
+                            Inactive
+                          </Badge>
+                        )}
                         {pendingTasks > 0 && (
                           <Badge variant="secondary" className="text-xs">
                             {pendingTasks} pending
@@ -456,16 +480,38 @@ export function SiteServicesManager({
                       <Button
                         variant="ghost"
                         size="icon"
-                        disabled={isDead}
+                        disabled={isDead || ss.active === false}
                         onClick={() => {
                           setScheduleServiceId(ss.id)
                           setScheduleDate(new Date())
                           setScheduleEngineerId(ss.assigned_engineer_id || '')
                         }}
                         className="text-primary hover:text-primary"
-                        title={isDead ? 'Site is dead — scheduling disabled' : 'Schedule Task'}
+                        title={
+                          isDead
+                            ? 'Site is dead — scheduling disabled'
+                            : ss.active === false
+                              ? 'Service is inactive — scheduling disabled'
+                              : 'Schedule Task'
+                        }
                       >
                         <Clock className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        disabled={togglingId === ss.id}
+                        onClick={() => handleToggleActive(ss.id, isInactive)}
+                        className="text-muted-foreground hover:text-foreground"
+                        title={isInactive ? 'Activate service' : 'Deactivate service (stops new calls)'}
+                      >
+                        {togglingId === ss.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : isInactive ? (
+                          <Power className="h-4 w-4" />
+                        ) : (
+                          <PowerOff className="h-4 w-4" />
+                        )}
                       </Button>
                       <Button
                         variant="ghost"

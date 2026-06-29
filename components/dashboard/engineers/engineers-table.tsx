@@ -51,6 +51,7 @@ import {
   KeyRound,
   Send,
   Pencil,
+  PanelLeft,
 } from 'lucide-react'
 import {
   Dialog,
@@ -64,6 +65,7 @@ import { Label } from '@/components/ui/label'
 import type { Profile, UserRole, Department, Branch } from '@/lib/types/database'
 import { formatDateUK } from '@/lib/utils'
 import { InviteEngineerDialog } from './invite-engineer-dialog'
+import { MenuAccessDialog } from './menu-access-dialog'
 
 const NO_DEPARTMENT = '__none__'
 const NO_BRANCH = '__none__'
@@ -133,6 +135,7 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
   })
   const [hoursError, setHoursError] = useState<string | null>(null)
   const [savingHours, setSavingHours] = useState(false)
+  const [menuAccessUser, setMenuAccessUser] = useState<Profile | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -524,6 +527,12 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
                           <CalendarClock className="mr-2 h-4 w-4" />
                           Working Hours
                         </DropdownMenuItem>
+                        {user.role !== 'client' && (
+                          <DropdownMenuItem onClick={() => setMenuAccessUser(user)}>
+                            <PanelLeft className="mr-2 h-4 w-4" />
+                            Menu Access
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="text-destructive focus:text-destructive"
@@ -858,6 +867,11 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <MenuAccessDialog
+        user={menuAccessUser}
+        onOpenChange={(open) => !open && setMenuAccessUser(null)}
+      />
     </div>
   )
 }

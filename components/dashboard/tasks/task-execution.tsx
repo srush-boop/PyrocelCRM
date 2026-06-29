@@ -266,6 +266,7 @@ export function TaskExecution({
         frequency_value,
         frequency_unit,
         anchor_next_to_schedule,
+        active,
         site:sites!inner(id, status),
         service_type:service_types!inner(id, status)
       `)
@@ -276,7 +277,8 @@ export function TaskExecution({
     const siteStatus = Array.isArray(siteRel) ? siteRel[0]?.status : siteRel?.status
     const serviceRel = (siteServiceData as { service_type?: { status?: string } | { status?: string }[] } | null)?.service_type
     const serviceStatus = Array.isArray(serviceRel) ? serviceRel[0]?.status : serviceRel?.status
-    if (siteServiceData && siteStatus === 'live' && serviceStatus !== 'dead') {
+    const serviceActive = (siteServiceData as { active?: boolean } | null)?.active !== false
+    if (siteServiceData && serviceActive && siteStatus === 'live' && serviceStatus !== 'dead') {
       // Calculate next scheduled date based on frequency + anchor preference
       const nextDate = computeNextScheduledDate(siteServiceData, {
         completedAt,

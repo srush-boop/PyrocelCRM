@@ -63,11 +63,14 @@ export interface Profile {
   // Days normally worked, as ISO weekday numbers (1 = Monday ... 7 = Sunday).
   // Supports part-time patterns. Defaults to Monday–Friday.
   work_days: number[] | null
+  // Per-user top-level menu visibility override. NULL/undefined = use role
+  // defaults. Otherwise an array of enabled top-level menu keys.
+  menu_permissions: string[] | null
   created_at: string
   updated_at: string
   department?: Department | null
   branch?: Branch | null
-}
+  }
 
 // A company department with its own default sales margin.
 export interface Department {
@@ -399,6 +402,9 @@ export interface Site {
   // When true (default) the next recurring task anchors to the original
   // scheduled date (fixed cadence); when false it anchors to completion date.
   anchor_next_to_schedule: boolean
+  // When false, the service is inactive: no new calls are generated for it
+  // (recurrence, bulk generation, manual scheduling all suppressed).
+  active: boolean
   created_at: string
   site?: Site
   site_system?: SiteSystem | null

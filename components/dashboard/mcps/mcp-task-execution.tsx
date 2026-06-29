@@ -313,14 +313,15 @@ export function McpTaskExecution({
     // Generate next recurring task if both the site and service type are live
     const { data: ss } = await supabase
       .from('site_services')
-      .select('frequency_value, frequency_unit, anchor_next_to_schedule, site:sites!inner(status), service_type:service_types!inner(status)')
+      .select('frequency_value, frequency_unit, anchor_next_to_schedule, active, site:sites!inner(status), service_type:service_types!inner(status)')
       .eq('id', task.site_service_id)
       .single()
     const siteRel = (ss as { site?: { status?: string } | { status?: string }[] } | null)?.site
     const siteStatus = Array.isArray(siteRel) ? siteRel[0]?.status : siteRel?.status
     const serviceRel = (ss as { service_type?: { status?: string } | { status?: string }[] } | null)?.service_type
     const serviceStatus = Array.isArray(serviceRel) ? serviceRel[0]?.status : serviceRel?.status
-    if (ss && siteStatus === 'live' && serviceStatus !== 'dead') {
+    const serviceActive = (ss as { active?: boolean } | null)?.active !== false
+    if (ss && serviceActive && siteStatus === 'live' && serviceStatus !== 'dead') {
       const nextDateStr = toDateString(
         computeNextScheduledDate(ss, { completedAt, scheduledDate: task.scheduled_date }),
       )

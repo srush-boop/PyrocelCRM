@@ -17,10 +17,17 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
+import { Switch } from '@/components/ui/switch'
 import { ChevronDown, FileDown, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { fetchQuoteSections } from '@/app/(dashboard)/dashboard/sales/quote-config-actions'
+import {
+  OMITTED_SECTIONS_KEY,
+  OMITTED_KEYS_KEY,
+  getOmittedSectionIds,
+  getOmittedElementKeys,
+} from '@/lib/sales/omitted-sections'
 import type {
   AssetType,
   QuoteDesignCategory,
@@ -159,7 +166,20 @@ function SectionBlock({
   disabled?: boolean
   ctx: RenderContext
 }) {
-  const [open, setOpen] = useState(!section.default_collapsed)
+  const elements = section.elements ?? []
+  const elementKeys = useMemo(
+    () => elements.map((el) => el.element_key),
+    [elements],
+  )
+
+  // A section is "not required" when its id is recorded in the reserved
+  // __omitted_sections list. Its answers are kept but excluded from the quote.
+  const notRequired = useMemo(
+    () => getOmittedSectionIds(values).includes(section.id),
+    [values, section.id],
+  )
+
+  const [open, setOpen] = useState(!section.default_collapsed && !notRequired)
 
   // Conditional display: only show when the referenced element equals the value.
   const visible = useMemo(() => {
@@ -168,32 +188,70 @@ function SectionBlock({
     return String(current ?? '') === String(section.condition_value ?? '')
   }, [section.condition_element_key, section.condition_value, values])
 
-  if (!visible) return null
+  // Toggle this section's "not required" state by updating the two reserved
+  // bookkeeping keys in conditional_values.
+  function setNotRequired(next: boolean) {
+    const sectionIds = new Set(getOmittedSectionIds(values))
+    const keys = new Set(getOmittedElementKeys(values))
+    if (next) {
+      sectionIds.add(section.id)
+      for (const k of elementKeys) keys.add(k)
+      setOpen(false)
+    } else {
+      sectionIds.delete(section.id)
+      for (const k of elementKeys) keys.delete(k)
+      setOpen(true)
+    }
+    onChange(OMITTED_SECTIONS_KEY, JSON.stringify(Array.from(sectionIds)))
+    onChange(OMITTED_KEYS_KEY, JSON.stringify(Array.from(keys)))
+  }
 
-  const elements = section.elements ?? []
+  if (!visible) return null
 
   return (
     <Collapsible
-      open={open}
-      onOpenChange={setOpen}
-      className="rounded-md border bg-muted/20"
+      open={open && !notRequired}
+      onOpenChange={(v) => !notRequired && setOpen(v)}
+      className={cn(
+        'rounded-md border bg-muted/20',
+        notRequired && 'opacity-70',
+      )}
     >
-      <CollapsibleTrigger asChild>
-        <button
-          type="button"
-          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left"
-        >
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            {section.title}
-          </span>
-          <ChevronDown
-            className={cn(
-              'h-4 w-4 text-muted-foreground transition-transform',
-              open && 'rotate-180',
+      <div className="flex w-full items-center justify-between gap-2 px-3 py-2">
+        <CollapsibleTrigger asChild disabled={notRequired}>
+          <button
+            type="button"
+            disabled={notRequired}
+            className="flex flex-1 items-center justify-between gap-2 text-left disabled:cursor-default"
+          >
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {section.title}
+              {notRequired && (
+                <span className="ml-2 normal-case text-muted-foreground/70">
+                  (not required — hidden from quote)
+                </span>
+              )}
+            </span>
+            {!notRequired && (
+              <ChevronDown
+                className={cn(
+                  'h-4 w-4 text-muted-foreground transition-transform',
+                  open && 'rotate-180',
+                )}
+              />
             )}
+          </button>
+        </CollapsibleTrigger>
+        <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+          <span>Not required</span>
+          <Switch
+            checked={notRequired}
+            onCheckedChange={setNotRequired}
+            disabled={disabled}
+            aria-label={`Mark ${section.title} as not required`}
           />
-        </button>
-      </CollapsibleTrigger>
+        </label>
+      </div>
       <CollapsibleContent>
         <div className="grid gap-3 px-3 pb-3 sm:grid-cols-2">
           {elements.length === 0 ? (

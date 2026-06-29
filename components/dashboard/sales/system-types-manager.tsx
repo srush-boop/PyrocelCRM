@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { SystemBadge, SystemIcon } from '@/lib/system-types'
 import {
   Table,
   TableBody,
@@ -144,18 +144,17 @@ export function SystemTypesManager({
                 <TableRow key={st.id}>
                   <TableCell>
                     {st.code ? (
-                      <Badge
-                        variant="outline"
-                        className="font-mono"
-                        style={st.color ? { borderColor: st.color, color: st.color } : undefined}
-                      >
-                        {st.code}
-                      </Badge>
+                      <SystemBadge system={st} codeOnly />
                     ) : (
                       <span className="text-muted-foreground">-</span>
                     )}
                   </TableCell>
-                  <TableCell className="font-medium">{st.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <span className="flex items-center gap-2">
+                      <SystemIcon system={st} />
+                      {st.name}
+                    </span>
+                  </TableCell>
                   <TableCell className="max-w-md truncate text-muted-foreground">
                     {st.description || '-'}
                   </TableCell>

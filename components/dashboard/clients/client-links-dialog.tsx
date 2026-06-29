@@ -18,6 +18,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Loader2, Plus, Trash2, Link2, ExternalLink, EyeOff } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Client, ClientLink, ServiceType, SystemType } from '@/lib/types/database'
+import { SystemColorDot } from '@/lib/system-types'
 
 interface ClientLinksDialogProps {
   client: Client
@@ -303,6 +304,7 @@ export function ClientLinksDialog({
                       checked={systemTypeIds.includes(st.id)}
                       onCheckedChange={() => setSystemTypeIds((prev) => toggle(prev, st.id))}
                     />
+                    <SystemColorDot color={st.color} />
                     {st.name}
                   </label>
                 ))}

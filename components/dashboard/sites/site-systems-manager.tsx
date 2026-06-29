@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
+import { SystemBadge, SystemIcon, systemAccentStyle } from '@/lib/system-types'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
@@ -321,17 +322,24 @@ export function SiteSystemsManager({
           {siteSystems.map((system) => {
             const services = servicesBySystem.get(system.id) ?? []
             const typeLabel = systemTypeLabel(system.system_type_id)
+            const st = systemTypes.find((s) => s.id === system.system_type_id)
             return (
-              <Card key={system.id}>
+              <Card
+                key={system.id}
+                className={st ? 'border-l-4' : undefined}
+                style={st ? systemAccentStyle(st.color) : undefined}
+              >
                 <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
                   <div className="space-y-1">
                     <CardTitle className="flex items-center gap-2 text-base">
-                      <Layers className="h-4 w-4 text-muted-foreground" />
+                      {st ? (
+                        <SystemIcon system={st} />
+                      ) : (
+                        <Layers className="h-4 w-4 text-muted-foreground" />
+                      )}
                       {systemTitle(system)}
-                      {typeLabel && system.system_type_id && (
-                        <Badge variant="outline" className="font-mono text-xs">
-                          {systemTypes.find((s) => s.id === system.system_type_id)?.code ?? ''}
-                        </Badge>
+                      {typeLabel && system.system_type_id && st?.code && (
+                        <SystemBadge system={st} codeOnly />
                       )}
                     </CardTitle>
                     {system.description && (

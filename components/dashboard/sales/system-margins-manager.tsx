@@ -13,6 +13,7 @@ import {
   saveWorkTypeSetting,
 } from '@/app/(dashboard)/dashboard/sales/quote-config-actions'
 import { WORK_TYPES } from '@/lib/sales'
+import { SystemBadge, SystemIcon, systemAccentStyle } from '@/lib/system-types'
 import type { SystemType, SystemWorkTypeMargin, WorkTypeSetting } from '@/lib/types/database'
 
 export function SystemMarginsManager({
@@ -120,9 +121,13 @@ export function SystemMarginsManager({
         ) : (
           <div className="grid gap-4">
             {systemTypes.map((st) => (
-              <Card key={st.id}>
+              <Card key={st.id} className="border-l-4" style={systemAccentStyle(st.color)}>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base">{st.name}</CardTitle>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <SystemIcon system={st} />
+                    {st.name}
+                    {st.code && <SystemBadge system={st} codeOnly />}
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

@@ -45,6 +45,7 @@ import { Plus, Pencil, Trash2, Boxes } from 'lucide-react'
 import { toast } from 'sonner'
 import { saveAssetType, deleteAssetType } from '@/app/(dashboard)/dashboard/sales/quote-config-actions'
 import type { AssetType, SystemType } from '@/lib/types/database'
+import { SystemColorDot } from '@/lib/system-types'
 
 const UNASSIGNED = '__none__'
 
@@ -232,7 +233,10 @@ export function AssetTypesManager({
                   <SelectItem value={UNASSIGNED}>Unassigned</SelectItem>
                   {systemTypes.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
-                      {s.code ? `${s.code} — ${s.name}` : s.name}
+                      <span className="flex items-center gap-2">
+                        <SystemColorDot color={s.color} />
+                        {s.code ? `${s.code} — ${s.name}` : s.name}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>

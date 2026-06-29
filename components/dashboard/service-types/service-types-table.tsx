@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { MoreHorizontal, Pencil, Trash2, Wrench } from 'lucide-react'
 import { EditServiceTypeDialog } from './edit-service-type-dialog'
+import { SystemBadge } from '@/lib/system-types'
 import type { ServiceType, SystemType } from '@/lib/types/database'
 
 interface ServiceTypesTableProps {
@@ -82,11 +83,7 @@ export function ServiceTypesTable({ serviceTypes, systemTypes }: ServiceTypesTab
                   <TableCell className="font-medium">{serviceType.name}</TableCell>
                   <TableCell>
                     {serviceType.system_type ? (
-                      <Badge variant="outline" className="font-mono">
-                        {serviceType.system_type.code
-                          ? `${serviceType.system_type.code} — ${serviceType.system_type.name}`
-                          : serviceType.system_type.name}
-                      </Badge>
+                      <SystemBadge system={serviceType.system_type} />
                     ) : (
                       <span className="text-muted-foreground">-</span>
                     )}

@@ -30,6 +30,7 @@ import type {
   ServiceType,
   SystemType,
 } from '@/lib/types/database'
+import { SystemColorDot } from '@/lib/system-types'
 
 interface ClientChecklistDialogProps {
   client: Client
@@ -261,6 +262,7 @@ export function ClientChecklistDialog({
                       checked={systemTypeIds.includes(st.id)}
                       onCheckedChange={() => setSystemTypeIds((prev) => toggle(prev, st.id))}
                     />
+                    <SystemColorDot color={st.color} />
                     {st.name}
                   </label>
                 ))}

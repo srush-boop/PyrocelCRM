@@ -17,6 +17,10 @@ import type {
   QuoteLineItem,
   QuoteSystem,
 } from '@/lib/types/database'
+import {
+  getOmittedElementKeys,
+  isHiddenConditionalKey,
+} from '@/lib/sales/omitted-sections'
 
 interface QuoteDocumentProps {
   quote: Quote
@@ -205,8 +209,12 @@ export function QuoteDocument({ quote, systems, lines, company, backHref }: Quot
               const productLines = systemLines.filter((l) => !l.is_service)
               const serviceLines = systemLines.filter((l) => l.is_service)
               const systemTotal = systemLines.reduce((sum, l) => sum + l.line_total_pence, 0)
+              // Keys belonging to sections the user marked "not required", plus
+              // the reserved bookkeeping keys, are excluded from the quote.
+              const omittedKeys = new Set(getOmittedElementKeys(system.conditional_values))
               const conditional = Object.entries(system.conditional_values ?? {}).filter(
-                ([, value]) => !isOmittedValue(value),
+                ([key, value]) =>
+                  !isHiddenConditionalKey(key, omittedKeys) && !isOmittedValue(value),
               )
               return (
                 <div key={system.id} className="break-inside-avoid">

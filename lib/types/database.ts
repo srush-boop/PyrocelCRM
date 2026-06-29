@@ -63,11 +63,14 @@ export interface Profile {
   // Days normally worked, as ISO weekday numbers (1 = Monday ... 7 = Sunday).
   // Supports part-time patterns. Defaults to Monday–Friday.
   work_days: number[] | null
+  // Per-user top-level menu visibility override. NULL/undefined = use role
+  // defaults. Otherwise an array of enabled top-level menu keys.
+  menu_permissions: string[] | null
   created_at: string
   updated_at: string
   department?: Department | null
   branch?: Branch | null
-}
+  }
 
 // A company department with its own default sales margin.
 export interface Department {

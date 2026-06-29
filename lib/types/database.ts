@@ -217,6 +217,19 @@ export interface ClientLink {
   updated_at: string
 }
 
+// Engineer-initiated request to take over a nearby open call.
+export interface TaskTransferRequest {
+  id: string
+  task_id: string
+  requested_by: string
+  current_engineer_id: string | null
+  status: 'pending' | 'approved' | 'declined' | 'cancelled'
+  message: string | null
+  resolved_by: string | null
+  resolved_at: string | null
+  created_at: string
+}
+
 // Per-recipient in-app notification. Browser push is a best-effort mirror.
 export interface AppNotification {
   id: string
@@ -268,6 +281,10 @@ export interface Site {
   monitoring_station_phone: string | null
   monitoring_station_url: string | null
   route_position: number | null
+  // Cached geocode of the postcode (via postcodes.io), used for "nearby calls".
+  latitude: number | null
+  longitude: number | null
+  geocoded_at: string | null
   created_at: string
   updated_at: string
   route?: Route

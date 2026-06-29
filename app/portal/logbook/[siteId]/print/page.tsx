@@ -8,10 +8,13 @@ export const metadata = { title: 'Fire Safety Log Book | Pyrocel' }
 
 export default async function PortalLogbookPrintPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ siteId: string }>
+  searchParams: Promise<{ from?: string; to?: string }>
 }) {
   const { siteId } = await params
+  const { from, to } = await searchParams
   const supabase = await createClient()
   const {
     data: { user },
@@ -36,6 +39,8 @@ export default async function PortalLogbookPrintPage({
         entries={data.entries}
         company={(company as Pick<CompanyInfo, 'name'> | null) ?? null}
         backHref={`/portal/logbook/${siteId}`}
+        fromDate={typeof from === 'string' ? from : null}
+        toDate={typeof to === 'string' ? to : null}
       />
     </div>
   )

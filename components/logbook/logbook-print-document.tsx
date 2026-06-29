@@ -24,6 +24,9 @@ export interface LogbookPrintDocumentProps {
   entries: LogbookEntry[]
   company: CompanyHeader | null
   backHref: string
+  /** Optional inclusive date range (YYYY-MM-DD). Null = unbounded on that end. */
+  fromDate?: string | null
+  toDate?: string | null
 }
 
 type Row = {
@@ -50,7 +53,11 @@ export function LogbookPrintDocument({
   entries,
   company,
   backHref,
+  fromDate,
+  toDate,
 }: LogbookPrintDocumentProps) {
+  const hasRange = Boolean(fromDate || toDate)
+
   const rows = useMemo<Row[]>(() => {
     const reportRows: Row[] = reports.map((r) => ({
       id: `report-${r.id}`,
@@ -82,8 +89,18 @@ export function LogbookPrintDocument({
       }
     })
 
-    return [...reportRows, ...entryRows].sort((a, b) => b.sortKey - a.sortKey)
-  }, [reports, entries])
+    const all = [...reportRows, ...entryRows]
+    const filtered =
+      fromDate || toDate
+        ? all.filter((r) => {
+            const day = r.date.slice(0, 10)
+            if (fromDate && day < fromDate) return false
+            if (toDate && day > toDate) return false
+            return true
+          })
+        : all
+    return filtered.sort((a, b) => b.sortKey - a.sortKey)
+  }, [reports, entries, fromDate, toDate])
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8 print:p-0">
@@ -112,11 +129,20 @@ export function LogbookPrintDocument({
           <p className="mt-2 text-xs text-muted-foreground">
             Generated {formatDateUK(new Date().toISOString())}
           </p>
+          {hasRange && (
+            <p className="text-xs font-medium text-muted-foreground">
+              Showing records
+              {fromDate ? ` from ${formatDateUK(fromDate)}` : ''}
+              {toDate ? ` to ${formatDateUK(toDate)}` : ''}
+            </p>
+          )}
         </header>
 
         {rows.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            No log book entries or service reports yet.
+            {hasRange
+              ? 'No log book entries or service reports in the selected date range.'
+              : 'No log book entries or service reports yet.'}
           </p>
         ) : (
           <table className="w-full border-collapse text-sm">

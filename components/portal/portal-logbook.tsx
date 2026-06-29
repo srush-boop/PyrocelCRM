@@ -9,7 +9,7 @@ import { BuildingInfoView } from '@/components/logbook/building-info-view'
 import { LogbookEntryForm, type LogbookEntryFormValues } from '@/components/logbook/logbook-entry-form'
 import { addClientLogbookEntry, type ClientLogbookData } from '@/app/portal/logbook/actions'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Printer } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 
 export function PortalLogbook({ data }: { data: ClientLogbookData }) {
   const router = useRouter()
@@ -48,22 +48,19 @@ export function PortalLogbook({ data }: { data: ClientLogbookData }) {
 
         <TabsContent value="records" className="mt-4">
           <Card>
-            <CardHeader className="flex flex-row items-start justify-between gap-4">
-              <div className="space-y-1.5">
-                <CardTitle className="text-base">Log book records</CardTitle>
-                <CardDescription>
-                  Professional service reports and routine checks, most recent first.
-                </CardDescription>
-              </div>
-              <Button asChild variant="outline" size="sm" className="gap-2 whitespace-nowrap">
-                <Link href={`/portal/logbook/${data.site.id}/print`}>
-                  <Printer className="h-4 w-4" />
-                  Print log book
-                </Link>
-              </Button>
+            <CardHeader>
+              <CardTitle className="text-base">Log book records</CardTitle>
+              <CardDescription>
+                Professional service reports and routine checks, most recent first. Filter by date,
+                then print or save the selected range as a PDF.
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <LogbookTimeline reports={data.reports} entries={data.entries} />
+              <LogbookTimeline
+                reports={data.reports}
+                entries={data.entries}
+                printHrefBase={`/portal/logbook/${data.site.id}/print`}
+              />
             </CardContent>
           </Card>
         </TabsContent>

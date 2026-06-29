@@ -56,6 +56,7 @@ import {
   Vault,
   Bell,
   Navigation,
+  ArrowLeftRight,
 } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 import type { LucideIcon } from 'lucide-react'
@@ -172,6 +173,7 @@ const adminNavItems: NavItem[] = [
   adminServiceManagementNavItem,
   { title: 'Users', href: '/dashboard/engineers', icon: Users },
   { title: 'Notifications', href: '/dashboard/notifications', icon: Bell },
+  { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
   { title: 'Client Logins', href: '/dashboard/client-logins', icon: KeyRound },
   { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
   salesNavItem,
@@ -186,6 +188,7 @@ const adminNavItems: NavItem[] = [
   const engineerNavItems: NavItem[] = [
   { title: 'Calls', href: '/dashboard/schedule', icon: Calendar },
   { title: 'Nearby Calls', href: '/dashboard/nearby', icon: Navigation },
+  { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
   { title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   engineerStockNavItem,
   { title: 'Employee Vault', href: '/dashboard/vault', icon: Vault },
@@ -199,6 +202,7 @@ const officeNavItems: NavItem[] = [
   { title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   officeServiceManagementNavItem,
   { title: 'Notifications', href: '/dashboard/notifications', icon: Bell },
+  { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
   { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
   salesNavItem,
   managerStockNavItem,

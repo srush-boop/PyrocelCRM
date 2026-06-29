@@ -16,6 +16,7 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { LogOut, User, ArrowLeft } from 'lucide-react'
 import { GlobalSiteSearch } from '@/components/dashboard/global-site-search'
+import { NotificationBell } from '@/components/dashboard/notifications/notification-bell'
 import type { Profile } from '@/lib/types/database'
 
 interface DashboardHeaderProps {
@@ -74,6 +75,7 @@ export function DashboardHeader({ profile }: DashboardHeaderProps) {
       {(profile.role === 'admin' || profile.role === 'office') && (
         <GlobalSiteSearch />
       )}
+      <NotificationBell />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="relative h-9 w-9 rounded-full">

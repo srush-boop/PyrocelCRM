@@ -200,6 +200,20 @@ export interface ClientChecklistItem {
   updated_at: string
 }
 
+// Per-recipient in-app notification. Browser push is a best-effort mirror.
+export interface AppNotification {
+  id: string
+  user_id: string
+  title: string
+  body: string | null
+  url: string | null
+  category: string
+  data: Record<string, unknown>
+  read_at: string | null
+  created_by: string | null
+  created_at: string
+}
+
 export interface Route {
   id: string
   name: string

@@ -120,6 +120,12 @@ export function LogbookPrintDocument({
 
       <article className="rounded-lg border bg-card p-6 text-card-foreground shadow-sm print:rounded-none print:border-0 print:p-0 print:shadow-none">
         <header className="mb-6 border-b pb-4">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/pyrocel-logo.png"
+            alt="Pyrocel Fire and Security logo"
+            className="mb-3 h-14 w-auto object-contain"
+          />
           {company?.name && (
             <p className="text-sm font-semibold text-muted-foreground">{company.name}</p>
           )}

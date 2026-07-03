@@ -12,6 +12,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Separator } from '@/components/ui/separator'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { SystemIcon, SystemBadge } from '@/lib/system-types'
 import { formatDateUK, formatTimeUK } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import {
@@ -41,7 +49,9 @@ import {
   Clock,
   StopCircle,
   Link2,
-  ExternalLink
+  ExternalLink,
+  UserPlus,
+  Wrench
 } from 'lucide-react'
 import type { 
   Profile, 
@@ -60,6 +70,7 @@ interface TaskExecutionProps {
   existingResult: TaskResult | null
   profile: Profile
   clientLinks?: ClientLink[]
+  engineers?: Profile[]
 }
 
 export function TaskExecution({ 
@@ -67,9 +78,16 @@ export function TaskExecution({
   checklistTemplate, 
   existingResult,
   profile,
-  clientLinks = []
+  clientLinks = [],
+  engineers = []
 }: TaskExecutionProps) {
   const [status, setStatus] = useState(task.status)
+  // Local snapshot of the assigned engineer so the summary reflects quick
+  // reassignments immediately without a full reload.
+  const [assignedEngineerId, setAssignedEngineerId] = useState<string | null>(
+    task.assigned_engineer_id ?? null
+  )
+  const [assigning, setAssigning] = useState(false)
   const [checklistResults, setChecklistResults] = useState<ChecklistResult[]>(() => {
     if (existingResult?.checklist_results) {
       return existingResult.checklist_results
@@ -108,6 +126,22 @@ export function TaskExecution({
 
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
+  const systemType = serviceType?.system_type
+  const clientName = task.client?.name ?? site?.client?.name ?? null
+  const isAdminOrOffice = profile.role === 'admin' || profile.role === 'office'
+
+  // Quick-assign (or reassign) this call to an engineer straight from the summary.
+  const assignEngineer = async (value: string) => {
+    const engineerId = value === 'unassigned' ? null : value
+    setAssigning(true)
+    await supabase
+      .from('tasks')
+      .update({ assigned_engineer_id: engineerId, updated_at: new Date().toISOString() })
+      .eq('id', task.id)
+    setAssignedEngineerId(engineerId)
+    setAssigning(false)
+    router.refresh()
+  }
 
   // Calculate overall status based on checklist results
   const calculateOverallStatus = (): TaskResultStatus => {
@@ -353,6 +387,81 @@ export function TaskExecution({
           <h1 className="text-2xl font-bold">{site?.name}</h1>
         </div>
       </div>
+
+      {/* Call Summary */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <SystemIcon system={systemType ?? {}} className="h-5 w-5" />
+            Call Summary
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          {systemType && (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-muted-foreground">System</span>
+              <SystemBadge system={systemType} />
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground">Service</span>
+            <span className="inline-flex items-center gap-1.5 text-right font-medium">
+              <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              {serviceType?.name ?? '—'}
+              {task.visit_type?.name ? ` · ${task.visit_type.name}` : ''}
+            </span>
+          </div>
+          {clientName && (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-muted-foreground">Client</span>
+              <span className="inline-flex items-center gap-1.5 text-right font-medium">
+                <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                {clientName}
+              </span>
+            </div>
+          )}
+          {isAdminOrOffice ? (
+            <div className="space-y-1.5 pt-1">
+              <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <UserPlus className="h-3.5 w-3.5" />
+                Assign engineer
+              </span>
+              <Select
+                value={assignedEngineerId ?? 'unassigned'}
+                onValueChange={assignEngineer}
+                disabled={assigning}
+              >
+                <SelectTrigger>
+                  {assigning ? (
+                    <span className="flex items-center gap-1.5">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving...
+                    </span>
+                  ) : (
+                    <SelectValue placeholder="Assign to..." />
+                  )}
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
+                  {engineers.map((eng) => (
+                    <SelectItem key={eng.id} value={eng.id}>
+                      {eng.full_name || eng.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-muted-foreground">Engineer</span>
+              <span className="text-right font-medium">
+                {task.assigned_engineer
+                  ? task.assigned_engineer.full_name || task.assigned_engineer.email
+                  : 'Unassigned'}
+              </span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Site Details Card */}
       <Card>

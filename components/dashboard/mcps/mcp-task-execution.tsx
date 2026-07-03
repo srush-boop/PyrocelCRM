@@ -51,6 +51,7 @@ import { formatDateUK } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import { generateMcpUrn, TEST_KEY_TYPES, MCP_CHECKLIST } from '@/lib/mcps'
 import { McpInspectionCard, type McpInspectionState, type CheckValue } from './mcp-inspection-card'
+import { TaskAttachments } from '@/components/dashboard/tasks/task-attachments'
 import type { Profile, TaskWithDetails, Mcp, McpInspection } from '@/lib/types/database'
 
 interface McpTaskExecutionProps {
@@ -627,6 +628,9 @@ export function McpTaskExecution({
           )}
         </div>
       )}
+
+      {/* Attachments */}
+      <TaskAttachments taskId={task.id} profile={profile} />
 
       {/* Add call point — lets engineers register a call point found on site */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>

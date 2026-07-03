@@ -55,6 +55,7 @@ import {
   type EmergencyLightInspectionState,
   type CheckValue,
 } from './emergency-light-inspection-card'
+import { TaskAttachments } from '@/components/dashboard/tasks/task-attachments'
 import type {
   Profile,
   TaskWithDetails,
@@ -509,6 +510,9 @@ export function EmergencyLightTaskExecution({
           </div>
         </div>
       )}
+
+      {/* Attachments */}
+      <TaskAttachments taskId={task.id} profile={profile} />
 
       <AlertDialog open={showSubmit} onOpenChange={setShowSubmit}>
         <AlertDialogContent>

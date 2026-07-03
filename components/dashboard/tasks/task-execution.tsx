@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { SystemIcon, SystemBadge } from '@/lib/system-types'
+import { TaskAttachments } from '@/components/dashboard/tasks/task-attachments'
 import { useBackNavigation } from '@/hooks/use-back-navigation'
 import { formatDateUK, formatTimeUK } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
@@ -853,6 +854,9 @@ export function TaskExecution({
           </CardContent>
         </Card>
       )}
+
+      {/* Attachments */}
+      <TaskAttachments taskId={task.id} profile={profile} />
 
       {/* Submit Confirmation Dialog */}
       <AlertDialog open={showSubmitDialog} onOpenChange={setShowSubmitDialog}>

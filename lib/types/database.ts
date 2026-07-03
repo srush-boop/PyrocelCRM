@@ -442,6 +442,23 @@ export interface DocumentFile {
   created_at: string
 }
 
+export interface TaskAttachment {
+  id: string
+  task_id: string
+  name: string
+  blob_pathname: string
+  blob_url: string
+  content_type: string | null
+  size_bytes: number | null
+  uploaded_by: string | null
+  created_at: string
+  uploader?: {
+    id: string
+    full_name: string | null
+    email: string | null
+  } | null
+}
+
 export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled'
 
 export interface Task {

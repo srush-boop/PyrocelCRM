@@ -56,6 +56,7 @@ import { emptyPhotoCategories, generateUrn, EXTINGUISHER_TYPE_LABELS } from '@/l
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import { ExtinguisherInspectionCard, type InspectionState } from './extinguisher-inspection-card'
 import { ScanQrButton } from './scan-qr-button'
+import { TaskAttachments } from '@/components/dashboard/tasks/task-attachments'
 import type {
   Profile,
   TaskWithDetails,
@@ -598,6 +599,9 @@ export function ExtinguisherTaskExecution({
           </div>
         </div>
       )}
+
+      {/* Attachments */}
+      <TaskAttachments taskId={task.id} profile={profile} />
 
       <AlertDialog open={showSubmit} onOpenChange={setShowSubmit}>
         <AlertDialogContent>

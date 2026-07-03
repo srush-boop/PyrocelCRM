@@ -370,7 +370,7 @@ export function TaskExecution({
       {/* Header */}
       <div className="flex items-start gap-4">
         <Button variant="ghost" size="icon" asChild className="mt-1">
-          <Link href="/dashboard">
+          <Link href="/dashboard/schedule">
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>

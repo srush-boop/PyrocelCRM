@@ -29,15 +29,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, ChevronUp, ChevronDown, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   saveWorkTypeField,
   deleteWorkTypeField,
+  reorderWorkTypeFields,
 } from '@/app/(dashboard)/dashboard/sales/quote-config-actions'
+import { cn } from '@/lib/utils'
 import { WORK_TYPES } from '@/lib/sales'
 import type { WorkTypeField, SystemType } from '@/lib/types/database'
 import { SystemBadge, SystemIcon } from '@/lib/system-types'
@@ -71,6 +78,8 @@ export function WorkTypeFieldsManager({
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<WorkTypeField | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  // Which system type sections are expanded. Default: all collapsed.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
   const [systemTypeId, setSystemTypeId] = useState<string>(systemTypes[0]?.id ?? '')
   const [workType, setWorkType] = useState<string>(WORK_TYPES[0].code)
@@ -167,6 +176,24 @@ export function WorkTypeFieldsManager({
     })
   }
 
+  // Move a field up or down within its system type x work type group, then
+  // persist the new order of that group only.
+  function handleMove(groupItems: WorkTypeField[], index: number, direction: -1 | 1) {
+    const target = index + direction
+    if (target < 0 || target >= groupItems.length) return
+    const reordered = [...groupItems]
+    const [moved] = reordered.splice(index, 1)
+    reordered.splice(target, 0, moved)
+    startTransition(async () => {
+      const res = await reorderWorkTypeFields(reordered.map((f) => f.id))
+      if (res.ok) {
+        router.refresh()
+      } else {
+        toast.error(res.error ?? 'Could not reorder fields')
+      }
+    })
+  }
+
   // Group fields by system type, then by work type within each.
   const bySystemType = systemTypes
     .map((st) => ({
@@ -178,9 +205,25 @@ export function WorkTypeFieldsManager({
     }))
     .filter((s) => s.groups.length > 0)
 
+  const allExpanded =
+    bySystemType.length > 0 && bySystemType.every((sys) => expanded[sys.systemType.id])
+
+  function toggleAll() {
+    if (allExpanded) {
+      setExpanded({})
+    } else {
+      setExpanded(Object.fromEntries(bySystemType.map((sys) => [sys.systemType.id, true])))
+    }
+  }
+
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        {bySystemType.length > 0 && (
+          <Button variant="outline" onClick={toggleAll}>
+            {allExpanded ? 'Collapse all' : 'Expand all'}
+          </Button>
+        )}
         <Button onClick={openNew}>
           <Plus className="mr-2 h-4 w-4" />
           Add field
@@ -196,13 +239,38 @@ export function WorkTypeFieldsManager({
         </Card>
       ) : (
         <div className="grid gap-6">
-          {bySystemType.map((sys) => (
-            <div key={sys.systemType.id} className="space-y-3">
-              <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-                <SystemIcon system={sys.systemType} />
-                {sys.systemType.name}
-                {sys.systemType.code && <SystemBadge system={sys.systemType} codeOnly />}
-              </h2>
+          {bySystemType.map((sys) => {
+            const fieldCount = sys.groups.reduce((n, g) => n + g.items.length, 0)
+            const isOpen = !!expanded[sys.systemType.id]
+            return (
+            <Collapsible
+              key={sys.systemType.id}
+              open={isOpen}
+              onOpenChange={(o) =>
+                setExpanded((prev) => ({ ...prev, [sys.systemType.id]: o }))
+              }
+              className="space-y-3"
+            >
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-md text-lg font-semibold tracking-tight"
+                >
+                  <ChevronRight
+                    className={cn(
+                      'h-5 w-5 shrink-0 text-muted-foreground transition-transform',
+                      isOpen && 'rotate-90',
+                    )}
+                  />
+                  <SystemIcon system={sys.systemType} />
+                  {sys.systemType.name}
+                  {sys.systemType.code && <SystemBadge system={sys.systemType} codeOnly />}
+                  <Badge variant="secondary" className="ml-1 font-normal">
+                    {fieldCount} {fieldCount === 1 ? 'field' : 'fields'}
+                  </Badge>
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
               <div className="grid gap-4">
                 {sys.groups.map((group) => (
                   <Card key={group.def.code}>
@@ -215,19 +283,43 @@ export function WorkTypeFieldsManager({
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-2">
-                      {group.items.map((f) => (
+                      {group.items.map((f, index) => (
                         <div
                           key={f.id}
                           className="flex items-center justify-between gap-4 rounded-md border p-3"
                         >
-                          <div className="min-w-0">
-                            <div className="font-medium">{f.label}</div>
-                            <div className="text-xs text-muted-foreground">
-                              <span className="font-mono">{f.field_key}</span> ·{' '}
-                              {FIELD_TYPES.find((t) => t.value === f.field_type)?.label}
-                              {f.field_type === 'select' && f.options.length > 0
-                                ? ` · ${f.options.join(', ')}`
-                                : ''}
+                          <div className="flex min-w-0 items-center gap-2">
+                            <div className="flex shrink-0 flex-col">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-6"
+                                disabled={isPending || index === 0}
+                                onClick={() => handleMove(group.items, index, -1)}
+                              >
+                                <ChevronUp className="h-4 w-4" />
+                                <span className="sr-only">Move up</span>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-6"
+                                disabled={isPending || index === group.items.length - 1}
+                                onClick={() => handleMove(group.items, index, 1)}
+                              >
+                                <ChevronDown className="h-4 w-4" />
+                                <span className="sr-only">Move down</span>
+                              </Button>
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-medium">{f.label}</div>
+                              <div className="text-xs text-muted-foreground">
+                                <span className="font-mono">{f.field_key}</span> ·{' '}
+                                {FIELD_TYPES.find((t) => t.value === f.field_type)?.label}
+                                {f.field_type === 'select' && f.options.length > 0
+                                  ? ` · ${f.options.join(', ')}`
+                                  : ''}
+                              </div>
                             </div>
                           </div>
                           <div className="flex shrink-0 gap-1">
@@ -246,8 +338,10 @@ export function WorkTypeFieldsManager({
                   </Card>
                 ))}
               </div>
-            </div>
-          ))}
+              </CollapsibleContent>
+            </Collapsible>
+            )
+          })}
         </div>
       )}
 

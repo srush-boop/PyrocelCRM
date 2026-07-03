@@ -40,7 +40,7 @@ import { Plus, Trash2, BookOpen, Save, TrendingUp, Calculator, Wrench, Check, Ch
 import { toast } from 'sonner'
 import { PpmCalculatorDialog, type PpmDraft } from '@/components/dashboard/sales/ppm-calculator-dialog'
 import { QuoteSectionRenderer } from '@/components/dashboard/sales/quote-section-renderer'
-import { SystemBadge, SystemIcon, SystemColorDot, systemAccentStyle } from '@/lib/system-types'
+import { SystemBadge, SystemIcon, SystemColorDot, getSystemHex } from '@/lib/system-types'
 import {
   computeQuoteTotals,
   computeBankStats,
@@ -1234,7 +1234,7 @@ function SystemCard({
   const systemType = systemTypes.find((s) => s.id === system.system_type_id)
 
   return (
-    <Card className={systemType ? 'border-l-4' : undefined} style={systemType ? systemAccentStyle(systemType.color) : undefined}>
+    <Card className={systemType ? 'border-l-2' : undefined} style={systemType ? { borderLeftColor: getSystemHex(systemType.color) } : undefined}>
       <Collapsible open={open} onOpenChange={setOpen}>
         <div className="flex items-center gap-2 px-6 py-4">
           <CollapsibleTrigger asChild>

@@ -32,7 +32,7 @@ export interface TransferRow {
     status: string
     scheduled_date: string | null
     site_service: {
-      service_type: { name: string } | null
+      service_type: { name: string; system_type: { name: string } | null } | null
       site: { name: string; postcode: string | null; client: { name: string } | null } | null
     } | null
   } | null
@@ -101,6 +101,11 @@ export function TransfersList({
             <div className="flex flex-wrap items-center gap-2">
               <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
               <span className="font-medium">{site?.name || 'Unknown site'}</span>
+              {row.task?.site_service?.service_type?.system_type?.name && (
+                <Badge variant="outline" className="font-normal">
+                  {row.task.site_service.service_type.system_type.name}
+                </Badge>
+              )}
               <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
               {row.task?.site_service?.service_type?.name && (
                 <Badge variant="outline">{row.task.site_service.service_type.name}</Badge>

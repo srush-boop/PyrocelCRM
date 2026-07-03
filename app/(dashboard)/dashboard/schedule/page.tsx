@@ -41,11 +41,12 @@ export default async function SchedulePage({
         route:routes(*),
         area:areas(*),
         subcontractor:subcontractors(*),
-        site:sites(*, route:routes(*), branch:branches(*)),
-        service_type:service_types(*)
+        site:sites(*, route:routes(*), branch:branches(*), client:clients(id, name)),
+        service_type:service_types(*, system_type:system_types(*))
       ),
       assigned_engineer:profiles(*),
-      visit_type:service_visit_types(*)
+      visit_type:service_visit_types(*),
+      client:clients(id, name)
     `)
     .order('scheduled_date', { ascending: true })
 
@@ -68,16 +69,18 @@ export default async function SchedulePage({
   let sites: Site[] = []
   let engineers: Profile[] = []
   let siteServices: (SiteService & { site: Site; service_type: ServiceType })[] = []
+  let clients: { id: string; name: string }[] = []
 
   if (isAdminOrOffice) {
-    const [sitesResult, engineersResult, siteServicesResult] = await Promise.all([
+    const [sitesResult, engineersResult, siteServicesResult, clientsResult] = await Promise.all([
       supabase.from('sites').select('*').order('name'),
       supabase.from('profiles').select('*').eq('role', 'engineer').order('full_name'),
       supabase.from('site_services').select(`
         *,
-        site:sites(*),
-        service_type:service_types(*)
+        site:sites(*, client:clients(id, name)),
+        service_type:service_types(*, system_type:system_types(*))
       `),
+      supabase.from('clients').select('id, name').order('name'),
     ])
 
     sites = (sitesResult.data || []) as Site[]
@@ -85,6 +88,7 @@ export default async function SchedulePage({
     // Dead sites and dead service types are paused: do not allow scheduling new tasks for them
     siteServices = ((siteServicesResult.data || []) as (SiteService & { site: Site; service_type: ServiceType })[])
       .filter((ss) => ss.site?.status !== 'dead' && ss.service_type?.status !== 'dead')
+    clients = (clientsResult.data || []) as { id: string; name: string }[]
   }
 
   return (
@@ -106,6 +110,7 @@ export default async function SchedulePage({
             <CreateTaskDialog 
               siteServices={siteServices}
               engineers={engineers}
+              clients={clients}
             />
           )}
         </div>

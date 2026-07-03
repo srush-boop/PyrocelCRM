@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
+import { useBackNavigation } from '@/hooks/use-back-navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -51,6 +51,7 @@ import { formatDateUK } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import { generateMcpUrn, TEST_KEY_TYPES, MCP_CHECKLIST } from '@/lib/mcps'
 import { McpInspectionCard, type McpInspectionState, type CheckValue } from './mcp-inspection-card'
+import { TaskAttachments } from '@/components/dashboard/tasks/task-attachments'
 import type { Profile, TaskWithDetails, Mcp, McpInspection } from '@/lib/types/database'
 
 interface McpTaskExecutionProps {
@@ -102,6 +103,7 @@ export function McpTaskExecution({
   const [showNoAccess, setShowNoAccess] = useState(false)
   const [noAccessNotes, setNoAccessNotes] = useState('')
   const router = useRouter()
+  const handleBack = useBackNavigation('/dashboard/schedule')
   const supabase = createClient()
 
   // Engineers can register new call points during the test, so keep a local
@@ -348,7 +350,7 @@ export function McpTaskExecution({
       console.log('[v0] Report email request error:', err)
     }
 
-    router.push('/dashboard')
+    router.push('/dashboard/schedule')
     router.refresh()
   }
 
@@ -407,10 +409,8 @@ export function McpTaskExecution({
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-28">
       <div className="flex items-start gap-4">
-        <Button variant="ghost" size="icon" asChild className="mt-1">
-          <Link href="/dashboard">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
+        <Button variant="ghost" size="icon" onClick={handleBack} className="mt-1" aria-label="Go back">
+          <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1">
           <div className="mb-1 flex items-center gap-2">
@@ -628,6 +628,9 @@ export function McpTaskExecution({
           )}
         </div>
       )}
+
+      {/* Attachments */}
+      <TaskAttachments taskId={task.id} profile={profile} />
 
       {/* Add call point — lets engineers register a call point found on site */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>

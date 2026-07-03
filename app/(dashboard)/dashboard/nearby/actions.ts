@@ -12,6 +12,7 @@ export interface NearbyCall {
   scheduledDate: string | null
   serviceTypeId: string | null
   serviceTypeName: string | null
+  systemTypeName: string | null
   siteId: string
   siteName: string
   postcode: string | null
@@ -56,7 +57,7 @@ export async function findNearbyCalls(
        assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(id, full_name),
        site_service:site_services(
          service_type_id,
-         service_type:service_types(id, name),
+         service_type:service_types(id, name, system_type:system_types(name)),
          site:sites(id, name, postcode, address, latitude, longitude, geocoded_at,
            client:clients(id, name))
        )`
@@ -79,7 +80,7 @@ export async function findNearbyCalls(
     assigned_engineer: { id: string; full_name: string | null } | null
     site_service: {
       service_type_id: string | null
-      service_type: { id: string; name: string } | null
+      service_type: { id: string; name: string; system_type: { name: string } | null } | null
       site: {
         id: string
         name: string
@@ -173,6 +174,7 @@ export async function findNearbyCalls(
       scheduledDate: r.scheduled_date,
       serviceTypeId: r.site_service?.service_type_id ?? null,
       serviceTypeName: r.site_service?.service_type?.name ?? null,
+      systemTypeName: r.site_service?.service_type?.system_type?.name ?? null,
       siteId: site.id,
       siteName: site.name,
       postcode: site.postcode,

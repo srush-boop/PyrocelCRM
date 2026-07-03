@@ -56,6 +56,8 @@ interface TaskReport {
   clientId: string
   serviceName: string
   serviceTypeId: string
+  systemTypeId: string
+  systemTypeName: string
   engineerName: string
   engineerId: string
   clientEmail: string
@@ -92,6 +94,7 @@ export default function ReportsPage() {
   const [selectedClient, setSelectedClient] = useState<string>('all')
   const [selectedEngineer, setSelectedEngineer] = useState<string>('all')
   const [selectedServiceType, setSelectedServiceType] = useState<string>('all')
+  const [selectedSystemType, setSelectedSystemType] = useState<string>('all')
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined)
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined)
@@ -102,6 +105,7 @@ export default function ReportsPage() {
   const [clients, setClients] = useState<FilterOption[]>([])
   const [engineers, setEngineers] = useState<FilterOption[]>([])
   const [serviceTypes, setServiceTypes] = useState<FilterOption[]>([])
+  const [systemTypes, setSystemTypes] = useState<FilterOption[]>([])
 
   useEffect(() => {
     loadReports()
@@ -109,17 +113,19 @@ export default function ReportsPage() {
   }, [])
 
   const loadFilterOptions = async () => {
-    const [sitesRes, clientsRes, engineersRes, serviceTypesRes] = await Promise.all([
+    const [sitesRes, clientsRes, engineersRes, serviceTypesRes, systemTypesRes] = await Promise.all([
       supabase.from('sites').select('id, name').order('name'),
       supabase.from('clients').select('id, name').order('name'),
       supabase.from('profiles').select('id, full_name, email').eq('role', 'engineer'),
       supabase.from('service_types').select('id, name').order('name'),
+      supabase.from('system_types').select('id, name').order('name'),
     ])
 
     setSites(sitesRes.data?.map(s => ({ id: s.id, name: s.name })) || [])
     setClients(clientsRes.data?.map(c => ({ id: c.id, name: c.name })) || [])
     setEngineers(engineersRes.data?.map(e => ({ id: e.id, name: e.full_name || e.email })) || [])
     setServiceTypes(serviceTypesRes.data?.map(st => ({ id: st.id, name: st.name })) || [])
+    setSystemTypes(systemTypesRes.data?.map(st => ({ id: st.id, name: st.name })) || [])
   }
 
   const loadReports = async () => {
@@ -143,7 +149,7 @@ export default function ReportsPage() {
               site_id,
               service_type_id,
               sites(id, name, contact_email, client_id, clients(id, name)),
-              service_types(id, name)
+              service_types(id, name, system_type_id, system_types(id, name))
             )
           )
         `)
@@ -162,6 +168,8 @@ export default function ReportsPage() {
         clientId: item.tasks?.site_services?.sites?.client_id || '',
         serviceName: item.tasks?.site_services?.service_types?.name || 'Unknown',
         serviceTypeId: item.tasks?.site_services?.service_types?.id || '',
+        systemTypeId: item.tasks?.site_services?.service_types?.system_type_id || '',
+        systemTypeName: item.tasks?.site_services?.service_types?.system_types?.name || '',
         engineerName: item.tasks?.profiles?.full_name || item.tasks?.profiles?.email || 'Unassigned',
         engineerId: item.tasks?.assigned_engineer_id || '',
         clientEmail: item.tasks?.site_services?.sites?.contact_email || '',
@@ -209,6 +217,9 @@ export default function ReportsPage() {
       // Service type filter
       if (selectedServiceType !== 'all' && report.serviceTypeId !== selectedServiceType) return false
 
+      // System type filter
+      if (selectedSystemType !== 'all' && report.systemTypeId !== selectedSystemType) return false
+
       // Status filter
       if (selectedStatus !== 'all' && report.overallStatus !== selectedStatus) return false
 
@@ -227,7 +238,7 @@ export default function ReportsPage() {
 
       return true
     })
-  }, [reports, search, selectedSite, selectedClient, selectedEngineer, selectedServiceType, selectedStatus, emailStatus, dateFrom, dateTo])
+  }, [reports, search, selectedSite, selectedClient, selectedEngineer, selectedServiceType, selectedSystemType, selectedStatus, emailStatus, dateFrom, dateTo])
 
   const clearFilters = () => {
     setSearch('')
@@ -235,6 +246,7 @@ export default function ReportsPage() {
     setSelectedClient('all')
     setSelectedEngineer('all')
     setSelectedServiceType('all')
+    setSelectedSystemType('all')
     setSelectedStatus('all')
     setEmailStatus('all')
     setDateFrom(undefined)
@@ -242,8 +254,8 @@ export default function ReportsPage() {
   }
 
   const hasActiveFilters = search || selectedSite !== 'all' || selectedClient !== 'all' || 
-    selectedEngineer !== 'all' || selectedServiceType !== 'all' || selectedStatus !== 'all' || 
-    emailStatus !== 'all' || dateFrom || dateTo
+    selectedEngineer !== 'all' || selectedServiceType !== 'all' || selectedSystemType !== 'all' || 
+    selectedStatus !== 'all' || emailStatus !== 'all' || dateFrom || dateTo
 
   const toggleOne = (id: string) => {
     setSelectedIds((prev) => {
@@ -448,6 +460,23 @@ export default function ReportsPage() {
                   {engineers.map((eng) => (
                     <SelectItem key={eng.id} value={eng.id}>
                       {eng.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label className="text-xs text-muted-foreground">System Type</Label>
+              <Select value={selectedSystemType} onValueChange={setSelectedSystemType}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="All Systems" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Systems</SelectItem>
+                  {systemTypes.map((st) => (
+                    <SelectItem key={st.id} value={st.id}>
+                      {st.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -230,6 +230,11 @@ export function NearbyCalls({ serviceTypes }: { serviceTypes: ServiceType[] }) {
                   <div className="flex items-center gap-2">
                     <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <span className="font-medium">{call.siteName}</span>
+                    {call.systemTypeName && (
+                      <Badge variant="outline" className="text-xs font-normal">
+                        {call.systemTypeName}
+                      </Badge>
+                    )}
                     <Badge variant="secondary" className="gap-1">
                       <MapPin className="h-3 w-3" />
                       {call.distanceMiles} mi

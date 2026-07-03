@@ -442,11 +442,31 @@ export interface DocumentFile {
   created_at: string
 }
 
+export interface TaskAttachment {
+  id: string
+  task_id: string
+  name: string
+  blob_pathname: string
+  blob_url: string
+  content_type: string | null
+  size_bytes: number | null
+  uploaded_by: string | null
+  created_at: string
+  uploader?: {
+    id: string
+    full_name: string | null
+    email: string | null
+  } | null
+}
+
 export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled'
 
 export interface Task {
   id: string
   site_service_id: string
+  // Client this call is billed to. Defaults to the site's client at scheduling
+  // time but can be overridden.
+  client_id: string | null
   assigned_engineer_id: string | null
   scheduled_date: string
   // Optional booked appointment slot on the scheduled date (24h "HH:MM[:SS]").
@@ -464,6 +484,7 @@ export interface Task {
   site_service?: SiteService
   assigned_engineer?: Profile | null
   visit_type?: ServiceVisitType | null
+  client?: Client | null
   }
 
 export interface ChecklistResult {

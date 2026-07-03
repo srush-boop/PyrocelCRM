@@ -51,11 +51,12 @@ export default async function TaskPage({ params }: PageProps) {
       *,
       site_service:site_services(
         *,
-        site:sites(*),
-        service_type:service_types(*)
+        site:sites(*, client:clients(id, name)),
+        service_type:service_types(*, system_type:system_types(*))
       ),
       assigned_engineer:profiles(*),
-      visit_type:service_visit_types(*)
+      visit_type:service_visit_types(*),
+      client:clients(id, name)
     `)
     .eq('id', id)
     .single()
@@ -290,6 +291,18 @@ export default async function TaskPage({ params }: PageProps) {
     .eq('task_id', id)
     .single()
 
+  // Office/admin can quick-assign this call from the summary, so load engineers.
+  const isAdminOrOffice = (profile as Profile).role === 'admin' || (profile as Profile).role === 'office'
+  let engineers: Profile[] = []
+  if (isAdminOrOffice) {
+    const { data: engineersData } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'engineer')
+      .order('full_name')
+    engineers = (engineersData || []) as Profile[]
+  }
+
   return (
     <TaskExecution
       task={task as TaskWithDetails}
@@ -297,6 +310,7 @@ export default async function TaskPage({ params }: PageProps) {
       existingResult={taskResult}
       profile={profile as Profile}
       clientLinks={clientLinks}
+      engineers={engineers}
     />
   )
 }

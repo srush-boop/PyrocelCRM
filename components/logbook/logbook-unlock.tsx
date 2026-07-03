@@ -32,6 +32,14 @@ export function LogbookUnlock({ siteId, siteName }: { siteId: string; siteName: 
     <main className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
+          <div className="mx-auto mb-3 flex h-16 w-28 items-center justify-center overflow-hidden rounded-md border bg-white p-1.5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/images/pyrocel-logo.png"
+              alt="Pyrocel Fire and Security logo"
+              className="h-full w-full object-contain"
+            />
+          </div>
           <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
             <Lock className="h-6 w-6 text-primary" aria-hidden="true" />
           </div>

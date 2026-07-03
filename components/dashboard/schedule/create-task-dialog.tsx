@@ -32,13 +32,22 @@ import { cn } from '@/lib/utils'
 interface CreateTaskDialogProps {
   siteServices: (SiteService & { site: Site; service_type: ServiceType })[]
   engineers: Profile[]
+  clients: { id: string; name: string }[]
 }
 
 const ALL_VISITS = '__all__'
+// Sentinel for service types that don't belong to a system type, so they remain
+// selectable rather than being hidden behind an empty system list.
+const NONE_SYSTEM = '__none__'
+const NO_CLIENT = '__none__'
 
-export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogProps) {
+export function CreateTaskDialog({ siteServices, engineers, clients }: CreateTaskDialogProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  // Cascading selection: site -> system -> service (which resolves to a site_service).
+  const [siteId, setSiteId] = useState('')
+  const [systemTypeId, setSystemTypeId] = useState('')
+  const [clientId, setClientId] = useState('')
   const [formData, setFormData] = useState({
     site_service_id: '',
     assigned_engineer_id: '',
@@ -54,12 +63,66 @@ export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogPr
   const router = useRouter()
   const supabase = createClient()
 
-  // When a site service is picked, load its service type's visit types so the
-  // user can schedule a specific visit (e.g. Annual vs Periodic).
+  // Inactive services and dead sites/service types cannot have new calls
+  // scheduled — hide them from the pickers.
+  const schedulableServices = siteServices.filter((ss) => ss.active !== false)
+
+  // Distinct sites that have at least one schedulable service.
+  const sites = Array.from(
+    new Map(schedulableServices.map((ss) => [ss.site.id, ss.site])).values(),
+  ).sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+
+  const selectedSite = sites.find((s) => s.id === siteId)
+
+  // Systems available at the selected site, derived from its services.
+  const systemsForSite = siteId
+    ? Array.from(
+        new Map(
+          schedulableServices
+            .filter((ss) => ss.site_id === siteId)
+            .map((ss) => {
+              const st = ss.service_type?.system_type
+              const key = st?.id ?? NONE_SYSTEM
+              return [key, { id: key, name: st?.name ?? 'No system' }]
+            }),
+        ).values(),
+      ).sort((a, b) => a.name.localeCompare(b.name))
+    : []
+
+  // Services at the selected site + system.
+  const servicesForSelection =
+    siteId && systemTypeId
+      ? schedulableServices.filter(
+          (ss) =>
+            ss.site_id === siteId &&
+            (ss.service_type?.system_type_id ?? NONE_SYSTEM) === systemTypeId,
+        )
+      : []
+
+  const handleSiteChange = (value: string) => {
+    setSiteId(value)
+    setSystemTypeId('')
+    setVisitTypes([])
+    setVisitTypeId(ALL_VISITS)
+    setFormData((prev) => ({ ...prev, site_service_id: '' }))
+    // Default the client to the site's client, but allow it to be overridden.
+    const site = sites.find((s) => s.id === value)
+    setClientId(site?.client_id ?? '')
+  }
+
+  const handleSystemChange = (value: string) => {
+    setSystemTypeId(value)
+    setVisitTypes([])
+    setVisitTypeId(ALL_VISITS)
+    setFormData((prev) => ({ ...prev, site_service_id: '' }))
+  }
+
+  // When a service is picked, load its service type's visit types so the user
+  // can schedule a specific visit (e.g. Annual vs Periodic).
   const handleServiceChange = async (siteServiceId: string) => {
     setFormData({ ...formData, site_service_id: siteServiceId })
     setVisitTypeId(ALL_VISITS)
-    const ss = siteServices.find((s) => s.id === siteServiceId)
+    const ss = schedulableServices.find((s) => s.id === siteServiceId)
     if (!ss?.service_type_id) {
       setVisitTypes([])
       return
@@ -70,6 +133,21 @@ export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogPr
       .eq('service_type_id', ss.service_type_id)
       .order('sort_order', { ascending: true })
     setVisitTypes((data as { id: string; name: string }[]) ?? [])
+  }
+
+  const resetForm = () => {
+    setSiteId('')
+    setSystemTypeId('')
+    setClientId('')
+    setFormData({
+      site_service_id: '',
+      assigned_engineer_id: '',
+      scheduled_date: new Date(),
+      booked_start_time: '',
+      booked_end_time: '',
+    })
+    setVisitTypes([])
+    setVisitTypeId(ALL_VISITS)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -89,6 +167,7 @@ export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogPr
 
     const { error } = await supabase.from('tasks').insert({
       site_service_id: formData.site_service_id,
+      client_id: clientId || null,
       assigned_engineer_id: formData.assigned_engineer_id || null,
       scheduled_date: format(formData.scheduled_date, 'yyyy-MM-dd'),
       booked_start_time: formData.booked_start_time || null,
@@ -101,34 +180,19 @@ export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogPr
 
     if (!error) {
       setOpen(false)
-      setFormData({
-        site_service_id: '',
-        assigned_engineer_id: '',
-        scheduled_date: new Date(),
-        booked_start_time: '',
-        booked_end_time: '',
-      })
-      setVisitTypes([])
-      setVisitTypeId(ALL_VISITS)
+      resetForm()
       router.refresh()
     }
   }
 
-  // Inactive services cannot have new calls scheduled — hide them from the picker.
-  const schedulableServices = siteServices.filter((ss) => ss.active !== false)
-
-  // Group site services by site
-  const siteServicesBySite = schedulableServices.reduce((acc, ss) => {
-    const siteName = ss.site?.name || 'Unknown'
-    if (!acc[siteName]) {
-      acc[siteName] = []
-    }
-    acc[siteName].push(ss)
-    return acc
-  }, {} as Record<string, typeof siteServices>)
-
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o)
+        if (!o) resetForm()
+      }}
+    >
       <DialogTrigger asChild>
         <Button>
           <Plus className="mr-2 h-4 w-4" />
@@ -145,30 +209,91 @@ export function CreateTaskDialog({ siteServices, engineers }: CreateTaskDialogPr
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label>Site & Service *</Label>
-              <Select
-                value={formData.site_service_id}
-                onValueChange={handleServiceChange}
-                required
-              >
+              <Label>Site *</Label>
+              <Select value={siteId} onValueChange={handleSiteChange} required>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a site service" />
+                  <SelectValue placeholder="Select a site" />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(siteServicesBySite).map(([siteName, services]) => (
-                    <div key={siteName}>
-                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                        {siteName}
-                      </div>
-                      {services.map((ss) => (
-                        <SelectItem key={ss.id} value={ss.id}>
-                          {ss.service_type?.name}
-                        </SelectItem>
-                      ))}
-                    </div>
+                  {sites.map((site) => (
+                    <SelectItem key={site.id} value={site.id}>
+                      {site.name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>System *</Label>
+              <Select
+                value={systemTypeId}
+                onValueChange={handleSystemChange}
+                disabled={!siteId}
+              >
+                <SelectTrigger>
+                  <SelectValue
+                    placeholder={siteId ? 'Select a system' : 'Select a site first'}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {systemsForSite.map((sys) => (
+                    <SelectItem key={sys.id} value={sys.id}>
+                      {sys.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Service Type *</Label>
+              <Select
+                value={formData.site_service_id}
+                onValueChange={handleServiceChange}
+                disabled={!systemTypeId}
+              >
+                <SelectTrigger>
+                  <SelectValue
+                    placeholder={
+                      systemTypeId ? 'Select a service type' : 'Select a system first'
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {servicesForSelection.map((ss) => (
+                    <SelectItem key={ss.id} value={ss.id}>
+                      {ss.service_type?.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Client</Label>
+              <Select
+                value={clientId || NO_CLIENT}
+                onValueChange={(value) => setClientId(value === NO_CLIENT ? '' : value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a client" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_CLIENT}>No client</SelectItem>
+                  {clients.map((client) => (
+                    <SelectItem key={client.id} value={client.id}>
+                      {client.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedSite && (
+                <p className="text-xs text-muted-foreground">
+                  Defaults to the site&apos;s client. Change it to bill this call to a
+                  different client.
+                </p>
+              )}
             </div>
 
             {visitTypes.length > 0 && (

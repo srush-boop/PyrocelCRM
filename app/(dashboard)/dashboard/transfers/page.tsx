@@ -26,7 +26,7 @@ export default async function TransfersPage() {
        current_engineer:profiles!task_transfer_requests_current_engineer_id_fkey(id, full_name),
        task:tasks(id, status, scheduled_date,
          site_service:site_services(
-           service_type:service_types(name),
+           service_type:service_types(name, system_type:system_types(name)),
            site:sites(name, postcode, client:clients(name))
          )
        )`

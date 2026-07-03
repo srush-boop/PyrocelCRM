@@ -6,7 +6,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LogbookTimeline } from '@/components/logbook/logbook-timeline'
 import { LogbookEntryForm, type LogbookEntryFormValues } from '@/components/logbook/logbook-entry-form'
 import { addOccupierEntry, type PublicLogbookData } from '@/app/logbook/[siteId]/actions'
-import { Flame } from 'lucide-react'
 
 export function PublicLogbook({ data }: { data: PublicLogbookData }) {
   const router = useRouter()
@@ -21,8 +20,13 @@ export function PublicLogbook({ data }: { data: PublicLogbookData }) {
   return (
     <main className="mx-auto min-h-screen max-w-3xl space-y-6 p-4 sm:p-6">
       <header className="flex items-center gap-3 border-b pb-4">
-        <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-          <Flame className="h-5 w-5" aria-hidden="true" />
+        <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-md border bg-white p-1">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/pyrocel-logo.png"
+            alt="Pyrocel Fire and Security logo"
+            className="h-full w-full object-contain"
+          />
         </div>
         <div>
           <h1 className="text-lg font-semibold leading-tight text-balance">Fire Safety Log Book</h1>

@@ -223,6 +223,23 @@ export async function deleteWorkTypeField(id: string): Promise<Result> {
   return { ok: true }
 }
 
+// Persist the order of work-type fields within a system type x work type group
+// in one call (after an up/down reorder). Positions are written 0..n-1 in the
+// supplied order.
+export async function reorderWorkTypeFields(orderedIds: string[]): Promise<Result> {
+  const { supabase, error } = await requireStaff()
+  if (!supabase) return { ok: false, error }
+  for (let i = 0; i < orderedIds.length; i++) {
+    const { error: dbError } = await supabase
+      .from('work_type_fields')
+      .update({ position: i })
+      .eq('id', orderedIds[i])
+    if (dbError) return { ok: false, error: dbError.message }
+  }
+  revalidatePath('/dashboard/sales/work-type-fields')
+  return { ok: true }
+}
+
 // ---------- Design categories ----------
 export async function saveDesignCategory(input: {
   id?: string

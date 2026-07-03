@@ -42,15 +42,8 @@ import type {
   SelectedHazard,
   MethodStep,
   KeyPerson,
+  SiteOption,
 } from '@/lib/rams/types'
-
-interface SiteOption {
-  id: string
-  name: string
-  address: string | null
-  client_id: string | null
-  contact_email: string | null
-}
 
 interface RamsWizardProps {
   templates: RamsMasterTemplate[]

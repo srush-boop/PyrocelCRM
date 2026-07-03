@@ -326,6 +326,9 @@ interface QuoteBuilderProps {
   initialSystems?: QuoteSystem[]
   initialLines?: QuoteLineItem[]
   initialPpm?: QuoteSystemPpm[]
+  // Client-request import: previously-saved requirements matrix + its source.
+  initialRequirements?: DraftRequirement[]
+  initialRequirementSource?: RequirementSourceInfo | null
   readOnly?: boolean
 }
 
@@ -356,6 +359,8 @@ export function QuoteBuilder({
   initialSystems,
   initialLines,
   initialPpm,
+  initialRequirements,
+  initialRequirementSource,
   readOnly = false,
 }: QuoteBuilderProps) {
   const router = useRouter()
@@ -385,6 +390,17 @@ export function QuoteBuilder({
   const [discount, setDiscount] = useState(penceToPounds(quote?.discount_pence ?? 0))
   const [validUntil, setValidUntil] = useState(quote?.valid_until ?? '')
   const [showLineItems, setShowLineItems] = useState(quote?.show_line_items ?? true)
+
+  // ----- Client-request requirements matrix state -----
+  const [requirements, setRequirements] = useState<DraftRequirement[]>(
+    initialRequirements ?? [],
+  )
+  const [requirementSource, setRequirementSource] = useState<RequirementSourceInfo | null>(
+    initialRequirementSource ?? null,
+  )
+  const [showRequirementsMatrix, setShowRequirementsMatrix] = useState(
+    quote?.show_requirements_matrix ?? false,
+  )
 
   // ----- Systems / lines state -----
   const [systems, setSystems] = useState<EditSystem[]>(() => {
@@ -479,6 +495,57 @@ export function QuoteBuilder({
   }
   function removeSystem(key: string) {
     setSystems((prev) => prev.filter((s) => s.key !== key))
+  }
+
+  // Apply an AI-generated proposal from an imported client request. This only
+  // ever *adds* to the quote and never touches pricing: suggested systems are
+  // appended as blank-priced systems (staff add catalogue lines afterwards),
+  // and the requirements matrix is populated for review. Existing content is
+  // preserved; the title is only filled if currently empty.
+  function applyImportedProposal(payload: ImportApplyPayload) {
+    // Seed notes with the AI proposal notes only if the field is empty.
+    if (payload.proposalNotes && !notes.trim()) setNotes(payload.proposalNotes)
+
+    if (payload.suggestedSystems.length > 0) {
+      setSystems((prev) => {
+        const startIndex = prev.length
+        const added: EditSystem[] = payload.suggestedSystems.map((sug, i) => {
+          const base = blankSystem(startIndex + i + 1, defaultMarginPercent)
+          const seededMargin =
+            sug.system_type_id !== null
+              ? resolveSystemWorkTypeMargin(
+                  systemWorkTypeMargins,
+                  sug.system_type_id,
+                  sug.work_type,
+                )
+              : null
+          const matchedType = sug.system_type_id
+            ? systemTypes.find((t) => t.id === sug.system_type_id)
+            : undefined
+          return {
+            ...base,
+            system_type_id: sug.system_type_id ?? null,
+            system_name: sug.system_name || base.system_name,
+            system_code: matchedType?.code ?? base.system_code,
+            work_type: sug.work_type || base.work_type,
+            specification: sug.specification || '',
+            margin: seededMargin !== null ? String(seededMargin) : base.margin,
+          }
+        })
+        return [...prev, ...added]
+      })
+    }
+
+    setRequirements(payload.requirements)
+    setRequirementSource(payload.source)
+    // Default to internal-only; staff opt in to showing the matrix to clients.
+    setShowRequirementsMatrix(false)
+    const sysCount = payload.suggestedSystems.length
+    toast.success(
+      `Imported ${payload.requirements.length} requirement${
+        payload.requirements.length === 1 ? '' : 's'
+      }${sysCount ? ` and ${sysCount} suggested system${sysCount === 1 ? '' : 's'}` : ''}`,
+    )
   }
   function addLine(systemKey: string, line?: EditLine) {
     setSystems((prev) =>
@@ -642,11 +709,24 @@ export function QuoteBuilder({
             margin_percent: l.margin.trim() === '' ? null : Number.parseFloat(l.margin) || 0,
           })),
       })),
+      show_requirements_matrix: showRequirementsMatrix,
+      requirements: requirements
+        .filter((r) => r.requirement.trim())
+        .map((r) => ({
+          category: r.category || null,
+          requirement: r.requirement,
+          our_response: r.our_response || null,
+          status: r.status,
+        })),
+      requirementSource,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     quote?.id,
     title,
+    requirements,
+    requirementSource,
+    showRequirementsMatrix,
     targetMode,
     clientId,
     siteId,
@@ -879,6 +959,36 @@ export function QuoteBuilder({
 
         </CardContent>
       </Card>
+
+      {/* ---------- Client request / requirements matrix ---------- */}
+      {!readOnly && (
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between gap-4">
+            <div>
+              <CardTitle>Client request</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground text-pretty">
+                Import a client email or specification. AI summarises it, extracts each
+                requirement, and drafts our response — you review before it&apos;s saved.
+              </p>
+            </div>
+            <QuoteRequestImporter
+              systemTypes={systemTypes}
+              onApply={applyImportedProposal}
+            />
+          </CardHeader>
+          {(requirements.length > 0 || requirementSource) && (
+            <CardContent>
+              <QuoteRequirementsEditor
+                requirements={requirements}
+                onChange={setRequirements}
+                source={requirementSource}
+                showMatrix={showRequirementsMatrix}
+                onShowMatrixChange={setShowRequirementsMatrix}
+              />
+            </CardContent>
+          )}
+        </Card>
+      )}
 
       {/* ---------- Systems ---------- */}
       {systems.map((system) => (

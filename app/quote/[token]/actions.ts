@@ -90,16 +90,19 @@ export async function getPublicQuote(token: string) {
     .maybeSingle()
   if (!quote) return null
 
-  const [{ data: systems }, { data: lines }, { data: company }] = await Promise.all([
-    supabase.from('quote_systems').select('*').eq('quote_id', quote.id).order('position'),
-    supabase.from('quote_line_items').select('*').eq('quote_id', quote.id).order('position'),
-    supabase.from('company_info').select('*').limit(1).maybeSingle(),
-  ])
+  const [{ data: systems }, { data: lines }, { data: company }, { data: requirements }] =
+    await Promise.all([
+      supabase.from('quote_systems').select('*').eq('quote_id', quote.id).order('position'),
+      supabase.from('quote_line_items').select('*').eq('quote_id', quote.id).order('position'),
+      supabase.from('company_info').select('*').limit(1).maybeSingle(),
+      supabase.from('quote_requirements').select('*').eq('quote_id', quote.id).order('position'),
+    ])
 
   return {
     quote,
     systems: systems ?? [],
     lines: lines ?? [],
     company: company ?? null,
+    requirements: requirements ?? [],
   }
 }

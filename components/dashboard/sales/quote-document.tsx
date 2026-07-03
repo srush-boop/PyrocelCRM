@@ -16,7 +16,9 @@ import type {
   Quote,
   QuoteLineItem,
   QuoteSystem,
+  QuoteRequirement,
 } from '@/lib/types/database'
+import { REQUIREMENT_STATUS_META } from '@/lib/sales-requirements'
 import {
   getOmittedElementKeys,
   isHiddenConditionalKey,
@@ -27,6 +29,9 @@ interface QuoteDocumentProps {
   systems: QuoteSystem[]
   lines: QuoteLineItem[]
   company: CompanyInfo | null
+  // Client-request compliance matrix. Only rendered when the quote opts in via
+  // show_requirements_matrix and at least one requirement is present.
+  requirements?: QuoteRequirement[]
   backHref?: string
 }
 
@@ -73,7 +78,16 @@ function renderConditionalValue(value: string | number | boolean): string {
   return String(value)
 }
 
-export function QuoteDocument({ quote, systems, lines, company, backHref }: QuoteDocumentProps) {
+export function QuoteDocument({
+  quote,
+  systems,
+  lines,
+  company,
+  requirements = [],
+  backHref,
+}: QuoteDocumentProps) {
+  const showRequirements = quote.show_requirements_matrix && requirements.length > 0
+  const sortedRequirements = requirements.slice().sort((a, b) => a.position - b.position)
   const companyName = company?.name || 'Pyrocel Ltd'
   const recipientName = quote.client?.name || quote.prospect_name || 'Prospective client'
   const recipientContact = quote.client?.contact_name || quote.prospect_contact
@@ -412,6 +426,53 @@ export function QuoteDocument({ quote, systems, lines, company, backHref }: Quot
               )
             })}
         </div>
+
+        {/* Client requirements compliance matrix */}
+        {showRequirements && (
+          <div className="mt-8 break-inside-avoid border-t pt-6">
+            <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide">
+              Compliance with your requirements
+            </h3>
+            <p className="mb-3 text-xs text-muted-foreground">
+              How this quotation addresses each requirement from your enquiry.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <th className="py-1 font-medium">Requirement</th>
+                    <th className="py-1 pl-3 font-medium">Our response</th>
+                    <th className="py-1 pl-3 font-medium whitespace-nowrap">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedRequirements.map((r) => (
+                    <tr key={r.id} className="border-b border-dashed align-top last:border-0">
+                      <td className="py-2 pr-3">
+                        {r.category && (
+                          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            {r.category}
+                          </div>
+                        )}
+                        <div>{r.requirement}</div>
+                      </td>
+                      <td className="py-2 pl-3 text-muted-foreground">
+                        {r.our_response || '—'}
+                      </td>
+                      <td className="py-2 pl-3 whitespace-nowrap">
+                        <span
+                          className={`inline-block rounded-full border px-2 py-0.5 text-xs font-medium ${REQUIREMENT_STATUS_META[r.status].badgeClass}`}
+                        >
+                          {REQUIREMENT_STATUS_META[r.status].short}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Totals */}
         <div className="mt-8 flex justify-end break-inside-avoid">

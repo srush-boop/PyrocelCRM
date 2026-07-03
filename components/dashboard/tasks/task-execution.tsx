@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -20,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { SystemIcon, SystemBadge } from '@/lib/system-types'
+import { useBackNavigation } from '@/hooks/use-back-navigation'
 import { formatDateUK, formatTimeUK } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import {
@@ -129,6 +129,7 @@ export function TaskExecution({
   const systemType = serviceType?.system_type
   const clientName = task.client?.name ?? site?.client?.name ?? null
   const isAdminOrOffice = profile.role === 'admin' || profile.role === 'office'
+  const handleBack = useBackNavigation('/dashboard/schedule')
 
   // Quick-assign (or reassign) this call to an engineer straight from the summary.
   const assignEngineer = async (value: string) => {
@@ -358,7 +359,7 @@ export function TaskExecution({
 
     setSubmitting(false)
     setShowSubmitDialog(false)
-    router.push('/dashboard')
+    router.push('/dashboard/schedule')
     router.refresh()
   }
 
@@ -369,10 +370,8 @@ export function TaskExecution({
     <div className="space-y-6 max-w-3xl mx-auto pb-20">
       {/* Header */}
       <div className="flex items-start gap-4">
-        <Button variant="ghost" size="icon" asChild className="mt-1">
-          <Link href="/dashboard/schedule">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
+        <Button variant="ghost" size="icon" onClick={handleBack} className="mt-1" aria-label="Go back">
+          <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">

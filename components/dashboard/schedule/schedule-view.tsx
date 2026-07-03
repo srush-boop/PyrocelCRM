@@ -88,6 +88,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   const [activeTab, setActiveTab] = useState('upcoming')
   const [sortBy, setSortBy] = useState<'date' | 'postcode'>('date')
   const [selectedEngineer, setSelectedEngineer] = useState<string>('all')
+  const [selectedSystem, setSelectedSystem] = useState<string>('all')
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined)
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined)
   const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null)
@@ -104,6 +105,15 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
 
   const isEngineer = profile.role === 'engineer'
   const isAdminOrOffice = profile.role === 'admin' || profile.role === 'office'
+
+  // Unique system types present across the current calls, for the system filter.
+  const systemOptions = Array.from(
+    tasks.reduce((map, task) => {
+      const sys = task.site_service?.service_type?.system_type
+      if (sys?.id && !map.has(sys.id)) map.set(sys.id, sys)
+      return map
+    }, new Map<string, NonNullable<NonNullable<NonNullable<TaskWithDetails['site_service']>['service_type']>['system_type']>>()).values()
+  ).sort((a, b) => (a?.name ?? '').localeCompare(b?.name ?? ''))
   // Only admin/office can multi-select and reassign tasks
   const canAssign = isAdminOrOffice && engineers.length > 0
 
@@ -172,11 +182,12 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     router.refresh()
   }
 
-  const hasActiveFilters = search || selectedEngineer !== 'all' || dateFrom || dateTo
+  const hasActiveFilters = search || selectedEngineer !== 'all' || selectedSystem !== 'all' || dateFrom || dateTo
 
   const clearFilters = () => {
     setSearch('')
     setSelectedEngineer('all')
+    setSelectedSystem('all')
     setDateFrom(undefined)
     setDateTo(undefined)
   }
@@ -191,13 +202,17 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     // Engineer filter (only for admin/office)
     const matchesEngineer = selectedEngineer === 'all' || 
       (selectedEngineer === 'unassigned' ? !task.assigned_engineer_id : task.assigned_engineer_id === selectedEngineer)
+
+    // System type filter
+    const matchesSystem = selectedSystem === 'all' ||
+      task.site_service?.service_type?.system_type?.id === selectedSystem
     
     // Date range filter
     const taskDate = new Date(task.scheduled_date)
     const matchesDateFrom = !dateFrom || taskDate >= dateFrom
     const matchesDateTo = !dateTo || taskDate <= dateTo
 
-    return matchesSearch && matchesEngineer && matchesDateFrom && matchesDateTo
+    return matchesSearch && matchesEngineer && matchesSystem && matchesDateFrom && matchesDateTo
   })
 
   // Sort the filtered tasks by the chosen key. This flows through to the
@@ -655,6 +670,25 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
               {engineers.map((eng) => (
                 <SelectItem key={eng.id} value={eng.id}>
                   {eng.full_name || eng.email}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {systemOptions.length > 0 && (
+          <Select value={selectedSystem} onValueChange={setSelectedSystem}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="System" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Systems</SelectItem>
+              {systemOptions.map((sys) => (
+                <SelectItem key={sys.id} value={sys.id}>
+                  <span className="flex items-center gap-2">
+                    <SystemIcon system={sys} className="h-3.5 w-3.5" />
+                    {sys.name}
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>

@@ -304,6 +304,7 @@ export async function deleteRamsDocument(id: string): Promise<ActionResult> {
 export async function submitForApproval(
   id: string,
   recipient: { email: string; name: string | null },
+  options?: { subject?: string; message?: string },
 ): Promise<ActionResult> {
   const { user } = await requireStaff()
   const supabase = await createClient()
@@ -347,11 +348,31 @@ export async function submitForApproval(
       ? `https://${process.env.VERCEL_URL}`
       : ''
   const link = `${baseUrl}/approve/${approval.token}`
+
+  // Escape user/AI-supplied text before embedding it in the HTML email.
+  const escapeHtml = (s: string) =>
+    s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+
+  const subject = options?.subject?.trim() || `RAMS approval requested: ${doc.rams_number}`
+
+  // If a custom (AI-drafted or edited) message was supplied, render it as the
+  // covering note; otherwise fall back to the standard boilerplate.
+  const introHtml = options?.message?.trim()
+    ? escapeHtml(options.message.trim())
+        .split(/\n{2,}/)
+        .map((para) => `<p>${para.replace(/\n/g, '<br/>')}</p>`)
+        .join('\n')
+    : `<p>Hello${recipient.name ? ` ${escapeHtml(recipient.name)}` : ''},</p>
+       <p>A Risk Assessment &amp; Method Statement (<strong>${doc.rams_number}</strong> — ${doc.title}) has been submitted for your approval.</p>`
+
   await sendEmail(
     recipient.email,
-    `RAMS approval requested: ${doc.rams_number}`,
-    `<p>Hello${recipient.name ? ` ${recipient.name}` : ''},</p>
-     <p>A Risk Assessment &amp; Method Statement (<strong>${doc.rams_number}</strong> — ${doc.title}) has been submitted for your approval.</p>
+    subject,
+    `${introHtml}
      <p><a href="${link}">Review and respond to this RAMS</a></p>
      <p>If the link above does not work, copy this URL into your browser:<br/>${link}</p>`,
   )

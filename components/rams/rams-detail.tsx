@@ -26,6 +26,13 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   ArrowLeft,
   Pencil,
   Download,
@@ -35,6 +42,7 @@ import {
   PenLine,
   GitBranch,
   Loader2,
+  Sparkles,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatDateUK, formatDateTimeUK } from '@/lib/utils'
@@ -47,6 +55,8 @@ import {
   confirmRams,
   createRevision,
 } from '@/lib/rams/actions'
+import { draftRamsApprovalEmail } from '@/lib/ai/draft-rams-approval-email'
+import type { EmailTone } from '@/lib/ai/shared'
 import type {
   RamsDocument,
   RamsEngineerConfirmation,
@@ -86,6 +96,11 @@ export function RamsDetail({
 
   const [recipientEmail, setRecipientEmail] = useState(doc.manager_email ?? '')
   const [recipientName, setRecipientName] = useState('')
+  const [approvalSubject, setApprovalSubject] = useState('')
+  const [approvalMessage, setApprovalMessage] = useState('')
+  const [approvalTone, setApprovalTone] = useState<EmailTone>('professional')
+  const [approvalInstructions, setApprovalInstructions] = useState('')
+  const [isDraftingApproval, setIsDraftingApproval] = useState(false)
   const [rejectComments, setRejectComments] = useState('')
   const [confirmSig, setConfirmSig] = useState<string | null>(null)
   const [confirmNotes, setConfirmNotes] = useState('')
@@ -93,16 +108,44 @@ export function RamsDetail({
   const meta = RAMS_STATUS_META[doc.status] || RAMS_STATUS_META.draft
   const myConfirmation = confirmations.find((c) => c.engineer_id === currentUserId)
 
+  async function handleAiDraftApproval() {
+    setIsDraftingApproval(true)
+    try {
+      const res = await draftRamsApprovalEmail({
+        ramsId: doc.id,
+        recipientName: recipientName.trim() || null,
+        tone: approvalTone,
+        instructions: approvalInstructions.trim() || undefined,
+      })
+      if (res.ok && res.body) {
+        if (res.subject) setApprovalSubject(res.subject)
+        setApprovalMessage(res.body)
+        toast.success('Draft generated — review and edit before sending')
+      } else {
+        toast.error(res.error ?? 'Could not generate a draft')
+      }
+    } finally {
+      setIsDraftingApproval(false)
+    }
+  }
+
   async function handleSendApproval() {
     if (!recipientEmail.trim()) {
       toast.error('Enter an approver email')
       return
     }
     setBusy(true)
-    const res = await submitForApproval(doc.id, {
-      email: recipientEmail.trim(),
-      name: recipientName.trim() || null,
-    })
+    const res = await submitForApproval(
+      doc.id,
+      {
+        email: recipientEmail.trim(),
+        name: recipientName.trim() || null,
+      },
+      {
+        subject: approvalSubject.trim() || undefined,
+        message: approvalMessage.trim() || undefined,
+      },
+    )
     setBusy(false)
     if (!res.success) return toast.error(res.error)
     toast.success('Sent for approval')
@@ -450,14 +493,16 @@ export function RamsDetail({
 
       {/* Send-for-approval dialog */}
       <Dialog open={approvalOpen} onOpenChange={setApprovalOpen}>
-        <DialogContent>
+        <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Send for Approval</DialogTitle>
             <DialogDescription>
               The approver receives a secure link to review and sign off this RAMS.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-2">
+          {/* min-h-0 lets this flex child shrink and scroll instead of pushing
+              the footer off-screen. */}
+          <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto py-2">
             <div className="grid gap-2">
               <Label>Approver Email *</Label>
               <Input
@@ -474,6 +519,67 @@ export function RamsDetail({
                 onChange={(e) => setRecipientName(e.target.value)}
                 placeholder="Optional"
               />
+            </div>
+            <div className="grid gap-2">
+              <Label>Subject</Label>
+              <Input
+                value={approvalSubject}
+                onChange={(e) => setApprovalSubject(e.target.value)}
+                placeholder={`RAMS approval requested: ${doc.rams_number}`}
+              />
+            </div>
+            <div className="grid gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label htmlFor="approval-message">Covering message</Label>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={approvalTone}
+                    onValueChange={(v) => setApprovalTone(v as EmailTone)}
+                  >
+                    <SelectTrigger className="h-8 w-[130px]" aria-label="Draft tone">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="professional">Professional</SelectItem>
+                      <SelectItem value="friendly">Friendly</SelectItem>
+                      <SelectItem value="concise">Concise</SelectItem>
+                      <SelectItem value="formal">Formal</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8"
+                    onClick={handleAiDraftApproval}
+                    disabled={isDraftingApproval}
+                  >
+                    {isDraftingApproval ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="mr-2 h-4 w-4" />
+                    )}
+                    {isDraftingApproval ? 'Drafting…' : 'AI draft'}
+                  </Button>
+                </div>
+              </div>
+              <Input
+                value={approvalInstructions}
+                onChange={(e) => setApprovalInstructions(e.target.value)}
+                placeholder="Optional: steer the AI draft, e.g. stress the tight deadline"
+                aria-label="Additional instructions for the AI draft"
+              />
+              <Textarea
+                id="approval-message"
+                value={approvalMessage}
+                onChange={(e) => setApprovalMessage(e.target.value)}
+                rows={7}
+                className="resize-y"
+                placeholder="Optional covering note. Leave blank to use the standard message. The secure approval link is added automatically."
+              />
+              <p className="text-xs text-muted-foreground">
+                AI drafts use this RAMS&apos;s details. Always review before sending.
+              </p>
             </div>
           </div>
           <DialogFooter>

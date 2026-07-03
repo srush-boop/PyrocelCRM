@@ -64,12 +64,17 @@ export function SendQuoteDialog({
   const [message, setMessage] = useState(defaultMessage(quote))
   const [requireSignature, setRequireSignature] = useState(quote.require_signature ?? false)
   const [tone, setTone] = useState<EmailTone>('professional')
+  const [instructions, setInstructions] = useState('')
   const [isDrafting, setIsDrafting] = useState(false)
 
   async function handleAiDraft() {
     setIsDrafting(true)
     try {
-      const res = await draftQuoteEmail({ quoteId: quote.id, tone })
+      const res = await draftQuoteEmail({
+        quoteId: quote.id,
+        tone,
+        instructions: instructions.trim() || undefined,
+      })
       if (res.ok && res.body) {
         if (res.subject) setSubject(res.subject)
         setMessage(res.body)
@@ -89,6 +94,7 @@ export function SendQuoteDialog({
     setMessage(defaultMessage(quote))
     setRequireSignature(quote.require_signature ?? false)
     setTone('professional')
+    setInstructions('')
   }
 
   function handleSend() {
@@ -210,6 +216,13 @@ export function SendQuoteDialog({
                 </Button>
               </div>
             </div>
+            <Input
+              id="quote-ai-instructions"
+              value={instructions}
+              onChange={(e) => setInstructions(e.target.value)}
+              placeholder="Optional: steer the AI draft, e.g. mention the 10% discount"
+              aria-label="Additional instructions for the AI draft"
+            />
             <Textarea
               id="quote-message"
               value={message}

@@ -45,11 +45,10 @@ import {
   Plus,
   Trash2,
   Loader2,
-  Clock,
   CalendarClock,
   CheckCircle2,
+  Ban,
   KeyRound,
-  Send,
   Pencil,
   PanelLeft,
 } from 'lucide-react'
@@ -109,7 +108,6 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
   const [confirmPassword, setConfirmPassword] = useState('')
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [savingPassword, setSavingPassword] = useState(false)
-  const [resendingId, setResendingId] = useState<string | null>(null)
   const [editUser, setEditUser] = useState<Profile | null>(null)
   const [editForm, setEditForm] = useState({
     full_name: '',
@@ -296,35 +294,6 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
     return matchesSearch && matchesRole
   })
 
-  const handleResendInvite = async (user: Profile) => {
-    setResendingId(user.id)
-    try {
-      const { error } = await supabase.auth.resend({
-        type: 'signup',
-        email: user.email,
-        options: {
-          emailRedirectTo:
-            process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ??
-            `${window.location.origin}/auth/callback`,
-        },
-      })
-      if (error) {
-        alert(`Failed to resend invite: ${error.message}`)
-      } else {
-        await supabase
-          .from('profiles')
-          .update({ invited_at: new Date().toISOString() })
-          .eq('id', user.id)
-        alert(`Invite resent to ${user.email}.`)
-        router.refresh()
-      }
-    } catch {
-      alert('An unexpected error occurred.')
-    } finally {
-      setResendingId(null)
-    }
-  }
-
   const handleRoleChange = async (userId: string, newRole: UserRole) => {
     await supabase
       .from('profiles')
@@ -401,16 +370,15 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
               <TableHead>Role</TableHead>
               <TableHead>Department</TableHead>
               {branches.length > 0 && <TableHead>Branch</TableHead>}
-              <TableHead>Status</TableHead>
-              <TableHead className="hidden lg:table-cell">Invited</TableHead>
-              <TableHead className="hidden lg:table-cell">Accepted</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="hidden lg:table-cell">Added</TableHead>
               <TableHead className="w-[70px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredUsers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={branches.length > 0 ? 9 : 8} className="h-24 text-center">
+                    <TableCell colSpan={branches.length > 0 ? 8 : 7} className="h-24 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <Users className="h-8 w-8 text-muted-foreground/50 mb-2" />
                     <p className="text-muted-foreground">No users found</p>
@@ -463,25 +431,20 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
                     </TableCell>
                   )}
                   <TableCell>
-                    {user.accepted_at ? (
+                    {user.status === 'active' ? (
                       <span className="flex items-center gap-1.5 text-green-600">
                         <CheckCircle2 className="h-4 w-4" />
                         Active
                       </span>
-                    ) : user.invited_at ? (
-                      <span className="flex items-center gap-1.5 text-amber-600">
-                        <Clock className="h-4 w-4" />
-                        Pending
-                      </span>
                     ) : (
-                      <span className="text-muted-foreground">-</span>
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <Ban className="h-4 w-4" />
+                        Inactive
+                      </span>
                     )}
                   </TableCell>
                   <TableCell className="hidden text-muted-foreground lg:table-cell">
-                    {user.invited_at ? formatDateUK(user.invited_at) : '-'}
-                  </TableCell>
-                  <TableCell className="hidden text-muted-foreground lg:table-cell">
-                    {user.accepted_at ? formatDateUK(user.accepted_at) : '-'}
+                    {user.created_at ? formatDateUK(user.created_at) : '-'}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>
@@ -506,19 +469,6 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
                           Set as Office
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        {!user.accepted_at && (
-                          <DropdownMenuItem
-                            onClick={() => handleResendInvite(user)}
-                            disabled={resendingId === user.id}
-                          >
-                            {resendingId === user.id ? (
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : (
-                              <Send className="mr-2 h-4 w-4" />
-                            )}
-                            Resend Invite
-                          </DropdownMenuItem>
-                        )}
                         <DropdownMenuItem onClick={() => openPasswordDialog(user)}>
                           <KeyRound className="mr-2 h-4 w-4" />
                           Change Password
@@ -555,6 +505,7 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
         open={inviteOpen}
         onOpenChange={setInviteOpen}
         departments={departments}
+        branches={branches}
       />
 
       <Dialog

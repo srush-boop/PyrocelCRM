@@ -253,8 +253,13 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
         <CardHeader className="pb-2">
           <div className="flex items-start justify-between">
             <div>
-              <CardTitle className="text-lg">
+              <CardTitle className="flex flex-wrap items-center gap-2 text-lg">
                 {task.site_service?.site?.name}
+                {task.site_service?.service_type?.system_type?.name && (
+                  <Badge variant="outline" className="text-xs font-normal">
+                    {task.site_service.service_type.system_type.name}
+                  </Badge>
+                )}
               </CardTitle>
               <CardDescription>
                 {task.site_service?.service_type?.name}
@@ -375,7 +380,14 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
         >
           <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{task.site_service?.site?.name}</p>
+            <div className="flex items-center gap-2">
+              <p className="truncate text-sm font-medium">{task.site_service?.site?.name}</p>
+              {task.site_service?.service_type?.system_type?.name && (
+                <Badge variant="outline" className="shrink-0 text-[10px] font-normal">
+                  {task.site_service.service_type.system_type.name}
+                </Badge>
+              )}
+            </div>
             <p className="truncate text-xs text-muted-foreground">
               {task.site_service?.service_type?.name}
               {task.visit_type?.name ? ` · ${task.visit_type.name}` : ''}
@@ -784,7 +796,14 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                 <DialogHeader>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <DialogTitle className="truncate">{site?.name}</DialogTitle>
+                      <DialogTitle className="flex flex-wrap items-center gap-2">
+                        <span className="truncate">{site?.name}</span>
+                        {viewTask.site_service?.service_type?.system_type?.name && (
+                          <Badge variant="outline" className="text-xs font-normal">
+                            {viewTask.site_service.service_type.system_type.name}
+                          </Badge>
+                        )}
+                      </DialogTitle>
                       <DialogDescription>
                         {viewTask.site_service?.service_type?.name}
                         {viewTask.visit_type?.name ? ` · ${viewTask.visit_type.name}` : ''}

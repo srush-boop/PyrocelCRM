@@ -62,6 +62,8 @@ import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
 import type { Profile, TaskWithDetails, Site, Route, Area } from '@/lib/types/database'
 import { WORKER_TYPE_LABELS } from '@/lib/assignment'
+import { SystemIcon, SystemBadge, getSystemColors } from '@/lib/system-types'
+import { Building2 } from 'lucide-react'
 
 type ViewMode = 'grid' | 'list' | 'route' | 'area'
 
@@ -150,6 +152,22 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
       .from('tasks')
       .update({ assigned_engineer_id: engineerId })
       .eq('id', taskId)
+    setAssigningTaskId(null)
+    router.refresh()
+  }
+
+  // Assign/reassign from the View Call dialog. Updates the local snapshot so the
+  // dialog reflects the change immediately, then refreshes the list.
+  const assignFromDialog = async (value: string) => {
+    if (!viewTask) return
+    const engineerId = value === 'unassigned' ? null : value
+    setAssigningTaskId(viewTask.id)
+    await supabase
+      .from('tasks')
+      .update({ assigned_engineer_id: engineerId })
+      .eq('id', viewTask.id)
+    const eng = engineers.find((e) => e.id === engineerId) ?? null
+    setViewTask({ ...viewTask, assigned_engineer_id: engineerId, assigned_engineer: eng })
     setAssigningTaskId(null)
     router.refresh()
   }
@@ -247,26 +265,32 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     const Icon = config.icon
     const taskDate = new Date(task.scheduled_date)
     const isOverdue = taskDate < today && task.status === 'pending'
+    const system = task.site_service?.service_type?.system_type
+    const sysColors = getSystemColors(system?.color)
 
     return (
-      <Card className={isOverdue ? 'border-destructive' : ''}>
+      <Card
+        className={cn('border-l-4', isOverdue && 'border-destructive')}
+        style={!isOverdue ? { borderLeftColor: sysColors.solid } : undefined}
+      >
         <CardHeader className="pb-2">
           <div className="flex items-start justify-between">
-            <div>
-              <CardTitle className="flex flex-wrap items-center gap-2 text-lg">
-                {task.site_service?.site?.name}
-                {task.site_service?.service_type?.system_type?.name && (
-                  <Badge variant="outline" className="text-xs font-normal">
-                    {task.site_service.service_type.system_type.name}
-                  </Badge>
-                )}
-              </CardTitle>
-              <CardDescription>
-                {task.site_service?.service_type?.name}
-                {task.visit_type?.name ? ` · ${task.visit_type.name}` : ''}
-              </CardDescription>
+            <div className="flex min-w-0 items-start gap-2">
+              <SystemIcon system={system ?? {}} boxed boxClassName="h-9 w-9 shrink-0" />
+              <div className="min-w-0">
+                <CardTitle className="flex flex-wrap items-center gap-2 text-lg">
+                  {task.site_service?.site?.name}
+                  {system?.name && (
+                    <SystemBadge system={system} className="text-xs font-normal" />
+                  )}
+                </CardTitle>
+                <CardDescription>
+                  {task.site_service?.service_type?.name}
+                  {task.visit_type?.name ? ` · ${task.visit_type.name}` : ''}
+                </CardDescription>
+              </div>
             </div>
-            <Badge variant={config.variant} className="flex items-center gap-1">
+            <Badge variant={config.variant} className="flex shrink-0 items-center gap-1">
               <Icon className="h-3 w-3" />
               {config.label}
             </Badge>
@@ -348,7 +372,6 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
 
   const TaskRow = ({ task }: { task: TaskWithDetails }) => {
     const config = statusConfig[task.status]
-    const Icon = config.icon
     const taskDate = new Date(task.scheduled_date)
     const isOverdue = taskDate < today && task.status === 'pending'
     const actionable =
@@ -356,17 +379,20 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
       task.status !== 'completed' &&
       task.status !== 'cancelled'
     const selected = selectedIds.has(task.id)
+    const system = task.site_service?.service_type?.system_type
+    const sysColors = getSystemColors(system?.color)
 
     return (
       <div
         className={cn(
-          'flex items-center gap-3 rounded-lg border bg-card transition-colors hover:bg-accent',
+          'flex items-center gap-2 rounded-md border border-l-4 bg-card transition-colors hover:bg-accent',
           isOverdue && 'border-destructive',
           selected && 'border-primary ring-1 ring-primary',
         )}
+        style={!isOverdue && !selected ? { borderLeftColor: sysColors.solid } : undefined}
       >
         {canAssign && (
-          <div className="pl-3">
+          <div className="pl-2">
             <Checkbox
               checked={selected}
               onCheckedChange={() => toggleOne(task.id)}
@@ -376,19 +402,17 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
         )}
         <Link
           href={`/dashboard/tasks/${task.id}`}
-          className={cn('flex min-w-0 flex-1 items-center gap-3 p-3', canAssign && 'pl-0')}
+          className={cn('flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-1.5', canAssign && 'pl-0')}
         >
-          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <SystemIcon system={system ?? {}} className="h-4 w-4" />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <p className="truncate text-sm font-medium">{task.site_service?.site?.name}</p>
-              {task.site_service?.service_type?.system_type?.name && (
-                <Badge variant="outline" className="shrink-0 text-[10px] font-normal">
-                  {task.site_service.service_type.system_type.name}
-                </Badge>
+              <p className="truncate text-sm font-medium leading-tight">{task.site_service?.site?.name}</p>
+              {system?.name && (
+                <SystemBadge system={system} codeOnly showIcon={false} className="shrink-0 px-1.5 py-0 text-[10px]" />
               )}
             </div>
-            <p className="truncate text-xs text-muted-foreground">
+            <p className="truncate text-xs text-muted-foreground leading-tight">
               {task.site_service?.service_type?.name}
               {task.visit_type?.name ? ` · ${task.visit_type.name}` : ''}
               {!isEngineer
@@ -398,17 +422,17 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {isOverdue && (
-              <Badge variant="destructive" className="hidden text-xs sm:inline-flex">
+              <Badge variant="destructive" className="hidden text-[10px] sm:inline-flex">
                 Overdue
               </Badge>
             )}
-            <span className="hidden text-xs text-muted-foreground sm:inline">
+            <span className="hidden text-xs text-muted-foreground md:inline">
               {formatDateUK(task.scheduled_date)}
               {formatBookedSlot(task.booked_start_time, task.booked_end_time)
                 ? ` · ${formatBookedSlot(task.booked_start_time, task.booked_end_time)}`
                 : ''}
             </span>
-            <Badge variant={config.variant} className="text-xs">
+            <Badge variant={config.variant} className="hidden text-[10px] sm:inline-flex">
               {config.label}
             </Badge>
             {actionable && (
@@ -416,7 +440,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 shrink-0"
+                className="h-7 w-7 shrink-0"
                 aria-label={`View call at ${task.site_service?.site?.name}`}
                 onClick={(e) => {
                   e.preventDefault()
@@ -427,7 +451,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                 <Eye className="h-4 w-4 text-muted-foreground" />
               </Button>
             )}
-            {actionable && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+            {actionable && <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
           </div>
         </Link>
       </div>
@@ -505,16 +529,23 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
       const allSelected = ids.length > 0 && ids.every((id) => selectedIds.has(id))
       return (
         <div className="space-y-2">
-          {canAssign && (
-            <label className="flex items-center gap-3 px-3 py-1.5 text-xs font-medium text-muted-foreground">
-              <Checkbox
-                checked={allSelected}
-                onCheckedChange={(checked) => toggleMany(ids, checked === true)}
-                aria-label="Select all tasks"
-              />
-              Select all ({ids.length})
-            </label>
-          )}
+          <div className="flex items-center justify-between px-1">
+            {canAssign ? (
+              <label className="flex items-center gap-3 py-1.5 text-xs font-medium text-muted-foreground">
+                <Checkbox
+                  checked={allSelected}
+                  onCheckedChange={(checked) => toggleMany(ids, checked === true)}
+                  aria-label="Select all tasks"
+                />
+                Select all
+              </label>
+            ) : (
+              <span />
+            )}
+            <span className="text-xs font-medium text-muted-foreground">
+              {ids.length} {ids.length === 1 ? 'call' : 'calls'}
+            </span>
+          </div>
           {list.map((task) => (
             <TaskRow key={task.id} task={task} />
           ))}
@@ -796,13 +827,12 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                 <DialogHeader>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <DialogTitle className="flex flex-wrap items-center gap-2">
+                      <DialogTitle className="flex items-center gap-2">
+                        <SystemIcon
+                          system={viewTask.site_service?.service_type?.system_type ?? {}}
+                          className="h-5 w-5"
+                        />
                         <span className="truncate">{site?.name}</span>
-                        {viewTask.site_service?.service_type?.system_type?.name && (
-                          <Badge variant="outline" className="text-xs font-normal">
-                            {viewTask.site_service.service_type.system_type.name}
-                          </Badge>
-                        )}
                       </DialogTitle>
                       <DialogDescription>
                         {viewTask.site_service?.service_type?.name}
@@ -829,6 +859,63 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                       </div>
                     )}
                   </div>
+
+                  <div className="grid gap-2 rounded-md border bg-muted/30 p-3">
+                    {viewTask.site_service?.service_type?.system_type && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">System</span>
+                        <SystemBadge system={viewTask.site_service.service_type.system_type} />
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground">Service</span>
+                      <span className="text-right font-medium">
+                        {viewTask.site_service?.service_type?.name ?? '—'}
+                        {viewTask.visit_type?.name ? ` · ${viewTask.visit_type.name}` : ''}
+                      </span>
+                    </div>
+                    {(viewTask.client?.name || site?.client?.name) && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">Client</span>
+                        <span className="inline-flex items-center gap-1.5 text-right font-medium">
+                          <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          {viewTask.client?.name ?? site?.client?.name}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {isAdminOrOffice && engineers.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                        <UserPlus className="h-3.5 w-3.5" />
+                        Assign engineer
+                      </p>
+                      <Select
+                        value={viewTask.assigned_engineer_id ?? 'unassigned'}
+                        onValueChange={assignFromDialog}
+                        disabled={assigningTaskId === viewTask.id}
+                      >
+                        <SelectTrigger>
+                          {assigningTaskId === viewTask.id ? (
+                            <span className="flex items-center gap-1.5">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving...
+                            </span>
+                          ) : (
+                            <SelectValue placeholder="Assign to..." />
+                          )}
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="unassigned">Unassigned</SelectItem>
+                          {engineers.map((eng) => (
+                            <SelectItem key={eng.id} value={eng.id}>
+                              {eng.full_name || eng.email}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
 
                   {site?.address && (
                     <div className="flex items-start gap-2">

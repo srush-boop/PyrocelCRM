@@ -41,11 +41,12 @@ export default async function SchedulePage({
         route:routes(*),
         area:areas(*),
         subcontractor:subcontractors(*),
-        site:sites(*, route:routes(*), branch:branches(*)),
+        site:sites(*, route:routes(*), branch:branches(*), client:clients(id, name)),
         service_type:service_types(*, system_type:system_types(*))
       ),
       assigned_engineer:profiles(*),
-      visit_type:service_visit_types(*)
+      visit_type:service_visit_types(*),
+      client:clients(id, name)
     `)
     .order('scheduled_date', { ascending: true })
 

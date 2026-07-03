@@ -447,6 +447,9 @@ export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled'
 export interface Task {
   id: string
   site_service_id: string
+  // Client this call is billed to. Defaults to the site's client at scheduling
+  // time but can be overridden.
+  client_id: string | null
   assigned_engineer_id: string | null
   scheduled_date: string
   // Optional booked appointment slot on the scheduled date (24h "HH:MM[:SS]").
@@ -464,6 +467,7 @@ export interface Task {
   site_service?: SiteService
   assigned_engineer?: Profile | null
   visit_type?: ServiceVisitType | null
+  client?: Client | null
   }
 
 export interface ChecklistResult {

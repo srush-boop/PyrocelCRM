@@ -40,6 +40,12 @@ import { Plus, Trash2, BookOpen, Save, TrendingUp, Calculator, Wrench, Check, Ch
 import { toast } from 'sonner'
 import { PpmCalculatorDialog, type PpmDraft } from '@/components/dashboard/sales/ppm-calculator-dialog'
 import { QuoteSectionRenderer } from '@/components/dashboard/sales/quote-section-renderer'
+import {
+  QuoteRequestImporter,
+  type ImportApplyPayload,
+} from '@/components/dashboard/sales/quote-request-importer'
+import { QuoteRequirementsEditor } from '@/components/dashboard/sales/quote-requirements-editor'
+import type { DraftRequirement, RequirementSourceInfo } from '@/lib/sales-requirements'
 import { SystemBadge, SystemIcon, SystemColorDot, getSystemHex } from '@/lib/system-types'
 import {
   computeQuoteTotals,

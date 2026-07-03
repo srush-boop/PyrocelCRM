@@ -75,6 +75,24 @@ export interface QuoteSystemInput {
   ppm?: QuotePpmInput | null
 }
 
+// A single client requirement + our response, shown in the compliance matrix.
+export interface QuoteRequirementInput {
+  category?: string | null
+  requirement: string
+  our_response?: string | null
+  status: string
+}
+
+// The originating client request (pasted email text or an uploaded spec).
+export interface QuoteRequirementSourceInput {
+  source_type: 'paste' | 'file'
+  file_name?: string | null
+  file_url?: string | null
+  mime_type?: string | null
+  raw_text?: string | null
+  summary?: string | null
+}
+
 export interface QuoteInput {
   id?: string
   title: string
@@ -94,6 +112,10 @@ export interface QuoteInput {
   show_line_items?: boolean
   valid_until?: string | null
   systems: QuoteSystemInput[]
+  // Client-request import: the compliance matrix and its source document.
+  show_requirements_matrix?: boolean
+  requirements?: QuoteRequirementInput[]
+  requirementSource?: QuoteRequirementSourceInput | null
   }
 
 async function requireStaff() {
@@ -231,6 +253,57 @@ async function persistSystems(
   return null
 }
 
+const VALID_REQ_STATUSES = new Set(['included', 'partial', 'excluded', 'query'])
+
+// Persist the client-request source document + extracted requirements for a
+// quote. Assumes any previous rows for the quote have already been cleared.
+async function persistRequirements(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  quoteId: string,
+  userId: string,
+  source: QuoteRequirementSourceInput | null | undefined,
+  requirements: QuoteRequirementInput[] | undefined,
+): Promise<string | null> {
+  let sourceId: string | null = null
+
+  if (source && (source.raw_text?.trim() || source.file_url || source.summary?.trim())) {
+    const { data: srcRow, error: srcErr } = await supabase
+      .from('quote_requirement_sources')
+      .insert({
+        quote_id: quoteId,
+        source_type: source.source_type === 'file' ? 'file' : 'paste',
+        file_name: source.file_name?.trim() || null,
+        file_url: source.file_url?.trim() || null,
+        mime_type: source.mime_type?.trim() || null,
+        raw_text: source.raw_text?.trim() || null,
+        summary: source.summary?.trim() || null,
+        created_by: userId,
+      })
+      .select('id')
+      .single()
+    if (srcErr) return 'Could not save the client request source.'
+    sourceId = (srcRow as { id: string } | null)?.id ?? null
+  }
+
+  const rows = (requirements ?? [])
+    .filter((r) => r.requirement?.trim())
+    .map((r, idx) => ({
+      quote_id: quoteId,
+      source_id: sourceId,
+      position: idx,
+      category: r.category?.trim() || null,
+      requirement: r.requirement.trim(),
+      our_response: r.our_response?.trim() || null,
+      status: VALID_REQ_STATUSES.has(r.status) ? r.status : 'included',
+    }))
+
+  if (rows.length > 0) {
+    const { error: reqErr } = await supabase.from('quote_requirements').insert(rows)
+    if (reqErr) return 'Could not save the quote requirements.'
+  }
+  return null
+}
+
 /**
  * Create or update a quote together with its systems and line items.
  * Totals are always recomputed here; values from the client are ignored.
@@ -286,6 +359,7 @@ export async function saveQuote(
     total_pence: totals.totalPence,
     show_line_items: input.show_line_items ?? true,
     valid_until: input.valid_until || null,
+    show_requirements_matrix: input.show_requirements_matrix ?? false,
   }
 
   let quoteId = input.id
@@ -297,6 +371,9 @@ export async function saveQuote(
     // remaining line items.
     await supabase.from('quote_systems').delete().eq('quote_id', quoteId)
     await supabase.from('quote_line_items').delete().eq('quote_id', quoteId)
+    // Replace requirements + source (cascade from source not relied upon).
+    await supabase.from('quote_requirements').delete().eq('quote_id', quoteId)
+    await supabase.from('quote_requirement_sources').delete().eq('quote_id', quoteId)
   } else {
     const { data: created, error: insErr } = await supabase
       .from('quotes')
@@ -309,6 +386,15 @@ export async function saveQuote(
 
   const persistErr = await persistSystems(supabase, quoteId, input.systems)
   if (persistErr) return { ok: false, error: persistErr }
+
+  const reqErr = await persistRequirements(
+    supabase,
+    quoteId,
+    user.id,
+    input.requirementSource,
+    input.requirements,
+  )
+  if (reqErr) return { ok: false, error: reqErr }
 
   revalidatePath('/dashboard/sales')
   revalidatePath('/dashboard/sales/quotes')

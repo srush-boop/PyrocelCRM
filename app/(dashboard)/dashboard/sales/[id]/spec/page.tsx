@@ -45,32 +45,7 @@ export default async function EquipmentSpecPage({
   // Pull the official spec text from the catalogue for the products on this quote
   // (matched by catalogue id, with product code as a fallback).
   const lineRows = (lines ?? []) as QuoteLineItem[]
-  const catalogueIds = Array.from(
-    new Set(lineRows.map((l) => l.catalogue_item_id).filter(Boolean) as string[]),
-  )
-  const productCodes = Array.from(
-    new Set(lineRows.map((l) => l.product_code).filter(Boolean) as string[]),
-  )
-
-  let catalogue: {
-    id: string
-    product_code: string | null
-    name: string
-    description: string | null
-  }[] = []
-  if (catalogueIds.length > 0 || productCodes.length > 0) {
-    const filters: string[] = []
-    if (catalogueIds.length > 0) filters.push(`id.in.(${catalogueIds.join(',')})`)
-    if (productCodes.length > 0) {
-      const quoted = productCodes.map((c) => `"${c.replace(/"/g, '')}"`).join(',')
-      filters.push(`product_code.in.(${quoted})`)
-    }
-    const { data: cat } = await supabase
-      .from('quote_catalogue_items')
-      .select('id, product_code, name, description')
-      .or(filters.join(','))
-    catalogue = (cat ?? []) as typeof catalogue
-  }
+  const catalogue = await loadQuoteCatalogue(supabase, lineRows)
 
   return (
     <div className="min-h-screen bg-muted/40 p-4 sm:p-8 print:bg-white print:p-0">

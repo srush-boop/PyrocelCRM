@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { QuoteBuilder } from '@/components/dashboard/sales/quote-builder'
 import { resolveDefaultMargin } from '@/lib/sales'
 import { getFailedChecklistItems, buildRemedialScope } from '@/lib/defects'
+import { draftRemedialScope } from '@/lib/ai/draft-remedial-scope'
 import type { ChecklistResult } from '@/lib/types/database'
 import type {
   Client,
@@ -112,7 +113,7 @@ export default async function NewQuotePage({
       .from('defects')
       .select(
         `id, site_id, client_id, reference_number,
-         task_result:task_results(checklist_results),
+         task_result:task_results(checklist_results, engineer_notes),
          site:sites(name),
          task:tasks(site_service:site_services(service_type:service_types(name, system_type_id)))`,
       )
@@ -125,6 +126,30 @@ export default async function NewQuotePage({
         (d.task_result?.checklist_results ?? []) as ChecklistResult[],
       )
       const siteName: string | null = d.site?.name ?? null
+      const serviceName: string | null =
+        d.task?.site_service?.service_type?.name ?? null
+
+      // Deterministic scope is always available as a reliable fallback.
+      const fallbackScope = buildRemedialScope(failedItems, {
+        reference: d.reference_number,
+        siteName,
+      })
+
+      // Prefer an AI-drafted description of works required — it turns the raw
+      // list of failed items into a professional remedial scope. Falls back to
+      // the deterministic scope if generation fails or returns nothing.
+      let scope = fallbackScope
+      if (failedItems.length) {
+        const drafted = await draftRemedialScope({
+          failedItems,
+          serviceType: serviceName,
+          siteName,
+          reference: d.reference_number,
+          engineerNotes: d.task_result?.engineer_notes ?? null,
+        })
+        if (drafted.ok && drafted.text) scope = drafted.text
+      }
+
       defectPrefill = {
         defectId: d.id,
         clientId: d.client_id ?? undefined,
@@ -135,10 +160,7 @@ export default async function NewQuotePage({
         title: `Remedial works${siteName ? ` — ${siteName}` : ''}${
           d.reference_number ? ` (${d.reference_number})` : ''
         }`,
-        scope: buildRemedialScope(failedItems, {
-          reference: d.reference_number,
-          siteName,
-        }),
+        scope,
       }
     }
   }

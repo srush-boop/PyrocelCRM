@@ -64,6 +64,8 @@ import type { Profile, TaskWithDetails, Site, Route, Area } from '@/lib/types/da
 import { WORKER_TYPE_LABELS } from '@/lib/assignment'
 import { SystemIcon, SystemBadge, getSystemColors } from '@/lib/system-types'
 import { Building2 } from 'lucide-react'
+import { SiteFlagBadges } from '@/components/dashboard/site-info/site-flag-badges'
+import { resolveSiteFlags } from '@/lib/site-flags'
 
 type ViewMode = 'grid' | 'list' | 'route' | 'area'
 

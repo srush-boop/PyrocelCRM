@@ -4,15 +4,12 @@ import { createClient } from '@/lib/supabase/server'
 import { getDocumentAuth } from '@/lib/documents/auth'
 import type { DocumentOwnerType } from '@/lib/types/database'
 
-const OWNER_TYPES: DocumentOwnerType[] = ['client', 'site', 'site_service']
+const OWNER_TYPES: DocumentOwnerType[] = ['client', 'site', 'site_service', 'site_engineer']
 
 export async function POST(request: NextRequest) {
   const auth = await getDocumentAuth()
   if (!auth.ok) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: auth.status })
-  }
-  if (!auth.canManage) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   try {
@@ -28,6 +25,12 @@ export async function POST(request: NextRequest) {
     }
     if (!ownerType || !OWNER_TYPES.includes(ownerType) || !ownerId) {
       return NextResponse.json({ error: 'Invalid owner' }, { status: 400 })
+    }
+
+    // Engineers may only upload to the shared engineer folder; other stores need canManage.
+    const allowed = ownerType === 'site_engineer' ? auth.canManageEngineer : auth.canManage
+    if (!allowed) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     // Namespaced path keeps blobs organised and avoids collisions.

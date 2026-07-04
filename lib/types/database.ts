@@ -281,6 +281,14 @@ export interface Site {
   uprn: string | null
   status: 'live' | 'dead'
   notes: string | null
+  // Pre-attendance flags engineers/office can set at site level. Individual
+  // site_services may override these (see SiteService); null override = inherit.
+  booking_required: boolean
+  access_required: boolean
+  keys_required: boolean
+  two_engineers_required: boolean
+  remedial_required: boolean
+  remedial_notes: string | null
   reporting_emails: string[]
   has_remote_monitoring: boolean
   remote_monitoring_type: RemoteMonitoringType | null
@@ -409,6 +417,14 @@ export interface Site {
   // When false, the service is inactive: no new calls are generated for it
   // (recurrence, bulk generation, manual scheduling all suppressed).
   active: boolean
+  // Pre-attendance flag overrides. null = inherit the site-level value;
+  // an explicit true/false overrides the site setting for this service only.
+  booking_required: boolean | null
+  access_required: boolean | null
+  keys_required: boolean | null
+  two_engineers_required: boolean | null
+  remedial_required: boolean | null
+  remedial_notes: string | null
   created_at: string
   site?: Site
   site_system?: SiteSystem | null
@@ -419,8 +435,30 @@ export interface Site {
   assigned_engineer?: Profile
 }
 
-// Document store: folders + files attached to a client, site, or a site's service.
-export type DocumentOwnerType = 'client' | 'site' | 'site_service'
+// Document store: folders + files attached to a client, site, a site's service,
+// or a site's shared engineer folder (engineer-contributable downloads/drawings).
+export type DocumentOwnerType = 'client' | 'site' | 'site_service' | 'site_engineer'
+
+// A communal internal note left by staff (engineers/office/admin) against a site.
+export interface SiteInternalNote {
+  id: string
+  site_id: string
+  author_id: string | null
+  body: string
+  created_at: string
+  author?: Pick<Profile, 'id' | 'full_name' | 'role'> | null
+}
+
+// The resolved pre-attendance flags for a task, after applying service-level
+// overrides on top of the site-level defaults.
+export interface ResolvedSiteFlags {
+  booking_required: boolean
+  access_required: boolean
+  keys_required: boolean
+  two_engineers_required: boolean
+  remedial_required: boolean
+  remedial_notes: string | null
+}
 
 export interface DocumentFolder {
   id: string

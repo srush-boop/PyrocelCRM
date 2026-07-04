@@ -66,11 +66,10 @@ export function LoginForm({
   return (
     <Card className="w-full max-w-md">
       <CardHeader className="text-center">
-        <div className="mx-auto mb-6 flex h-56 w-56 items-center justify-center bg-white p-3">
+        <div className="mx-auto flex h-56 w-56 items-center justify-center bg-white p-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={logoUrl || '/placeholder.svg'} alt={logoAlt} className="h-full w-full object-contain" />
         </div>
-        <CardTitle className="text-base font-normal text-chart-1 text-balance">{title}</CardTitle>
         <CardDescription>{subtitle}</CardDescription>
         {tagline && (
           <p className="mt-2 text-sm font-medium text-primary text-balance">{tagline}</p>

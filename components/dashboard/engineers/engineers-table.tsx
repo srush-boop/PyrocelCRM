@@ -823,6 +823,20 @@ export function EngineersTable({
             <p className="text-xs text-muted-foreground">
               Annual holiday entitlement. Days and hours are recorded separately.
             </p>
+            {(() => {
+              const bal = editUser ? leaveBalances[editUser.id] : undefined
+              if (!bal || bal.entitlementDays == null || bal.remainingDays == null) return null
+              return (
+                <div className="flex items-center justify-between rounded-md border bg-muted/50 px-3 py-2">
+                  <span className="text-sm text-muted-foreground">
+                    Remaining this year (from {formatDays(bal.takenDays)} taken)
+                  </span>
+                  <span className="text-sm font-semibold tabular-nums">
+                    {formatDays(bal.remainingDays)} / {formatDays(bal.entitlementDays)} days
+                  </span>
+                </div>
+              )
+            })()}
             {editError && <p className="text-sm text-destructive">{editError}</p>}
           </div>
           <DialogFooter>

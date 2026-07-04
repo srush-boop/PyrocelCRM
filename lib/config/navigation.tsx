@@ -32,6 +32,7 @@ import {
   ArrowLeftRight,
   Settings,
   ShieldCheck,
+  GraduationCap,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { UserRole } from '@/lib/types/database'
@@ -201,6 +202,7 @@ const adminNavItems: NavItem[] = [
   // Users is locked so an admin can never hide their own access to user/menu
   // management and lock everyone out.
   { key: 'users', title: 'Users', href: '/dashboard/engineers', icon: Users, locked: true },
+  { key: 'training', title: 'Training', href: '/dashboard/training', icon: GraduationCap },
   { key: 'notifications', title: 'Notifications', href: '/dashboard/notifications', icon: Bell },
   salesNavItem,
   managerStockNavItem,
@@ -217,6 +219,7 @@ const officeNavItems: NavItem[] = [
   { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   officeServiceManagementNavItem,
+  { key: 'training', title: 'Training', href: '/dashboard/training', icon: GraduationCap },
   { key: 'notifications', title: 'Notifications', href: '/dashboard/notifications', icon: Bell },
   salesNavItem,
   managerStockNavItem,

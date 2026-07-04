@@ -178,7 +178,7 @@ export function QuotesTable({
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" asChild>
-            <Link href="/dashboard/sales/catalogue">
+            <Link href="/dashboard/stock/catalogue">
               <BookOpen className="mr-2 h-4 w-4" />
               Catalogue
             </Link>

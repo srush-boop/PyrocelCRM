@@ -6,7 +6,6 @@ import {
   LayoutDashboard,
   ReceiptText,
   Landmark,
-  BookOpen,
   Coins,
   Layers,
   Boxes,
@@ -38,7 +37,6 @@ const topLevelLinks: SalesNavLink[] = [
   { title: 'Dashboard', href: '/dashboard/sales', icon: LayoutDashboard },
   { title: 'Quotes', href: '/dashboard/sales/quotes', icon: ReceiptText },
   { title: 'Quote Bank', href: '/dashboard/sales/quote-bank', icon: Landmark },
-  { title: 'Catalogue', href: '/dashboard/sales/catalogue', icon: BookOpen },
 ]
 
 // Setup areas grouped under the "Sales Configuration" dropdown.

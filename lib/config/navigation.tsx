@@ -147,7 +147,6 @@ const salesNavItem: NavItem = {
     { title: 'Dashboard', href: '/dashboard/sales', icon: LayoutDashboard },
     { title: 'Quotes', href: '/dashboard/sales/quotes', icon: ReceiptText },
     { title: 'Quote Bank', href: '/dashboard/sales/quote-bank', icon: Landmark },
-    { title: 'Catalogue', href: '/dashboard/sales/catalogue', icon: BookOpen },
     {
       title: 'Sales Configuration',
       icon: Settings,
@@ -173,6 +172,7 @@ const managerStockNavItem: NavItem = {
     { title: 'Overview', href: '/dashboard/stock', icon: Boxes },
     { title: 'Transfer Stock', href: '/dashboard/stock/transfer', icon: Route },
     { title: 'Parts Catalogue', href: '/dashboard/stock/parts', icon: BookOpen },
+    { title: 'Quote Catalogue', href: '/dashboard/stock/catalogue', icon: BookOpen },
     { title: 'Transfers Report', href: '/dashboard/stock/report', icon: FileText },
   ],
 }

@@ -459,7 +459,7 @@ export async function saveCatalogueItem(
     if (insErr) return { ok: false, error: 'Could not create the catalogue item.' }
   }
 
-  revalidatePath('/dashboard/sales/catalogue')
+  revalidatePath('/dashboard/stock/catalogue')
   return { ok: true }
 }
 
@@ -470,7 +470,7 @@ export async function deleteCatalogueItem(id: string): Promise<{ ok: boolean; er
   const { error: delErr } = await supabase.from('quote_catalogue_items').delete().eq('id', id)
   if (delErr) return { ok: false, error: 'Could not delete the catalogue item.' }
 
-  revalidatePath('/dashboard/sales/catalogue')
+  revalidatePath('/dashboard/stock/catalogue')
   return { ok: true }
 }
 
@@ -617,7 +617,7 @@ export async function addCatalogueItemsToStock(
   }
 
   revalidatePath('/dashboard/stock/parts')
-  revalidatePath('/dashboard/sales/catalogue')
+  revalidatePath('/dashboard/stock/catalogue')
   return { ok: true, added: rows.length, skipped }
 }
 

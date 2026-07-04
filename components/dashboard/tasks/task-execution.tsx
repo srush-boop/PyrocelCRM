@@ -386,6 +386,12 @@ export function TaskExecution({
             )}
           </div>
           <h1 className="text-2xl font-bold">{site?.name}</h1>
+          {task.started_at && (
+            <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Clock className="h-3.5 w-3.5 shrink-0" />
+              Commenced {formatDateUK(task.started_at)} at {formatTimeUK(task.started_at)}
+            </p>
+          )}
         </div>
       </div>
 

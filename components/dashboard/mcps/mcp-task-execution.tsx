@@ -47,7 +47,7 @@ import {
   Ban,
   ExternalLink,
 } from 'lucide-react'
-import { formatDateUK } from '@/lib/utils'
+import { formatDateUK, formatTimeUK } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import { generateMcpUrn, TEST_KEY_TYPES, MCP_CHECKLIST } from '@/lib/mcps'
 import { McpInspectionCard, type McpInspectionState, type CheckValue } from './mcp-inspection-card'
@@ -442,6 +442,12 @@ export function McpTaskExecution({
             <Calendar className="h-4 w-4" />
             Scheduled: {formatDateUK(task.scheduled_date)}
           </div>
+          {task.started_at && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Calendar className="h-4 w-4" />
+              Commenced: {formatDateUK(task.started_at)} at {formatTimeUK(task.started_at)}
+            </div>
+          )}
           {nimbusUrl && (
             <a
               href={nimbusUrl}

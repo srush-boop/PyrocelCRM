@@ -94,6 +94,12 @@ export interface TrainingRecord {
   provider: string | null
   completed_date: string | null
   expiry_date: string | null
+  // Certificate evidence. Either an uploaded file (certificate_pathname points
+  // at the private blob) or an external link (certificate_pathname is null).
+  // certificate_url is the openable URL; certificate_name is a display label.
+  certificate_url: string | null
+  certificate_pathname: string | null
+  certificate_name: string | null
   created_at: string
   updated_at: string
   profile?: Profile | null

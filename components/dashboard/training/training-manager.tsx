@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -40,7 +40,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Pencil, Trash2, FileDown, Loader2, GraduationCap, Search } from 'lucide-react'
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  FileDown,
+  Loader2,
+  GraduationCap,
+  Search,
+  Paperclip,
+  Upload,
+  X,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { ImportTrainingDialog } from '@/components/dashboard/training/import-training-dialog'
 import { saveTrainingRecord, deleteTrainingRecord } from '@/lib/actions/training'
@@ -99,6 +110,16 @@ const emptyForm = {
   provider: '',
   completed_date: '',
   expiry_date: '',
+  certificate_url: '' as string,
+  certificate_pathname: '' as string,
+  certificate_name: '' as string,
+}
+
+// The openable href for a certificate: uploaded files stream through the
+// private serve route (by record id); external links open directly.
+function certHref(record: TrainingRecord): string | null {
+  if (record.certificate_pathname) return `/api/training/certificate/file?id=${record.id}`
+  return record.certificate_url || null
 }
 
 export function TrainingManager({ users, departments, records }: TrainingManagerProps) {
@@ -111,8 +132,10 @@ export function TrainingManager({ users, departments, records }: TrainingManager
   const [dialogOpen, setDialogOpen] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const certFileRef = useRef<HTMLInputElement>(null)
 
   const userById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users])
   const deptById = useMemo(() => new Map(departments.map((d) => [d.id, d])), [departments])
@@ -161,6 +184,9 @@ export function TrainingManager({ users, departments, records }: TrainingManager
       provider: record.provider ?? '',
       completed_date: record.completed_date ?? '',
       expiry_date: record.expiry_date ?? '',
+      certificate_url: record.certificate_url ?? '',
+      certificate_pathname: record.certificate_pathname ?? '',
+      certificate_name: record.certificate_name ?? '',
     })
     setFormError(null)
     setDialogOpen(true)
@@ -177,6 +203,9 @@ export function TrainingManager({ users, departments, records }: TrainingManager
       provider: form.provider || null,
       completed_date: form.completed_date || null,
       expiry_date: form.expiry_date || null,
+      certificate_url: form.certificate_url || null,
+      certificate_pathname: form.certificate_pathname || null,
+      certificate_name: form.certificate_name || null,
     })
     setSaving(false)
     if (!result.ok) {
@@ -186,6 +215,38 @@ export function TrainingManager({ users, departments, records }: TrainingManager
     toast.success(form.id ? 'Training record updated' : 'Training record added')
     setDialogOpen(false)
     router.refresh()
+  }
+
+  // Uploads a certificate file to private Blob storage, then stores the
+  // returned pathname/url on the form so it saves with the record.
+  const handleCertUpload = async (file: File) => {
+    setUploading(true)
+    setFormError(null)
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      const res = await fetch('/api/training/certificate/upload', { method: 'POST', body })
+      const data = await res.json()
+      if (!res.ok) {
+        setFormError(data.error ?? 'Upload failed')
+        return
+      }
+      setForm((f) => ({
+        ...f,
+        certificate_pathname: data.pathname,
+        certificate_url: data.url,
+        certificate_name: data.name,
+      }))
+      toast.success('Certificate uploaded')
+    } catch {
+      setFormError('Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const clearCertificate = () => {
+    setForm((f) => ({ ...f, certificate_pathname: '', certificate_url: '', certificate_name: '' }))
   }
 
   const handleDelete = async () => {
@@ -210,6 +271,7 @@ export function TrainingManager({ users, departments, records }: TrainingManager
         const dept = profile?.department_id ? deptById.get(profile.department_id)?.name : ''
         const role = profile?.role ? ROLE_LABELS[profile.role] ?? profile.role : ''
         const status = STATUS_BADGE[statusOf(r.expiry_date)].label
+        const cert = r.certificate_pathname ? 'On file' : r.certificate_url ? 'Linked' : '—'
         return `<tr>
           <td>${escapeHtml(profile?.employee_number ?? '—')}</td>
           <td>${escapeHtml(role)}</td>
@@ -220,6 +282,7 @@ export function TrainingManager({ users, departments, records }: TrainingManager
           <td>${escapeHtml(formatDate(r.completed_date))}</td>
           <td>${escapeHtml(formatDate(r.expiry_date))}</td>
           <td>${escapeHtml(status)}</td>
+          <td>${escapeHtml(cert)}</td>
         </tr>`
       })
       .join('')
@@ -241,10 +304,10 @@ export function TrainingManager({ users, departments, records }: TrainingManager
       <table>
         <thead><tr>
           <th>Employee No.</th><th>Role</th><th>Department</th><th>Training Type</th>
-          <th>Course</th><th>Provider</th><th>Completed</th><th>Expiry</th><th>Status</th>
+          <th>Course</th><th>Provider</th><th>Completed</th><th>Expiry</th><th>Status</th><th>Certificate</th>
         </tr></thead>
-        <tbody>${rowsHtml || '<tr><td colspan="9">No records match the current filters.</td></tr>'}</tbody>
-        <tfoot><tr><td colspan="9">This document intentionally excludes employee names for data protection.</td></tr></tfoot>
+        <tbody>${rowsHtml || '<tr><td colspan="10">No records match the current filters.</td></tr>'}</tbody>
+        <tfoot><tr><td colspan="10">This document intentionally excludes employee names for data protection.</td></tr></tfoot>
       </table>
       <script>window.onload = function () { window.print(); }</script>
       </body></html>`
@@ -345,13 +408,14 @@ export function TrainingManager({ users, departments, records }: TrainingManager
                 <TableHead>Completed</TableHead>
                 <TableHead>Expiry</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Certificate</TableHead>
                 <TableHead className="w-24 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="py-10 text-center text-muted-foreground">
+                  <TableCell colSpan={11} className="py-10 text-center text-muted-foreground">
                     <GraduationCap className="mx-auto mb-2 h-8 w-8 opacity-40" />
                     No training records match your filters.
                   </TableCell>
@@ -374,6 +438,21 @@ export function TrainingManager({ users, departments, records }: TrainingManager
                       <TableCell>{formatDate(r.expiry_date)}</TableCell>
                       <TableCell>
                         <Badge className={badge.className}>{badge.label}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {certHref(r) ? (
+                          <a
+                            href={certHref(r)!}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                          >
+                            <Paperclip className="h-3.5 w-3.5" />
+                            {r.certificate_pathname ? 'View' : 'Link'}
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
@@ -478,6 +557,63 @@ export function TrainingManager({ users, departments, records }: TrainingManager
                   onChange={(e) => setForm({ ...form, expiry_date: e.target.value })}
                 />
               </div>
+            </div>
+
+            <div className="space-y-2 rounded-md border p-3">
+              <Label>Certificate</Label>
+              {form.certificate_pathname || form.certificate_url ? (
+                <div className="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-2">
+                  <span className="flex min-w-0 items-center gap-2 text-sm">
+                    <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="truncate">
+                      {form.certificate_name ||
+                        (form.certificate_pathname ? 'Uploaded certificate' : form.certificate_url)}
+                    </span>
+                  </span>
+                  <Button type="button" variant="ghost" size="icon" onClick={clearCertificate}>
+                    <X className="h-4 w-4" />
+                    <span className="sr-only">Remove certificate</span>
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={uploading}
+                      onClick={() => certFileRef.current?.click()}
+                    >
+                      {uploading ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Upload className="mr-2 h-4 w-4" />
+                      )}
+                      Upload file
+                    </Button>
+                    <input
+                      ref={certFileRef}
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg,.webp,image/*,application/pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) handleCertUpload(file)
+                        e.target.value = ''
+                      }}
+                    />
+                    <span className="text-xs text-muted-foreground">or paste a link below</span>
+                  </div>
+                  <Input
+                    value={form.certificate_url}
+                    onChange={(e) =>
+                      setForm({ ...form, certificate_url: e.target.value, certificate_pathname: '' })
+                    }
+                    placeholder="https://link-to-certificate"
+                  />
+                </div>
+              )}
             </div>
             {formError && <p className="text-sm text-destructive">{formError}</p>}
           </div>

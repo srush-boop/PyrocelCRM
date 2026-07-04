@@ -55,6 +55,9 @@ export async function saveTrainingRecord(input: {
   provider: string | null
   completed_date: string | null
   expiry_date: string | null
+  certificate_url?: string | null
+  certificate_pathname?: string | null
+  certificate_name?: string | null
 }): Promise<Result> {
   const { supabase, error } = await requireStaff()
   if (!supabase) return { ok: false, error }
@@ -67,6 +70,15 @@ export async function saveTrainingRecord(input: {
   if (completed === 'invalid') return { ok: false, error: 'Completed date is not a valid date' }
   if (expiry === 'invalid') return { ok: false, error: 'Expiry date is not a valid date' }
 
+  // Certificate: either an uploaded file (pathname + url both set) or an
+  // external link (url only). A bare pathname without url is meaningless.
+  const certPathname = input.certificate_pathname?.trim() || null
+  const certUrl = input.certificate_url?.trim() || null
+  if (certUrl && !certPathname && !/^https?:\/\//i.test(certUrl)) {
+    return { ok: false, error: 'Certificate link must start with http:// or https://' }
+  }
+  const certName = input.certificate_name?.trim() || null
+
   const payload = {
     profile_id: input.profile_id,
     training_type: input.training_type.trim(),
@@ -74,6 +86,9 @@ export async function saveTrainingRecord(input: {
     provider: input.provider?.trim() || null,
     completed_date: completed,
     expiry_date: expiry,
+    certificate_url: certUrl,
+    certificate_pathname: certPathname,
+    certificate_name: certName,
   }
 
   const query = input.id

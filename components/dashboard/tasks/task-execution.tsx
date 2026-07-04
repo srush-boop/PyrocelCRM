@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select'
 import { SystemIcon, SystemBadge } from '@/lib/system-types'
 import { TaskAttachments } from '@/components/dashboard/tasks/task-attachments'
+import { ReportNotesAssist } from '@/components/dashboard/reports/report-notes-assist'
 import { useBackNavigation } from '@/hooks/use-back-navigation'
 import { formatDateUK, formatTimeUK } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
@@ -772,13 +773,40 @@ export function TaskExecution({
 
                     {/* Notes for failed items */}
                     {result.type === 'pass_fail' && result.passed === false && (
-                      <Textarea
-                        value={result.notes || ''}
-                        onChange={(e) => updateChecklistResult(result.item_id, { notes: e.target.value })}
-                        placeholder="Describe the issue..."
-                        className="mt-2"
-                        disabled={!canEdit}
-                      />
+                      <div className="mt-2 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-medium text-muted-foreground">
+                            Defect description
+                          </span>
+                          {canEdit && (
+                            <ReportNotesAssist
+                              label="AI describe"
+                              input={{
+                                mode: 'defect',
+                                serviceType: serviceType?.name,
+                                systemType: systemType?.name,
+                                visitType: task.visit_type?.name,
+                                siteName: site?.name,
+                                itemLabel: result.label,
+                              }}
+                              onInsert={(text, applyMode) =>
+                                updateChecklistResult(result.item_id, {
+                                  notes:
+                                    applyMode === 'replace' || !result.notes
+                                      ? text
+                                      : `${result.notes}\n${text}`,
+                                })
+                              }
+                            />
+                          )}
+                        </div>
+                        <Textarea
+                          value={result.notes || ''}
+                          onChange={(e) => updateChecklistResult(result.item_id, { notes: e.target.value })}
+                          placeholder="Describe the issue..."
+                          disabled={!canEdit}
+                        />
+                      </div>
                     )}
                   </div>
                 </div>
@@ -793,8 +821,37 @@ export function TaskExecution({
       {(status === 'in_progress' || status === 'completed') && (
         <Card>
           <CardHeader>
-            <CardTitle>Notes</CardTitle>
-            <CardDescription>Add any additional observations or comments</CardDescription>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <CardTitle>Notes</CardTitle>
+                <CardDescription>Add any additional observations or comments</CardDescription>
+              </div>
+              {canEdit && (
+                <ReportNotesAssist
+                  label="AI summary"
+                  input={{
+                    mode: 'summary',
+                    serviceType: serviceType?.name,
+                    systemType: systemType?.name,
+                    visitType: task.visit_type?.name,
+                    siteName: site?.name,
+                    existingNotes: engineerNotes,
+                    checklist: checklistResults.map((r) => ({
+                      label: r.label,
+                      type: r.type,
+                      value: r.value,
+                      passed: r.passed,
+                      notes: r.notes,
+                    })),
+                  }}
+                  onInsert={(text, applyMode) =>
+                    setEngineerNotes((prev) =>
+                      applyMode === 'replace' || !prev ? text : `${prev}\n${text}`,
+                    )
+                  }
+                />
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <Textarea

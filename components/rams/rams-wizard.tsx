@@ -24,11 +24,17 @@ import {
   ChevronRight,
   GripVertical,
   Check,
+  MapPin,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { PPE_OPTIONS } from '@/lib/rams/risk'
-import { RiskScoreBadge } from '@/components/rams/risk-matrix'
+import { RiskScoreBadge, HazardRiskMatrix } from '@/components/rams/risk-matrix'
+import {
+  RamsAiAssistant,
+  type AppliedRamsSuggestion,
+} from '@/components/rams/rams-ai-assistant'
+import { findNearestHospital } from '@/lib/ai/find-nearest-hospital'
 import {
   createRamsDocument,
   updateRamsDocument,
@@ -118,6 +124,8 @@ export function RamsWizard({
     existing?.key_personnel ?? [],
   )
   const [equipInput, setEquipInput] = useState('')
+  const [findingHospital, setFindingHospital] = useState(false)
+  const [hospitalNote, setHospitalNote] = useState<string | null>(null)
 
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
@@ -129,6 +137,23 @@ export function RamsWizard({
         : sites,
     [sites, form.clientId],
   )
+
+  // Selecting a site sets the work location to that site's address. We only
+  // overwrite the work location when it is empty or was itself auto-filled from
+  // another site's address, so a manually typed location is never clobbered.
+  function selectSite(siteId: string) {
+    const site = sites.find((s) => s.id === siteId)
+    setForm((f) => {
+      const wasAutoFilled =
+        !f.workLocation.trim() ||
+        sites.some((s) => s.address && s.address === f.workLocation)
+      return {
+        ...f,
+        siteId,
+        workLocation: wasAutoFilled && site?.address ? site.address : f.workLocation,
+      }
+    })
+  }
 
   // Applying a template pre-fills default PPE/equipment/method steps + hazards.
   function applyTemplate(templateId: string) {
@@ -153,8 +178,16 @@ export function RamsWizard({
     }
   }
 
-  function addLibraryHazard(h: RamsHazard) {
-    if (selectedHazards.some((s) => s.description === h.description)) return
+  // Whether a library/system hazard (matched by description) is already added.
+  const isHazardSelected = (description: string) =>
+    selectedHazards.some((s) => s.description === description)
+
+  // Clicking a library hazard toggles it: adds if not present, removes if it is.
+  function toggleLibraryHazard(h: RamsHazard) {
+    if (isHazardSelected(h.description)) {
+      setSelectedHazards((prev) => prev.filter((s) => s.description !== h.description))
+      return
+    }
     setSelectedHazards((prev) => [
       ...prev,
       {
@@ -171,8 +204,11 @@ export function RamsWizard({
     ])
   }
 
-  function addSystemHazard(h: RamsSystemHazard) {
-    if (selectedHazards.some((s) => s.description === h.hazard_name)) return
+  function toggleSystemHazard(h: RamsSystemHazard) {
+    if (isHazardSelected(h.hazard_name)) {
+      setSelectedHazards((prev) => prev.filter((s) => s.description !== h.hazard_name))
+      return
+    }
     setSelectedHazards((prev) => [
       ...prev,
       {
@@ -204,6 +240,42 @@ export function RamsWizard({
         controls: [],
       },
     ])
+  }
+
+  // Merge the parts of an AI suggestion the author chose to apply. Scope,
+  // method steps and considerations overwrite (the author opted in); hazards are
+  // appended, skipping any whose description already exists.
+  function applyAiSuggestion(parts: AppliedRamsSuggestion) {
+    if (parts.scope !== undefined && parts.scope.trim()) {
+      set('workDescription', parts.scope.trim())
+    }
+    if (parts.siteConsiderations !== undefined && parts.siteConsiderations.trim()) {
+      set('siteSpecificConsiderations', parts.siteConsiderations.trim())
+    }
+    if (parts.methodSteps && parts.methodSteps.length > 0) {
+      setMethodSteps(
+        parts.methodSteps.map((description, i) => ({ step: i + 1, description })),
+      )
+    }
+    if (parts.hazards && parts.hazards.length > 0) {
+      setSelectedHazards((prev) => {
+        const existing = new Set(prev.map((h) => h.description.trim().toLowerCase()))
+        const additions: SelectedHazard[] = parts.hazards!
+          .filter((h) => !existing.has(h.description.trim().toLowerCase()))
+          .map((h) => ({
+            id: uid(),
+            category: h.category,
+            description: h.description,
+            potential_consequences: h.potential_consequences,
+            likelihood: h.likelihood,
+            severity: h.severity,
+            residual_likelihood: h.residual_likelihood,
+            residual_severity: h.residual_severity,
+            controls: h.controls,
+          }))
+        return [...prev, ...additions]
+      })
+    }
   }
 
   function updateHazard(id: string, patch: Partial<SelectedHazard>) {
@@ -250,6 +322,42 @@ export function RamsWizard({
         .filter((_, i) => i !== index)
         .map((s, i) => ({ ...s, step: i + 1 })),
     )
+  }
+
+  // Looks up the nearest A&E hospital from the site address (falling back to the
+  // work location) and fills the emergency fields. Results are AI-generated, so
+  // the returned caveat is surfaced for the author to verify.
+  async function handleFindHospital() {
+    const site = sites.find((s) => s.id === form.siteId)
+    const location = (site?.address || form.workLocation || '').trim()
+    if (!location) {
+      toast.error('Add a site or work location first so we can find the nearest hospital.')
+      return
+    }
+    setFindingHospital(true)
+    setHospitalNote(null)
+    try {
+      const res = await findNearestHospital({ location })
+      if (!res.ok || !res.hospital) {
+        toast.error(res.error ?? 'Could not find a hospital.')
+        return
+      }
+      if (!res.hospital.found && !res.hospital.name) {
+        toast.error('No hospital could be identified for that location.')
+        setHospitalNote(res.hospital.note || null)
+        return
+      }
+      setForm((f) => ({
+        ...f,
+        hospitalName: res.hospital!.name || f.hospitalName,
+        hospitalAddress: res.hospital!.address || f.hospitalAddress,
+        hospitalPhone: res.hospital!.phone || f.hospitalPhone,
+      }))
+      setHospitalNote(res.hospital.note || null)
+      toast.success('Nearest hospital added — please verify the details.')
+    } finally {
+      setFindingHospital(false)
+    }
   }
 
   function addPerson() {
@@ -326,7 +434,8 @@ export function RamsWizard({
 
   return (
     <div className="space-y-6">
-      {/* Stepper */}
+      {/* Stepper + AI assistant */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex flex-wrap items-center gap-2">
         {STEPS.map((label, i) => (
           <button
@@ -353,6 +462,17 @@ export function RamsWizard({
             <span className="hidden sm:inline">{label}</span>
           </button>
         ))}
+      </div>
+        <RamsAiAssistant
+          context={{
+            title: form.title,
+            systemType:
+              systemTemplates.find((t) => t.id === form.systemTypeId)?.name ?? null,
+            workDescription: form.workDescription || null,
+            workLocation: form.workLocation || null,
+          }}
+          onApply={applyAiSuggestion}
+        />
       </div>
 
       {/* Step 0: Details */}
@@ -431,7 +551,7 @@ export function RamsWizard({
             </div>
             <div className="grid gap-2">
               <Label>Site</Label>
-              <Select value={form.siteId} onValueChange={(v) => set('siteId', v)}>
+              <Select value={form.siteId} onValueChange={selectSite}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select a site" />
                 </SelectTrigger>
@@ -513,18 +633,26 @@ export function RamsWizard({
                   <div className="flex flex-wrap gap-2">
                     {systemHazards
                       .filter((h) => h.system_type_id === form.systemTypeId)
-                      .map((h) => (
-                        <Button
-                          key={h.id}
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => addSystemHazard(h)}
-                        >
-                          <Plus className="mr-1 h-3 w-3" />
-                          {h.hazard_name}
-                        </Button>
-                      ))}
+                      .map((h) => {
+                        const selected = isHazardSelected(h.hazard_name)
+                        return (
+                          <Button
+                            key={h.id}
+                            type="button"
+                            variant={selected ? 'default' : 'outline'}
+                            size="sm"
+                            aria-pressed={selected}
+                            onClick={() => toggleSystemHazard(h)}
+                          >
+                            {selected ? (
+                              <Check className="mr-1 h-3 w-3" />
+                            ) : (
+                              <Plus className="mr-1 h-3 w-3" />
+                            )}
+                            {h.hazard_name}
+                          </Button>
+                        )
+                      })}
                   </div>
                 </div>
               )}
@@ -533,18 +661,26 @@ export function RamsWizard({
                   Hazard library
                 </Label>
                 <div className="flex flex-wrap gap-2">
-                  {hazards.map((h) => (
-                    <Button
-                      key={h.id}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => addLibraryHazard(h)}
-                    >
-                      <Plus className="mr-1 h-3 w-3" />
-                      {h.description}
-                    </Button>
-                  ))}
+                  {hazards.map((h) => {
+                    const selected = isHazardSelected(h.description)
+                    return (
+                      <Button
+                        key={h.id}
+                        type="button"
+                        variant={selected ? 'default' : 'outline'}
+                        size="sm"
+                        aria-pressed={selected}
+                        onClick={() => toggleLibraryHazard(h)}
+                      >
+                        {selected ? (
+                          <Check className="mr-1 h-3 w-3" />
+                        ) : (
+                          <Plus className="mr-1 h-3 w-3" />
+                        )}
+                        {h.description}
+                      </Button>
+                    )
+                  })}
                 </div>
               </div>
               <Button type="button" variant="secondary" size="sm" onClick={addBlankHazard}>
@@ -639,6 +775,21 @@ export function RamsWizard({
                         />
                       </div>
                     </div>
+                  </div>
+
+                  <div className="flex flex-col items-center gap-1 rounded-md border p-3">
+                    <p className="text-xs font-medium uppercase text-muted-foreground">
+                      Risk matrix
+                    </p>
+                    <HazardRiskMatrix
+                      likelihood={h.likelihood}
+                      severity={h.severity}
+                      residualLikelihood={h.residual_likelihood}
+                      residualSeverity={h.residual_severity}
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      I = initial · R = residual
+                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -830,9 +981,28 @@ export function RamsWizard({
                   placeholder="First aid, evacuation, incident reporting..."
                 />
               </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label className="text-xs uppercase text-muted-foreground">
+                  Nearest hospital (A&amp;E)
+                </Label>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleFindHospital}
+                  disabled={findingHospital}
+                >
+                  {findingHospital ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <MapPin className="mr-2 h-4 w-4" />
+                  )}
+                  Find nearest hospital
+                </Button>
+              </div>
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="grid gap-2">
-                  <Label>Nearest Hospital</Label>
+                  <Label>Hospital Name</Label>
                   <Input
                     value={form.hospitalName}
                     onChange={(e) => set('hospitalName', e.target.value)}
@@ -853,6 +1023,11 @@ export function RamsWizard({
                   />
                 </div>
               </div>
+              {hospitalNote && (
+                <p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                  {hospitalNote} Always verify hospital details before relying on them.
+                </p>
+              )}
               <div className="grid gap-2">
                 <Label>Site-specific Considerations</Label>
                 <Textarea

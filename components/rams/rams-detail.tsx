@@ -47,7 +47,7 @@ import {
 import { toast } from 'sonner'
 import { formatDateUK, formatDateTimeUK } from '@/lib/utils'
 import { RAMS_STATUS_META } from '@/lib/rams/risk'
-import { RiskScoreBadge } from '@/components/rams/risk-matrix'
+import { RiskScoreBadge, HazardRiskMatrix } from '@/components/rams/risk-matrix'
 import { SignaturePad } from '@/components/rams/signature-pad'
 import {
   submitForApproval,
@@ -303,12 +303,14 @@ export function RamsDetail({
         </CardHeader>
         <CardContent>
           {doc.selected_hazards?.length ? (
+            <>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Hazard</TableHead>
                   <TableHead>Initial</TableHead>
                   <TableHead>Residual</TableHead>
+                  <TableHead className="hidden lg:table-cell">Risk Matrix</TableHead>
                   <TableHead>Controls</TableHead>
                 </TableRow>
               </TableHeader>
@@ -332,6 +334,14 @@ export function RamsDetail({
                         severity={h.residual_severity}
                       />
                     </TableCell>
+                    <TableCell className="hidden align-top lg:table-cell">
+                      <HazardRiskMatrix
+                        likelihood={h.likelihood}
+                        severity={h.severity}
+                        residualLikelihood={h.residual_likelihood}
+                        residualSeverity={h.residual_severity}
+                      />
+                    </TableCell>
                     <TableCell className="align-top">
                       <ul className="list-disc pl-4 text-sm">
                         {h.controls.map((c, i) => (
@@ -343,6 +353,12 @@ export function RamsDetail({
                 ))}
               </TableBody>
             </Table>
+            <p className="mt-3 hidden text-xs text-muted-foreground lg:block">
+              Risk matrix: <span className="font-medium">I</span> = initial (pre-control) risk,{' '}
+              <span className="font-medium">R</span> = residual (post-control) risk. Score = likelihood ×
+              severity.
+            </p>
+            </>
           ) : (
             <p className="text-sm text-muted-foreground">No hazards recorded.</p>
           )}

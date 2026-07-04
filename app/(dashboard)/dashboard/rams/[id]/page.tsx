@@ -6,6 +6,7 @@ import type {
   RamsEngineerConfirmation,
   RamsSignature,
   RamsRevisionSummary,
+  RamsApproval,
 } from '@/lib/rams/types'
 
 export const dynamic = 'force-dynamic'
@@ -27,16 +28,34 @@ export default async function RamsDetailPage({
 
   if (!doc) notFound()
 
-  const [{ data: confirmations }, { data: signatures }] = await Promise.all([
+  const [
+    { data: confirmations },
+    { data: signatures },
+    { data: clientReceipts },
+    { data: engineers },
+  ] = await Promise.all([
     supabase
       .from('rams_engineer_confirmations')
-      .select('*')
+      // Join the engineer profile so confirmations render with real names.
+      .select('*, engineer:profiles!rams_engineer_confirmations_engineer_id_fkey(id, full_name, email)')
       .eq('rams_id', id),
     supabase
       .from('rams_signatures')
       .select('*')
       .eq('rams_id', id)
       .order('signed_at', { ascending: true }),
+    supabase
+      .from('rams_approvals')
+      .select('*')
+      .eq('rams_id', id)
+      .eq('approval_type', 'client_receipt')
+      .order('sent_at', { ascending: true }),
+    // Staff who can be assigned to confirm a RAMS.
+    supabase
+      .from('profiles')
+      .select('id, full_name, email, role')
+      .in('role', ['engineer', 'admin', 'office'])
+      .order('full_name'),
   ])
 
   // Resolve display names for client / site / preparer / approver.

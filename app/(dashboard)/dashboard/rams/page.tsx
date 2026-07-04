@@ -11,7 +11,7 @@ export default async function RamsPage() {
   const { data: docs } = await supabase
     .from('rams_documents')
     .select(
-      'id, rams_number, title, status, revision, work_location, planned_start_date, created_at, client_id, prepared_by',
+      'id, rams_number, title, status, revision, work_location, planned_start_date, created_at, updated_at, client_id, prepared_by',
     )
     .eq('is_current_revision', true)
     .order('created_at', { ascending: false })

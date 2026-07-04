@@ -37,20 +37,29 @@ export const timeFormatOptions: Intl.DateTimeFormatOptions = {
   timeZone: UK_TIME_ZONE,
 }
 
-// Helper functions for UK date formatting
-export function formatDateUK(date: Date | string): string {
+// Helper functions for UK date formatting.
+// These coerce their input safely: a null/undefined/invalid date returns a
+// dash placeholder rather than throwing, so a single missing field can never
+// crash an entire client component.
+function coerceDate(date: Date | string | null | undefined): Date | null {
+  if (date == null) return null
   const d = typeof date === 'string' ? new Date(date) : date
-  return d.toLocaleDateString(UK_LOCALE, dateFormatOptions)
+  return Number.isNaN(d.getTime()) ? null : d
 }
 
-export function formatDateTimeUK(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date
-  return d.toLocaleDateString(UK_LOCALE, dateTimeFormatOptions)
+export function formatDateUK(date: Date | string | null | undefined): string {
+  const d = coerceDate(date)
+  return d ? d.toLocaleDateString(UK_LOCALE, dateFormatOptions) : '—'
 }
 
-export function formatTimeUK(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date
-  return d.toLocaleTimeString(UK_LOCALE, timeFormatOptions)
+export function formatDateTimeUK(date: Date | string | null | undefined): string {
+  const d = coerceDate(date)
+  return d ? d.toLocaleDateString(UK_LOCALE, dateTimeFormatOptions) : '—'
+}
+
+export function formatTimeUK(date: Date | string | null | undefined): string {
+  const d = coerceDate(date)
+  return d ? d.toLocaleTimeString(UK_LOCALE, timeFormatOptions) : '—'
 }
 
 export function formatNumberUK(value: number): string {

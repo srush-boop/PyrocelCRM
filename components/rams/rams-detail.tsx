@@ -61,10 +61,12 @@ import type {
   RamsDocument,
   RamsEngineerConfirmation,
   RamsSignature,
+  RamsRevisionSummary,
 } from '@/lib/rams/types'
 
 interface RamsDetailProps {
   doc: RamsDocument
+  revisionHistory: RamsRevisionSummary[]
   clientName: string | null
   siteName: string | null
   preparedByName: string | null
@@ -78,6 +80,7 @@ interface RamsDetailProps {
 
 export function RamsDetail({
   doc,
+  revisionHistory,
   clientName,
   siteName,
   preparedByName,
@@ -104,6 +107,8 @@ export function RamsDetail({
   const [rejectComments, setRejectComments] = useState('')
   const [confirmSig, setConfirmSig] = useState<string | null>(null)
   const [confirmNotes, setConfirmNotes] = useState('')
+  const [revisionOpen, setRevisionOpen] = useState(false)
+  const [revisionNotes, setRevisionNotes] = useState('')
 
   const meta = RAMS_STATUS_META[doc.status] || RAMS_STATUS_META.draft
   const myConfirmation = confirmations.find((c) => c.engineer_id === currentUserId)
@@ -174,10 +179,15 @@ export function RamsDetail({
   }
 
   async function handleRevision() {
+    if (!revisionNotes.trim()) {
+      return toast.error('Describe what is changing in this revision.')
+    }
     setBusy(true)
-    const res = await createRevision(doc.id, null)
+    const res = await createRevision(doc.id, revisionNotes.trim())
     setBusy(false)
     if (!res.success) return toast.error(res.error)
+    setRevisionOpen(false)
+    setRevisionNotes('')
     toast.success('New revision created')
     router.push(`/dashboard/rams/${res.data!.id}/edit`)
   }
@@ -258,7 +268,12 @@ export function RamsDetail({
             </Button>
           )}
           {canManage && doc.status === 'approved' && (
-            <Button size="sm" variant="outline" onClick={handleRevision} disabled={busy}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setRevisionOpen(true)}
+              disabled={busy}
+            >
               <GitBranch className="mr-2 h-4 w-4" />
               New Revision
             </Button>
@@ -505,6 +520,56 @@ export function RamsDetail({
             )}
           </CardContent>
         </Card>
+
+        {revisionHistory.length > 1 && (
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base">Revision History</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2 text-sm">
+                {revisionHistory.map((rev) => {
+                  const revMeta = RAMS_STATUS_META[rev.status] || RAMS_STATUS_META.draft
+                  const isCurrentDoc = rev.id === doc.id
+                  return (
+                    <li
+                      key={rev.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3"
+                    >
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-medium">R{rev.revision}</span>
+                          <Badge variant="outline" className={revMeta.className}>
+                            {revMeta.label}
+                          </Badge>
+                          {rev.is_current_revision && (
+                            <Badge
+                              variant="outline"
+                              className="border-emerald-200 bg-emerald-100 text-emerald-800"
+                            >
+                              Current
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDateUK(rev.created_at)}
+                          {rev.revision_notes ? ` · ${rev.revision_notes}` : ''}
+                        </p>
+                      </div>
+                      {isCurrentDoc ? (
+                        <span className="text-xs text-muted-foreground">Viewing</span>
+                      ) : (
+                        <Button asChild variant="ghost" size="sm">
+                          <Link href={`/dashboard/rams/${rev.id}`}>View</Link>
+                        </Button>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Send-for-approval dialog */}
@@ -636,6 +701,38 @@ export function RamsDetail({
             >
               {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Reject
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* New revision dialog — captures the change reason for the audit trail */}
+      <Dialog open={revisionOpen} onOpenChange={setRevisionOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New Revision</DialogTitle>
+            <DialogDescription>
+              This creates R{(doc.revision || 0) + 1} as an editable draft and
+              supersedes the current approved version. Record what is changing and why.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <Label htmlFor="revision-notes">Reason for revision</Label>
+            <Textarea
+              id="revision-notes"
+              value={revisionNotes}
+              onChange={(e) => setRevisionNotes(e.target.value)}
+              placeholder="e.g. Updated access equipment following site survey; added working-at-height controls."
+              rows={4}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRevisionOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleRevision} disabled={busy}>
+              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Create Revision
             </Button>
           </DialogFooter>
         </DialogContent>

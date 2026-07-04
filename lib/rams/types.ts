@@ -180,6 +180,17 @@ export interface RamsDocument {
   approved_by_profile?: { id: string; full_name: string | null } | null
 }
 
+// A lightweight summary of one document in a revision lineage, used to render
+// the revision history timeline on the detail view.
+export interface RamsRevisionSummary {
+  id: string
+  revision: number
+  status: RamsStatus
+  created_at: string
+  is_current_revision: boolean | null
+  revision_notes: string | null
+}
+
 export interface RamsApproval {
   id: string
   rams_id: string

@@ -5,6 +5,7 @@ import type {
   RamsDocument,
   RamsEngineerConfirmation,
   RamsSignature,
+  RamsRevisionSummary,
 } from '@/lib/rams/types'
 
 export const dynamic = 'force-dynamic'
@@ -54,6 +55,15 @@ export default async function RamsDetailPage({
       : Promise.resolve({ data: null }),
   ])
 
+  // Full revision chain: every document sharing this lineage's root id, so the
+  // detail view can show and link the complete R0 → Rn history.
+  const rootId = (doc.parent_rams_id as string | null) ?? doc.id
+  const { data: revisionRows } = await supabase
+    .from('rams_documents')
+    .select('id, revision, status, created_at, is_current_revision, revision_notes')
+    .or(`id.eq.${rootId},parent_rams_id.eq.${rootId}`)
+    .order('revision', { ascending: false })
+
   const canApprove = ['admin', 'office'].includes(profile.role)
   const canManage = ['admin', 'office', 'engineer'].includes(profile.role)
 
@@ -61,6 +71,7 @@ export default async function RamsDetailPage({
     <div className="p-4 md:p-6">
       <RamsDetail
         doc={doc as RamsDocument}
+        revisionHistory={(revisionRows as RamsRevisionSummary[]) ?? []}
         clientName={(clientRes.data as { name?: string } | null)?.name ?? null}
         siteName={(siteRes.data as { name?: string } | null)?.name ?? null}
         preparedByName={(preparerRes.data as { full_name?: string } | null)?.full_name ?? null}

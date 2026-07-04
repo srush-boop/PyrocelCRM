@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import { EquipmentSpecDocument } from '@/components/dashboard/sales/equipment-spec-document'
+import { loadQuoteCatalogue } from '@/lib/sales/equipment-spec'
 import type {
   CompanyInfo,
   Profile,

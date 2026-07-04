@@ -9,14 +9,13 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import { SITE_FLAG_KEYS, SITE_FLAG_META, type SiteFlagKey } from '@/lib/site-flags'
+import { EDITABLE_SITE_FLAG_KEYS, SITE_FLAG_META, type SiteFlagKey } from '@/lib/site-flags'
 
 type SiteValues = {
   booking_required: boolean
   access_required: boolean
   keys_required: boolean
   two_engineers_required: boolean
-  remedial_required: boolean
   remedial_notes: string | null
 }
 
@@ -26,7 +25,6 @@ type ServiceValues = {
   access_required: boolean | null
   keys_required: boolean | null
   two_engineers_required: boolean | null
-  remedial_required: boolean | null
   remedial_notes: string | null
 }
 
@@ -84,7 +82,7 @@ export function SiteFlagsEditor({
   return (
     <div className="flex flex-col gap-4">
       <div className="grid gap-3 sm:grid-cols-2">
-        {SITE_FLAG_KEYS.map((key) => {
+        {EDITABLE_SITE_FLAG_KEYS.map((key) => {
           const meta = SITE_FLAG_META[key]
           const Icon = meta.icon
           const value = values[key]

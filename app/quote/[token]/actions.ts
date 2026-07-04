@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { loadQuoteCatalogue } from '@/lib/sales/equipment-spec'
+import { createRemedialCallsForQuote } from '@/lib/remedial'
 import type { QuoteLineItem } from '@/lib/types/database'
 
 type Result = { ok: boolean; error?: string }
@@ -77,6 +78,12 @@ export async function respondToPublicQuote(args: {
   }
   if (!updated || updated.length === 0) {
     return { ok: false, error: 'Could not record your response. Please try again.' }
+  }
+
+  // When a remedial quote is approved by the client, raise the remedial call(s)
+  // automatically so the works are scheduled and the pre-attendance alert fires.
+  if (args.decision === 'accepted') {
+    await createRemedialCallsForQuote(supabase, quote.id)
   }
 
   return { ok: true }

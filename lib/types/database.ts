@@ -582,6 +582,13 @@ export interface Task {
   updated_at: string
   // The visit type this task fulfils (null = single/legacy service-wide visit).
   visit_type_id?: string | null
+  // True when this call was raised as remedial works (e.g. auto-created when a
+  // remedial quote is accepted). Drives the automatic "remedial works required"
+  // pre-attendance alert at site and service level.
+  is_remedial: boolean
+  // When this is a remedial call, the quote/defect it originated from.
+  source_quote_id: string | null
+  source_defect_id: string | null
   site_service?: SiteService
   assigned_engineer?: Profile | null
   visit_type?: ServiceVisitType | null

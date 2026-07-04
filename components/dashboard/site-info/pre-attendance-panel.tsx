@@ -81,7 +81,8 @@ export function PreAttendancePanel({
                 </p>
               ) : (
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Remedial works are flagged — check with the office for details before attending.
+                  A remedial call is outstanding for this site — check with the office for details
+                  before attending.
                 </p>
               )}
             </div>

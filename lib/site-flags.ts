@@ -29,6 +29,16 @@ export const SITE_FLAG_KEYS: SiteFlagKey[] = [
   'remedial_required',
 ]
 
+// The flags a user can manually toggle on a site/service. `remedial_required` is
+// intentionally excluded: it is no longer a manual toggle but is derived
+// automatically from open remedial calls (see resolveSiteFlags `remedialOpen`).
+export const EDITABLE_SITE_FLAG_KEYS: SiteFlagKey[] = [
+  'booking_required',
+  'access_required',
+  'keys_required',
+  'two_engineers_required',
+]
+
 type SiteFlagSource = Partial<
   Pick<
     Site,
@@ -62,6 +72,15 @@ type ServiceFlagSource = Partial<
 export function resolveSiteFlags(
   site: SiteFlagSource | null | undefined,
   service?: ServiceFlagSource | null,
+  opts?: {
+    /**
+     * Whether a remedial call is currently outstanding for this site/service.
+     * `remedial_required` is derived from this instead of a stored toggle, so
+     * the pre-attendance alert appears automatically once a remedial quote is
+     * accepted (and clears when the remedial call is completed).
+     */
+    remedialOpen?: boolean
+  },
 ): ResolvedSiteFlags {
   const pick = (key: SiteFlagKey): boolean => {
     const override = service?.[key]
@@ -83,7 +102,7 @@ export function resolveSiteFlags(
     access_required: pick('access_required'),
     keys_required: pick('keys_required'),
     two_engineers_required: pick('two_engineers_required'),
-    remedial_required: pick('remedial_required'),
+    remedial_required: Boolean(opts?.remedialOpen),
     remedial_notes: remedialNotes,
   }
 }

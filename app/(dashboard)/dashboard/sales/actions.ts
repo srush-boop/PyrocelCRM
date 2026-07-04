@@ -7,6 +7,7 @@ import { computeQuoteTotals, QUOTE_TYPES, WORK_TYPES, sellFromCost, resolveLineM
 import { sendEmail } from '@/lib/email/send-email'
 import { renderQuotePdfBuffer } from '@/lib/pdf/quote-pdf'
 import { loadQuoteCatalogue } from '@/lib/sales/equipment-spec'
+import { createRemedialCallsForQuote } from '@/lib/remedial'
 import type {
   QuoteStatus,
   QuoteCatalogueItem,
@@ -668,6 +669,14 @@ export async function setQuoteStatus(
   }
   if (!updated || updated.length === 0) {
     return { ok: false, error: 'Quote not found or you do not have permission to update it.' }
+  }
+
+  // When a remedial quote is accepted, raise the remedial call(s) automatically
+  // so the works are scheduled and the site/service pre-attendance alert fires.
+  if (status === 'accepted') {
+    await createRemedialCallsForQuote(supabase, id)
+    revalidatePath('/dashboard/schedule')
+    revalidatePath('/dashboard/defects')
   }
 
   revalidatePath('/dashboard/sales')

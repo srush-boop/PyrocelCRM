@@ -2,13 +2,14 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import type { Profile } from '@/lib/types/database'
 
-// Boolean flag columns shared by sites and site_services.
+// Boolean flag columns shared by sites and site_services. `remedial_required` is
+// deliberately excluded: it is no longer a manual toggle but derived from open
+// remedial calls. `remedial_notes` is still editable (handled separately below).
 const BOOL_FLAGS = [
   'booking_required',
   'access_required',
   'keys_required',
   'two_engineers_required',
-  'remedial_required',
 ] as const
 
 /** Ensure caller is staff (admin/office/engineer). Returns the profile or an error. */

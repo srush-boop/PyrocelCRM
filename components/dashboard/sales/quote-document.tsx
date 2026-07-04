@@ -23,6 +23,10 @@ import {
   getOmittedElementKeys,
   isHiddenConditionalKey,
 } from '@/lib/sales/omitted-sections'
+import {
+  buildEquipmentSpecSections,
+  type SpecCatalogueItem,
+} from '@/lib/sales/equipment-spec'
 
 interface QuoteDocumentProps {
   quote: Quote
@@ -32,6 +36,9 @@ interface QuoteDocumentProps {
   // Client-request compliance matrix. Only rendered when the quote opts in via
   // show_requirements_matrix and at least one requirement is present.
   requirements?: QuoteRequirement[]
+  // Catalogue rows backing the quote's products, used to append a full
+  // equipment specification when the quote opts in via show_equipment_spec.
+  catalogue?: SpecCatalogueItem[]
   backHref?: string
 }
 
@@ -84,9 +91,13 @@ export function QuoteDocument({
   lines,
   company,
   requirements = [],
+  catalogue = [],
   backHref,
 }: QuoteDocumentProps) {
   const showRequirements = quote.show_requirements_matrix && requirements.length > 0
+  const equipmentSpecSections = quote.show_equipment_spec
+    ? buildEquipmentSpecSections(systems, lines, catalogue)
+    : []
   const sortedRequirements = requirements.slice().sort((a, b) => a.position - b.position)
   const companyName = company?.name || 'Pyrocel Ltd'
   const recipientName = quote.client?.name || quote.prospect_name || 'Prospective client'
@@ -254,11 +265,12 @@ export function QuoteDocument({
                   )}
 
                   {/* Design & survey */}
-                  {(system.design_overview ||
-                    system.design_category_id ||
-                    system.drawing_reference ||
-                    system.designed_by ||
-                    system.survey_carried_out) && (
+                  {quote.show_design_overview &&
+                    (system.design_overview ||
+                      system.design_category_id ||
+                      system.drawing_reference ||
+                      system.designed_by ||
+                      system.survey_carried_out) && (
                     <div className="mb-3 rounded-md bg-muted/40 p-3 text-sm">
                       {system.design_overview && (
                         <p className="mb-2 whitespace-pre-line leading-relaxed">{system.design_overview}</p>
@@ -470,6 +482,62 @@ export function QuoteDocument({
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* Equipment specification (opt-in) */}
+        {equipmentSpecSections.length > 0 && (
+          <div className="mt-8 break-inside-avoid border-t pt-6">
+            <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide">
+              Equipment specification
+            </h3>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Official part numbers and specifications for the equipment supplied.
+            </p>
+            <div className="space-y-6">
+              {equipmentSpecSections.map(({ system, rows }) => (
+                <section key={system.id} className="break-inside-avoid">
+                  <h4 className="mb-2 border-b pb-1 text-sm font-semibold">
+                    {system.system_name || quoteTypeLabel(quote.quote_type)}
+                  </h4>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                          <th className="w-32 py-1 font-medium">Part number</th>
+                          <th className="py-1 font-medium">Specification</th>
+                          <th className="w-20 py-1 text-right font-medium">Qty</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((row) => (
+                          <tr
+                            key={row.id}
+                            className="border-b border-dashed align-top last:border-0"
+                          >
+                            <td className="py-2 pr-4 align-top font-mono text-xs">
+                              {row.partNumber}
+                            </td>
+                            <td className="py-2 pr-4 align-top">
+                              <div className="font-medium">{row.standardDescription}</div>
+                              {row.specDetail && (
+                                <div className="mt-0.5 whitespace-pre-line text-xs text-muted-foreground">
+                                  {row.specDetail}
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-2 text-right align-top tabular-nums">
+                              {row.quantity}
+                              {row.unit ? ` ${row.unit}` : ''}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              ))}
             </div>
           </div>
         )}

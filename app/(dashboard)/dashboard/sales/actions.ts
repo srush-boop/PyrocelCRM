@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { computeQuoteTotals, QUOTE_TYPES, WORK_TYPES, sellFromCost, resolveLineMargin } from '@/lib/sales'
 import { sendEmail } from '@/lib/email/send-email'
 import { renderQuotePdfBuffer } from '@/lib/pdf/quote-pdf'
+import { loadQuoteCatalogue } from '@/lib/sales/equipment-spec'
 import type {
   QuoteStatus,
   QuoteCatalogueItem,
@@ -110,6 +111,8 @@ export interface QuoteInput {
   vat_rate: number
   discount_pence: number
   show_line_items?: boolean
+  show_equipment_spec?: boolean
+  show_design_overview?: boolean
   valid_until?: string | null
   systems: QuoteSystemInput[]
   // Client-request import: the compliance matrix and its source document.
@@ -358,6 +361,8 @@ export async function saveQuote(
     vat_pence: totals.vatPence,
     total_pence: totals.totalPence,
     show_line_items: input.show_line_items ?? true,
+    show_equipment_spec: input.show_equipment_spec ?? false,
+    show_design_overview: input.show_design_overview ?? true,
     valid_until: input.valid_until || null,
     show_requirements_matrix: input.show_requirements_matrix ?? false,
   }
@@ -758,6 +763,12 @@ export async function sendQuote(args: {
 
   const typedQuote = quote as Quote
   const companyName = (company as CompanyInfo | null)?.name || 'Pyrocel Ltd'
+  const typedLines = (lines ?? []) as QuoteLineItem[]
+
+  // Only pay the catalogue lookup when the quote opts into the equipment spec.
+  const catalogue = typedQuote.show_equipment_spec
+    ? await loadQuoteCatalogue(supabase, typedLines)
+    : []
 
   // Generate the PDF attachment.
   let pdf: Buffer
@@ -765,8 +776,9 @@ export async function sendQuote(args: {
     pdf = await renderQuotePdfBuffer({
       quote: typedQuote,
       systems: (systems ?? []) as QuoteSystem[],
-      lines: (lines ?? []) as QuoteLineItem[],
+      lines: typedLines,
       company: (company ?? null) as CompanyInfo | null,
+      catalogue,
     })
   } catch (e) {
     console.error('[v0] Quote PDF generation failed:', e)
@@ -787,6 +799,15 @@ export async function sendQuote(args: {
     attachments: [{ filename: fileName, content: pdf }],
   })
   if (!result.success) {
+    // In the preview / any environment without RESEND_API_KEY, email sending is
+    // disabled. Surface a clear, actionable message rather than a generic error.
+    if (result.error === 'Email service not configured') {
+      return {
+        ok: false,
+        error:
+          'Email isn’t configured in this environment, so the quote couldn’t be sent. Add a RESEND_API_KEY to enable sending. You can still use "View / PDF" to download and share the quote manually.',
+      }
+    }
     return { ok: false, error: result.error || 'The email could not be sent.' }
   }
 
@@ -950,6 +971,8 @@ export async function cloneQuoteForContractor(
       vat_pence: quote.vat_pence,
       total_pence: quote.total_pence,
       show_line_items: quote.show_line_items,
+      show_equipment_spec: quote.show_equipment_spec,
+      show_design_overview: quote.show_design_overview,
       created_by: user.id,
     })
     .select('id')
@@ -1017,6 +1040,8 @@ export async function createRevision(
       vat_pence: quote.vat_pence,
       total_pence: quote.total_pence,
       show_line_items: quote.show_line_items,
+      show_equipment_spec: quote.show_equipment_spec,
+      show_design_overview: quote.show_design_overview,
       created_by: user.id,
     })
     .select('id')

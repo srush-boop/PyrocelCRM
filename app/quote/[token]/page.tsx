@@ -9,6 +9,7 @@ import type {
   CompanyInfo,
   QuoteRequirement,
 } from '@/lib/types/database'
+import type { SpecCatalogueItem } from '@/lib/sales/equipment-spec'
 
 export const metadata = {
   title: 'Your Quote',
@@ -29,6 +30,7 @@ export default async function PublicQuotePage({
   const lines = data.lines as QuoteLineItem[]
   const company = data.company as CompanyInfo | null
   const requirements = data.requirements as QuoteRequirement[]
+  const catalogue = data.catalogue as SpecCatalogueItem[]
 
   return (
     <main className="min-h-screen bg-muted/40 py-8">
@@ -39,6 +41,7 @@ export default async function PublicQuotePage({
           lines={lines}
           company={company}
           requirements={requirements}
+          catalogue={catalogue}
         />
         <div className="mt-6 print:hidden">
           <PublicQuoteApproval quote={quote} token={token} />

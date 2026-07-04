@@ -11,14 +11,10 @@ import type {
   QuoteLineItem,
   QuoteSystem,
 } from '@/lib/types/database'
-
-// A catalogue item carries the official standard description and full spec text.
-interface SpecCatalogueItem {
-  id: string
-  product_code: string | null
-  name: string
-  description: string | null
-}
+import {
+  buildEquipmentSpecSections,
+  type SpecCatalogueItem,
+} from '@/lib/sales/equipment-spec'
 
 interface EquipmentSpecDocumentProps {
   quote: Quote
@@ -43,47 +39,9 @@ export function EquipmentSpecDocument({
   const recipientName = quote.client?.name || quote.prospect_name || 'Prospective client'
   const recipientAddress = quote.site?.address || quote.client?.address || quote.prospect_address
 
-  // Index the catalogue for fast lookup by id and by product code.
-  const byId = new Map(catalogue.map((c) => [c.id, c]))
-  const byCode = new Map(
-    catalogue.filter((c) => c.product_code).map((c) => [c.product_code as string, c]),
-  )
-
-  // Resolve the official catalogue record behind a quote line so we can surface
-  // the standard description and full specification text from the catalogue.
-  function resolveCatalogue(line: QuoteLineItem): SpecCatalogueItem | null {
-    if (line.catalogue_item_id && byId.has(line.catalogue_item_id)) {
-      return byId.get(line.catalogue_item_id) as SpecCatalogueItem
-    }
-    if (line.product_code && byCode.has(line.product_code)) {
-      return byCode.get(line.product_code) as SpecCatalogueItem
-    }
-    return null
-  }
-
-  // Build spec rows per system: only equipment (non-service) lines with a product.
-  const sections = systems
-    .slice()
-    .sort((a, b) => a.position - b.position)
-    .map((system) => {
-      const rows = lines
-        .filter((l) => l.system_id === system.id && !l.is_service)
-        .filter((l) => l.product_code || l.catalogue_item_id)
-        .sort((a, b) => a.position - b.position)
-        .map((line) => {
-          const cat = resolveCatalogue(line)
-          return {
-            id: line.id,
-            partNumber: line.product_code || cat?.product_code || '—',
-            standardDescription: cat?.name || line.description,
-            specDetail: cat?.description ?? '',
-            quantity: line.quantity,
-            unit: line.unit,
-          }
-        })
-      return { system, rows }
-    })
-    .filter((s) => s.rows.length > 0)
+  // Build spec rows per system from the shared helper: only equipment
+  // (non-service) lines that map to a catalogue product are included.
+  const sections = buildEquipmentSpecSections(systems, lines, catalogue)
 
   return (
     <div className="mx-auto max-w-4xl">

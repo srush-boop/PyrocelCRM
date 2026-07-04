@@ -1,6 +1,8 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { loadQuoteCatalogue } from '@/lib/sales/equipment-spec'
+import type { QuoteLineItem } from '@/lib/types/database'
 
 type Result = { ok: boolean; error?: string }
 
@@ -98,11 +100,17 @@ export async function getPublicQuote(token: string) {
       supabase.from('quote_requirements').select('*').eq('quote_id', quote.id).order('position'),
     ])
 
+  const lineRows = (lines ?? []) as QuoteLineItem[]
+  const catalogue = (quote as { show_equipment_spec?: boolean }).show_equipment_spec
+    ? await loadQuoteCatalogue(supabase, lineRows)
+    : []
+
   return {
     quote,
     systems: systems ?? [],
-    lines: lines ?? [],
+    lines: lineRows,
     company: company ?? null,
     requirements: requirements ?? [],
+    catalogue,
   }
 }

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import { QuoteDocument } from '@/components/dashboard/sales/quote-document'
+import { loadQuoteCatalogue } from '@/lib/sales/equipment-spec'
 import type {
   CompanyInfo,
   Profile,
@@ -44,14 +45,20 @@ export default async function QuotePrintPage({
       supabase.from('quote_requirements').select('*').eq('quote_id', id).order('position'),
     ])
 
+  const lineRows = (lines ?? []) as QuoteLineItem[]
+  const catalogue = (quote as Quote).show_equipment_spec
+    ? await loadQuoteCatalogue(supabase, lineRows)
+    : []
+
   return (
     <div className="min-h-screen bg-muted/40 p-4 sm:p-8 print:bg-white print:p-0">
       <QuoteDocument
         quote={quote as Quote}
         systems={(systems ?? []) as QuoteSystem[]}
-        lines={(lines ?? []) as QuoteLineItem[]}
+        lines={lineRows}
         company={(company ?? null) as CompanyInfo | null}
         requirements={(requirements ?? []) as QuoteRequirement[]}
+        catalogue={catalogue}
         backHref={`/dashboard/sales/${id}`}
       />
     </div>

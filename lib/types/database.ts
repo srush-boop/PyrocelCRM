@@ -936,6 +936,12 @@ export interface Quote {
   // When true, the client-facing quote/PDF renders the requirements compliance
   // matrix imported from the client's request. Internal-only when false.
   show_requirements_matrix: boolean
+  // When true, the quote document/PDF appends a full equipment specification
+  // (catalogue part numbers + standard descriptions + spec detail).
+  show_equipment_spec: boolean
+  // When true (default), the quote document/PDF shows each system's design
+  // overview + design/survey details. Hidden when false.
+  show_design_overview: boolean
   valid_until: string | null
   sent_at: string | null
   decided_at: string | null

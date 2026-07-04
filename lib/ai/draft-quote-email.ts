@@ -43,6 +43,7 @@ export async function draftQuoteEmail(input: {
   tone?: EmailTone
   instructions?: string
 }): Promise<DraftQuoteEmailResult> {
+  try {
   const { supabase, user, error } = await requireStaff()
   if (error || !user) return { ok: false, error: error ?? 'Not authorised.' }
 
@@ -138,7 +139,19 @@ export async function draftQuoteEmail(input: {
 
     return { ok: true, subject: object.subject, body: object.body }
   } catch (err) {
-    console.error('[v0] draftQuoteEmail failed:', err)
+    console.error('[v0] draftQuoteEmail generateObject failed:', err)
     return { ok: false, error: 'Could not generate a draft. Please try again.' }
+  }
+  } catch (err) {
+    // Guards the prelude (auth, quote/sender fetch, date parsing) so an
+    // unexpected throw here is never surfaced as an opaque Server Action digest.
+    console.error('[v0] draftQuoteEmail unexpected failure:', err)
+    return {
+      ok: false,
+      error:
+        err instanceof Error
+          ? `Could not generate a draft: ${err.message}`
+          : 'Could not generate a draft due to an unexpected error.',
+    }
   }
 }

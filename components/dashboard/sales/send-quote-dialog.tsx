@@ -82,6 +82,10 @@ export function SendQuoteDialog({
       } else {
         toast.error(res.error ?? 'Could not generate a draft')
       }
+    } catch (err) {
+      // Catch throws (not just {ok:false}) so the user never sees a raw digest.
+      console.error('[v0] handleAiDraft failed:', err)
+      toast.error('Could not generate a draft. Please try again.')
     } finally {
       setIsDrafting(false)
     }
@@ -99,24 +103,30 @@ export function SendQuoteDialog({
 
   function handleSend() {
     startTransition(async () => {
-      const ccList = cc
-        .split(/[,;]/)
-        .map((e) => e.trim())
-        .filter(Boolean)
-      const res = await sendQuote({
-        id: quote.id,
-        to,
-        cc: ccList.length > 0 ? ccList : undefined,
-        subject,
-        message,
-        requireSignature,
-      })
-      if (res.ok) {
-        toast.success('Quote sent to the client')
-        setOpen(false)
-        router.refresh()
-      } else {
-        toast.error(res.error ?? 'Could not send the quote')
+      try {
+        const ccList = cc
+          .split(/[,;]/)
+          .map((e) => e.trim())
+          .filter(Boolean)
+        const res = await sendQuote({
+          id: quote.id,
+          to,
+          cc: ccList.length > 0 ? ccList : undefined,
+          subject,
+          message,
+          requireSignature,
+        })
+        if (res.ok) {
+          toast.success('Quote sent to the client')
+          setOpen(false)
+          router.refresh()
+        } else {
+          toast.error(res.error ?? 'Could not send the quote')
+        }
+      } catch (err) {
+        // Catch throws (not just {ok:false}) so the user never sees a raw digest.
+        console.error('[v0] handleSend failed:', err)
+        toast.error('Could not send the quote. Please try again.')
       }
     })
   }

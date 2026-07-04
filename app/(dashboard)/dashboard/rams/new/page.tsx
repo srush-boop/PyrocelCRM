@@ -10,7 +10,8 @@ export default async function NewRamsPage() {
   if (!user || !profile) redirect('/auth/login')
   if (!['admin', 'office', 'engineer'].includes(profile.role)) redirect('/dashboard/rams')
 
-  const { templates, hazards, systemHazards, clients, sites } = await loadWizardData()
+  const { templates, hazards, systemHazards, equipmentLibrary, clients, sites } =
+    await loadWizardData()
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6">
@@ -24,6 +25,7 @@ export default async function NewRamsPage() {
         templates={templates}
         hazards={hazards}
         systemHazards={systemHazards}
+        equipmentLibrary={equipmentLibrary}
         clients={clients}
         sites={sites}
       />

@@ -44,6 +44,7 @@ import type {
   RamsMasterTemplate,
   RamsHazard,
   RamsSystemHazard,
+  RamsEquipmentItem,
   RamsDocument,
   SelectedHazard,
   MethodStep,
@@ -55,6 +56,7 @@ interface RamsWizardProps {
   templates: RamsMasterTemplate[]
   hazards: RamsHazard[]
   systemHazards: RamsSystemHazard[]
+  equipmentLibrary: RamsEquipmentItem[]
   clients: { id: string; name: string }[]
   sites: SiteOption[]
   existing?: RamsDocument | null
@@ -76,6 +78,7 @@ export function RamsWizard({
   templates,
   hazards,
   systemHazards,
+  equipmentLibrary,
   clients,
   sites,
   existing,
@@ -124,6 +127,7 @@ export function RamsWizard({
     existing?.key_personnel ?? [],
   )
   const [equipInput, setEquipInput] = useState('')
+  const [equipSearch, setEquipSearch] = useState('')
   const [findingHospital, setFindingHospital] = useState(false)
   const [hospitalNote, setHospitalNote] = useState<string | null>(null)
 
@@ -137,6 +141,30 @@ export function RamsWizard({
         : sites,
     [sites, form.clientId],
   )
+
+  // Default equipment suggested by the selected system type (shown as one-tap
+  // chips in the equipment step).
+  const systemDefaultEquipment = useMemo(() => {
+    if (!form.systemTypeId) return [] as string[]
+    const sys = systemTemplates.find((t) => t.id === form.systemTypeId)
+    return (sys?.default_equipment ?? []).map((e) => e.trim()).filter(Boolean)
+  }, [form.systemTypeId, systemTemplates])
+
+  // The equipment library filtered by the search box, grouped by category, so
+  // the author can add standard items from a maintained list.
+  const filteredEquipmentLibrary = useMemo(() => {
+    const q = equipSearch.trim().toLowerCase()
+    const items = q
+      ? equipmentLibrary.filter((e) => e.name.toLowerCase().includes(q))
+      : equipmentLibrary
+    const groups = new Map<string, RamsEquipmentItem[]>()
+    for (const item of items) {
+      const key = item.category || 'General'
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(item)
+    }
+    return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+  }, [equipmentLibrary, equipSearch])
 
   // Selecting a site sets the work location to that site's address. We only
   // overwrite the work location when it is empty or was itself auto-filled from
@@ -303,6 +331,37 @@ export function RamsWizard({
     if (!form.equipmentList.includes(v))
       set('equipmentList', [...form.equipmentList, v])
     setEquipInput('')
+  }
+
+  // Toggle a single equipment item on the current list (used by the library
+  // picker and the system-default chips).
+  function toggleEquipment(item: string) {
+    const v = item.trim()
+    if (!v) return
+    setForm((f) => ({
+      ...f,
+      equipmentList: f.equipmentList.includes(v)
+        ? f.equipmentList.filter((e) => e !== v)
+        : [...f.equipmentList, v],
+    }))
+  }
+
+  // Selecting a system type mirrors the hazard behaviour: it auto-imports that
+  // system's default equipment (from the system template), merged with whatever
+  // the author already has. Equipment already present is left untouched.
+  function selectSystemType(systemTypeId: string) {
+    set('systemTypeId', systemTypeId)
+    const sys = systemTemplates.find((t) => t.id === systemTypeId)
+    const defaults = sys?.default_equipment ?? []
+    if (defaults.length === 0) return
+    setForm((f) => {
+      const merged = [...f.equipmentList]
+      for (const item of defaults) {
+        const v = item.trim()
+        if (v && !merged.includes(v)) merged.push(v)
+      }
+      return { ...f, equipmentList: merged }
+    })
   }
 
   function addStep() {
@@ -509,7 +568,7 @@ export function RamsWizard({
               <Label>System Type</Label>
               <Select
                 value={form.systemTypeId}
-                onValueChange={(v) => set('systemTypeId', v)}
+                onValueChange={selectSystemType}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select a system type" />
@@ -844,45 +903,135 @@ export function RamsWizard({
             <CardHeader>
               <CardTitle>Equipment & Tools</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex gap-2">
-                <Input
-                  value={equipInput}
-                  onChange={(e) => setEquipInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-                      e.preventDefault()
-                      addEquipment()
-                    }
-                  }}
-                  placeholder="Add equipment and press Enter"
-                />
-                <Button type="button" onClick={addEquipment}>
-                  Add
-                </Button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {form.equipmentList.map((item) => (
-                  <Badge
-                    key={item}
-                    variant="secondary"
-                    className="cursor-pointer"
-                    onClick={() =>
-                      set(
-                        'equipmentList',
-                        form.equipmentList.filter((e) => e !== item),
+            <CardContent className="space-y-4">
+              {/* System-suggested equipment: one-tap chips imported from the
+                  selected system type. */}
+              {systemDefaultEquipment.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-xs uppercase text-muted-foreground">
+                    Suggested for this system
+                  </Label>
+                  <div className="flex flex-wrap gap-2">
+                    {systemDefaultEquipment.map((item) => {
+                      const selected = form.equipmentList.includes(item)
+                      return (
+                        <Button
+                          key={item}
+                          type="button"
+                          variant={selected ? 'default' : 'outline'}
+                          size="sm"
+                          aria-pressed={selected}
+                          onClick={() => toggleEquipment(item)}
+                        >
+                          {selected ? (
+                            <Check className="mr-1 h-3 w-3" />
+                          ) : (
+                            <Plus className="mr-1 h-3 w-3" />
+                          )}
+                          {item}
+                        </Button>
                       )
-                    }
-                  >
-                    {item}
-                    <Trash2 className="ml-1 h-3 w-3" />
-                  </Badge>
-                ))}
-                {form.equipmentList.length === 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    No equipment added yet.
-                  </p>
-                )}
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Add from the maintained equipment library. */}
+              {equipmentLibrary.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-xs uppercase text-muted-foreground">
+                    Add from equipment list
+                  </Label>
+                  <Input
+                    value={equipSearch}
+                    onChange={(e) => setEquipSearch(e.target.value)}
+                    placeholder="Search equipment library"
+                  />
+                  <div className="max-h-56 space-y-3 overflow-y-auto rounded-md border p-3">
+                    {filteredEquipmentLibrary.length === 0 && (
+                      <p className="text-sm text-muted-foreground">
+                        No matching equipment.
+                      </p>
+                    )}
+                    {filteredEquipmentLibrary.map(([category, items]) => (
+                      <div key={category} className="space-y-1.5">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          {category}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {items.map((eq) => {
+                            const selected = form.equipmentList.includes(eq.name)
+                            return (
+                              <Button
+                                key={eq.id}
+                                type="button"
+                                variant={selected ? 'default' : 'outline'}
+                                size="sm"
+                                aria-pressed={selected}
+                                onClick={() => toggleEquipment(eq.name)}
+                              >
+                                {selected ? (
+                                  <Check className="mr-1 h-3 w-3" />
+                                ) : (
+                                  <Plus className="mr-1 h-3 w-3" />
+                                )}
+                                {eq.name}
+                              </Button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Free-text entry for anything not in the library. */}
+              <div className="space-y-2">
+                <Label className="text-xs uppercase text-muted-foreground">
+                  Add custom equipment
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={equipInput}
+                    onChange={(e) => setEquipInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                        e.preventDefault()
+                        addEquipment()
+                      }
+                    }}
+                    placeholder="Add equipment and press Enter"
+                  />
+                  <Button type="button" onClick={addEquipment}>
+                    Add
+                  </Button>
+                </div>
+              </div>
+
+              {/* Current selection. */}
+              <div className="space-y-2">
+                <Label className="text-xs uppercase text-muted-foreground">
+                  On this RAMS
+                </Label>
+                <div className="flex flex-wrap gap-2">
+                  {form.equipmentList.map((item) => (
+                    <Badge
+                      key={item}
+                      variant="secondary"
+                      className="cursor-pointer"
+                      onClick={() => toggleEquipment(item)}
+                    >
+                      {item}
+                      <Trash2 className="ml-1 h-3 w-3" />
+                    </Badge>
+                  ))}
+                  {form.equipmentList.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      No equipment added yet.
+                    </p>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>

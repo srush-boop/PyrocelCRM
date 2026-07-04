@@ -21,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Plus, Search, FileText, ShieldCheck } from 'lucide-react'
+import { Plus, Search, FileText, ShieldCheck, Wrench } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { RAMS_STATUS_META } from '@/lib/rams/risk'
 import type { RamsDocument } from '@/lib/rams/types'
@@ -32,9 +32,10 @@ interface RamsListProps {
     prepared_by_name?: string | null
   })[]
   canManage: boolean
+  canAdmin?: boolean
 }
 
-export function RamsList({ documents, canManage }: RamsListProps) {
+export function RamsList({ documents, canManage, canAdmin }: RamsListProps) {
   const router = useRouter()
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<string>('all')
@@ -79,6 +80,14 @@ export function RamsList({ documents, canManage }: RamsListProps) {
               <SelectItem value="archived">Archived</SelectItem>
             </SelectContent>
           </Select>
+          {canAdmin && (
+            <Button asChild variant="outline">
+              <Link href="/dashboard/rams/admin/equipment">
+                <Wrench className="mr-2 h-4 w-4" />
+                Equipment
+              </Link>
+            </Button>
+          )}
           {canManage && (
             <Button asChild>
               <Link href="/dashboard/rams/new">

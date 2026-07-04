@@ -29,7 +29,8 @@ export default async function EditRamsPage({
     redirect(`/dashboard/rams/${id}`)
   }
 
-  const { templates, hazards, systemHazards, clients, sites } = await loadWizardData()
+  const { templates, hazards, systemHazards, equipmentLibrary, clients, sites } =
+    await loadWizardData()
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6">
@@ -43,6 +44,7 @@ export default async function EditRamsPage({
         templates={templates}
         hazards={hazards}
         systemHazards={systemHazards}
+        equipmentLibrary={equipmentLibrary}
         clients={clients}
         sites={sites}
         existing={doc as RamsDocument}

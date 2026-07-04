@@ -101,6 +101,17 @@ export interface RamsSystemHazard {
   updated_at: string
 }
 
+// A reusable piece of equipment/tooling that can be picked into a RAMS. The
+// firm's central list, editable in the RAMS admin section.
+export interface RamsEquipmentItem {
+  id: string
+  name: string
+  category: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface RamsCompanySettings {
   id: string
   company_name: string | null
@@ -203,6 +214,10 @@ export interface RamsApproval {
   responded_at: string | null
   ip_address: string | null
   comments: string | null
+  // For client "acknowledge receipt" flows: the captured signature (base64 PNG)
+  // and the typed name the client signed with.
+  signature_data: string | null
+  signed_name: string | null
   created_at: string
 }
 

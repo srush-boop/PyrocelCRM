@@ -41,6 +41,7 @@ export default async function RamsPage() {
   }))
 
   const canManage = ['admin', 'office', 'engineer'].includes(profile.role)
+  const canAdmin = ['admin', 'office'].includes(profile.role)
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6">
@@ -53,7 +54,11 @@ export default async function RamsPage() {
         </p>
       </div>
       {/* Enriched rows carry extra display fields the list renders. */}
-      <RamsList documents={enriched as never} canManage={canManage} />
+      <RamsList
+        documents={enriched as never}
+        canManage={canManage}
+        canAdmin={canAdmin}
+      />
     </div>
   )
 }

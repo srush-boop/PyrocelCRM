@@ -31,12 +31,12 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { MoreHorizontal, Search, Plus, Trash2, Loader2, Pencil, UserRound } from 'lucide-react'
-import { ClientLoginDialog } from './client-login-dialog'
+import { ClientLoginDialog, type BrandingClient } from './client-login-dialog'
 import type { ClientLogin } from '@/lib/types/database'
 
 interface ClientLoginsTableProps {
   logins: ClientLogin[]
-  clients: { id: string; name: string }[]
+  clients: BrandingClient[]
   sites: { id: string; name: string; client_id: string }[]
 }
 

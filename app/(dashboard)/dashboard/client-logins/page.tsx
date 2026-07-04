@@ -23,7 +23,7 @@ export default async function ClientLoginsPage() {
 
   const [{ data: clients }, { data: sites }, { data: logins }, { data: access }] =
     await Promise.all([
-      supabase.from('clients').select('id, name').order('name'),
+      supabase.from('clients').select('id, name, logo_url, login_tagline').order('name'),
       supabase.from('sites').select('id, name, client_id').order('name'),
       supabase
         .from('profiles')
@@ -58,7 +58,14 @@ export default async function ClientLoginsPage() {
 
       <ClientLoginsTable
         logins={clientLogins}
-        clients={(clients as { id: string; name: string }[]) || []}
+        clients={
+          (clients as {
+            id: string
+            name: string
+            logo_url: string | null
+            login_tagline: string | null
+          }[]) || []
+        }
         sites={(sites as { id: string; name: string; client_id: string }[]) || []}
       />
     </div>

@@ -39,6 +39,10 @@ export interface Client {
   contact_phone: string | null
   address: string | null
   notes: string | null
+  /** Public Blob URL of the client logo shown on their branded login page. */
+  logo_url: string | null
+  /** Positive tagline shown on the client's branded login page. */
+  login_tagline: string | null
   created_at: string
   updated_at: string
 }

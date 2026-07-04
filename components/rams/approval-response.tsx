@@ -6,11 +6,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { CheckCircle2, XCircle } from 'lucide-react'
 import { respondToApproval } from '@/lib/rams/approval-actions'
+import type { ApprovalStatus } from '@/lib/rams/types'
 
 interface ApprovalResponseProps {
   token: string
   alreadyResponded: boolean
-  initialStatus: 'pending' | 'approved' | 'rejected'
+  initialStatus: ApprovalStatus
 }
 
 export function ApprovalResponse({

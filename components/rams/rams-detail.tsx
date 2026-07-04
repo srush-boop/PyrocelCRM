@@ -49,6 +49,7 @@ import { formatDateUK, formatDateTimeUK } from '@/lib/utils'
 import { RAMS_STATUS_META } from '@/lib/rams/risk'
 import { RiskScoreBadge, HazardRiskMatrix } from '@/components/rams/risk-matrix'
 import { SignaturePad } from '@/components/rams/signature-pad'
+import { DistributeRamsDialog } from '@/components/rams/distribute-rams-dialog'
 import {
   submitForApproval,
   decideRams,
@@ -62,6 +63,7 @@ import type {
   RamsEngineerConfirmation,
   RamsSignature,
   RamsRevisionSummary,
+  RamsApproval,
 } from '@/lib/rams/types'
 
 interface RamsDetailProps {
@@ -73,6 +75,13 @@ interface RamsDetailProps {
   approvedByName: string | null
   confirmations: RamsEngineerConfirmation[]
   signatures: RamsSignature[]
+  clientReceipts: RamsApproval[]
+  engineers: {
+    id: string
+    full_name: string | null
+    email: string | null
+    role: string
+  }[]
   currentUserId: string
   canApprove: boolean
   canManage: boolean
@@ -87,6 +96,8 @@ export function RamsDetail({
   approvedByName,
   confirmations,
   signatures,
+  clientReceipts,
+  engineers,
   currentUserId,
   canApprove,
   canManage,
@@ -109,6 +120,7 @@ export function RamsDetail({
   const [confirmNotes, setConfirmNotes] = useState('')
   const [revisionOpen, setRevisionOpen] = useState(false)
   const [revisionNotes, setRevisionNotes] = useState('')
+  const [distributeOpen, setDistributeOpen] = useState(false)
 
   const meta = RAMS_STATUS_META[doc.status] || RAMS_STATUS_META.draft
   const myConfirmation = confirmations.find((c) => c.engineer_id === currentUserId)
@@ -265,6 +277,17 @@ export function RamsDetail({
               {myConfirmation?.status === 'confirmed'
                 ? 'Confirmed'
                 : 'Read & Confirm'}
+            </Button>
+          )}
+          {canManage && doc.status === 'approved' && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setDistributeOpen(true)}
+              disabled={busy}
+            >
+              <Send className="mr-2 h-4 w-4" />
+              Distribute
             </Button>
           )}
           {canManage && doc.status === 'approved' && (
@@ -521,6 +544,59 @@ export function RamsDetail({
           </CardContent>
         </Card>
 
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-base">Client Receipts</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {clientReceipts.length ? (
+              <ul className="space-y-2 text-sm">
+                {clientReceipts.map((r) => (
+                  <li
+                    key={r.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3"
+                  >
+                    <div className="space-y-0.5">
+                      <p className="font-medium">
+                        {r.recipient_name || r.recipient_email}
+                      </p>
+                      {r.recipient_name && (
+                        <p className="text-xs text-muted-foreground">
+                          {r.recipient_email}
+                        </p>
+                      )}
+                    </div>
+                    {r.status === 'acknowledged' ? (
+                      <Badge
+                        variant="outline"
+                        className="border-emerald-200 bg-emerald-100 text-emerald-800"
+                      >
+                        Acknowledged
+                        {r.responded_at
+                          ? ` ${formatDateTimeUK(r.responded_at)}`
+                          : ''}
+                        {r.signed_name ? ` · ${r.signed_name}` : ''}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline">
+                        Sent
+                        {r.sent_at ? ` ${formatDateUK(r.sent_at)}` : ''}
+                      </Badge>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Not yet sent to any clients.
+                {canManage && doc.status === 'approved'
+                  ? ' Use “Distribute” to send for acknowledgement.'
+                  : ''}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
         {revisionHistory.length > 1 && (
           <Card className="lg:col-span-2">
             <CardHeader>
@@ -705,6 +781,16 @@ export function RamsDetail({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Distribute dialog — send to engineers + clients */}
+      <DistributeRamsDialog
+        ramsId={doc.id}
+        engineers={engineers}
+        currentUserId={currentUserId}
+        defaultClientEmail={doc.manager_email}
+        open={distributeOpen}
+        onOpenChange={setDistributeOpen}
+      />
 
       {/* New revision dialog — captures the change reason for the audit trail */}
       <Dialog open={revisionOpen} onOpenChange={setRevisionOpen}>

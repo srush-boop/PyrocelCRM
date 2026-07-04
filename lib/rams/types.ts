@@ -9,7 +9,11 @@ export type RamsStatus =
   | 'rejected'
   | 'archived'
 
-export type ApprovalStatus = 'pending' | 'approved' | 'rejected'
+export type ApprovalStatus =
+  | 'pending'
+  | 'approved'
+  | 'rejected'
+  | 'acknowledged'
 
 export type EngineerConfirmationStatus = 'pending' | 'confirmed'
 

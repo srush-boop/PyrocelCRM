@@ -97,6 +97,15 @@ export default async function RamsDetailPage({
         approvedByName={(approverRes.data as { full_name?: string } | null)?.full_name ?? null}
         confirmations={(confirmations as RamsEngineerConfirmation[]) ?? []}
         signatures={(signatures as RamsSignature[]) ?? []}
+        clientReceipts={(clientReceipts as RamsApproval[]) ?? []}
+        engineers={
+          (engineers as {
+            id: string
+            full_name: string | null
+            email: string | null
+            role: string
+          }[]) ?? []
+        }
         currentUserId={user.id}
         canApprove={canApprove}
         canManage={canManage}

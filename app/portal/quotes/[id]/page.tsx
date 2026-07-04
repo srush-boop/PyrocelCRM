@@ -7,6 +7,7 @@ import type {
   Quote,
   QuoteLineItem,
   QuoteSystem,
+  QuoteRequirement,
 } from '@/lib/types/database'
 
 export default async function PortalQuoteDetailPage({
@@ -29,11 +30,13 @@ export default async function PortalQuoteDetailPage({
     .single()
   if (!quote) notFound()
 
-  const [{ data: systems }, { data: lines }, { data: company }] = await Promise.all([
-    supabase.from('quote_systems').select('*').eq('quote_id', id).order('position'),
-    supabase.from('quote_line_items').select('*').eq('quote_id', id).order('position'),
-    supabase.from('company_info').select('*').limit(1).maybeSingle(),
-  ])
+  const [{ data: systems }, { data: lines }, { data: company }, { data: requirements }] =
+    await Promise.all([
+      supabase.from('quote_systems').select('*').eq('quote_id', id).order('position'),
+      supabase.from('quote_line_items').select('*').eq('quote_id', id).order('position'),
+      supabase.from('company_info').select('*').limit(1).maybeSingle(),
+      supabase.from('quote_requirements').select('*').eq('quote_id', id).order('position'),
+    ])
 
   const typedQuote = quote as Quote
 
@@ -45,6 +48,7 @@ export default async function PortalQuoteDetailPage({
         systems={(systems ?? []) as QuoteSystem[]}
         lines={(lines ?? []) as QuoteLineItem[]}
         company={(company ?? null) as CompanyInfo | null}
+        requirements={(requirements ?? []) as QuoteRequirement[]}
         backHref="/portal/quotes"
       />
     </div>

@@ -7,6 +7,7 @@ import { QuoteBuilder } from '@/components/dashboard/sales/quote-builder'
 import { QuoteStatusPanel } from '@/components/dashboard/sales/quote-status-panel'
 import { QuoteGroupPanel } from '@/components/dashboard/sales/quote-group-panel'
 import { resolveDefaultMargin } from '@/lib/sales'
+import { isRequirementStatus } from '@/lib/sales-requirements'
 import type {
   Client,
   Profile,
@@ -75,6 +76,8 @@ export default async function QuoteDetailPage({
     { data: groupMembers },
     { data: companyInfo },
     { data: department },
+    { data: requirements },
+    { data: requirementSources },
   ] = await Promise.all([
     supabase.from('quote_systems').select('*').eq('quote_id', id).order('position'),
     supabase.from('quote_line_items').select('*').eq('quote_id', id).order('position'),
@@ -113,6 +116,13 @@ export default async function QuoteDetailPage({
           .eq('id', (profile as Profile).department_id as string)
           .maybeSingle()
       : Promise.resolve({ data: null }),
+    supabase.from('quote_requirements').select('*').eq('quote_id', id).order('position'),
+    supabase
+      .from('quote_requirement_sources')
+      .select('*')
+      .eq('quote_id', id)
+      .order('created_at', { ascending: false })
+      .limit(1),
   ])
 
   const defaultHourlyCostPence = (ppmEngineerCost as { hourly_cost_pence: number } | null)?.hourly_cost_pence ?? 0
@@ -122,6 +132,40 @@ export default async function QuoteDetailPage({
   )
 
   const editable = typedQuote.status === 'draft'
+
+  // Map saved requirement rows into the builder's editable draft shapes.
+  const initialRequirements = ((requirements ?? []) as Array<{
+    id: string
+    category: string | null
+    requirement: string
+    our_response: string | null
+    status: string
+  }>).map((r) => ({
+    key: r.id,
+    category: r.category,
+    requirement: r.requirement,
+    our_response: r.our_response ?? '',
+    status: isRequirementStatus(r.status) ? r.status : ('included' as const),
+  }))
+
+  const sourceRow = ((requirementSources ?? []) as Array<{
+    source_type: string
+    file_name: string | null
+    file_url: string | null
+    mime_type: string | null
+    raw_text: string | null
+    summary: string | null
+  }>)[0]
+  const initialRequirementSource = sourceRow
+    ? {
+        source_type: sourceRow.source_type === 'file' ? ('file' as const) : ('paste' as const),
+        file_name: sourceRow.file_name,
+        file_url: sourceRow.file_url,
+        mime_type: sourceRow.mime_type,
+        raw_text: sourceRow.raw_text,
+        summary: sourceRow.summary,
+      }
+    : null
 
   return (
     <div className="space-y-6">
@@ -167,6 +211,8 @@ export default async function QuoteDetailPage({
         initialSystems={(systems ?? []) as QuoteSystem[]}
         initialLines={(lines ?? []) as QuoteLineItem[]}
         initialPpm={(ppmRows ?? []) as QuoteSystemPpm[]}
+        initialRequirements={initialRequirements}
+        initialRequirementSource={initialRequirementSource}
         readOnly={!editable}
       />
     </div>

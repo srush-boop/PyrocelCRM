@@ -15,6 +15,10 @@ import {
   QUOTE_STATUS_META,
 } from '@/lib/sales'
 import type { CompanyInfo, Quote, QuoteLineItem, QuoteSystem } from '@/lib/types/database'
+import {
+  buildEquipmentSpecSections,
+  type SpecCatalogueItem,
+} from '@/lib/sales/equipment-spec'
 
 const HEADER_COLOR = '#0f172a'
 const MUTED = '#64748b'
@@ -65,6 +69,14 @@ const styles = StyleSheet.create({
   totalsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
   totalsFinal: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: BORDER, paddingTop: 4, marginTop: 4 },
   totalsFinalText: { fontSize: 12, fontFamily: 'Helvetica-Bold' },
+  designBlock: { marginBottom: 8, backgroundColor: '#f8fafc', borderRadius: 4, padding: 8 },
+  specSection: { marginTop: 24, borderTopWidth: 1, borderTopColor: BORDER, paddingTop: 12 },
+  specSectionTitle: { fontSize: 11, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 2 },
+  specGroup: { marginTop: 10 },
+  specGroupTitle: { fontSize: 10, fontFamily: 'Helvetica-Bold', borderBottomWidth: 1, borderBottomColor: BORDER, paddingBottom: 2, marginBottom: 4 },
+  cPart: { width: 90, paddingRight: 6, fontFamily: 'Helvetica' },
+  cSpec: { flex: 1, paddingRight: 6 },
+  cSpecQty: { width: 50, textAlign: 'right' },
   terms: { marginTop: 24, borderTopWidth: 1, borderTopColor: BORDER, paddingTop: 10 },
   termsText: { fontSize: 7.5, color: MUTED, lineHeight: 1.5 },
   footer: { position: 'absolute', bottom: 24, left: 40, right: 40, textAlign: 'center', fontSize: 7, color: MUTED, borderTopWidth: 1, borderTopColor: BORDER, paddingTop: 8 },
@@ -111,13 +123,18 @@ function QuotePdfDocument({
   systems,
   lines,
   company,
+  catalogue = [],
 }: {
   quote: Quote
   systems: QuoteSystem[]
   lines: QuoteLineItem[]
   company: CompanyInfo | null
+  catalogue?: SpecCatalogueItem[]
 }) {
   const companyName = company?.name || 'Pyrocel Ltd'
+  const equipmentSpecSections = quote.show_equipment_spec
+    ? buildEquipmentSpecSections(systems, lines, catalogue)
+    : []
   const recipientName = quote.client?.name || quote.prospect_name || 'Prospective client'
   const recipientContact = quote.client?.contact_name || quote.prospect_contact
   const recipientEmail = quote.client?.contact_email || quote.prospect_email
@@ -224,6 +241,42 @@ function QuotePdfDocument({
                 </View>
               ) : null}
 
+              {quote.show_design_overview &&
+              (system.design_overview ||
+                system.drawing_reference ||
+                system.designed_by ||
+                system.survey_carried_out) ? (
+                <View style={styles.designBlock}>
+                  {system.design_overview ? (
+                    <Text style={[styles.spec, { marginBottom: 4 }]}>{system.design_overview}</Text>
+                  ) : null}
+                  {system.designed_by ? (
+                    <Text style={{ marginBottom: 1 }}>
+                      <Text style={styles.muted}>Designed by: </Text>
+                      <Text style={styles.bold}>
+                        {designedByLabel(system.designed_by, system.designed_by_name)}
+                      </Text>
+                    </Text>
+                  ) : null}
+                  {system.drawing_reference ? (
+                    <Text style={{ marginBottom: 1 }}>
+                      <Text style={styles.muted}>Drawing ref: </Text>
+                      <Text style={styles.bold}>{system.drawing_reference}</Text>
+                    </Text>
+                  ) : null}
+                  <Text style={{ marginBottom: 1 }}>
+                    <Text style={styles.muted}>Survey: </Text>
+                    <Text style={styles.bold}>
+                      {system.survey_carried_out
+                        ? `Yes${system.survey_by ? ` — ${system.survey_by}` : ''}${
+                            system.survey_date ? ` (${formatDateUK(system.survey_date)})` : ''
+                          }`
+                        : 'Not carried out'}
+                    </Text>
+                  </Text>
+                </View>
+              ) : null}
+
               {scalars.length > 0 ? (
                 <View style={styles.block}>
                   {scalars.map(([key, value]) => (
@@ -308,6 +361,43 @@ function QuotePdfDocument({
           )
         })}
 
+        {/* Equipment specification (opt-in) */}
+        {equipmentSpecSections.length > 0 ? (
+          <View style={styles.specSection}>
+            <Text style={styles.specSectionTitle}>Equipment specification</Text>
+            <Text style={styles.muted}>
+              Official part numbers and specifications for the equipment supplied.
+            </Text>
+            {equipmentSpecSections.map(({ system, rows }) => (
+              <View key={system.id} style={styles.specGroup} wrap={false}>
+                <Text style={styles.specGroupTitle}>
+                  {system.system_name || quoteTypeLabel(quote.quote_type)}
+                </Text>
+                <View style={styles.tHead}>
+                  <Text style={[styles.th, styles.cPart]}>Part number</Text>
+                  <Text style={[styles.th, styles.cSpec]}>Specification</Text>
+                  <Text style={[styles.th, styles.cSpecQty]}>Qty</Text>
+                </View>
+                {rows.map((row) => (
+                  <View key={row.id} style={styles.tRow}>
+                    <Text style={styles.cPart}>{row.partNumber}</Text>
+                    <View style={styles.cSpec}>
+                      <Text style={styles.bold}>{row.standardDescription}</Text>
+                      {row.specDetail ? (
+                        <Text style={styles.lineDetail}>{row.specDetail}</Text>
+                      ) : null}
+                    </View>
+                    <Text style={styles.cSpecQty}>
+                      {row.quantity}
+                      {row.unit ? ` ${row.unit}` : ''}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ))}
+          </View>
+        ) : null}
+
         {/* Totals */}
         <View style={styles.totals} wrap={false}>
           <View style={styles.totalsBox}>
@@ -361,6 +451,7 @@ export async function renderQuotePdfBuffer(args: {
   systems: QuoteSystem[]
   lines: QuoteLineItem[]
   company: CompanyInfo | null
+  catalogue?: SpecCatalogueItem[]
 }): Promise<Buffer> {
   return renderToBuffer(<QuotePdfDocument {...args} />)
 }

@@ -31,6 +31,7 @@ import {
   Navigation,
   ArrowLeftRight,
   Settings,
+  ShieldCheck,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { UserRole } from '@/lib/types/database'
@@ -204,6 +205,7 @@ const adminNavItems: NavItem[] = [
   salesNavItem,
   managerStockNavItem,
   { key: 'documents', title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
+  { key: 'rams', title: 'RAMS', href: '/dashboard/rams', icon: ShieldCheck },
   { key: 'vault', title: 'Employee Vault', href: '/dashboard/vault', icon: Vault },
 ]
 
@@ -219,6 +221,7 @@ const officeNavItems: NavItem[] = [
   salesNavItem,
   managerStockNavItem,
   { key: 'documents', title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
+  { key: 'rams', title: 'RAMS', href: '/dashboard/rams', icon: ShieldCheck },
   { key: 'vault', title: 'Employee Vault', href: '/dashboard/vault', icon: Vault },
 ]
 
@@ -227,6 +230,7 @@ const engineerNavItems: NavItem[] = [
   { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   engineerStockNavItem,
+  { key: 'rams', title: 'RAMS', href: '/dashboard/rams', icon: ShieldCheck },
   { key: 'vault', title: 'Employee Vault', href: '/dashboard/vault', icon: Vault },
 ]
 

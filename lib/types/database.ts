@@ -933,6 +933,15 @@ export interface Quote {
   // When false, the PDF/quote document hides the itemised product lines and
   // shows only each system's total (and the overall total).
   show_line_items: boolean
+  // When true, the client-facing quote/PDF renders the requirements compliance
+  // matrix imported from the client's request. Internal-only when false.
+  show_requirements_matrix: boolean
+  // When true, the quote document/PDF appends a full equipment specification
+  // (catalogue part numbers + standard descriptions + spec detail).
+  show_equipment_spec: boolean
+  // When true (default), the quote document/PDF shows each system's design
+  // overview + design/survey details. Hidden when false.
+  show_design_overview: boolean
   valid_until: string | null
   sent_at: string | null
   decided_at: string | null
@@ -956,6 +965,37 @@ export interface Quote {
 export interface QuoteWithDetails extends Quote {
   systems: QuoteSystem[]
   line_items: QuoteLineItem[]
+}
+
+// One line of the client-request compliance matrix: a requirement extracted
+// from the client's brief and how our quote responds to it.
+export type QuoteRequirementStatus = 'included' | 'partial' | 'excluded' | 'query'
+
+export interface QuoteRequirement {
+  id: string
+  quote_id: string
+  category: string | null
+  requirement: string
+  our_response: string | null
+  status: QuoteRequirementStatus
+  position: number
+  created_at: string
+  updated_at: string
+}
+
+// The original client brief a requirements matrix was extracted from (a pasted
+// email/spec or an uploaded document), kept for provenance.
+export interface QuoteRequirementSource {
+  id: string
+  quote_id: string
+  source_type: 'paste' | 'file'
+  file_name: string | null
+  file_url: string | null
+  mime_type: string | null
+  raw_text: string | null
+  summary: string | null
+  created_by: string | null
+  created_at: string
 }
 
 // Editable master specification keyed by system type x work type. Pre-fills

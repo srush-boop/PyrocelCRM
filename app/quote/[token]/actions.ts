@@ -1,6 +1,8 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { loadQuoteCatalogue } from '@/lib/sales/equipment-spec'
+import type { QuoteLineItem } from '@/lib/types/database'
 
 type Result = { ok: boolean; error?: string }
 
@@ -90,16 +92,25 @@ export async function getPublicQuote(token: string) {
     .maybeSingle()
   if (!quote) return null
 
-  const [{ data: systems }, { data: lines }, { data: company }] = await Promise.all([
-    supabase.from('quote_systems').select('*').eq('quote_id', quote.id).order('position'),
-    supabase.from('quote_line_items').select('*').eq('quote_id', quote.id).order('position'),
-    supabase.from('company_info').select('*').limit(1).maybeSingle(),
-  ])
+  const [{ data: systems }, { data: lines }, { data: company }, { data: requirements }] =
+    await Promise.all([
+      supabase.from('quote_systems').select('*').eq('quote_id', quote.id).order('position'),
+      supabase.from('quote_line_items').select('*').eq('quote_id', quote.id).order('position'),
+      supabase.from('company_info').select('*').limit(1).maybeSingle(),
+      supabase.from('quote_requirements').select('*').eq('quote_id', quote.id).order('position'),
+    ])
+
+  const lineRows = (lines ?? []) as QuoteLineItem[]
+  const catalogue = (quote as { show_equipment_spec?: boolean }).show_equipment_spec
+    ? await loadQuoteCatalogue(supabase, lineRows)
+    : []
 
   return {
     quote,
     systems: systems ?? [],
-    lines: lines ?? [],
+    lines: lineRows,
     company: company ?? null,
+    requirements: requirements ?? [],
+    catalogue,
   }
 }

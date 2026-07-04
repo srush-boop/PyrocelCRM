@@ -15,9 +15,18 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { Send } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Send, Sparkles, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { sendQuote } from '@/app/(dashboard)/dashboard/sales/actions'
+import { draftQuoteEmail } from '@/lib/ai/draft-quote-email'
+import type { EmailTone } from '@/lib/ai/shared'
 import type { Quote } from '@/lib/types/database'
 
 function defaultMessage(quote: Quote): string {
@@ -55,6 +64,33 @@ export function SendQuoteDialog({
   )
   const [message, setMessage] = useState(defaultMessage(quote))
   const [requireSignature, setRequireSignature] = useState(quote.require_signature ?? false)
+  const [tone, setTone] = useState<EmailTone>('professional')
+  const [instructions, setInstructions] = useState('')
+  const [isDrafting, setIsDrafting] = useState(false)
+
+  async function handleAiDraft() {
+    setIsDrafting(true)
+    try {
+      const res = await draftQuoteEmail({
+        quoteId: quote.id,
+        tone,
+        instructions: instructions.trim() || undefined,
+      })
+      if (res.ok && res.body) {
+        if (res.subject) setSubject(res.subject)
+        setMessage(res.body)
+        toast.success('Draft generated — review and edit before sending')
+      } else {
+        toast.error(res.error ?? 'Could not generate a draft')
+      }
+    } catch (err) {
+      // Catch throws (not just {ok:false}) so the user never sees a raw digest.
+      console.error('[v0] handleAiDraft failed:', err)
+      toast.error('Could not generate a draft. Please try again.')
+    } finally {
+      setIsDrafting(false)
+    }
+  }
 
   function reset() {
     setTo(defaultTo)
@@ -62,28 +98,36 @@ export function SendQuoteDialog({
     setSubject(`Quotation${ref ? ` ${ref}` : ''}${quote.title ? ` — ${quote.title}` : ''}`)
     setMessage(defaultMessage(quote))
     setRequireSignature(quote.require_signature ?? false)
+    setTone('professional')
+    setInstructions('')
   }
 
   function handleSend() {
     startTransition(async () => {
-      const ccList = cc
-        .split(/[,;]/)
-        .map((e) => e.trim())
-        .filter(Boolean)
-      const res = await sendQuote({
-        id: quote.id,
-        to,
-        cc: ccList.length > 0 ? ccList : undefined,
-        subject,
-        message,
-        requireSignature,
-      })
-      if (res.ok) {
-        toast.success('Quote sent to the client')
-        setOpen(false)
-        router.refresh()
-      } else {
-        toast.error(res.error ?? 'Could not send the quote')
+      try {
+        const ccList = cc
+          .split(/[,;]/)
+          .map((e) => e.trim())
+          .filter(Boolean)
+        const res = await sendQuote({
+          id: quote.id,
+          to,
+          cc: ccList.length > 0 ? ccList : undefined,
+          subject,
+          message,
+          requireSignature,
+        })
+        if (res.ok) {
+          toast.success('Quote sent to the client')
+          setOpen(false)
+          router.refresh()
+        } else {
+          toast.error(res.error ?? 'Could not send the quote')
+        }
+      } catch (err) {
+        // Catch throws (not just {ok:false}) so the user never sees a raw digest.
+        console.error('[v0] handleSend failed:', err)
+        toast.error('Could not send the quote. Please try again.')
       }
     })
   }
@@ -152,7 +196,44 @@ export function SendQuoteDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="quote-message">Message</Label>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label htmlFor="quote-message">Message</Label>
+              <div className="flex items-center gap-2">
+                <Select value={tone} onValueChange={(v) => setTone(v as EmailTone)}>
+                  <SelectTrigger className="h-8 w-[130px]" aria-label="Draft tone">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="professional">Professional</SelectItem>
+                    <SelectItem value="friendly">Friendly</SelectItem>
+                    <SelectItem value="concise">Concise</SelectItem>
+                    <SelectItem value="formal">Formal</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  onClick={handleAiDraft}
+                  disabled={isDrafting}
+                >
+                  {isDrafting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-2 h-4 w-4" />
+                  )}
+                  {isDrafting ? 'Drafting…' : 'AI draft'}
+                </Button>
+              </div>
+            </div>
+            <Input
+              id="quote-ai-instructions"
+              value={instructions}
+              onChange={(e) => setInstructions(e.target.value)}
+              placeholder="Optional: steer the AI draft, e.g. mention the 10% discount"
+              aria-label="Additional instructions for the AI draft"
+            />
             <Textarea
               id="quote-message"
               value={message}
@@ -160,6 +241,9 @@ export function SendQuoteDialog({
               rows={9}
               className="resize-y"
             />
+            <p className="text-xs text-muted-foreground">
+              AI drafts use this quote&apos;s details. Always review before sending.
+            </p>
           </div>
 
           <div className="flex items-start justify-between gap-4 rounded-md border p-3">

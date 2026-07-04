@@ -16,17 +16,29 @@ import type {
   Quote,
   QuoteLineItem,
   QuoteSystem,
+  QuoteRequirement,
 } from '@/lib/types/database'
+import { REQUIREMENT_STATUS_META } from '@/lib/sales-requirements'
 import {
   getOmittedElementKeys,
   isHiddenConditionalKey,
 } from '@/lib/sales/omitted-sections'
+import {
+  buildEquipmentSpecSections,
+  type SpecCatalogueItem,
+} from '@/lib/sales/equipment-spec'
 
 interface QuoteDocumentProps {
   quote: Quote
   systems: QuoteSystem[]
   lines: QuoteLineItem[]
   company: CompanyInfo | null
+  // Client-request compliance matrix. Only rendered when the quote opts in via
+  // show_requirements_matrix and at least one requirement is present.
+  requirements?: QuoteRequirement[]
+  // Catalogue rows backing the quote's products, used to append a full
+  // equipment specification when the quote opts in via show_equipment_spec.
+  catalogue?: SpecCatalogueItem[]
   backHref?: string
 }
 
@@ -73,7 +85,20 @@ function renderConditionalValue(value: string | number | boolean): string {
   return String(value)
 }
 
-export function QuoteDocument({ quote, systems, lines, company, backHref }: QuoteDocumentProps) {
+export function QuoteDocument({
+  quote,
+  systems,
+  lines,
+  company,
+  requirements = [],
+  catalogue = [],
+  backHref,
+}: QuoteDocumentProps) {
+  const showRequirements = quote.show_requirements_matrix && requirements.length > 0
+  const equipmentSpecSections = quote.show_equipment_spec
+    ? buildEquipmentSpecSections(systems, lines, catalogue)
+    : []
+  const sortedRequirements = requirements.slice().sort((a, b) => a.position - b.position)
   const companyName = company?.name || 'Pyrocel Ltd'
   const recipientName = quote.client?.name || quote.prospect_name || 'Prospective client'
   const recipientContact = quote.client?.contact_name || quote.prospect_contact
@@ -240,11 +265,12 @@ export function QuoteDocument({ quote, systems, lines, company, backHref }: Quot
                   )}
 
                   {/* Design & survey */}
-                  {(system.design_overview ||
-                    system.design_category_id ||
-                    system.drawing_reference ||
-                    system.designed_by ||
-                    system.survey_carried_out) && (
+                  {quote.show_design_overview &&
+                    (system.design_overview ||
+                      system.design_category_id ||
+                      system.drawing_reference ||
+                      system.designed_by ||
+                      system.survey_carried_out) && (
                     <div className="mb-3 rounded-md bg-muted/40 p-3 text-sm">
                       {system.design_overview && (
                         <p className="mb-2 whitespace-pre-line leading-relaxed">{system.design_overview}</p>
@@ -412,6 +438,109 @@ export function QuoteDocument({ quote, systems, lines, company, backHref }: Quot
               )
             })}
         </div>
+
+        {/* Client requirements compliance matrix */}
+        {showRequirements && (
+          <div className="mt-8 break-inside-avoid border-t pt-6">
+            <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide">
+              Compliance with your requirements
+            </h3>
+            <p className="mb-3 text-xs text-muted-foreground">
+              How this quotation addresses each requirement from your enquiry.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <th className="py-1 font-medium">Requirement</th>
+                    <th className="py-1 pl-3 font-medium">Our response</th>
+                    <th className="py-1 pl-3 font-medium whitespace-nowrap">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedRequirements.map((r) => (
+                    <tr key={r.id} className="border-b border-dashed align-top last:border-0">
+                      <td className="py-2 pr-3">
+                        {r.category && (
+                          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            {r.category}
+                          </div>
+                        )}
+                        <div>{r.requirement}</div>
+                      </td>
+                      <td className="py-2 pl-3 text-muted-foreground">
+                        {r.our_response || '—'}
+                      </td>
+                      <td className="py-2 pl-3 whitespace-nowrap">
+                        <span
+                          className={`inline-block rounded-full border px-2 py-0.5 text-xs font-medium ${REQUIREMENT_STATUS_META[r.status].badgeClass}`}
+                        >
+                          {REQUIREMENT_STATUS_META[r.status].short}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Equipment specification (opt-in) */}
+        {equipmentSpecSections.length > 0 && (
+          <div className="mt-8 break-inside-avoid border-t pt-6">
+            <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide">
+              Equipment specification
+            </h3>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Official part numbers and specifications for the equipment supplied.
+            </p>
+            <div className="space-y-6">
+              {equipmentSpecSections.map(({ system, rows }) => (
+                <section key={system.id} className="break-inside-avoid">
+                  <h4 className="mb-2 border-b pb-1 text-sm font-semibold">
+                    {system.system_name || quoteTypeLabel(quote.quote_type)}
+                  </h4>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                          <th className="w-32 py-1 font-medium">Part number</th>
+                          <th className="py-1 font-medium">Specification</th>
+                          <th className="w-20 py-1 text-right font-medium">Qty</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((row) => (
+                          <tr
+                            key={row.id}
+                            className="border-b border-dashed align-top last:border-0"
+                          >
+                            <td className="py-2 pr-4 align-top font-mono text-xs">
+                              {row.partNumber}
+                            </td>
+                            <td className="py-2 pr-4 align-top">
+                              <div className="font-medium">{row.standardDescription}</div>
+                              {row.specDetail && (
+                                <div className="mt-0.5 whitespace-pre-line text-xs text-muted-foreground">
+                                  {row.specDetail}
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-2 text-right align-top tabular-nums">
+                              {row.quantity}
+                              {row.unit ? ` ${row.unit}` : ''}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Totals */}
         <div className="mt-8 flex justify-end break-inside-avoid">

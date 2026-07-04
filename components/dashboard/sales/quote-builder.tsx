@@ -36,7 +36,7 @@ import {
 } from '@/components/ui/command'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
-import { Plus, Trash2, BookOpen, Save, TrendingUp, Calculator, Wrench, Check, ChevronsUpDown, ChevronDown } from 'lucide-react'
+import { Plus, Trash2, BookOpen, Save, TrendingUp, Calculator, Wrench, Check, ChevronsUpDown, ChevronDown, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { PpmCalculatorDialog, type PpmDraft } from '@/components/dashboard/sales/ppm-calculator-dialog'
 import { QuoteSectionRenderer } from '@/components/dashboard/sales/quote-section-renderer'
@@ -993,6 +993,39 @@ export function QuoteBuilder({
               />
             </CardContent>
           )}
+        </Card>
+      )}
+
+      {/* ---------- Description of works required (remedial quotes) ----------
+           When raising a remedial quote from a defect, the AI-drafted scope is
+           seeded into the first system's specification. That field only renders
+           if a spec_template section is configured for the system type + work
+           type, so we surface it here explicitly to guarantee it's always shown
+           (and editable) when creating the quote. Bound to the first system's
+           specification so edits persist through save. */}
+      {defectId && systems.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-muted-foreground" />
+              Description of works required
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              AI-drafted from the failed items on the originating report. Review
+              and edit before sending.
+            </p>
+            <Textarea
+              value={systems[0].specification}
+              onChange={(e) =>
+                updateSystem(systems[0].key, { specification: e.target.value })
+              }
+              rows={8}
+              disabled={readOnly || isPending}
+              placeholder="Description of the remedial works required."
+            />
+          </CardContent>
         </Card>
       )}
 

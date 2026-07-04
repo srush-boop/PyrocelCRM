@@ -32,7 +32,9 @@ export const SITE_FLAG_KEYS: SiteFlagKey[] = [
 // The flags a user can manually toggle on a site/service. `remedial_required` is
 // intentionally excluded: it is no longer a manual toggle but is derived
 // automatically from open remedial calls (see resolveSiteFlags `remedialOpen`).
-export const EDITABLE_SITE_FLAG_KEYS: SiteFlagKey[] = [
+export type EditableSiteFlagKey = Exclude<SiteFlagKey, 'remedial_required'>
+
+export const EDITABLE_SITE_FLAG_KEYS: EditableSiteFlagKey[] = [
   'booking_required',
   'access_required',
   'keys_required',

@@ -8,7 +8,8 @@ import { LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navLinks = [
-  { href: '/portal', label: 'Reports' },
+  { href: '/portal', label: 'Overview' },
+  { href: '/portal/reports', label: 'Reports' },
   { href: '/portal/quotes', label: 'Quotes' },
   { href: '/portal/logbook', label: 'Log Book' },
   { href: '/portal/kpis', label: 'Performance' },

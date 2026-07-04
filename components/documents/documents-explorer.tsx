@@ -37,8 +37,12 @@ interface DocumentsExplorerProps {
   canManage: boolean
 }
 
+// Only these owner types are browsable in the top-level documents explorer.
+// (site_engineer is surfaced on the site's "Engineer Info" tab, not here.)
+type BrowsableOwnerType = 'client' | 'site' | 'site_service'
+
 const TAB_META: Record<
-  DocumentOwnerType,
+  BrowsableOwnerType,
   { label: string; icon: typeof Building }
 > = {
   client: { label: 'Clients', icon: Building },
@@ -54,7 +58,9 @@ export function DocumentsExplorer({
   canManage,
 }: DocumentsExplorerProps) {
   const router = useRouter()
-  const [tab, setTab] = useState<DocumentOwnerType>(selected?.ownerType ?? 'client')
+  const [tab, setTab] = useState<BrowsableOwnerType>(
+    (selected?.ownerType as BrowsableOwnerType) ?? 'client',
+  )
   const [query, setQuery] = useState('')
 
   const siteName = useMemo(
@@ -114,7 +120,7 @@ export function DocumentsExplorer({
           </Button>
           <div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              {TAB_META[selected.ownerType].label.replace(/s$/, '')}
+              {TAB_META[selected.ownerType as BrowsableOwnerType].label.replace(/s$/, '')}
             </p>
             <h2 className="text-lg font-semibold">{selectedLabel}</h2>
           </div>
@@ -132,9 +138,9 @@ export function DocumentsExplorer({
 
   return (
     <div className="space-y-4">
-      <Tabs value={tab} onValueChange={(v) => setTab(v as DocumentOwnerType)}>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as BrowsableOwnerType)}>
         <TabsList>
-          {(Object.keys(TAB_META) as DocumentOwnerType[]).map((key) => {
+          {(Object.keys(TAB_META) as BrowsableOwnerType[]).map((key) => {
             const Icon = TAB_META[key].icon
             return (
               <TabsTrigger key={key} value={key}>

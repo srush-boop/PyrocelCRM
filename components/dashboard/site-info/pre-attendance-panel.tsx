@@ -11,6 +11,7 @@ import {
 import { DocumentBrowser } from '@/components/documents/document-browser'
 import { SiteFlagBadges } from './site-flag-badges'
 import { SiteInternalNotes } from './site-internal-notes'
+import { UploadDownloadButton } from './upload-download-button'
 import { activeFlagKeys } from '@/lib/site-flags'
 import type {
   DocumentFile,
@@ -27,6 +28,8 @@ interface PreAttendancePanelProps {
   engineerFiles: DocumentFile[]
   currentUserId: string
   canModerateNotes: boolean
+  /** When true (fire alarm calls), shows the "Upload Download" action. */
+  isFireAlarm?: boolean
 }
 
 /**
@@ -43,6 +46,7 @@ export function PreAttendancePanel({
   engineerFiles,
   currentUserId,
   canModerateNotes,
+  isFireAlarm = false,
 }: PreAttendancePanelProps) {
   const hasFlags = activeFlagKeys(flags).length > 0
   const fileCount = engineerFiles.length
@@ -130,6 +134,11 @@ export function PreAttendancePanel({
               </span>
             </AccordionTrigger>
             <AccordionContent>
+              {isFireAlarm && (
+                <div className="mb-4 rounded-md border bg-muted/40 p-3">
+                  <UploadDownloadButton siteId={siteId} engineerFolders={engineerFolders} />
+                </div>
+              )}
               <DocumentBrowser
                 ownerType="site_engineer"
                 ownerId={siteId}

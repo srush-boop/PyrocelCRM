@@ -14,6 +14,7 @@ import { SiteAssetsTab, type SiteAsset } from '@/components/dashboard/sites/site
 import { SiteReports } from '@/components/dashboard/sites/site-reports'
 import { SiteLogbook } from '@/components/dashboard/sites/site-logbook'
 import { SiteDocuments } from '@/components/dashboard/sites/site-documents'
+import { SiteEngineerInfoTab } from '@/components/dashboard/sites/site-engineer-info-tab'
 import { getOwnerDocuments } from '@/lib/documents/data'
 import type { ReportTimelineItem } from '@/components/logbook/logbook-timeline'
 import { DamperRegister } from '@/components/dashboard/dampers/damper-register'
@@ -47,6 +48,7 @@ import type {
   LogbookEntry,
   SiteBuildingInfo,
   Quote,
+  SiteInternalNote,
 } from '@/lib/types/database'
 
 interface PageProps {
@@ -271,6 +273,15 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
   const siteDocuments = await getOwnerDocuments('site', id)
   const canManageDocuments = ['admin', 'office'].includes((profile as Profile).role)
 
+  // Engineer Info tab: shared engineer file store + communal internal notes.
+  const engineerDocuments = await getOwnerDocuments('site_engineer', id)
+  const { data: internalNotesData } = await supabase
+    .from('site_internal_notes')
+    .select('*, author:profiles!site_internal_notes_author_id_fkey(id, full_name, role)')
+    .eq('site_id', id)
+    .order('created_at', { ascending: false })
+  const canModerateNotes = ['admin', 'office'].includes((profile as Profile).role)
+
   // The client this site belongs to (joined above), if any.
   const siteClient = (site as Site & { client: Client | null }).client
 
@@ -336,6 +347,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
           <TabsTrigger value="quotes" className="flex-none">Quotes</TabsTrigger>
           <TabsTrigger value="logbook" className="flex-none">Log Book</TabsTrigger>
           <TabsTrigger value="documents" className="flex-none">Documents</TabsTrigger>
+          <TabsTrigger value="engineer-info" className="flex-none">Engineer Info</TabsTrigger>
           <TabsTrigger value="reports" className="flex-none">Reports</TabsTrigger>
         </TabsList>
 
@@ -553,6 +565,17 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             folders={siteDocuments.folders}
             files={siteDocuments.files}
             canManage={canManageDocuments}
+          />
+        </TabsContent>
+
+        <TabsContent value="engineer-info" className="mt-0">
+          <SiteEngineerInfoTab
+            site={site as Site}
+            notes={(internalNotesData || []) as SiteInternalNote[]}
+            engineerFolders={engineerDocuments.folders}
+            engineerFiles={engineerDocuments.files}
+            currentUserId={user.id}
+            canModerateNotes={canModerateNotes}
           />
         </TabsContent>
 

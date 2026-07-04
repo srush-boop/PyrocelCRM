@@ -354,6 +354,11 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                 {task.assigned_engineer.full_name || task.assigned_engineer.email}
               </p>
             )}
+            <SiteFlagBadges
+              flags={resolveSiteFlags(task.site_service?.site, task.site_service)}
+              variant="full"
+              className="pt-1"
+            />
           </div>
           <AssignControl task={task} className="mt-4" />
           {(isEngineer || profile.role === 'admin') && task.status !== 'completed' && task.status !== 'cancelled' && (
@@ -438,6 +443,10 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            <SiteFlagBadges
+              flags={resolveSiteFlags(task.site_service?.site, task.site_service)}
+              variant="compact"
+            />
             {isOverdue && (
               <Badge variant="destructive" className="hidden text-[10px] sm:inline-flex">
                 Overdue

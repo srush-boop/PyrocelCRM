@@ -114,6 +114,7 @@ export default async function TaskPage({ params }: PageProps) {
         engineerFiles={(engFiles || []) as DocumentFile[]}
         currentUserId={user.id}
         canModerateNotes={canModerateNotes}
+        isFireAlarm={isFireAlarmService(task.site_service?.service_type?.name)}
       />
     )
   }

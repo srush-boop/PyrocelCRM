@@ -26,7 +26,7 @@ interface LoginFormProps {
 export function LoginForm({
   logoUrl = '/images/pyrocel-logo.png',
   logoAlt = 'Pyrocel logo',
-  title = 'PYROCEL Ltd',
+  title = 'PYROCEL LTD',
   subtitle = 'Service & Compliance Management',
   tagline,
 }: LoginFormProps) {
@@ -70,7 +70,7 @@ export function LoginForm({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={logoUrl || '/placeholder.svg'} alt={logoAlt} className="h-full w-full object-contain" />
         </div>
-        <CardTitle className="text-2xl font-bold text-balance">{title}</CardTitle>
+        <CardTitle className="text-base font-normal text-chart-1 text-balance">{title}</CardTitle>
         <CardDescription>{subtitle}</CardDescription>
         {tagline && (
           <p className="mt-2 text-sm font-medium text-primary text-balance">{tagline}</p>

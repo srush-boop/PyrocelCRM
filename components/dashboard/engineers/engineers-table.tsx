@@ -154,6 +154,8 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
     status: 'active' as 'active' | 'inactive',
     manager_id: NO_MANAGER,
     employee_number: '',
+    holiday_entitlement_days: '',
+    holiday_entitlement_hours: '',
   })
   const [editError, setEditError] = useState<string | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
@@ -282,6 +284,10 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
       status: user.status,
       manager_id: user.manager_id ?? NO_MANAGER,
       employee_number: user.employee_number ?? '',
+      holiday_entitlement_days:
+        user.holiday_entitlement_days != null ? String(user.holiday_entitlement_days) : '',
+      holiday_entitlement_hours:
+        user.holiday_entitlement_hours != null ? String(user.holiday_entitlement_hours) : '',
     })
     setEditError(null)
   }
@@ -294,6 +300,17 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editForm.email.trim())) {
       setEditError('Please enter a valid email address.')
+      return
+    }
+    // Holiday entitlement is optional; when provided it must be a non-negative number.
+    const days = editForm.holiday_entitlement_days.trim()
+    const hours = editForm.holiday_entitlement_hours.trim()
+    if (days !== '' && (Number.isNaN(Number(days)) || Number(days) < 0)) {
+      setEditError('Holiday entitlement (days) must be a positive number.')
+      return
+    }
+    if (hours !== '' && (Number.isNaN(Number(hours)) || Number(hours) < 0)) {
+      setEditError('Holiday entitlement (hours) must be a positive number.')
       return
     }
     setEditError(null)
@@ -311,6 +328,8 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
           status: editForm.status,
           manager_id: editForm.manager_id === NO_MANAGER ? null : editForm.manager_id,
           employee_number: editForm.employee_number.trim() || null,
+          holiday_entitlement_days: days === '' ? null : Number(days),
+          holiday_entitlement_hours: hours === '' ? null : Number(hours),
         }),
       })
       const data = await res.json()
@@ -731,6 +750,41 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
                 </p>
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-holiday-days">Holiday entitlement (days)</Label>
+                <Input
+                  id="edit-holiday-days"
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  inputMode="decimal"
+                  value={editForm.holiday_entitlement_days}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, holiday_entitlement_days: e.target.value })
+                  }
+                  placeholder="e.g. 25"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-holiday-hours">Holiday entitlement (hours)</Label>
+                <Input
+                  id="edit-holiday-hours"
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  inputMode="decimal"
+                  value={editForm.holiday_entitlement_hours}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, holiday_entitlement_hours: e.target.value })
+                  }
+                  placeholder="e.g. 200"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Annual holiday entitlement. Days and hours are recorded separately.
+            </p>
             {editError && <p className="text-sm text-destructive">{editError}</p>}
           </div>
           <DialogFooter>

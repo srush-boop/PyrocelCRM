@@ -84,6 +84,10 @@ export interface Profile {
   // Sunday). Only worked days appear. Each entry records the start/finish time
   // and the break to deduct, from which net daily hours are derived.
   work_day_hours: WorkDayHours | null
+  // Annual holiday entitlement, recorded as a single figure per user. Days and
+  // hours are entered independently (no automatic conversion between them).
+  holiday_entitlement_days: number | null
+  holiday_entitlement_hours: number | null
   // Per-user top-level menu visibility override. NULL/undefined = use role
   // defaults. Otherwise an array of enabled top-level menu keys.
   menu_permissions: string[] | null

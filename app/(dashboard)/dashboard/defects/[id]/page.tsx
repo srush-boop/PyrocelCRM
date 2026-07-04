@@ -16,6 +16,7 @@ import { getFailedChecklistItems, DEFECT_STATUS_LABELS } from '@/lib/defects'
 import { isDamperService } from '@/lib/dampers'
 import { isExtinguisherService } from '@/lib/extinguishers'
 import { DefectStatusActions } from '@/components/dashboard/defects/defect-status-actions'
+import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
 import type { ChecklistResult, DefectStatus } from '@/lib/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -207,6 +208,9 @@ export default async function DefectDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      {/* Internal suggested parts recorded by the engineer for this defect */}
+      {d.task?.id && <SuggestedPartsPicker taskId={d.task.id} canEdit />}
     </div>
   )
 }

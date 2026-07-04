@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Search, AlertTriangle, ChevronRight } from 'lucide-react'
+import { Search, AlertTriangle, ChevronRight, Package } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { DEFECT_STATUS_LABELS } from '@/lib/defects'
 import type { DefectStatus } from '@/lib/types/database'
@@ -30,6 +30,7 @@ export interface DefectRow {
   siteName: string
   clientName: string
   serviceName: string
+  suggestedPartsCount: number
 }
 
 const STATUS_VARIANT: Record<DefectStatus, 'destructive' | 'secondary' | 'default' | 'outline'> = {

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { DefectsTable, type DefectRow } from '@/components/dashboard/defects/defects-table'
+import { getSuggestedPartCounts } from '@/lib/defects-data'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,6 +33,10 @@ export default async function DefectsPage() {
     )
     .order('created_at', { ascending: false })
 
+  const partCounts = await getSuggestedPartCounts(
+    (data ?? []).map((d: any) => d.task_id).filter(Boolean),
+  )
+
   const defects: DefectRow[] = (data ?? []).map((d: any) => ({
     id: d.id,
     taskId: d.task_id,
@@ -44,6 +49,7 @@ export default async function DefectsPage() {
     siteName: d.site?.name ?? 'Unknown site',
     clientName: d.client?.name ?? 'Unknown client',
     serviceName: d.task?.site_service?.service_type?.name ?? 'Unknown service',
+    suggestedPartsCount: d.task_id ? (partCounts[d.task_id] ?? 0) : 0,
   }))
 
   return (

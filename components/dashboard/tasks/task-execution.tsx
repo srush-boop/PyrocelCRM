@@ -21,6 +21,7 @@ import {
 import { SystemIcon, SystemBadge } from '@/lib/system-types'
 import { TaskAttachments } from '@/components/dashboard/tasks/task-attachments'
 import { ReportNotesAssist } from '@/components/dashboard/reports/report-notes-assist'
+import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
 import { useBackNavigation } from '@/hooks/use-back-navigation'
 import { formatDateUK, formatTimeUK } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
@@ -820,6 +821,11 @@ export function TaskExecution({
             )}
           </CardContent>
         </Card>
+
+        {/* Suggested parts (internal) — shown when a defect/failure is present */}
+        {checklistResults.some((r) => r.type === 'pass_fail' && r.passed === false) && (
+          <SuggestedPartsPicker taskId={task.id} canEdit={canEdit} />
+        )}
         </>
       )}
 

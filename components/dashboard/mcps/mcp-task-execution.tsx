@@ -48,6 +48,7 @@ import {
   ExternalLink,
 } from 'lucide-react'
 import { formatDateUK, formatTimeUK } from '@/lib/utils'
+import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import { generateMcpUrn, TEST_KEY_TYPES, MCP_CHECKLIST } from '@/lib/mcps'
 import { McpInspectionCard, type McpInspectionState, type CheckValue } from './mcp-inspection-card'
@@ -525,6 +526,11 @@ export function McpTaskExecution({
               </div>
             </CardContent>
           </Card>
+
+          {/* Suggested parts (internal) — shown when a defect/failure is present */}
+          {summary.failed > 0 && (
+            <SuggestedPartsPicker taskId={task.id} canEdit={canEdit} />
+          )}
 
           {mcpList.length === 0 ? (
             <Card>

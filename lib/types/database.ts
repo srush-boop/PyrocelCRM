@@ -1312,6 +1312,29 @@ export interface Part {
   created_at: string
 }
 
+// An internal-only suggested part an engineer attaches to a task when a defect
+// is found. Linked to the task (1:1 with the task's defect) so it surfaces in
+// the open defects summary. Never shown to clients.
+export interface DefectSuggestedPart {
+  id: string
+  task_id: string
+  part_id: string
+  quantity: number
+  suggested_by: string | null
+  created_at: string
+  updated_at: string
+  part?: Part | null
+}
+
+// Lightweight shape used by the suggested-parts picker (part joined in).
+export interface SuggestedPartLine {
+  part_id: string
+  quantity: number
+  name: string
+  sku: string | null
+  unit: string
+}
+
 // A part held at a location, with its own minimum re-order level and the
 // target (ideal) quantity that defines the location's stock profile.
 export interface StockItem {

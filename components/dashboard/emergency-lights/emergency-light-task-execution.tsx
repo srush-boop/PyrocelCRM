@@ -44,6 +44,7 @@ import {
 } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { formatDateUK, formatTimeUK } from '@/lib/utils'
+import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
 import {
   EMERGENCY_LIGHT_CHECKLIST,
   FITTING_TYPES,
@@ -432,6 +433,11 @@ export function EmergencyLightTaskExecution({
               </div>
             </CardContent>
           </Card>
+
+          {/* Suggested parts (internal) — shown when a defect/failure is present */}
+          {summary.failed > 0 && (
+            <SuggestedPartsPicker taskId={task.id} canEdit={canEdit} />
+          )}
 
           {lightList.length === 0 ? (
             <Card>

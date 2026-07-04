@@ -385,6 +385,7 @@ export default async function TaskPage({ params }: PageProps) {
       profile={profile as Profile}
       clientLinks={clientLinks}
       engineers={engineers}
+      panels={panels}
     />,
   )
 }

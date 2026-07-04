@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+  import { Fragment, useMemo } from 'react'
 import Link from 'next/link'
 import {
   PieChart,
@@ -240,24 +240,40 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
                 </tr>
               </thead>
               <tbody>
-                {checklist.map((item, index) => (
-                  <tr key={item.item_id || index} className="border-t align-top">
-                    <td className="px-3 py-2">{item.label}</td>
-                    <td className="px-3 py-2">
-                      {item.type === 'pass_fail' ? (
-                        <span
-                          className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
-                          style={{ backgroundColor: item.passed ? '#16a34a' : '#dc2626' }}
-                        >
-                          {item.passed ? 'Pass' : 'Fail'}
-                        </span>
-                      ) : (
-                        <span className="font-medium">{String(item.value)}</span>
+                {checklist.map((item, index) => {
+                  // When the report covers multiple panels, print a panel header
+                  // row whenever the panel changes so each panel's results are
+                  // clearly grouped in one report.
+                  const prev = index > 0 ? checklist[index - 1] : null
+                  const showPanelHeader = !!item.panel_name && item.panel_id !== (prev?.panel_id ?? null)
+                  return (
+                    <Fragment key={item.item_id || index}>
+                      {showPanelHeader && (
+                        <tr style={{ backgroundColor: `${headerColor}0d` }}>
+                          <td colSpan={3} className="px-3 py-2 text-[11px] font-bold uppercase tracking-wide">
+                            {item.panel_name}
+                          </td>
+                        </tr>
                       )}
-                    </td>
-                    <td className="px-3 py-2 text-muted-foreground">{item.notes || '-'}</td>
-                  </tr>
-                ))}
+                      <tr className="border-t align-top">
+                        <td className="px-3 py-2">{item.label}</td>
+                        <td className="px-3 py-2">
+                          {item.type === 'pass_fail' ? (
+                            <span
+                              className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
+                              style={{ backgroundColor: item.passed ? '#16a34a' : '#dc2626' }}
+                            >
+                              {item.passed ? 'Pass' : 'Fail'}
+                            </span>
+                          ) : (
+                            <span className="font-medium">{String(item.value)}</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">{item.notes || '-'}</td>
+                      </tr>
+                    </Fragment>
+                  )
+                })}
                 {checklist.length === 0 && (
                   <tr>
                     <td colSpan={3} className="px-3 py-6 text-center text-muted-foreground">

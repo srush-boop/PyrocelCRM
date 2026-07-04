@@ -70,11 +70,34 @@ export interface Profile {
   // Per-user top-level menu visibility override. NULL/undefined = use role
   // defaults. Otherwise an array of enabled top-level menu keys.
   menu_permissions: string[] | null
+  // Nominated line manager for this user (self-referencing). Recorded for HR /
+  // future approvals wiring. NULL = no manager set.
+  manager_id: string | null
+  // HR employee/payroll reference. Used to match rows during training CSV
+  // imports and to anonymise client-facing training exports.
+  employee_number: string | null
   created_at: string
   updated_at: string
   department?: Department | null
   branch?: Branch | null
+  manager?: Profile | null
   }
+
+// A single training/qualification record for an employee. Managed by staff;
+// users can read their own. Powers the master training grid and the anonymised
+// client PDF export.
+export interface TrainingRecord {
+  id: string
+  profile_id: string
+  training_type: string
+  course_name: string
+  provider: string | null
+  completed_date: string | null
+  expiry_date: string | null
+  created_at: string
+  updated_at: string
+  profile?: Profile | null
+}
 
 // A company department with its own default sales margin.
 export interface Department {

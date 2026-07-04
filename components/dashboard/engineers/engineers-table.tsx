@@ -68,6 +68,7 @@ import { MenuAccessDialog } from './menu-access-dialog'
 
 const NO_DEPARTMENT = '__none__'
 const NO_BRANCH = '__none__'
+const NO_MANAGER = '__none__'
 
 // ISO weekday numbers (1 = Monday ... 7 = Sunday) used for working patterns.
 const WEEKDAYS: { value: number; label: string }[] = [
@@ -116,6 +117,8 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
     department_id: NO_DEPARTMENT,
     branch_id: NO_BRANCH,
     status: 'active' as 'active' | 'inactive',
+    manager_id: NO_MANAGER,
+    employee_number: '',
   })
   const [editError, setEditError] = useState<string | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
@@ -139,6 +142,24 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
 
   // Normalises a stored "HH:MM:SS" time to the "HH:MM" an <input type="time"> wants.
   const toTimeInput = (t: string | null) => (t ? t.slice(0, 5) : '')
+
+  // Net daily hours = (finish - start) - lunch, formatted as "Xh Ym". Returns
+  // null when the times are incomplete/invalid so the UI can hide the readout.
+  const netDailyHours = (() => {
+    const { work_start_time, work_end_time, lunch_minutes } = hoursForm
+    if (!work_start_time || !work_end_time) return null
+    const [sh, sm] = work_start_time.split(':').map(Number)
+    const [eh, em] = work_end_time.split(':').map(Number)
+    const startMin = sh * 60 + sm
+    const endMin = eh * 60 + em
+    if (Number.isNaN(startMin) || Number.isNaN(endMin) || endMin <= startMin) return null
+    const lunch = lunch_minutes === '' ? 0 : Number(lunch_minutes)
+    const net = endMin - startMin - (Number.isNaN(lunch) ? 0 : lunch)
+    if (net <= 0) return null
+    const h = Math.floor(net / 60)
+    const m = net % 60
+    return m === 0 ? `${h}h` : `${h}h ${m}m`
+  })()
 
   const openHoursDialog = (user: Profile) => {
     setHoursUser(user)
@@ -212,6 +233,8 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
       department_id: user.department_id ?? NO_DEPARTMENT,
       branch_id: user.branch_id ?? NO_BRANCH,
       status: user.status,
+      manager_id: user.manager_id ?? NO_MANAGER,
+      employee_number: user.employee_number ?? '',
     })
     setEditError(null)
   }
@@ -239,6 +262,8 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
           department_id: editForm.department_id === NO_DEPARTMENT ? null : editForm.department_id,
           branch_id: editForm.branch_id === NO_BRANCH ? null : editForm.branch_id,
           status: editForm.status,
+          manager_id: editForm.manager_id === NO_MANAGER ? null : editForm.manager_id,
+          employee_number: editForm.employee_number.trim() || null,
         }),
       })
       const data = await res.json()
@@ -622,6 +647,43 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
                 </Select>
               </div>
             </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-manager">Nominated manager</Label>
+                <Select
+                  value={editForm.manager_id}
+                  onValueChange={(value) => setEditForm({ ...editForm, manager_id: value })}
+                >
+                  <SelectTrigger id="edit-manager">
+                    <SelectValue placeholder="No manager" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_MANAGER}>No manager</SelectItem>
+                    {users
+                      .filter((u) => u.id !== editUser?.id && u.role !== 'client')
+                      .map((u) => (
+                        <SelectItem key={u.id} value={u.id}>
+                          {u.full_name || u.email}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-employee-number">Employee number</Label>
+                <Input
+                  id="edit-employee-number"
+                  value={editForm.employee_number}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, employee_number: e.target.value })
+                  }
+                  placeholder="e.g. EMP-0042"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Used to match training imports and for anonymised exports.
+                </p>
+              </div>
+            </div>
             {editError && <p className="text-sm text-destructive">{editError}</p>}
           </div>
           <DialogFooter>
@@ -777,6 +839,12 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
                 Deducted from daily working time when calculating timesheets.
               </p>
             </div>
+            {netDailyHours && (
+              <div className="flex items-center justify-between rounded-md border bg-muted/50 px-3 py-2">
+                <span className="text-sm text-muted-foreground">Net daily hours</span>
+                <span className="text-sm font-medium">{netDailyHours}</span>
+              </div>
+            )}
             {hoursError && <p className="text-sm text-destructive">{hoursError}</p>}
           </div>
           <DialogFooter>

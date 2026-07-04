@@ -65,6 +65,8 @@ export async function PUT(
       department_id,
       branch_id,
       status,
+      manager_id,
+      employee_number,
     } = body as {
       full_name?: string
       email?: string
@@ -72,6 +74,8 @@ export async function PUT(
       department_id?: string | null
       branch_id?: string | null
       status?: string
+      manager_id?: string | null
+      employee_number?: string | null
     }
 
     // Verify the caller is an authenticated admin
@@ -126,6 +130,14 @@ export async function PUT(
     if (department_id !== undefined) profilePatch.department_id = department_id || null
     if (branch_id !== undefined) profilePatch.branch_id = branch_id || null
     if (status !== undefined) profilePatch.status = status
+    // A user cannot be their own manager.
+    if (manager_id !== undefined) {
+      profilePatch.manager_id = manager_id && manager_id !== id ? manager_id : null
+    }
+    if (employee_number !== undefined) {
+      const trimmed = typeof employee_number === 'string' ? employee_number.trim() : ''
+      profilePatch.employee_number = trimmed || null
+    }
 
     const { error: profileError } = await adminClient
       .from('profiles')

@@ -11,9 +11,11 @@ import {
   type DraftEmailResult,
 } from '@/lib/ai/shared'
 
-// Re-exported so existing imports (e.g. the send-quote dialog) keep working.
-export type { EmailTone }
-export type DraftQuoteEmailResult = DraftEmailResult
+// NOTE: This is a `'use server'` module, so it may ONLY export async functions.
+// Re-exporting types here (e.g. `export type { EmailTone }`) breaks the server
+// actions module at evaluation time ("EmailTone is not defined"), which takes
+// down every action in the chunk — including sendQuote. Import these types
+// directly from `@/lib/ai/shared` where needed instead.
 
 async function requireStaff() {
   const supabase = await createClient()
@@ -42,7 +44,7 @@ export async function draftQuoteEmail(input: {
   quoteId: string
   tone?: EmailTone
   instructions?: string
-}): Promise<DraftQuoteEmailResult> {
+}): Promise<DraftEmailResult> {
   try {
   const { supabase, user, error } = await requireStaff()
   if (error || !user) return { ok: false, error: error ?? 'Not authorised.' }

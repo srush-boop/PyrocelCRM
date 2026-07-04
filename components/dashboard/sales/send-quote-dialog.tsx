@@ -25,7 +25,8 @@ import {
 import { Send, Sparkles, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { sendQuote } from '@/app/(dashboard)/dashboard/sales/actions'
-import { draftQuoteEmail, type EmailTone } from '@/lib/ai/draft-quote-email'
+import { draftQuoteEmail } from '@/lib/ai/draft-quote-email'
+import type { EmailTone } from '@/lib/ai/shared'
 import type { Quote } from '@/lib/types/database'
 
 function defaultMessage(quote: Quote): string {

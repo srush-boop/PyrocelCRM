@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import { TaskExecution } from '@/components/dashboard/tasks/task-execution'
@@ -9,6 +10,9 @@ import { isDamperService } from '@/lib/dampers'
 import { isFireAlarmService } from '@/lib/mcps'
 import { isEmergencyLightService } from '@/lib/emergency-lights'
 import { isExtinguisherService } from '@/lib/extinguishers'
+import { PreAttendancePanel } from '@/components/dashboard/site-info/pre-attendance-panel'
+import { resolveSiteFlags } from '@/lib/site-flags'
+import type { DocumentFile, DocumentFolder, SiteInternalNote } from '@/lib/types/database'
 import type {
   Profile,
   TaskWithDetails,
@@ -23,6 +27,7 @@ import type {
   EmergencyLightInspection,
   Extinguisher,
   ExtinguisherInspection,
+  SystemPanel,
 } from '@/lib/types/database'
 
 interface PageProps {
@@ -70,6 +75,61 @@ export default async function TaskPage({ params }: PageProps) {
     redirect('/dashboard')
   }
 
+  // Shared pre-attendance info (flags, communal notes, engineer file store) shown
+  // at the top of every task flow regardless of service type. Viewing this never
+  // changes the task status — starting the job is a separate explicit action.
+  const preAttendanceSiteId: string | null =
+    task.site_service?.site?.id ?? task.site_service?.site_id ?? null
+  const role = (profile as Profile).role
+  const canModerateNotes = role === 'admin' || role === 'office'
+
+  let preAttendancePanel: ReactNode = null
+  if (preAttendanceSiteId) {
+    const [{ data: notesData }, { data: engFolders }, { data: engFiles }] = await Promise.all([
+      supabase
+        .from('site_internal_notes')
+        .select('*, author:profiles!site_internal_notes_author_id_fkey(id, full_name, role)')
+        .eq('site_id', preAttendanceSiteId)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('document_folders')
+        .select('*')
+        .eq('owner_type', 'site_engineer')
+        .eq('owner_id', preAttendanceSiteId),
+      supabase
+        .from('documents')
+        .select('*')
+        .eq('owner_type', 'site_engineer')
+        .eq('owner_id', preAttendanceSiteId)
+        .order('created_at', { ascending: false }),
+    ])
+
+    const flags = resolveSiteFlags(task.site_service?.site, task.site_service)
+
+    preAttendancePanel = (
+      <PreAttendancePanel
+        siteId={preAttendanceSiteId}
+        flags={flags}
+        notes={(notesData || []) as SiteInternalNote[]}
+        engineerFolders={(engFolders || []) as DocumentFolder[]}
+        engineerFiles={(engFiles || []) as DocumentFile[]}
+        currentUserId={user.id}
+        canModerateNotes={canModerateNotes}
+        isFireAlarm={isFireAlarmService(task.site_service?.service_type?.name)}
+      />
+    )
+  }
+
+  // Wraps a service-specific execution flow with the shared pre-attendance panel.
+  const withPanel = (node: ReactNode) => (
+    <div className="space-y-6">
+      {preAttendancePanel && (
+        <div className="mx-auto max-w-3xl">{preAttendancePanel}</div>
+      )}
+      {node}
+    </div>
+  )
+
   // Damper inspection tasks use a dedicated per-asset flow
   if (isDamperService(task.site_service?.service_type?.name)) {
     const siteId = task.site_service?.site?.id ?? task.site_service?.site_id
@@ -78,13 +138,13 @@ export default async function TaskPage({ params }: PageProps) {
       supabase.from('damper_inspections').select('*').eq('task_id', id),
     ])
 
-    return (
+    return withPanel(
       <DamperTaskExecution
         task={task as TaskWithDetails}
         profile={profile as Profile}
         dampers={(dampersData || []) as Damper[]}
         existingInspections={(inspectionsData || []) as DamperInspection[]}
-      />
+      />,
     )
   }
 
@@ -96,13 +156,13 @@ export default async function TaskPage({ params }: PageProps) {
       supabase.from('extinguisher_inspections').select('*').eq('task_id', id),
     ])
 
-    return (
+    return withPanel(
       <ExtinguisherTaskExecution
         task={task as TaskWithDetails}
         profile={profile as Profile}
         extinguishers={(extinguishersData || []) as Extinguisher[]}
         existingInspections={(inspectionsData || []) as ExtinguisherInspection[]}
-      />
+      />,
     )
   }
 
@@ -158,7 +218,7 @@ export default async function TaskPage({ params }: PageProps) {
       lastTestedDate = priorInspection?.inspection_date ?? null
     }
 
-    return (
+    return withPanel(
       <McpTaskExecution
         task={task as TaskWithDetails}
         profile={profile as Profile}
@@ -167,7 +227,7 @@ export default async function TaskPage({ params }: PageProps) {
         lastTestedMcpId={lastTestedMcpId}
         lastTestedDate={lastTestedDate}
         nimbusUrl={nimbusUrl}
-      />
+      />,
     )
   }
 
@@ -183,13 +243,13 @@ export default async function TaskPage({ params }: PageProps) {
       supabase.from('emergency_light_inspections').select('*').eq('task_id', id),
     ])
 
-    return (
+    return withPanel(
       <EmergencyLightTaskExecution
         task={task as TaskWithDetails}
         profile={profile as Profile}
         lights={(lightsData || []) as EmergencyLight[]}
         existingInspections={(inspectionsData || []) as EmergencyLightInspection[]}
-      />
+      />,
     )
   }
 
@@ -291,6 +351,20 @@ export default async function TaskPage({ params }: PageProps) {
     .eq('task_id', id)
     .single()
 
+  // Panels configured on the system this service is attached to. When present,
+  // the general checklist below is repeated once per panel so one report covers
+  // every panel. Only relevant to the general flow (the dedicated per-asset
+  // flows above return earlier).
+  let panels: SystemPanel[] = []
+  if (task.site_service?.site_system_id) {
+    const { data: panelsData } = await supabase
+      .from('system_panels')
+      .select('*')
+      .eq('site_system_id', task.site_service.site_system_id)
+      .order('position')
+    panels = (panelsData || []) as SystemPanel[]
+  }
+
   // Office/admin can quick-assign this call from the summary, so load engineers.
   const isAdminOrOffice = (profile as Profile).role === 'admin' || (profile as Profile).role === 'office'
   let engineers: Profile[] = []
@@ -303,7 +377,7 @@ export default async function TaskPage({ params }: PageProps) {
     engineers = (engineersData || []) as Profile[]
   }
 
-  return (
+  return withPanel(
     <TaskExecution
       task={task as TaskWithDetails}
       checklistTemplate={checklistTemplate as ChecklistTemplate | null}
@@ -311,6 +385,7 @@ export default async function TaskPage({ params }: PageProps) {
       profile={profile as Profile}
       clientLinks={clientLinks}
       engineers={engineers}
-    />
+      panels={panels}
+    />,
   )
 }

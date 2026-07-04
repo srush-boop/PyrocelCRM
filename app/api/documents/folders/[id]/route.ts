@@ -9,8 +9,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const auth = await getDocumentAuth()
-  if (!auth.ok || !auth.canManage) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: auth.ok ? 403 : auth.status })
+  if (!auth.ok) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: auth.status })
   }
 
   const { id } = await params
@@ -21,6 +21,16 @@ export async function PATCH(
   }
 
   const supabase = await createClient()
+  const { data: existing } = await supabase
+    .from('document_folders')
+    .select('owner_type')
+    .eq('id', id)
+    .single()
+  const allowed = existing?.owner_type === 'site_engineer' ? auth.canManageEngineer : auth.canManage
+  if (!allowed) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const { error } = await supabase.from('document_folders').update({ name }).eq('id', id)
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -35,12 +45,23 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const auth = await getDocumentAuth()
-  if (!auth.ok || !auth.canManage) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: auth.ok ? 403 : auth.status })
+  if (!auth.ok) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: auth.status })
   }
 
   const { id } = await params
   const supabase = await createClient()
+
+  const { data: rootFolder } = await supabase
+    .from('document_folders')
+    .select('owner_type')
+    .eq('id', id)
+    .single()
+  const allowed =
+    rootFolder?.owner_type === 'site_engineer' ? auth.canManageEngineer : auth.canManage
+  if (!allowed) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   // Collect all descendant folder ids (recursive) so we can clean up their blobs.
   const folderIds: string[] = [id]

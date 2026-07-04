@@ -24,6 +24,13 @@ export default async function PortalOverviewPage() {
   } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('clients(name)')
+    .eq('id', user.id)
+    .single()
+  const clientName = (profile as any)?.clients?.name ?? null
+
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const todayIso = today.toISOString().slice(0, 10)
@@ -119,10 +126,14 @@ export default async function PortalOverviewPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-balance">
-          {userName ? `Welcome back, ${userName}` : 'Welcome back'}
+          {clientName
+            ? `${clientName} Dashboard`
+            : userName
+              ? `Welcome back, ${userName}`
+              : 'Welcome back'}
         </h1>
         <p className="text-muted-foreground">
-          A summary of activity across your sites.
+          {userName ? `Welcome back, ${userName}. ` : ''}A summary of activity across your sites.
         </p>
       </div>
 

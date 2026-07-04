@@ -43,7 +43,8 @@ import {
   Plus,
 } from 'lucide-react'
 import { Label } from '@/components/ui/label'
-import { formatDateUK } from '@/lib/utils'
+import { formatDateUK, formatTimeUK } from '@/lib/utils'
+import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
 import {
   EMERGENCY_LIGHT_CHECKLIST,
   FITTING_TYPES,
@@ -394,6 +395,12 @@ export function EmergencyLightTaskExecution({
             <Calendar className="h-4 w-4" />
             Scheduled: {formatDateUK(task.scheduled_date)}
           </div>
+          {task.started_at && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Calendar className="h-4 w-4" />
+              Commenced: {formatDateUK(task.started_at)} at {formatTimeUK(task.started_at)}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -426,6 +433,11 @@ export function EmergencyLightTaskExecution({
               </div>
             </CardContent>
           </Card>
+
+          {/* Suggested parts (internal) — shown when a defect/failure is present */}
+          {summary.failed > 0 && (
+            <SuggestedPartsPicker taskId={task.id} canEdit={canEdit} />
+          )}
 
           {lightList.length === 0 ? (
             <Card>

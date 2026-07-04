@@ -32,6 +32,7 @@ import {
   ArrowLeftRight,
   Settings,
   ShieldCheck,
+  GraduationCap,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { UserRole } from '@/lib/types/database'
@@ -146,7 +147,6 @@ const salesNavItem: NavItem = {
     { title: 'Dashboard', href: '/dashboard/sales', icon: LayoutDashboard },
     { title: 'Quotes', href: '/dashboard/sales/quotes', icon: ReceiptText },
     { title: 'Quote Bank', href: '/dashboard/sales/quote-bank', icon: Landmark },
-    { title: 'Catalogue', href: '/dashboard/sales/catalogue', icon: BookOpen },
     {
       title: 'Sales Configuration',
       icon: Settings,
@@ -172,6 +172,7 @@ const managerStockNavItem: NavItem = {
     { title: 'Overview', href: '/dashboard/stock', icon: Boxes },
     { title: 'Transfer Stock', href: '/dashboard/stock/transfer', icon: Route },
     { title: 'Parts Catalogue', href: '/dashboard/stock/parts', icon: BookOpen },
+    { title: 'Quote Catalogue', href: '/dashboard/stock/catalogue', icon: BookOpen },
     { title: 'Transfers Report', href: '/dashboard/stock/report', icon: FileText },
   ],
 }
@@ -201,6 +202,7 @@ const adminNavItems: NavItem[] = [
   // Users is locked so an admin can never hide their own access to user/menu
   // management and lock everyone out.
   { key: 'users', title: 'Users', href: '/dashboard/engineers', icon: Users, locked: true },
+  { key: 'training', title: 'Training', href: '/dashboard/training', icon: GraduationCap },
   { key: 'notifications', title: 'Notifications', href: '/dashboard/notifications', icon: Bell },
   salesNavItem,
   managerStockNavItem,
@@ -217,6 +219,7 @@ const officeNavItems: NavItem[] = [
   { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   officeServiceManagementNavItem,
+  { key: 'training', title: 'Training', href: '/dashboard/training', icon: GraduationCap },
   { key: 'notifications', title: 'Notifications', href: '/dashboard/notifications', icon: Bell },
   salesNavItem,
   managerStockNavItem,
@@ -230,7 +233,6 @@ const engineerNavItems: NavItem[] = [
   { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   engineerStockNavItem,
-  { key: 'rams', title: 'RAMS', href: '/dashboard/rams', icon: ShieldCheck },
   { key: 'vault', title: 'Employee Vault', href: '/dashboard/vault', icon: Vault },
 ]
 

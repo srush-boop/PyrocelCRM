@@ -39,6 +39,10 @@ export interface Client {
   contact_phone: string | null
   address: string | null
   notes: string | null
+  /** Public Blob URL of the client logo shown on their branded login page. */
+  logo_url: string | null
+  /** Positive tagline shown on the client's branded login page. */
+  login_tagline: string | null
   created_at: string
   updated_at: string
 }
@@ -66,11 +70,40 @@ export interface Profile {
   // Per-user top-level menu visibility override. NULL/undefined = use role
   // defaults. Otherwise an array of enabled top-level menu keys.
   menu_permissions: string[] | null
+  // Nominated line manager for this user (self-referencing). Recorded for HR /
+  // future approvals wiring. NULL = no manager set.
+  manager_id: string | null
+  // HR employee/payroll reference. Used to match rows during training CSV
+  // imports and to anonymise client-facing training exports.
+  employee_number: string | null
   created_at: string
   updated_at: string
   department?: Department | null
   branch?: Branch | null
+  manager?: Profile | null
   }
+
+// A single training/qualification record for an employee. Managed by staff;
+// users can read their own. Powers the master training grid and the anonymised
+// client PDF export.
+export interface TrainingRecord {
+  id: string
+  profile_id: string
+  training_type: string
+  course_name: string
+  provider: string | null
+  completed_date: string | null
+  expiry_date: string | null
+  // Certificate evidence. Either an uploaded file (certificate_pathname points
+  // at the private blob) or an external link (certificate_pathname is null).
+  // certificate_url is the openable URL; certificate_name is a display label.
+  certificate_url: string | null
+  certificate_pathname: string | null
+  certificate_name: string | null
+  created_at: string
+  updated_at: string
+  profile?: Profile | null
+}
 
 // A company department with its own default sales margin.
 export interface Department {
@@ -277,6 +310,14 @@ export interface Site {
   uprn: string | null
   status: 'live' | 'dead'
   notes: string | null
+  // Pre-attendance flags engineers/office can set at site level. Individual
+  // site_services may override these (see SiteService); null override = inherit.
+  booking_required: boolean
+  access_required: boolean
+  keys_required: boolean
+  two_engineers_required: boolean
+  remedial_required: boolean
+  remedial_notes: string | null
   reporting_emails: string[]
   has_remote_monitoring: boolean
   remote_monitoring_type: RemoteMonitoringType | null
@@ -371,6 +412,36 @@ export interface Site {
     site?: Site
     system_type?: SystemType | null
     site_services?: SiteService[]
+    panels?: SystemPanel[]
+  }
+
+  // Admin-configurable definition of a panel field, scoped to a system type.
+  // Mirrors WorkTypeField. Drives the dynamic "Add panel" form.
+  export interface PanelFieldDef {
+    id: string
+    system_type_id: string
+    label: string
+    field_key: string
+    field_type: 'text' | 'number' | 'select' | 'boolean'
+    options: string[]
+    required: boolean
+    position: number
+    active: boolean
+    created_at: string
+    updated_at: string
+    system_type?: SystemType | null
+  }
+
+  // A panel instance belonging to a site system. field_values is keyed by the
+  // panel_field_defs.field_key for that system type. Internal-use only.
+  export interface SystemPanel {
+    id: string
+    site_system_id: string
+    name: string
+    position: number
+    field_values: Record<string, string | number | boolean | null>
+    created_at: string
+    updated_at: string
   }
 
   export interface SiteService {
@@ -405,6 +476,14 @@ export interface Site {
   // When false, the service is inactive: no new calls are generated for it
   // (recurrence, bulk generation, manual scheduling all suppressed).
   active: boolean
+  // Pre-attendance flag overrides. null = inherit the site-level value;
+  // an explicit true/false overrides the site setting for this service only.
+  booking_required: boolean | null
+  access_required: boolean | null
+  keys_required: boolean | null
+  two_engineers_required: boolean | null
+  remedial_required: boolean | null
+  remedial_notes: string | null
   created_at: string
   site?: Site
   site_system?: SiteSystem | null
@@ -415,8 +494,30 @@ export interface Site {
   assigned_engineer?: Profile
 }
 
-// Document store: folders + files attached to a client, site, or a site's service.
-export type DocumentOwnerType = 'client' | 'site' | 'site_service'
+// Document store: folders + files attached to a client, site, a site's service,
+// or a site's shared engineer folder (engineer-contributable downloads/drawings).
+export type DocumentOwnerType = 'client' | 'site' | 'site_service' | 'site_engineer'
+
+// A communal internal note left by staff (engineers/office/admin) against a site.
+export interface SiteInternalNote {
+  id: string
+  site_id: string
+  author_id: string | null
+  body: string
+  created_at: string
+  author?: Pick<Profile, 'id' | 'full_name' | 'role'> | null
+}
+
+// The resolved pre-attendance flags for a task, after applying service-level
+// overrides on top of the site-level defaults.
+export interface ResolvedSiteFlags {
+  booking_required: boolean
+  access_required: boolean
+  keys_required: boolean
+  two_engineers_required: boolean
+  remedial_required: boolean
+  remedial_notes: string | null
+}
 
 export interface DocumentFolder {
   id: string
@@ -487,14 +588,19 @@ export interface Task {
   client?: Client | null
   }
 
-export interface ChecklistResult {
+  export interface ChecklistResult {
   item_id: string
   label: string
   type: 'pass_fail' | 'text' | 'number' | 'checkbox'
   value: boolean | string | number
   passed: boolean | null
   notes?: string
-}
+  // When a system has configured panels, the general checklist is repeated once
+  // per panel. These tag each result with the panel it belongs to. Absent on
+  // legacy/non-panel results, which keeps older reports rendering unchanged.
+  panel_id?: string | null
+  panel_name?: string | null
+  }
 
 // Defect tracking: one row per failed report (task_result with overall_status='fail').
 // Auto-maintained by a DB trigger; lifecycle open -> quoted -> resolved/dismissed.
@@ -1268,6 +1374,29 @@ export interface Part {
   default_min_level: number
   is_active: boolean
   created_at: string
+}
+
+// An internal-only suggested part an engineer attaches to a task when a defect
+// is found. Linked to the task (1:1 with the task's defect) so it surfaces in
+// the open defects summary. Never shown to clients.
+export interface DefectSuggestedPart {
+  id: string
+  task_id: string
+  part_id: string
+  quantity: number
+  suggested_by: string | null
+  created_at: string
+  updated_at: string
+  part?: Part | null
+}
+
+// Lightweight shape used by the suggested-parts picker (part joined in).
+export interface SuggestedPartLine {
+  part_id: string
+  quantity: number
+  name: string
+  sku: string | null
+  unit: string
 }
 
 // A part held at a location, with its own minimum re-order level and the

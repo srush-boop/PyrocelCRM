@@ -10,6 +10,8 @@ import type {
 
 // Default colour used for booked service tasks on the calendar.
 export const TASK_COLOR = '#2563eb'
+// Accent colour for jobs that are currently underway (commenced, in progress).
+export const COMMENCED_COLOR = '#f59e0b'
 
 // Maps an English weekday name to its JS index (0 = Sunday … 6 = Saturday).
 const WEEKDAY_INDEX: Record<string, number> = {
@@ -50,6 +52,8 @@ interface TaskRow {
   booked_start_time: string | null
   booked_end_time: string | null
   status: string
+  // Actual on-site commencement timestamp, set when an engineer taps "Start".
+  started_at: string | null
   assigned_engineer_id: string | null
   assigned_engineer: { id: string; full_name: string | null; email: string; branch_id: string | null } | null
   site_service: {
@@ -143,7 +147,7 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
   let taskQuery = supabase
     .from('tasks')
     .select(
-      `id, scheduled_date, booked_start_time, booked_end_time, status, assigned_engineer_id,
+      `id, scheduled_date, booked_start_time, booked_end_time, status, started_at, assigned_engineer_id,
        assigned_engineer:profiles(id, full_name, email, branch_id),
        site_service:site_services(
          site:sites(name, branch_id),
@@ -235,6 +239,9 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
     const result = taskResults.find((r) => r.testing_start_time)
     const hasSlot = !!t.booked_start_time
     const hasActual = !!result?.testing_start_time
+    // A job is "commenced" once the engineer taps Start (status in_progress with
+    // a recorded started_at) but hasn't yet submitted its final on-site times.
+    const hasCommenced = t.status === 'in_progress' && !!t.started_at
 
     let start: string
     let end: string
@@ -245,6 +252,15 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
       start = combineDateTime(t.scheduled_date, t.booked_start_time, '00:00:00')
       end = combineDateTime(t.scheduled_date, t.booked_end_time ?? t.booked_start_time, '23:59:00')
       allDay = false
+      // Keep the booked window but flag that the job is already underway.
+      if (hasCommenced) timeNote = 'Commenced'
+    } else if (hasCommenced) {
+      // Unbooked job that has been started: drop it onto the calendar at its
+      // actual commencement time so it appears live as soon as Start is tapped.
+      start = t.started_at as string
+      end = t.started_at as string
+      allDay = false
+      timeNote = 'Commenced'
     } else if (hasActual) {
       // Actual timestamps carry their own date/time.
       start = result!.testing_start_time as string
@@ -269,7 +285,7 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
       start,
       end,
       allDay,
-      color: TASK_COLOR,
+      color: hasCommenced ? COMMENCED_COLOR : TASK_COLOR,
       ownerId: t.assigned_engineer_id,
       ownerName,
       subtitle:

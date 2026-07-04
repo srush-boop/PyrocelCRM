@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Search, AlertTriangle, ChevronRight } from 'lucide-react'
+import { Search, AlertTriangle, ChevronRight, Package } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { DEFECT_STATUS_LABELS } from '@/lib/defects'
 import type { DefectStatus } from '@/lib/types/database'
@@ -30,6 +30,7 @@ export interface DefectRow {
   siteName: string
   clientName: string
   serviceName: string
+  suggestedPartsCount: number
 }
 
 const STATUS_VARIANT: Record<DefectStatus, 'destructive' | 'secondary' | 'default' | 'outline'> = {
@@ -102,6 +103,7 @@ export function DefectsTable({ defects }: { defects: DefectRow[] }) {
                   <TableHead>Client</TableHead>
                   <TableHead>Service</TableHead>
                   <TableHead className="text-center">Failures</TableHead>
+                  <TableHead className="text-center">Parts</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Logged</TableHead>
                   <TableHead className="sr-only">View</TableHead>
@@ -120,6 +122,19 @@ export function DefectsTable({ defects }: { defects: DefectRow[] }) {
                     <TableCell>{d.serviceName}</TableCell>
                     <TableCell className="text-center">
                       <Badge variant="destructive">{d.failedCount}</Badge>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {d.suggestedPartsCount > 0 ? (
+                        <span
+                          className="inline-flex items-center gap-1 text-sm text-muted-foreground"
+                          title={`${d.suggestedPartsCount} suggested part${d.suggestedPartsCount === 1 ? '' : 's'} (internal)`}
+                        >
+                          <Package className="h-3.5 w-3.5" />
+                          {d.suggestedPartsCount}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[d.status]}>

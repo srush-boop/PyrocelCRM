@@ -51,7 +51,8 @@ import {
   Plus,
   CheckCircle2,
 } from 'lucide-react'
-import { formatDateUK } from '@/lib/utils'
+import { formatDateUK, formatTimeUK } from '@/lib/utils'
+import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
 import { emptyPhotoCategories, generateUrn, EXTINGUISHER_TYPE_LABELS } from '@/lib/extinguishers'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import { ExtinguisherInspectionCard, type InspectionState } from './extinguisher-inspection-card'
@@ -480,6 +481,12 @@ export function ExtinguisherTaskExecution({
             <Calendar className="h-4 w-4" />
             Scheduled: {formatDateUK(task.scheduled_date)}
           </div>
+          {task.started_at && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Calendar className="h-4 w-4" />
+              Commenced: {formatDateUK(task.started_at)} at {formatTimeUK(task.started_at)}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -512,6 +519,11 @@ export function ExtinguisherTaskExecution({
               </div>
             </CardContent>
           </Card>
+
+          {/* Suggested parts (internal) — shown when a defect/failure is present */}
+          {summary.failed > 0 && (
+            <SuggestedPartsPicker taskId={task.id} canEdit={canEdit} />
+          )}
 
           {extinguishers.length === 0 ? (
             <Card>

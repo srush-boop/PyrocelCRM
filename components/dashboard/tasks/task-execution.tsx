@@ -21,6 +21,7 @@ import {
 import { SystemIcon, SystemBadge } from '@/lib/system-types'
 import { TaskAttachments } from '@/components/dashboard/tasks/task-attachments'
 import { ReportNotesAssist } from '@/components/dashboard/reports/report-notes-assist'
+import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
 import { useBackNavigation } from '@/hooks/use-back-navigation'
 import { formatDateUK, formatTimeUK } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
@@ -63,7 +64,8 @@ import type {
   ChecklistResult,
   TaskResult,
   TaskResultStatus,
-  ClientLink
+  ClientLink,
+  SystemPanel
 } from '@/lib/types/database'
 
 interface TaskExecutionProps {
@@ -73,6 +75,29 @@ interface TaskExecutionProps {
   profile: Profile
   clientLinks?: ClientLink[]
   engineers?: Profile[]
+  panels?: SystemPanel[]
+}
+
+// Builds the initial checklist results for a template. When the task's system
+// has panels, the full checklist is repeated once per panel and each row is
+// tagged with its panel so one report captures every panel. The composite
+// item_id keeps each row uniquely addressable by updateChecklistResult.
+function buildInitialResults(
+  items: ChecklistItem[],
+  panels: SystemPanel[],
+): ChecklistResult[] {
+  const makeRow = (item: ChecklistItem, panel: SystemPanel | null): ChecklistResult => ({
+    item_id: panel ? `${panel.id}::${item.id}` : item.id,
+    label: item.label,
+    type: item.type,
+    value: item.type === 'pass_fail' ? true : item.type === 'checkbox' ? false : '',
+    passed: item.type === 'pass_fail' ? true : null,
+    notes: '',
+    panel_id: panel?.id ?? null,
+    panel_name: panel?.name ?? null,
+  })
+  if (panels.length === 0) return items.map((item) => makeRow(item, null))
+  return panels.flatMap((panel) => items.map((item) => makeRow(item, panel)))
 }
 
 export function TaskExecution({ 
@@ -81,7 +106,8 @@ export function TaskExecution({
   existingResult,
   profile,
   clientLinks = [],
-  engineers = []
+  engineers = [],
+  panels = []
 }: TaskExecutionProps) {
   const [status, setStatus] = useState(task.status)
   // Local snapshot of the assigned engineer so the summary reflects quick
@@ -94,15 +120,8 @@ export function TaskExecution({
     if (existingResult?.checklist_results) {
       return existingResult.checklist_results
     }
-    // Initialize from template
-    return (checklistTemplate?.items || []).map((item) => ({
-      item_id: item.id,
-      label: item.label,
-      type: item.type,
-      value: item.type === 'pass_fail' ? true : item.type === 'checkbox' ? false : '',
-      passed: item.type === 'pass_fail' ? true : null,
-      notes: '',
-    }))
+    // Initialize from template, repeated per panel when the system has panels.
+    return buildInitialResults(checklistTemplate?.items || [], panels)
   })
   const [engineerNotes, setEngineerNotes] = useState(existingResult?.engineer_notes || '')
   const [testingStartTime, setTestingStartTime] = useState<Date | null>(
@@ -368,6 +387,25 @@ export function TaskExecution({
   const isEngineer = profile.role === 'engineer'
   const canEdit = isEngineer && status !== 'completed' && status !== 'cancelled'
 
+  // Group checklist rows by panel for rendering. Preserves the order results
+  // were built in (per panel, then per item). Legacy results with no panel_id
+  // fall into a single untitled group so older reports render unchanged.
+  const checklistGroups = (() => {
+    const groups: { key: string; panelName: string | null; results: ChecklistResult[] }[] = []
+    const byKey = new Map<string, { key: string; panelName: string | null; results: ChecklistResult[] }>()
+    for (const result of checklistResults) {
+      const key = result.panel_id ?? '__none__'
+      let group = byKey.get(key)
+      if (!group) {
+        group = { key, panelName: result.panel_name ?? null, results: [] }
+        byKey.set(key, group)
+        groups.push(group)
+      }
+      group.results.push(result)
+    }
+    return groups
+  })()
+
   return (
     <div className="space-y-6 max-w-3xl mx-auto pb-20">
       {/* Header */}
@@ -386,6 +424,12 @@ export function TaskExecution({
             )}
           </div>
           <h1 className="text-2xl font-bold">{site?.name}</h1>
+          {task.started_at && (
+            <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Clock className="h-3.5 w-3.5 shrink-0" />
+              Commenced {formatDateUK(task.started_at)} at {formatTimeUK(task.started_at)}
+            </p>
+          )}
         </div>
       </div>
 
@@ -696,6 +740,7 @@ export function TaskExecution({
               <CardTitle>Inspection Checklist</CardTitle>
               <CardDescription>
                 {checklistTemplate?.name || 'Standard inspection checklist'}
+                {panels.length > 0 && ` · repeated for ${panels.length} panel${panels.length === 1 ? '' : 's'}`}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -704,116 +749,134 @@ export function TaskExecution({
                 No checklist items configured for this service type
               </p>
             ) : (
-              checklistResults.map((result, index) => (
-                <div key={result.item_id} className="space-y-2">
-                  {index > 0 && <Separator />}
-                  <div className="pt-2">
-                    <Label className="text-base font-medium">{result.label}</Label>
-                    
-                    {result.type === 'pass_fail' && (
-                      <div className="flex gap-2 mt-2">
-                        <Button
-                          type="button"
-                          variant={result.passed === true ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => updateChecklistResult(result.item_id, { value: true, passed: true })}
-                          disabled={!canEdit}
-                          className={result.passed === true ? 'bg-green-600 hover:bg-green-700' : ''}
-                        >
-                          <CheckCircle2 className="mr-2 h-4 w-4" />
-                          Pass
-                        </Button>
-                        <Button
-                          type="button"
-                          variant={result.passed === false ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => updateChecklistResult(result.item_id, { value: false, passed: false })}
-                          disabled={!canEdit}
-                          className={result.passed === false ? 'bg-destructive hover:bg-destructive/90' : ''}
-                        >
-                          <XCircle className="mr-2 h-4 w-4" />
-                          Fail
-                        </Button>
-                      </div>
-                    )}
+              checklistGroups.map((group, groupIndex) => (
+                <div key={group.key} className="space-y-4">
+                  {group.panelName && (
+                    <div className={`flex items-center gap-2 ${groupIndex > 0 ? 'pt-4' : ''}`}>
+                      <Wrench className="h-4 w-4 text-primary" />
+                      <h3 className="text-base font-semibold">{group.panelName}</h3>
+                      {group.results.some((r) => r.type === 'pass_fail' && r.passed === false) && (
+                        <Badge variant="destructive" className="ml-1">Defect</Badge>
+                      )}
+                    </div>
+                  )}
+                  {group.results.map((result, index) => (
+                    <div key={result.item_id} className="space-y-2">
+                      {index > 0 && <Separator />}
+                      <div className="pt-2">
+                        <Label className="text-base font-medium">{result.label}</Label>
 
-                    {result.type === 'checkbox' && (
-                      <div className="flex items-center gap-2 mt-2">
-                        <Checkbox
-                          checked={result.value as boolean}
-                          onCheckedChange={(checked) =>
-                            updateChecklistResult(result.item_id, { value: checked as boolean })
-                          }
-                          disabled={!canEdit}
-                        />
-                        <span className="text-sm">Completed</span>
-                      </div>
-                    )}
+                        {result.type === 'pass_fail' && (
+                          <div className="flex gap-2 mt-2">
+                            <Button
+                              type="button"
+                              variant={result.passed === true ? 'default' : 'outline'}
+                              size="sm"
+                              onClick={() => updateChecklistResult(result.item_id, { value: true, passed: true })}
+                              disabled={!canEdit}
+                              className={result.passed === true ? 'bg-green-600 hover:bg-green-700' : ''}
+                            >
+                              <CheckCircle2 className="mr-2 h-4 w-4" />
+                              Pass
+                            </Button>
+                            <Button
+                              type="button"
+                              variant={result.passed === false ? 'default' : 'outline'}
+                              size="sm"
+                              onClick={() => updateChecklistResult(result.item_id, { value: false, passed: false })}
+                              disabled={!canEdit}
+                              className={result.passed === false ? 'bg-destructive hover:bg-destructive/90' : ''}
+                            >
+                              <XCircle className="mr-2 h-4 w-4" />
+                              Fail
+                            </Button>
+                          </div>
+                        )}
 
-                    {result.type === 'text' && (
-                      <Input
-                        value={result.value as string}
-                        onChange={(e) => updateChecklistResult(result.item_id, { value: e.target.value })}
-                        placeholder="Enter value..."
-                        className="mt-2"
-                        disabled={!canEdit}
-                      />
-                    )}
-
-                    {result.type === 'number' && (
-                      <Input
-                        type="number"
-                        value={result.value as number}
-                        onChange={(e) => updateChecklistResult(result.item_id, { value: parseFloat(e.target.value) || 0 })}
-                        placeholder="Enter value..."
-                        className="mt-2"
-                        disabled={!canEdit}
-                      />
-                    )}
-
-                    {/* Notes for failed items */}
-                    {result.type === 'pass_fail' && result.passed === false && (
-                      <div className="mt-2 space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-medium text-muted-foreground">
-                            Defect description
-                          </span>
-                          {canEdit && (
-                            <ReportNotesAssist
-                              label="AI describe"
-                              input={{
-                                mode: 'defect',
-                                serviceType: serviceType?.name,
-                                systemType: systemType?.name,
-                                visitType: task.visit_type?.name,
-                                siteName: site?.name,
-                                itemLabel: result.label,
-                              }}
-                              onInsert={(text, applyMode) =>
-                                updateChecklistResult(result.item_id, {
-                                  notes:
-                                    applyMode === 'replace' || !result.notes
-                                      ? text
-                                      : `${result.notes}\n${text}`,
-                                })
+                        {result.type === 'checkbox' && (
+                          <div className="flex items-center gap-2 mt-2">
+                            <Checkbox
+                              checked={result.value as boolean}
+                              onCheckedChange={(checked) =>
+                                updateChecklistResult(result.item_id, { value: checked as boolean })
                               }
+                              disabled={!canEdit}
                             />
-                          )}
-                        </div>
-                        <Textarea
-                          value={result.notes || ''}
-                          onChange={(e) => updateChecklistResult(result.item_id, { notes: e.target.value })}
-                          placeholder="Describe the issue..."
-                          disabled={!canEdit}
-                        />
+                            <span className="text-sm">Completed</span>
+                          </div>
+                        )}
+
+                        {result.type === 'text' && (
+                          <Input
+                            value={result.value as string}
+                            onChange={(e) => updateChecklistResult(result.item_id, { value: e.target.value })}
+                            placeholder="Enter value..."
+                            className="mt-2"
+                            disabled={!canEdit}
+                          />
+                        )}
+
+                        {result.type === 'number' && (
+                          <Input
+                            type="number"
+                            value={result.value as number}
+                            onChange={(e) => updateChecklistResult(result.item_id, { value: parseFloat(e.target.value) || 0 })}
+                            placeholder="Enter value..."
+                            className="mt-2"
+                            disabled={!canEdit}
+                          />
+                        )}
+
+                        {/* Notes for failed items */}
+                        {result.type === 'pass_fail' && result.passed === false && (
+                          <div className="mt-2 space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-medium text-muted-foreground">
+                                Defect description
+                              </span>
+                              {canEdit && (
+                                <ReportNotesAssist
+                                  label="AI describe"
+                                  input={{
+                                    mode: 'defect',
+                                    serviceType: serviceType?.name,
+                                    systemType: systemType?.name,
+                                    visitType: task.visit_type?.name,
+                                    siteName: site?.name,
+                                    itemLabel: group.panelName ? `${group.panelName} — ${result.label}` : result.label,
+                                  }}
+                                  onInsert={(text, applyMode) =>
+                                    updateChecklistResult(result.item_id, {
+                                      notes:
+                                        applyMode === 'replace' || !result.notes
+                                          ? text
+                                          : `${result.notes}\n${text}`,
+                                    })
+                                  }
+                                />
+                              )}
+                            </div>
+                            <Textarea
+                              value={result.notes || ''}
+                              onChange={(e) => updateChecklistResult(result.item_id, { notes: e.target.value })}
+                              placeholder="Describe the issue..."
+                              disabled={!canEdit}
+                            />
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  ))}
                 </div>
               ))
             )}
           </CardContent>
         </Card>
+
+        {/* Suggested parts (internal) — shown when a defect/failure is present */}
+        {checklistResults.some((r) => r.type === 'pass_fail' && r.passed === false) && (
+          <SuggestedPartsPicker taskId={task.id} canEdit={canEdit} />
+        )}
         </>
       )}
 

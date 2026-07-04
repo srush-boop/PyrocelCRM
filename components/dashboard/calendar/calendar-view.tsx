@@ -154,7 +154,7 @@ export function CalendarView({
   canManageOthers,
   }: CalendarViewProps) {
   const router = useRouter()
-  const [view, setView] = useState<ViewMode>('month')
+  const [view, setView] = useState<ViewMode>('day')
   const [cursor, setCursor] = useState<Date>(new Date())
   const [selected, setSelected] = useState<CalendarItem | null>(null)
 

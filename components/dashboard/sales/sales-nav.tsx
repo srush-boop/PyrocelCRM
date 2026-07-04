@@ -6,7 +6,6 @@ import {
   LayoutDashboard,
   ReceiptText,
   Landmark,
-  BookOpen,
   Coins,
   Layers,
   Boxes,
@@ -14,6 +13,7 @@ import {
   SlidersHorizontal,
   PencilRuler,
   LayoutList,
+  PanelsTopLeft,
   Settings,
   ChevronDown,
 } from 'lucide-react'
@@ -37,7 +37,6 @@ const topLevelLinks: SalesNavLink[] = [
   { title: 'Dashboard', href: '/dashboard/sales', icon: LayoutDashboard },
   { title: 'Quotes', href: '/dashboard/sales/quotes', icon: ReceiptText },
   { title: 'Quote Bank', href: '/dashboard/sales/quote-bank', icon: Landmark },
-  { title: 'Catalogue', href: '/dashboard/sales/catalogue', icon: BookOpen },
 ]
 
 // Setup areas grouped under the "Sales Configuration" dropdown.
@@ -47,6 +46,7 @@ const configLinks: SalesNavLink[] = [
   { title: 'Asset Types', href: '/dashboard/sales/asset-types', icon: Boxes },
   { title: 'Spec Templates', href: '/dashboard/sales/spec-templates', icon: FileText },
   { title: 'Work-type Fields', href: '/dashboard/sales/work-type-fields', icon: SlidersHorizontal },
+  { title: 'Panel Fields', href: '/dashboard/sales/panel-fields', icon: PanelsTopLeft },
   { title: 'Quote Sections', href: '/dashboard/sales/quote-sections', icon: LayoutList },
   { title: 'Design Categories', href: '/dashboard/sales/design-categories', icon: PencilRuler },
 ]

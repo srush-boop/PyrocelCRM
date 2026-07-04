@@ -14,6 +14,7 @@ import { SiteAssetsTab, type SiteAsset } from '@/components/dashboard/sites/site
 import { SiteReports } from '@/components/dashboard/sites/site-reports'
 import { SiteLogbook } from '@/components/dashboard/sites/site-logbook'
 import { SiteDocuments } from '@/components/dashboard/sites/site-documents'
+import { SiteEngineerInfoTab } from '@/components/dashboard/sites/site-engineer-info-tab'
 import { getOwnerDocuments } from '@/lib/documents/data'
 import type { ReportTimelineItem } from '@/components/logbook/logbook-timeline'
 import { DamperRegister } from '@/components/dashboard/dampers/damper-register'
@@ -36,6 +37,8 @@ import type {
   SiteService,
   SiteSystem,
   SystemType,
+  PanelFieldDef,
+  SystemPanel,
   Task,
   TaskResult,
   Damper,
@@ -47,6 +50,7 @@ import type {
   LogbookEntry,
   SiteBuildingInfo,
   Quote,
+  SiteInternalNote,
 } from '@/lib/types/database'
 
 interface PageProps {
@@ -86,7 +90,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
     notFound()
   }
 
-  const [siteServicesResult, serviceTypesResult, engineersResult, routesResult, areasResult, subcontractorsResult, clientsResult, siteSystemsResult, systemTypesResult, quotesResult] = await Promise.all([
+  const [siteServicesResult, serviceTypesResult, engineersResult, routesResult, areasResult, subcontractorsResult, clientsResult, siteSystemsResult, systemTypesResult, quotesResult, panelFieldDefsResult] = await Promise.all([
     supabase
       .from('site_services')
       .select(`
@@ -115,6 +119,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
       .select('*, client:clients(*), site:sites(*)')
       .eq('site_id', id)
       .order('created_at', { ascending: false }),
+    supabase.from('panel_field_defs').select('*').eq('active', true).order('position'),
   ])
 
   const siteServices = (siteServicesResult.data || []) as (SiteService & { service_type: ServiceType })[]
@@ -127,6 +132,19 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
   const siteSystems = (siteSystemsResult.data || []) as SiteSystem[]
   const systemTypes = (systemTypesResult.data || []) as SystemType[]
   const quotes = (quotesResult.data || []) as Quote[]
+  const panelFieldDefs = (panelFieldDefsResult.data || []) as PanelFieldDef[]
+
+  // Panels captured against this site's systems (Fire Alarm etc.). Loaded here
+  // so the systems tab can list and edit them per system.
+  const siteSystemIds = siteSystems.map((s) => s.id)
+  const { data: panelsData } = siteSystemIds.length > 0
+    ? await supabase
+        .from('system_panels')
+        .select('*')
+        .in('site_system_id', siteSystemIds)
+        .order('position')
+    : { data: [] }
+  const panels = (panelsData || []) as SystemPanel[]
 
   // Get tasks for this site's services
   const siteServiceIds = siteServices.map(ss => ss.id)
@@ -271,6 +289,15 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
   const siteDocuments = await getOwnerDocuments('site', id)
   const canManageDocuments = ['admin', 'office'].includes((profile as Profile).role)
 
+  // Engineer Info tab: shared engineer file store + communal internal notes.
+  const engineerDocuments = await getOwnerDocuments('site_engineer', id)
+  const { data: internalNotesData } = await supabase
+    .from('site_internal_notes')
+    .select('*, author:profiles!site_internal_notes_author_id_fkey(id, full_name, role)')
+    .eq('site_id', id)
+    .order('created_at', { ascending: false })
+  const canModerateNotes = ['admin', 'office'].includes((profile as Profile).role)
+
   // The client this site belongs to (joined above), if any.
   const siteClient = (site as Site & { client: Client | null }).client
 
@@ -336,6 +363,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
           <TabsTrigger value="quotes" className="flex-none">Quotes</TabsTrigger>
           <TabsTrigger value="logbook" className="flex-none">Log Book</TabsTrigger>
           <TabsTrigger value="documents" className="flex-none">Documents</TabsTrigger>
+          <TabsTrigger value="engineer-info" className="flex-none">Engineer Info</TabsTrigger>
           <TabsTrigger value="reports" className="flex-none">Reports</TabsTrigger>
         </TabsList>
 
@@ -515,14 +543,16 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
         </TabsContent>
 
         <TabsContent value="systems" className="mt-0">
-          <SiteSystemsManager
-            siteId={id}
-            siteSystems={siteSystems}
-            siteServices={siteServices}
-            systemTypes={systemTypes}
-            availableServiceTypes={availableServiceTypes}
-            siteStatus={(site as Site).status}
-          />
+              <SiteSystemsManager
+                siteId={id}
+                siteSystems={siteSystems}
+                siteServices={siteServices}
+                systemTypes={systemTypes}
+                availableServiceTypes={availableServiceTypes}
+                siteStatus={(site as Site).status}
+                panelFieldDefs={panelFieldDefs}
+                panels={panels}
+              />
         </TabsContent>
 
         <TabsContent value="quotes" className="mt-0">
@@ -553,6 +583,17 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             folders={siteDocuments.folders}
             files={siteDocuments.files}
             canManage={canManageDocuments}
+          />
+        </TabsContent>
+
+        <TabsContent value="engineer-info" className="mt-0">
+          <SiteEngineerInfoTab
+            site={site as Site}
+            notes={(internalNotesData || []) as SiteInternalNote[]}
+            engineerFolders={engineerDocuments.folders}
+            engineerFiles={engineerDocuments.files}
+            currentUserId={user.id}
+            canModerateNotes={canModerateNotes}
           />
         </TabsContent>
 

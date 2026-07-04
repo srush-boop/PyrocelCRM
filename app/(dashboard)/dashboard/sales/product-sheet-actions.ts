@@ -275,7 +275,7 @@ export async function importProductSheet(sheetId?: string): Promise<ImportResult
     })
     .eq('id', sheet.id)
 
-  revalidatePath('/dashboard/sales/catalogue')
+  revalidatePath('/dashboard/stock/catalogue')
   return { ok: true, imported, updated, skipped: parsed.length - imported - updated }
 }
 
@@ -285,6 +285,6 @@ export async function deleteProductSheet(id: string): Promise<{ ok: boolean; err
   if (error || !user) return { ok: false, error: error ?? 'Not authorised.' }
   const { error: delErr } = await supabase.from('product_sheets').delete().eq('id', id)
   if (delErr) return { ok: false, error: 'Could not delete the product sheet.' }
-  revalidatePath('/dashboard/sales/catalogue')
+  revalidatePath('/dashboard/stock/catalogue')
   return { ok: true }
 }

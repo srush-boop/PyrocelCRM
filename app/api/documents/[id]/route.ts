@@ -9,8 +9,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const auth = await getDocumentAuth()
-  if (!auth.ok || !auth.canManage) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: auth.ok ? 403 : auth.status })
+  if (!auth.ok) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: auth.status })
   }
 
   const { id } = await params
@@ -21,6 +21,16 @@ export async function PATCH(
   }
 
   const supabase = await createClient()
+  const { data: existing } = await supabase
+    .from('documents')
+    .select('owner_type')
+    .eq('id', id)
+    .single()
+  const allowed = existing?.owner_type === 'site_engineer' ? auth.canManageEngineer : auth.canManage
+  if (!allowed) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const { error } = await supabase.from('documents').update({ name }).eq('id', id)
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -34,8 +44,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const auth = await getDocumentAuth()
-  if (!auth.ok || !auth.canManage) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: auth.ok ? 403 : auth.status })
+  if (!auth.ok) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: auth.status })
   }
 
   const { id } = await params
@@ -43,9 +53,14 @@ export async function DELETE(
 
   const { data: doc } = await supabase
     .from('documents')
-    .select('blob_url')
+    .select('blob_url, owner_type')
     .eq('id', id)
     .single()
+
+  const allowed = doc?.owner_type === 'site_engineer' ? auth.canManageEngineer : auth.canManage
+  if (!allowed) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   if (doc?.blob_url) {
     try {

@@ -47,6 +47,18 @@ export interface Client {
   updated_at: string
 }
 
+// A single day's working hours. `start`/`end` are 24h "HH:MM" strings and
+// `break_minutes` is the unpaid break to deduct when computing net hours.
+export interface WorkDayHoursEntry {
+  start: string
+  end: string
+  break_minutes: number
+}
+
+// Per-day working hours keyed by ISO weekday number ("1" = Monday ... "7" =
+// Sunday). Absent keys mean the day is not worked.
+export type WorkDayHours = Record<string, WorkDayHoursEntry>
+
 export interface Profile {
   id: string
   email: string
@@ -59,14 +71,19 @@ export interface Profile {
   branch_id: string | null
   invited_at: string | null
   accepted_at: string | null
-  // Optional working hours (24h "HH:MM[:SS]") and daily lunch allowance in
-  // minutes. Used for future timesheet calculations.
+  // Legacy single working-hours fields (24h "HH:MM[:SS]") and daily lunch
+  // allowance in minutes. Superseded by `work_day_hours` (per-day). Retained for
+  // backwards compatibility / historical data.
   work_start_time: string | null
   work_end_time: string | null
   lunch_minutes: number | null
   // Days normally worked, as ISO weekday numbers (1 = Monday ... 7 = Sunday).
-  // Supports part-time patterns. Defaults to Monday–Friday.
+  // Kept in sync with the keys of `work_day_hours`. Defaults to Monday–Friday.
   work_days: number[] | null
+  // Per-day working hours, keyed by ISO weekday number ("1" = Monday ... "7" =
+  // Sunday). Only worked days appear. Each entry records the start/finish time
+  // and the break to deduct, from which net daily hours are derived.
+  work_day_hours: WorkDayHours | null
   // Per-user top-level menu visibility override. NULL/undefined = use role
   // defaults. Otherwise an array of enabled top-level menu keys.
   menu_permissions: string[] | null

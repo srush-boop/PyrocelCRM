@@ -93,14 +93,14 @@ export default async function SchedulePage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Calls</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Calls</h1>
           <p className="text-muted-foreground">
             {isAdminOrOffice ? 'Manage and schedule service tasks' : 'View your scheduled tasks'}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 [&>*]:flex-1 sm:[&>*]:flex-none">
           {isAdminOrOffice && (
             <BranchFilter branches={scope.branches} activeBranchId={scope.activeBranchId} />
           )}

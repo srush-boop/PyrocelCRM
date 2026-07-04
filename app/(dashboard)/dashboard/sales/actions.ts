@@ -740,6 +740,7 @@ export async function sendQuote(args: {
   // When true, the client must draw a signature to approve via the public link.
   requireSignature?: boolean
 }): Promise<{ ok: boolean; error?: string }> {
+  try {
   const { supabase, user, error } = await requireStaff()
   if (error || !user) return { ok: false, error: error ?? 'Not authorised.' }
 
@@ -826,6 +827,19 @@ export async function sendQuote(args: {
   revalidatePath('/dashboard/sales/quotes')
   revalidatePath(`/dashboard/sales/${args.id}`)
   return { ok: true }
+  } catch (e) {
+    // Never let an unexpected error bubble up as an opaque Server Action digest
+    // (e.g. "ERROR 3791787566"). Log the real cause server-side and return a
+    // readable message the dialog can show.
+    console.error('[v0] sendQuote unexpected failure:', e)
+    return {
+      ok: false,
+      error:
+        e instanceof Error
+          ? `The quote could not be sent: ${e.message}`
+          : 'The quote could not be sent due to an unexpected error.',
+    }
+  }
 }
 
 /** Delete a quote (systems and line items cascade). */

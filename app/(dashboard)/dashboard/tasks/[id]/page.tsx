@@ -27,6 +27,7 @@ import type {
   EmergencyLightInspection,
   Extinguisher,
   ExtinguisherInspection,
+  SystemPanel,
 } from '@/lib/types/database'
 
 interface PageProps {
@@ -349,6 +350,20 @@ export default async function TaskPage({ params }: PageProps) {
     .select('*')
     .eq('task_id', id)
     .single()
+
+  // Panels configured on the system this service is attached to. When present,
+  // the general checklist below is repeated once per panel so one report covers
+  // every panel. Only relevant to the general flow (the dedicated per-asset
+  // flows above return earlier).
+  let panels: SystemPanel[] = []
+  if (task.site_service?.site_system_id) {
+    const { data: panelsData } = await supabase
+      .from('system_panels')
+      .select('*')
+      .eq('site_system_id', task.site_service.site_system_id)
+      .order('position')
+    panels = (panelsData || []) as SystemPanel[]
+  }
 
   // Office/admin can quick-assign this call from the summary, so load engineers.
   const isAdminOrOffice = (profile as Profile).role === 'admin' || (profile as Profile).role === 'office'

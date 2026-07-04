@@ -383,6 +383,36 @@ export interface Site {
     site?: Site
     system_type?: SystemType | null
     site_services?: SiteService[]
+    panels?: SystemPanel[]
+  }
+
+  // Admin-configurable definition of a panel field, scoped to a system type.
+  // Mirrors WorkTypeField. Drives the dynamic "Add panel" form.
+  export interface PanelFieldDef {
+    id: string
+    system_type_id: string
+    label: string
+    field_key: string
+    field_type: 'text' | 'number' | 'select' | 'boolean'
+    options: string[]
+    required: boolean
+    position: number
+    active: boolean
+    created_at: string
+    updated_at: string
+    system_type?: SystemType | null
+  }
+
+  // A panel instance belonging to a site system. field_values is keyed by the
+  // panel_field_defs.field_key for that system type. Internal-use only.
+  export interface SystemPanel {
+    id: string
+    site_system_id: string
+    name: string
+    position: number
+    field_values: Record<string, string | number | boolean | null>
+    created_at: string
+    updated_at: string
   }
 
   export interface SiteService {
@@ -529,14 +559,19 @@ export interface Task {
   client?: Client | null
   }
 
-export interface ChecklistResult {
+  export interface ChecklistResult {
   item_id: string
   label: string
   type: 'pass_fail' | 'text' | 'number' | 'checkbox'
   value: boolean | string | number
   passed: boolean | null
   notes?: string
-}
+  // When a system has configured panels, the general checklist is repeated once
+  // per panel. These tag each result with the panel it belongs to. Absent on
+  // legacy/non-panel results, which keeps older reports rendering unchanged.
+  panel_id?: string | null
+  panel_name?: string | null
+  }
 
 // Defect tracking: one row per failed report (task_result with overall_status='fail').
 // Auto-maintained by a DB trigger; lifecycle open -> quoted -> resolved/dismissed.

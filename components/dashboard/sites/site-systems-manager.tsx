@@ -39,7 +39,15 @@ import {
 import { Plus, Pencil, Trash2, Layers, Wrench, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
 import { buildSeedTaskRows, fetchVisitsByServiceType } from '@/lib/scheduling'
-import type { SiteSystem, SiteService, ServiceType, SystemType } from '@/lib/types/database'
+import { SystemPanelsManager } from '@/components/dashboard/sites/system-panels-manager'
+import type {
+  SiteSystem,
+  SiteService,
+  ServiceType,
+  SystemType,
+  PanelFieldDef,
+  SystemPanel,
+} from '@/lib/types/database'
 
 type ServiceWithType = SiteService & { service_type?: ServiceType }
 
@@ -52,6 +60,8 @@ interface SiteSystemsManagerProps {
   systemTypes: SystemType[]
   availableServiceTypes: ServiceType[]
   siteStatus?: 'live' | 'dead'
+  panelFieldDefs?: PanelFieldDef[]
+  panels?: SystemPanel[]
 }
 
 export function SiteSystemsManager({
@@ -61,6 +71,8 @@ export function SiteSystemsManager({
   systemTypes,
   availableServiceTypes,
   siteStatus = 'live',
+  panelFieldDefs = [],
+  panels = [],
 }: SiteSystemsManagerProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -286,6 +298,23 @@ export function SiteSystemsManager({
   const activeServiceSystem = siteSystems.find((s) => s.id === serviceSystemId)
   const serviceTypeOptions = serviceTypesForSystem(activeServiceSystem)
 
+  // Active panel field definitions grouped by system type, and panels grouped by
+  // the site system they belong to. A system type only offers panels when an
+  // admin has configured at least one active panel field for it.
+  const panelDefsBySystemType = new Map<string, PanelFieldDef[]>()
+  for (const def of panelFieldDefs) {
+    if (!def.active) continue
+    const list = panelDefsBySystemType.get(def.system_type_id) ?? []
+    list.push(def)
+    panelDefsBySystemType.set(def.system_type_id, list)
+  }
+  const panelsBySystem = new Map<string, SystemPanel[]>()
+  for (const panel of panels) {
+    const list = panelsBySystem.get(panel.site_system_id) ?? []
+    list.push(panel)
+    panelsBySystem.set(panel.site_system_id, list)
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -323,6 +352,10 @@ export function SiteSystemsManager({
             const services = servicesBySystem.get(system.id) ?? []
             const typeLabel = systemTypeLabel(system.system_type_id)
             const st = systemTypes.find((s) => s.id === system.system_type_id)
+            const systemPanelDefs = system.system_type_id
+              ? panelDefsBySystemType.get(system.system_type_id) ?? []
+              : []
+            const systemPanels = panelsBySystem.get(system.id) ?? []
             return (
               <Card
                 key={system.id}
@@ -402,6 +435,15 @@ export function SiteSystemsManager({
                     <Plus className="h-4 w-4" />
                     Add service
                   </Button>
+                  {systemPanelDefs.length > 0 && (
+                    <SystemPanelsManager
+                      siteSystemId={system.id}
+                      panels={systemPanels}
+                      fieldDefs={systemPanelDefs}
+                      sitePath={pathname}
+                      disabled={isDead}
+                    />
+                  )}
                 </CardContent>
               </Card>
             )

@@ -37,6 +37,8 @@ import type {
   SiteService,
   SiteSystem,
   SystemType,
+  PanelFieldDef,
+  SystemPanel,
   Task,
   TaskResult,
   Damper,
@@ -88,7 +90,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
     notFound()
   }
 
-  const [siteServicesResult, serviceTypesResult, engineersResult, routesResult, areasResult, subcontractorsResult, clientsResult, siteSystemsResult, systemTypesResult, quotesResult] = await Promise.all([
+  const [siteServicesResult, serviceTypesResult, engineersResult, routesResult, areasResult, subcontractorsResult, clientsResult, siteSystemsResult, systemTypesResult, quotesResult, panelFieldDefsResult] = await Promise.all([
     supabase
       .from('site_services')
       .select(`
@@ -117,6 +119,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
       .select('*, client:clients(*), site:sites(*)')
       .eq('site_id', id)
       .order('created_at', { ascending: false }),
+    supabase.from('panel_field_defs').select('*').eq('active', true).order('position'),
   ])
 
   const siteServices = (siteServicesResult.data || []) as (SiteService & { service_type: ServiceType })[]
@@ -129,6 +132,19 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
   const siteSystems = (siteSystemsResult.data || []) as SiteSystem[]
   const systemTypes = (systemTypesResult.data || []) as SystemType[]
   const quotes = (quotesResult.data || []) as Quote[]
+  const panelFieldDefs = (panelFieldDefsResult.data || []) as PanelFieldDef[]
+
+  // Panels captured against this site's systems (Fire Alarm etc.). Loaded here
+  // so the systems tab can list and edit them per system.
+  const siteSystemIds = siteSystems.map((s) => s.id)
+  const { data: panelsData } = siteSystemIds.length > 0
+    ? await supabase
+        .from('system_panels')
+        .select('*')
+        .in('site_system_id', siteSystemIds)
+        .order('position')
+    : { data: [] }
+  const panels = (panelsData || []) as SystemPanel[]
 
   // Get tasks for this site's services
   const siteServiceIds = siteServices.map(ss => ss.id)
@@ -527,14 +543,16 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
         </TabsContent>
 
         <TabsContent value="systems" className="mt-0">
-          <SiteSystemsManager
-            siteId={id}
-            siteSystems={siteSystems}
-            siteServices={siteServices}
-            systemTypes={systemTypes}
-            availableServiceTypes={availableServiceTypes}
-            siteStatus={(site as Site).status}
-          />
+              <SiteSystemsManager
+                siteId={id}
+                siteSystems={siteSystems}
+                siteServices={siteServices}
+                systemTypes={systemTypes}
+                availableServiceTypes={availableServiceTypes}
+                siteStatus={(site as Site).status}
+                panelFieldDefs={panelFieldDefs}
+                panels={panels}
+              />
         </TabsContent>
 
         <TabsContent value="quotes" className="mt-0">

@@ -230,7 +230,6 @@ const engineerNavItems: NavItem[] = [
   { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   engineerStockNavItem,
-  { key: 'rams', title: 'RAMS', href: '/dashboard/rams', icon: ShieldCheck },
   { key: 'vault', title: 'Employee Vault', href: '/dashboard/vault', icon: Vault },
 ]
 

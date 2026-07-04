@@ -62,6 +62,7 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import type { Profile, UserRole, Department, Branch, WorkDayHours } from '@/lib/types/database'
+import type { LeaveBalance } from '@/lib/leave'
 import { formatDateUK } from '@/lib/utils'
 import { InviteEngineerDialog } from './invite-engineer-dialog'
 import { MenuAccessDialog } from './menu-access-dialog'
@@ -116,10 +117,38 @@ const netDayMinutes = (start: string, end: string, breakMin: string): number | n
 const formatDecimalHours = (mins: number): string =>
   (mins / 60).toFixed(2).replace(/\.?0+$/, '')
 
+// Trims trailing zeros from a day count (e.g. 12.50 -> "12.5", 12.00 -> "12").
+const formatDays = (n: number): string => n.toFixed(2).replace(/\.?0+$/, '')
+
+// Renders the current-year remaining annual leave for a user's table row. Shows
+// a dash when no entitlement is set, and highlights when leave is still owed.
+const renderLeaveCell = (bal?: LeaveBalance) => {
+  if (!bal || bal.entitlementDays == null || bal.remainingDays == null) {
+    return <span className="text-sm text-muted-foreground">—</span>
+  }
+  const remaining = bal.remainingDays
+  const label = `${formatDays(remaining)} / ${formatDays(bal.entitlementDays)} days`
+  return (
+    <Badge
+      variant={remaining > 0 ? 'secondary' : 'outline'}
+      className={
+        remaining > 0
+          ? 'bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-300'
+          : 'text-muted-foreground'
+      }
+      title={`${formatDays(bal.takenDays)} days taken this year`}
+    >
+      {label}
+    </Badge>
+  )
+}
+
 interface EngineersTableProps {
   users: Profile[]
   departments: Department[]
   branches?: Branch[]
+  /** Current-year annual leave balances, keyed by user id. */
+  leaveBalances?: Record<string, LeaveBalance>
 }
 
 const roleColors: Record<UserRole, string> = {
@@ -129,7 +158,12 @@ const roleColors: Record<UserRole, string> = {
   client: 'bg-muted text-muted-foreground',
 }
 
-export function EngineersTable({ users, departments, branches = [] }: EngineersTableProps) {
+export function EngineersTable({
+  users,
+  departments,
+  branches = [],
+  leaveBalances = {},
+}: EngineersTableProps) {
   const departmentName = (id: string | null) =>
     id ? departments.find((d) => d.id === id)?.name ?? null : null
   const branchName = (id: string | null) =>
@@ -462,6 +496,7 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
               <TableHead>Department</TableHead>
               {branches.length > 0 && <TableHead>Branch</TableHead>}
                       <TableHead>Status</TableHead>
+                      <TableHead className="hidden md:table-cell">Leave left</TableHead>
                       <TableHead className="hidden lg:table-cell">Added</TableHead>
               <TableHead className="w-[70px]"></TableHead>
             </TableRow>
@@ -469,7 +504,7 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
           <TableBody>
             {filteredUsers.length === 0 ? (
               <TableRow>
-                    <TableCell colSpan={branches.length > 0 ? 8 : 7} className="h-24 text-center">
+                    <TableCell colSpan={branches.length > 0 ? 9 : 8} className="h-24 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <Users className="h-8 w-8 text-muted-foreground/50 mb-2" />
                     <p className="text-muted-foreground">No users found</p>
@@ -533,6 +568,9 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
                         Inactive
                       </span>
                     )}
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell">
+                    {renderLeaveCell(leaveBalances[user.id])}
                   </TableCell>
                   <TableCell className="hidden text-muted-foreground lg:table-cell">
                     {user.created_at ? formatDateUK(user.created_at) : '-'}

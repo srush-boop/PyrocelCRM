@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { EngineersTable } from '@/components/dashboard/engineers/engineers-table'
+import { computeLeaveBalances, type LeaveBalance } from '@/lib/leave'
 import type { Profile, Department, Branch } from '@/lib/types/database'
 
 export default async function EngineersPage() {
@@ -19,11 +20,15 @@ export default async function EngineersPage() {
     redirect('/dashboard')
   }
 
-  const [{ data: users }, { data: departments }, { data: branches }] = await Promise.all([
+  const [{ data: users }, { data: departments }, { data: branches }, leaveMap] = await Promise.all([
     supabase.from('profiles').select('*').neq('role', 'client').order('full_name'),
     supabase.from('departments').select('*').order('name'),
     supabase.from('branches').select('*').order('name'),
+    computeLeaveBalances(),
   ])
+
+  // Serialise the Map to a plain object for the client component.
+  const leaveBalances: Record<string, LeaveBalance> = Object.fromEntries(leaveMap)
 
   return (
     <div className="space-y-6">
@@ -40,6 +45,7 @@ export default async function EngineersPage() {
         users={(users || []) as Profile[]}
         departments={(departments || []) as Department[]}
         branches={(branches || []) as Branch[]}
+        leaveBalances={leaveBalances}
       />
     </div>
   )

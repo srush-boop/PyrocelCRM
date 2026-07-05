@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState, useTransition } from 'react'
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -64,6 +64,7 @@ import {
   deleteCatalogueItem,
   fetchCataloguePage,
   fetchAllCatalogueItems,
+  importCatalogueItems,
   addCatalogueItemsToStock,
 } from '@/app/(dashboard)/dashboard/sales/actions'
 
@@ -134,6 +135,8 @@ export function CatalogueManager({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [addingToStock, setAddingToStock] = useState(false)
   const [downloading, setDownloading] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // The catalogue can hold thousands of rows, so we fetch one page at a time
   // from the server (with the search term applied in SQL) instead of loading
@@ -277,6 +280,88 @@ export function CatalogueManager({
       toast.error('Could not export the catalogue')
     } finally {
       setDownloading(false)
+    }
+  }
+
+  // Parse CSV text into row objects keyed by lower-cased header. Handles quoted
+  // fields, escaped double-quotes, and CRLF/LF line endings.
+  function parseCsv(text: string): Record<string, string>[] {
+    const rows: string[][] = []
+    let field = ''
+    let row: string[] = []
+    let inQuotes = false
+    // Strip a leading UTF-8 BOM if present.
+    const src = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text
+    for (let i = 0; i < src.length; i++) {
+      const c = src[i]
+      if (inQuotes) {
+        if (c === '"') {
+          if (src[i + 1] === '"') {
+            field += '"'
+            i++
+          } else inQuotes = false
+        } else field += c
+      } else if (c === '"') {
+        inQuotes = true
+      } else if (c === ',') {
+        row.push(field)
+        field = ''
+      } else if (c === '\n' || c === '\r') {
+        if (c === '\r' && src[i + 1] === '\n') i++
+        row.push(field)
+        field = ''
+        if (row.some((f) => f.trim() !== '')) rows.push(row)
+        row = []
+      } else field += c
+    }
+    if (field !== '' || row.length > 0) {
+      row.push(field)
+      if (row.some((f) => f.trim() !== '')) rows.push(row)
+    }
+    if (rows.length < 2) return []
+    const headers = rows[0].map((h) => h.trim().toLowerCase())
+    return rows.slice(1).map((r) => {
+      const obj: Record<string, string> = {}
+      headers.forEach((h, idx) => {
+        obj[h] = (r[idx] ?? '').trim()
+      })
+      return obj
+    })
+  }
+
+  // Import catalogue items from a CSV file (same columns as the Download export).
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    // Reset the input so selecting the same file again re-triggers onChange.
+    e.target.value = ''
+    if (!file) return
+    setUploading(true)
+    try {
+      const text = await file.text()
+      const parsed = parseCsv(text)
+      if (parsed.length === 0) {
+        toast.error('No rows found. The file needs a header row and at least one item.')
+        return
+      }
+      const res = await importCatalogueItems(parsed)
+      if (!res.ok) {
+        toast.error(res.errors[0] ?? 'Could not import the catalogue.')
+        return
+      }
+      const summary = `Imported ${res.created} new, updated ${res.updated}`
+      if (res.errors.length > 0) {
+        toast.warning(`${summary}. ${res.errors.length} row(s) had issues.`, {
+          description: res.errors.slice(0, 5).join(' '),
+        })
+      } else {
+        toast.success(summary)
+      }
+      await loadPage({ search, page: 0 })
+      setPage(0)
+    } catch {
+      toast.error('Could not read the file. Please upload a valid CSV.')
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -435,6 +520,26 @@ export function CatalogueManager({
               <Download className="mr-2 h-4 w-4" />
             )}
             Download
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={handleUpload}
+          />
+          <Button
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            title="Upload a CSV to add or update catalogue items"
+          >
+            {uploading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Upload className="mr-2 h-4 w-4" />
+            )}
+            Upload
           </Button>
           <Button onClick={openNew}>
             <Plus className="mr-2 h-4 w-4" />

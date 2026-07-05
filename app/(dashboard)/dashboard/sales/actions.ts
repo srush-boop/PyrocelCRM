@@ -596,6 +596,137 @@ export async function fetchAllCatalogueItems(
   return all
 }
 
+export interface CatalogueImportResult {
+  ok: boolean
+  created: number
+  updated: number
+  errors: string[]
+}
+
+// Bulk import catalogue items from parsed CSV rows (objects keyed by lower-cased
+// header). Matches the columns produced by the Download export so a downloaded
+// file can be edited and re-uploaded. Existing items are matched by product code
+// (case-insensitive), falling back to an exact name match; anything else is
+// inserted. System type and supplier are resolved by name.
+export async function importCatalogueItems(
+  rows: Record<string, string>[],
+): Promise<CatalogueImportResult> {
+  const { supabase, user, error } = await requireStaff()
+  if (error || !user) return { ok: false, created: 0, updated: 0, errors: ['Not authorised.'] }
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return { ok: false, created: 0, updated: 0, errors: ['The file had no rows.'] }
+  }
+
+  // Lookup maps for resolving names → ids, and existing items for upsert.
+  const [{ data: systemTypes }, { data: suppliers }, { data: existing }] = await Promise.all([
+    supabase.from('system_types').select('id, name'),
+    supabase.from('suppliers').select('id, name'),
+    supabase.from('quote_catalogue_items').select('id, name, product_code'),
+  ])
+  const systemByName = new Map(
+    (systemTypes ?? []).map((s) => [s.name.trim().toLowerCase(), s.id]),
+  )
+  const supplierByName = new Map(
+    (suppliers ?? []).map((s) => [s.name.trim().toLowerCase(), s.id]),
+  )
+  const idByCode = new Map<string, string>()
+  const idByName = new Map<string, string>()
+  for (const it of existing ?? []) {
+    if (it.product_code) idByCode.set(it.product_code.trim().toLowerCase(), it.id)
+    if (it.name) idByName.set(it.name.trim().toLowerCase(), it.id)
+  }
+
+  // Accept a few header spellings for each field.
+  const pick = (row: Record<string, string>, keys: string[]) => {
+    for (const k of keys) {
+      const v = row[k]
+      if (v != null && v.trim() !== '') return v.trim()
+    }
+    return ''
+  }
+  const toPence = (v: string) => {
+    const n = Number.parseFloat(v.replace(/[^0-9.-]/g, ''))
+    return Number.isFinite(n) ? Math.round(n * 100) : 0
+  }
+
+  const errors: string[] = []
+  let created = 0
+  let updated = 0
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]
+    const lineNo = i + 2 // account for the header row
+    const name = pick(row, ['name', 'item', 'item name'])
+    if (!name) {
+      errors.push(`Row ${lineNo}: missing name — skipped.`)
+      continue
+    }
+
+    const code = pick(row, ['product code', 'code', 'sku'])
+    const systemName = pick(row, ['system type', 'system']).toLowerCase()
+    const supplierName = pick(row, ['supplier']).toLowerCase()
+    const activeRaw = pick(row, ['active']).toLowerCase()
+    const unitCost = toPence(pick(row, ['unit cost (£)', 'unit cost', 'cost']))
+    const marginStr = pick(row, ['margin (%)', 'margin'])
+    const margin = Number.isFinite(Number.parseFloat(marginStr))
+      ? Number.parseFloat(marginStr)
+      : 0
+
+    const record = {
+      name,
+      product_code: code || null,
+      description: pick(row, ['description', 'notes']) || null,
+      category: pick(row, ['category']) || null,
+      system_type_id: systemName ? (systemByName.get(systemName) ?? null) : null,
+      service_type_id: null,
+      default_unit: pick(row, ['unit', 'default unit']) || null,
+      unit_cost_pence: Math.max(0, unitCost),
+      margin_percent: margin,
+      default_unit_price_pence: sellFromCost(Math.max(0, unitCost), margin),
+      service_sale_price_pence: toPence(pick(row, ['service sale price (£)', 'service sale price'])),
+      ecommerce_price_pence: toPence(pick(row, ['ecommerce price (£)', 'ecommerce price'])),
+      supplier_id: supplierName ? (supplierByName.get(supplierName) ?? null) : null,
+      active: activeRaw ? !['no', 'false', '0', 'n'].includes(activeRaw) : true,
+    }
+
+    if (systemName && !systemByName.has(systemName)) {
+      errors.push(`Row ${lineNo}: unknown system type "${systemName}" — left blank.`)
+    }
+    if (supplierName && !supplierByName.has(supplierName)) {
+      errors.push(`Row ${lineNo}: unknown supplier "${supplierName}" — left blank.`)
+    }
+
+    const matchId =
+      (code && idByCode.get(code.toLowerCase())) || idByName.get(name.toLowerCase()) || null
+
+    if (matchId) {
+      const { error: upErr } = await supabase
+        .from('quote_catalogue_items')
+        .update(record)
+        .eq('id', matchId)
+      if (upErr) errors.push(`Row ${lineNo}: could not update "${name}".`)
+      else updated++
+    } else {
+      const { data: ins, error: insErr } = await supabase
+        .from('quote_catalogue_items')
+        .insert({ ...record, created_by: user.id })
+        .select('id')
+        .single()
+      if (insErr) {
+        errors.push(`Row ${lineNo}: could not create "${name}".`)
+      } else {
+        created++
+        // Track new rows so later duplicates in the same file update, not dupe.
+        if (code) idByCode.set(code.toLowerCase(), ins.id)
+        idByName.set(name.toLowerCase(), ins.id)
+      }
+    }
+  }
+
+  revalidatePath('/dashboard/stock/catalogue')
+  return { ok: true, created, updated, errors }
+}
+
 // Create stock parts from selected sales-catalogue items so they can be issued
 // to locations. Each part links back to its catalogue item; items already
 // stocked are skipped so nothing is added twice.

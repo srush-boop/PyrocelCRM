@@ -38,6 +38,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { MoreHorizontal, Pencil, Trash2, Search, Building2, X } from 'lucide-react'
+import { PrintButton } from '@/components/ui/print-button'
 import { EditSiteDialog } from './edit-site-dialog'
 import type { Site, Route, Client, Branch } from '@/lib/types/database'
 import Link from 'next/link'
@@ -144,10 +145,12 @@ export function SitesTable({ sites, routes, clients, branches = [] }: SitesTable
             Clear
           </Button>
         )}
+
+        <PrintButton targetId="sites-grid" title="Sites" className="ml-auto" />
       </div>
 
       <div className="rounded-md border">
-        <Table>
+        <Table id="sites-grid">
           <TableHeader>
             <TableRow>
               <TableHead>Site Name</TableHead>

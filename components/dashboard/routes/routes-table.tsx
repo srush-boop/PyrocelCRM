@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Input } from '@/components/ui/input'
 import { MoreHorizontal, Pencil, Trash2, Search, Route as RouteIcon, Building2, MapPin } from 'lucide-react'
+import { PrintButton } from '@/components/ui/print-button'
 import { EditRouteDialog } from './edit-route-dialog'
 import { RoutePlannerDialog, type PlannerSite } from './route-planner-dialog'
 import type { Route, Profile } from '@/lib/types/database'
@@ -75,10 +76,11 @@ export function RoutesTable({ routes, engineers, sites }: RoutesTableProps) {
             className="pl-9"
           />
         </div>
+        <PrintButton targetId="routes-grid" title="Routes" className="ml-auto" />
       </div>
 
       <div className="rounded-md border">
-        <Table>
+        <Table id="routes-grid">
           <TableHeader>
             <TableRow>
               <TableHead>Route Name</TableHead>

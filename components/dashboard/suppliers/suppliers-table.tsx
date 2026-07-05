@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Input } from '@/components/ui/input'
 import { MoreHorizontal, Pencil, Trash2, Search, Truck } from 'lucide-react'
+import { PrintButton } from '@/components/ui/print-button'
 import { EditSupplierDialog } from './edit-supplier-dialog'
 import type { Supplier } from '@/lib/types/database'
 
@@ -70,10 +71,11 @@ export function SuppliersTable({ suppliers }: SuppliersTableProps) {
             className="pl-9"
           />
         </div>
+        <PrintButton targetId="suppliers-grid" title="Suppliers" className="ml-auto" />
       </div>
 
       <div className="rounded-md border">
-        <Table>
+        <Table id="suppliers-grid">
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>

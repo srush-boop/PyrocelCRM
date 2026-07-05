@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Search, AlertTriangle, ChevronRight, Package } from 'lucide-react'
+import { PrintButton } from '@/components/ui/print-button'
 import { formatDateUK } from '@/lib/utils'
 import { DEFECT_STATUS_LABELS } from '@/lib/defects'
 import type { DefectStatus } from '@/lib/types/database'
@@ -83,6 +84,7 @@ export function DefectsTable({ defects }: { defects: DefectRow[] }) {
               <SelectItem value="dismissed">Dismissed</SelectItem>
             </SelectContent>
           </Select>
+          <PrintButton targetId="defects-grid" title="Defects" />
         </div>
 
         {filtered.length === 0 ? (
@@ -95,7 +97,7 @@ export function DefectsTable({ defects }: { defects: DefectRow[] }) {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <Table>
+            <Table id="defects-grid">
               <TableHeader>
                 <TableRow>
                   <TableHead>Reference</TableHead>

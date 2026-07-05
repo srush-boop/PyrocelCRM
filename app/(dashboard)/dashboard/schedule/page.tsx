@@ -1,5 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
+import { CalendarClock } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { ScheduleView } from '@/components/dashboard/schedule/schedule-view'
 import { CreateTaskDialog } from '@/components/dashboard/schedule/create-task-dialog'
 import { GenerateCallsButton } from '@/components/dashboard/schedule/generate-calls-button'
@@ -105,6 +108,14 @@ export default async function SchedulePage({
             <BranchFilter branches={scope.branches} activeBranchId={scope.activeBranchId} />
           )}
           <ScanQrButton />
+          {isAdminOrOffice && (
+            <Button asChild variant="outline">
+              <Link href="/dashboard/schedule/planning">
+                <CalendarClock className="h-4 w-4" />
+                Planning
+              </Link>
+            </Button>
+          )}
           {isAdminOrOffice && <GenerateCallsButton />}
           {isAdminOrOffice && (
             <CreateTaskDialog 

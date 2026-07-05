@@ -10,6 +10,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import {
   Building2,
+  Route,
   ClipboardCheck,
   AlertTriangle,
   Calendar,
@@ -73,6 +74,7 @@ export default async function DashboardPage() {
 
   const [
     sitesCount,
+    routesCount,
     engineersCount,
     pendingCount,
     inProgressCount,
@@ -81,6 +83,7 @@ export default async function DashboardPage() {
     openDefectsCount,
   ] = await Promise.all([
     supabase.from('sites').select('id', { count: 'exact', head: true }),
+    supabase.from('routes').select('id', { count: 'exact', head: true }),
     supabase
       .from('profiles')
       .select('id', { count: 'exact', head: true })
@@ -198,6 +201,13 @@ export default async function DashboardPage() {
       hint: 'On the team',
       icon: Users,
       href: '/dashboard/engineers',
+    },
+    {
+      label: 'Routes',
+      value: routesCount.count || 0,
+      hint: 'Geographic areas',
+      icon: Route,
+      href: '/dashboard/routes',
     },
     {
       label: 'Open Tasks',

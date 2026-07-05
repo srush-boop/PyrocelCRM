@@ -2,7 +2,12 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { parseDateString, toDateString } from '@/lib/scheduling'
+import {
+  parseDateString,
+  toDateString,
+  computeEvenlySplitVisitDates,
+  fetchVisitsByServiceType,
+} from '@/lib/scheduling'
 
 export interface GenerateMonthlyCallsResult {
   ok: boolean
@@ -14,6 +19,7 @@ export interface GenerateMonthlyCallsResult {
 
 interface ServiceRow {
   id: string
+  service_type_id: string
   frequency_value: number
   frequency_unit: 'weeks' | 'months'
   next_service_date: string | null
@@ -90,7 +96,7 @@ export async function generateMonthlyCalls(
   const { data: serviceData, error: svcError } = await supabase
     .from('site_services')
     .select(
-      `id, frequency_value, frequency_unit, next_service_date, active,
+      `id, service_type_id, frequency_value, frequency_unit, next_service_date, active,
        site:sites(status),
        service_type:service_types(status)`,
     )
@@ -118,9 +124,21 @@ export async function generateMonthlyCalls(
   }
   const tasks = (taskData || []) as TaskRow[]
 
+  // Authoritative visit types per service type (ordered by sort_order). This is
+  // what lets us generate a visit that was deferred at setup and therefore has
+  // no task history yet.
+  const visitsByServiceType = await fetchVisitsByServiceType(
+    supabase,
+    services.map((s) => s.service_type_id),
+  )
+
   const groupKey = (ssId: string, visitId: string | null) => `${ssId}|${visitId ?? 'none'}`
 
-  // Latest scheduled date per service+visit (the cadence anchor).
+  // Earliest scheduled date per service — the phase reference for deriving a
+  // visit's cadence when the visit itself has no history yet.
+  const earliestByService = new Map<string, string>()
+  // Latest scheduled date per service+visit — the cadence anchor for visits
+  // that DO have history (respects a drifted cadence from late completions).
   const latestByGroup = new Map<string, string>()
   // Service+visit combinations that already have a call in the target month.
   const coveredThisMonth = new Set<string>()
@@ -128,6 +146,10 @@ export async function generateMonthlyCalls(
   const endStr = toDateString(monthEnd)
 
   for (const t of tasks) {
+    const prevEarliest = earliestByService.get(t.site_service_id)
+    if (!prevEarliest || t.scheduled_date < prevEarliest) {
+      earliestByService.set(t.site_service_id, t.scheduled_date)
+    }
     const key = groupKey(t.site_service_id, t.visit_type_id)
     const prev = latestByGroup.get(key)
     if (!prev || t.scheduled_date > prev) latestByGroup.set(key, t.scheduled_date)
@@ -140,39 +162,41 @@ export async function generateMonthlyCalls(
   let skipped = 0
 
   for (const svc of services) {
-    // Determine which visit-type groups this service has from its history.
-    // A live service always has at least its seeded call(s). Fall back to a
-    // single null-visit group anchored on next_service_date if there is none.
-    const groups = Array.from(latestByGroup.keys()).filter((k) =>
-      k.startsWith(`${svc.id}|`),
-    )
-    const groupList: { key: string; visitId: string | null; anchor: string | null }[] =
-      groups.length > 0
-        ? groups.map((k) => ({
-            key: k,
-            visitId: k.endsWith('|none') ? null : k.split('|')[1],
-            anchor: latestByGroup.get(k) ?? svc.next_service_date,
-          }))
-        : [
-            {
-              key: groupKey(svc.id, null),
-              visitId: null,
-              anchor: svc.next_service_date,
-            },
-          ]
+    const visits = visitsByServiceType.get(svc.service_type_id) ?? []
+    const visitCount = Math.max(1, visits.length)
+    // Build the visit-type groups from the service definition (not history), so
+    // deferred visits are included. Zero-visit services use a single null group.
+    const groupList =
+      visits.length > 0
+        ? visits.map((v, index) => ({ visitId: v.id as string | null, index }))
+        : [{ visitId: null as string | null, index: 0 }]
+
+    const serviceEarliest = earliestByService.get(svc.id) ?? svc.next_service_date
 
     for (const g of groupList) {
-      if (coveredThisMonth.has(g.key)) {
+      const key = groupKey(svc.id, g.visitId)
+      if (coveredThisMonth.has(key)) {
         skipped += 1
         continue
       }
-      if (!g.anchor) continue
+
+      // Anchor priority: the visit's own latest call (accurate for a drifted
+      // cadence); otherwise derive its first occurrence from the service phase
+      // using the evenly-split offset for this visit's index.
+      let anchor: string | null = latestByGroup.get(key) ?? null
+      if (!anchor) {
+        if (!serviceEarliest) continue
+        anchor = computeEvenlySplitVisitDates(
+          serviceEarliest,
+          { frequency_value: svc.frequency_value, frequency_unit: svc.frequency_unit },
+          visitCount,
+        )[g.index]
+      }
 
       // Roll the fixed cadence from the anchor toward the target month. The
-      // anchor (latest existing call) is usually before the month, so we roll
-      // forward; if it sits beyond the month we roll backward, so a genuine gap
-      // in the target month is still filled.
-      let project = parseDateString(g.anchor)
+      // anchor is usually before the month, so we roll forward; if it sits
+      // beyond the month we roll backward, so a genuine gap is still filled.
+      let project = parseDateString(anchor)
       let guard = 0
       while (project < monthStart && guard < 1040) {
         project = addFrequency(project, svc.frequency_value, svc.frequency_unit)
@@ -191,7 +215,7 @@ export async function generateMonthlyCalls(
           scheduled_date: toDateString(project),
         })
         // Guard against two groups projecting onto the same month slot.
-        coveredThisMonth.add(g.key)
+        coveredThisMonth.add(key)
       }
     }
   }

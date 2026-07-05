@@ -42,7 +42,6 @@ import {
   MessageSquareText,
   History,
   Archive,
-  Truck,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { UserRole } from '@/lib/types/database'
@@ -158,7 +157,7 @@ const salesNavItem: NavItem = {
     { title: 'Quotes', href: '/dashboard/sales/quotes', icon: ReceiptText },
     { title: 'Quote Bank', href: '/dashboard/sales/quote-bank', icon: Landmark },
     {
-      title: 'Configure',
+      title: 'Sales Configuration',
       icon: Settings,
       children: [
         { title: 'Direct Costs', href: '/dashboard/sales/direct-costs', icon: Coins },
@@ -176,21 +175,20 @@ const salesNavItem: NavItem = {
 
 const managerStockNavItem: NavItem = {
   key: 'stock',
-  title: 'Products',
+  title: 'Stock',
   icon: Boxes,
   children: [
     { title: 'Overview', href: '/dashboard/stock', icon: Boxes },
     { title: 'Transfer Stock', href: '/dashboard/stock/transfer', icon: Route },
     { title: 'Parts Catalogue', href: '/dashboard/stock/parts', icon: BookOpen },
     { title: 'Quote Catalogue', href: '/dashboard/stock/catalogue', icon: BookOpen },
-    { title: 'Suppliers', href: '/dashboard/suppliers', icon: Truck },
     { title: 'Transfers Report', href: '/dashboard/stock/report', icon: FileText },
   ],
 }
 
 const engineerStockNavItem: NavItem = {
   key: 'stock',
-  title: 'Products',
+  title: 'Stock',
   icon: Boxes,
   children: [
     { title: 'Overview', href: '/dashboard/stock', icon: Boxes },

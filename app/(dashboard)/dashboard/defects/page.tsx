@@ -29,7 +29,7 @@ export default async function DefectsPage() {
       `*,
        site:sites(id, name),
        client:clients(id, name),
-       task:tasks!defects_task_id_fkey(id, site_service:site_services(service_type:service_types(name)))`,
+       task:tasks(id, site_service:site_services(service_type:service_types(name)))`,
     )
     .order('created_at', { ascending: false })
 

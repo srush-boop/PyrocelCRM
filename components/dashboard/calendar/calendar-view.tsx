@@ -252,7 +252,9 @@ export function CalendarView({
   // Selecting a task opens it directly; routes and entries open the detail sheet.
   const handleSelect = (it: CalendarItem) => {
     if (it.kind === 'task' && it.taskId) {
-      router.push(`/dashboard/tasks/${it.taskId}`)
+      // Pass the origin so the task's Back button returns here deterministically
+      // (router.back() is unreliable after auth redirects / hard refreshes).
+      router.push(`/dashboard/tasks/${it.taskId}?from=/dashboard/calendar`)
       return
     }
     setSelected(it)
@@ -471,7 +473,7 @@ export function CalendarView({
                 <div className="flex gap-2 pt-2">
                   {selected.kind === 'task' && selected.taskId && (
                     <Button asChild variant="outline" size="sm">
-                      <Link href={`/dashboard/tasks/${selected.taskId}`}>
+                      <Link href={`/dashboard/tasks/${selected.taskId}?from=/dashboard/calendar`}>
                         <ExternalLink className="mr-2 h-4 w-4" />
                         Open task
                       </Link>

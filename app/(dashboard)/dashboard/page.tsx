@@ -355,7 +355,7 @@ export default async function DashboardPage() {
                 {overdueTasks.map((task) => (
                   <Link
                     key={task.id}
-                    href={`/dashboard/tasks/${task.id}`}
+                    href={`/dashboard/tasks/${task.id}?from=/dashboard`}
                     className="flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors hover:border-primary/50 hover:bg-accent/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <div className="min-w-0 space-y-0.5">
@@ -395,7 +395,7 @@ export default async function DashboardPage() {
                 {upcomingTasks.map((task) => (
                   <Link
                     key={task.id}
-                    href={`/dashboard/tasks/${task.id}`}
+                    href={`/dashboard/tasks/${task.id}?from=/dashboard`}
                     className="flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors hover:border-primary/50 hover:bg-accent/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <div className="min-w-0 space-y-0.5">

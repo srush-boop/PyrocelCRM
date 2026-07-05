@@ -124,11 +124,20 @@ function buildRouteItems(
   return out
 }
 
+// All-day entries are stored at UTC midnight and are timezone-independent, so we
+// read their calendar date from UTC parts. Timed entries use the viewer's local
+// time as normal.
+function itemDay(iso: string, allDay: boolean): Date {
+  const dt = new Date(iso)
+  if (allDay) return new Date(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate())
+  return startOfDay(dt)
+}
+
 function itemsForDay(items: CalendarItem[], day: Date): CalendarItem[] {
   return items
     .filter((it) => {
-      const start = startOfDay(new Date(it.start))
-      const end = startOfDay(new Date(it.end))
+      const start = itemDay(it.start, it.allDay)
+      const end = itemDay(it.end, it.allDay)
       const d = startOfDay(day)
       return isWithinInterval(d, { start, end })
     })

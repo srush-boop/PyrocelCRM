@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
@@ -12,13 +12,16 @@ import {
   BookOpen,
   Paperclip,
   Save,
+  Upload,
+  FileText,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Progress } from '@/components/ui/progress'
 import {
   Select,
   SelectContent,
@@ -49,12 +52,43 @@ interface RecommendedEvidence {
   title: string
 }
 
+// Draft an answer for a single question via the RAG endpoint, then persist it.
+// Returns the saved answer + sources, or null on failure.
+async function draftAndSave(
+  question: TenderQuestion,
+): Promise<{ answer: string; sources: TenderAnswerSource[] } | null> {
+  const res = await fetch('/api/tender/answer', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question: question.question }),
+  })
+  if (!res.ok) return null
+  const data = await res.json()
+  const answer: string = data.answer ?? ''
+  const sources: TenderAnswerSource[] = data.sources ?? []
+  if (!answer.trim()) return null
+
+  await fetch(`/api/tender/questions/${question.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ answer, sources, status: 'draft' }),
+  })
+  return { answer, sources }
+}
+
 export function TenderWorkspace({ tender, initialQuestions }: WorkspaceProps) {
   const router = useRouter()
   const [questions, setQuestions] = useState<TenderQuestion[]>(initialQuestions)
   const [status, setStatus] = useState<TenderStatus>(tender.status)
   const [newQuestion, setNewQuestion] = useState('')
   const [adding, setAdding] = useState(false)
+
+  // Tender-pack upload + auto-draft state.
+  const [file, setFile] = useState<File | null>(null)
+  const [autoDraft, setAutoDraft] = useState(true)
+  const [extracting, setExtracting] = useState(false)
+  const [draftProgress, setDraftProgress] = useState<{ current: number; total: number } | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const updateStatus = useCallback(
     async (value: TenderStatus) => {
@@ -73,6 +107,10 @@ export function TenderWorkspace({ tender, initialQuestions }: WorkspaceProps) {
     },
     [tender.id],
   )
+
+  const patchQuestion = useCallback((id: string, patch: Partial<TenderQuestion>) => {
+    setQuestions((prev) => prev.map((q) => (q.id === id ? { ...q, ...patch } : q)))
+  }, [])
 
   const addQuestion = useCallback(async () => {
     if (!newQuestion.trim()) return
@@ -94,9 +132,76 @@ export function TenderWorkspace({ tender, initialQuestions }: WorkspaceProps) {
     }
   }, [newQuestion, tender.id])
 
-  const patchQuestion = useCallback((id: string, patch: Partial<TenderQuestion>) => {
-    setQuestions((prev) => prev.map((q) => (q.id === id ? { ...q, ...patch } : q)))
-  }, [])
+  // Draft answers for a batch of freshly-added questions, one at a time, so the
+  // UI can show progress and each answer streams into its card as it completes.
+  const batchDraft = useCallback(
+    async (toDraft: TenderQuestion[]) => {
+      setDraftProgress({ current: 0, total: toDraft.length })
+      let failures = 0
+      for (let i = 0; i < toDraft.length; i++) {
+        setDraftProgress({ current: i + 1, total: toDraft.length })
+        try {
+          const result = await draftAndSave(toDraft[i])
+          if (result) {
+            patchQuestion(toDraft[i].id, {
+              answer: result.answer,
+              sources: result.sources,
+              status: 'draft',
+            })
+          } else {
+            failures++
+          }
+        } catch {
+          failures++
+        }
+      }
+      setDraftProgress(null)
+      if (failures === 0) {
+        toast.success(`Drafted ${toDraft.length} answer${toDraft.length === 1 ? '' : 's'}`)
+      } else if (failures < toDraft.length) {
+        toast.warning(`Drafted ${toDraft.length - failures} of ${toDraft.length}. ${failures} need a manual draft.`)
+      } else {
+        toast.error('Could not draft answers. Add company knowledge in the Knowledge Centre, then try again.')
+      }
+    },
+    [patchQuestion],
+  )
+
+  const extractPack = useCallback(async () => {
+    if (!file) return
+    setExtracting(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch(`/api/tender/tenders/${tender.id}/extract`, {
+        method: 'POST',
+        body: fd,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Failed to read the tender pack')
+
+      const extracted: TenderQuestion[] = data.questions ?? []
+      if (extracted.length === 0) {
+        toast.info(data.message ?? 'No answerable questions were found in that document.')
+        return
+      }
+
+      setQuestions((prev) => [...prev, ...extracted])
+      setFile(null)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      toast.success(`Extracted ${extracted.length} question${extracted.length === 1 ? '' : 's'} from the pack`)
+
+      if (autoDraft) {
+        await batchDraft(extracted)
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to read the tender pack')
+    } finally {
+      setExtracting(false)
+    }
+  }, [file, tender.id, autoDraft, batchDraft])
+
+  const busy = extracting || draftProgress !== null
 
   return (
     <div className="flex flex-col gap-6">
@@ -126,6 +231,74 @@ export function TenderWorkspace({ tender, initialQuestions }: WorkspaceProps) {
         </div>
       </div>
 
+      {/* Upload tender pack */}
+      <Card className="border-primary/30 bg-primary/[0.03]">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Upload className="size-4 text-primary" />
+            <h2 className="font-medium">Upload the client tender pack</h2>
+          </div>
+          <p className="text-sm text-muted-foreground text-pretty">
+            Upload the tender document (PDF, Word or text). The AI reads it, pulls out every
+            question, and can draft a grounded answer to each one automatically.
+          </p>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <input
+              ref={fileInputRef}
+              id="tender-pack"
+              type="file"
+              accept=".pdf,.docx,.txt,.md,.csv,application/pdf"
+              disabled={busy}
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              className="block w-full cursor-pointer rounded-md border bg-background text-sm file:mr-3 file:cursor-pointer file:border-0 file:bg-muted file:px-3 file:py-2 file:text-sm file:font-medium disabled:opacity-50"
+            />
+          </div>
+
+          {tender.pack_file_name && !file && (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <FileText className="size-3.5" />
+              Last uploaded: {tender.pack_file_name}
+            </p>
+          )}
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={autoDraft}
+                onCheckedChange={(v) => setAutoDraft(v === true)}
+                disabled={busy}
+              />
+              Automatically draft answers with AI after extracting
+            </label>
+            <Button onClick={extractPack} disabled={busy || !file}>
+              {extracting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Sparkles className="size-4" />
+              )}
+              {extracting ? 'Reading pack…' : 'Extract questions'}
+            </Button>
+          </div>
+
+          {draftProgress && (
+            <div className="flex flex-col gap-1.5 rounded-md border bg-background p-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-1.5">
+                  <Loader2 className="size-4 animate-spin text-primary" />
+                  Drafting answers…
+                </span>
+                <span className="text-muted-foreground">
+                  {draftProgress.current} of {draftProgress.total}
+                </span>
+              </div>
+              <Progress value={(draftProgress.current / draftProgress.total) * 100} />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Add question */}
       <Card>
         <CardHeader className="pb-3">
@@ -150,7 +323,7 @@ export function TenderWorkspace({ tender, initialQuestions }: WorkspaceProps) {
       {/* Questions */}
       {questions.length === 0 ? (
         <p className="rounded-lg border border-dashed py-10 text-center text-sm text-muted-foreground">
-          No questions yet. Add one above to start drafting answers.
+          No questions yet. Upload the tender pack above, or add a question manually.
         </p>
       ) : (
         <div className="flex flex-col gap-4">
@@ -187,6 +360,18 @@ function QuestionCard({
   const [saving, setSaving] = useState(false)
   const [winning, setWinning] = useState(question.is_winning_response)
 
+  // Adopt answers that arrive from outside this card (e.g. the batch auto-draft
+  // updating parent state) without clobbering the user's in-progress edits.
+  const lastSyncedAnswer = useRef(question.answer ?? '')
+  useEffect(() => {
+    const incoming = question.answer ?? ''
+    if (incoming !== lastSyncedAnswer.current) {
+      lastSyncedAnswer.current = incoming
+      setAnswer(incoming)
+      setSources(question.sources ?? [])
+    }
+  }, [question.answer, question.sources])
+
   const generate = useCallback(async () => {
     setGenerating(true)
     try {
@@ -197,6 +382,7 @@ function QuestionCard({
       })
       if (!res.ok) throw new Error('Failed to generate answer')
       const data = await res.json()
+      lastSyncedAnswer.current = data.answer ?? ''
       setAnswer(data.answer ?? '')
       setSources(data.sources ?? [])
       setEvidence(data.recommendedEvidence ?? [])
@@ -228,6 +414,7 @@ function QuestionCard({
         } else {
           toast.success('Answer saved')
         }
+        lastSyncedAnswer.current = answer
         onPatch(question.id, {
           answer,
           sources,

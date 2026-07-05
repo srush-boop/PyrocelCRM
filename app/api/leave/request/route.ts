@@ -26,7 +26,9 @@ export async function POST(req: NextRequest) {
     const admin = createAdminClient()
     const { data: entry } = await admin
       .from('calendar_entries')
-      .select('id, user_id, entry_type_id, approval_status, start_at, end_at, created_by')
+      .select(
+        'id, user_id, entry_type_id, approval_status, start_at, end_at, created_by, start_portion, end_portion, start_hours, end_hours',
+      )
       .eq('id', entryId)
       .single()
 
@@ -57,15 +59,28 @@ export async function POST(req: NextRequest) {
 
     const fmt = (s: string) =>
       new Date(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-    const range =
-      fmt(entry.start_at as string) === fmt(entry.end_at as string)
-        ? fmt(entry.start_at as string)
-        : `${fmt(entry.start_at as string)} – ${fmt(entry.end_at as string)}`
+    const sameDay = fmt(entry.start_at as string) === fmt(entry.end_at as string)
+    const range = sameDay
+      ? fmt(entry.start_at as string)
+      : `${fmt(entry.start_at as string)} – ${fmt(entry.end_at as string)}`
+
+    // Note part-day requests so the approver sees them at a glance.
+    const startPortion = (entry.start_portion as string | null) ?? 'full'
+    const endPortion = (entry.end_portion as string | null) ?? 'full'
+    let portionNote = ''
+    if (startPortion === 'hours' || endPortion === 'hours') {
+      const parts: string[] = []
+      if (entry.start_hours != null) parts.push(`${entry.start_hours} hrs`)
+      if (!sameDay && entry.end_hours != null) parts.push(`${entry.end_hours} hrs`)
+      portionNote = parts.length > 0 ? `, ${parts.join(' + ')}` : ''
+    } else if (startPortion === 'am' || startPortion === 'pm' || endPortion === 'am' || endPortion === 'pm') {
+      portionNote = sameDay ? ', half day' : ', part days'
+    }
 
     await notifyUsers({
       userIds: approvers,
       title: 'Annual leave request',
-      body: `${who} has requested annual leave (${range}).`,
+      body: `${who} has requested annual leave (${range}${portionNote}).`,
       url: '/dashboard/approvals',
       category: 'leave',
       createdBy: user.id,

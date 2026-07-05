@@ -158,7 +158,11 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
        visit_type:service_visit_types(name),
        task_results(testing_start_time, testing_end_time)`,
     )
-    .not('scheduled_date', 'is', null)
+    // Include jobs with a forward-booked date, plus completed/in-progress jobs
+    // even when they were never formally scheduled — those carry actual on-site
+    // or commencement times, so they can still be placed on the calendar "in
+    // hindsight". Unplaceable rows are filtered out when building items below.
+    .or('scheduled_date.not.is.null,status.eq.completed,status.eq.in_progress')
     .neq('status', 'cancelled')
 
   if (isEngineer) {
@@ -239,7 +243,8 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
         ? [t.task_results]
         : []
     const result = taskResults.find((r) => r.testing_start_time)
-    const hasSlot = !!t.booked_start_time
+    // A booked slot is only usable when we also have the day it falls on.
+    const hasSlot = !!t.booked_start_time && !!t.scheduled_date
     const hasActual = !!result?.testing_start_time
     // A job is "commenced" once the engineer taps Start (status in_progress with
     // a recorded started_at) but hasn't yet submitted its final on-site times.
@@ -269,10 +274,15 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
       end = (result!.testing_end_time as string) || (result!.testing_start_time as string)
       allDay = false
       timeNote = 'Actual time'
-    } else {
+    } else if (t.scheduled_date) {
       start = combineDateTime(t.scheduled_date, null, '00:00:00')
       end = combineDateTime(t.scheduled_date, null, '23:59:00')
       allDay = true
+    } else {
+      // No booked slot, no actual on-site times, not commenced and never
+      // scheduled: there is no date to anchor it to, so leave it off the
+      // calendar rather than rendering it at an arbitrary time.
+      continue
     }
 
     const siteName = t.site_service?.site?.name ?? 'Service task'

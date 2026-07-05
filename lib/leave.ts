@@ -1,6 +1,6 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
-import type { WorkDayHours } from '@/lib/types/database'
+import type { LeavePortion, WorkDayHours } from '@/lib/types/database'
 import { ANNUAL_LEAVE_TYPE_ID, BANK_HOLIDAY_TYPE_ID } from '@/lib/constants/leave'
 
 // Re-export for existing server-side importers.
@@ -44,39 +44,104 @@ function netHoursForWeekday(hours: WorkDayHours | null, weekday: number): number
 }
 
 /**
- * Walks the inclusive day range of a leave entry (clamped to the calendar year)
- * and accumulates the working days and net working hours it consumes. Weekends,
- * bank holidays and any day the user does not normally work are excluded.
+ * Resolves how much of a single working day a portion consumes, given that
+ * day's net working hours and (for 'hours' portions) the hours booked.
+ * Returns both the fraction of a day (for day-based balances) and the raw hours
+ * (for hour-based balances). 'hours' is capped at the day's net hours — you
+ * cannot book more leave than the day contains.
  */
-function consumeRange(
+function portionUsage(
+  portion: LeavePortion,
+  netHours: number,
+  hoursField: number | null,
+): { dayFraction: number; hours: number } {
+  switch (portion) {
+    case 'am':
+    case 'pm':
+      return { dayFraction: 0.5, hours: netHours / 2 }
+    case 'hours': {
+      const booked = Math.min(Math.max(Number(hoursField) || 0, 0), netHours)
+      return { dayFraction: netHours > 0 ? booked / netHours : 0, hours: booked }
+    }
+    case 'full':
+    default:
+      return { dayFraction: 1, hours: netHours }
+  }
+}
+
+// Options describing partial-day portions and the user's working pattern for a
+// single leave span. All fields are optional and default to today's whole-day
+// behaviour (portions = 'full', Mon–Fri, default day hours).
+export interface LeaveSpanOptions {
+  startPortion?: LeavePortion
+  endPortion?: LeavePortion
+  startHours?: number | null
+  endHours?: number | null
+  workDays?: number[]
+  workDayHours?: WorkDayHours | null
+  // When set, the span is clamped to this calendar year (used by balances so a
+  // request straddling year-end only counts the portion inside the year).
+  year?: number
+}
+
+/**
+ * Walks the inclusive day range of a leave entry and accumulates both the
+ * working days and net working hours it consumes. Weekends, bank holidays and
+ * any day the user does not normally work are excluded. Partial-day portions
+ * (half-day AM/PM or custom hours) apply to the first and last day only; every
+ * day in between is a full working day. This is the single source of truth for
+ * how much leave a request costs, in both days and hours.
+ */
+export function computeLeaveSpan(
   startAt: string,
   endAt: string,
-  year: number,
-  workDays: number[],
-  workDayHours: WorkDayHours | null,
   bankHolidays: Set<string>,
+  opts: LeaveSpanOptions = {},
 ): { days: number; hours: number } {
-  const yearStart = Date.UTC(year, 0, 1)
-  const yearEnd = Date.UTC(year, 11, 31)
+  const workDays = opts.workDays && opts.workDays.length > 0 ? opts.workDays : DEFAULT_WORK_DAYS
+  const workDayHours = opts.workDayHours ?? null
+  const startPortion = opts.startPortion ?? 'full'
+  const endPortion = opts.endPortion ?? 'full'
 
   const start = new Date(startAt)
   const end = new Date(endAt)
   let cursor = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate())
   const last = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate())
+  // The real first/last calendar days of the booking (before any year clamp), so
+  // the partial portions attach to the correct days.
+  const firstKey = cursor
+  const lastKey = last
 
-  if (cursor < yearStart) cursor = yearStart
-  const stop = Math.min(last, yearEnd)
+  let stop = last
+  if (opts.year != null) {
+    const yearStart = Date.UTC(opts.year, 0, 1)
+    const yearEnd = Date.UTC(opts.year, 11, 31)
+    if (cursor < yearStart) cursor = yearStart
+    stop = Math.min(last, yearEnd)
+  }
 
   let days = 0
   let hours = 0
   const oneDay = 24 * 60 * 60 * 1000
   while (cursor <= stop) {
-    const d = new Date(cursor)
-    const weekday = isoWeekday(d)
+    const weekday = isoWeekday(new Date(cursor))
     // Skip non-working days and bank holidays.
     if (workDays.includes(weekday) && !bankHolidays.has(dayKey(cursor))) {
-      days += 1
-      hours += netHoursForWeekday(workDayHours, weekday) ?? DEFAULT_DAY_HOURS
+      const net = netHoursForWeekday(workDayHours, weekday) ?? DEFAULT_DAY_HOURS
+      // Middle days are always full. Single-day bookings (firstKey === lastKey)
+      // use the start portion. The first-day check wins when they coincide.
+      let portion: LeavePortion = 'full'
+      let hoursField: number | null = null
+      if (cursor === firstKey) {
+        portion = startPortion
+        hoursField = opts.startHours ?? null
+      } else if (cursor === lastKey) {
+        portion = endPortion
+        hoursField = opts.endHours ?? null
+      }
+      const { dayFraction, hours: dayHours } = portionUsage(portion, net, hoursField)
+      days += dayFraction
+      hours += dayHours
     }
     cursor += oneDay
   }
@@ -85,31 +150,6 @@ function consumeRange(
 
 // Re-export the working-hours type for consumers that build day/hour views.
 export type { WorkDayHours }
-
-/**
- * Counts the working days a leave entry spans (weekends, bank holidays and the
- * user's non-working days excluded). Not year-clamped — intended for showing the
- * length of a single request in the Approvals area.
- */
-export function countWorkingDays(
-  startAt: string,
-  endAt: string,
-  bankHolidays: Set<string>,
-  workDays: number[] = DEFAULT_WORK_DAYS,
-): number {
-  const start = new Date(startAt)
-  const end = new Date(endAt)
-  let cursor = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate())
-  const last = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate())
-  let days = 0
-  const oneDay = 24 * 60 * 60 * 1000
-  while (cursor <= last) {
-    const weekday = isoWeekday(new Date(cursor))
-    if (workDays.includes(weekday) && !bankHolidays.has(dayKey(cursor))) days += 1
-    cursor += oneDay
-  }
-  return days
-}
 
 export interface LeaveBalance {
   entitlementDays: number | null
@@ -181,7 +221,7 @@ export async function computeLeaveBalances(
   // Only APPROVED annual leave counts towards taken balances.
   const { data: entries } = await admin
     .from('calendar_entries')
-    .select('user_id, start_at, end_at')
+    .select('user_id, start_at, end_at, start_portion, end_portion, start_hours, end_hours')
     .eq('entry_type_id', ANNUAL_LEAVE_TYPE_ID)
     .eq('approval_status', 'approved')
     .lte('start_at', rangeEnd)
@@ -191,23 +231,30 @@ export async function computeLeaveBalances(
     const userId = e.user_id as string
     const bal = balances.get(userId)
     if (!bal) continue
-    const { days, hours } = consumeRange(
+    const { days, hours } = computeLeaveSpan(
       e.start_at as string,
       e.end_at as string,
-      year,
-      workDaysByUser.get(userId) ?? DEFAULT_WORK_DAYS,
-      workHoursByUser.get(userId) ?? null,
       bankHolidays,
+      {
+        year,
+        workDays: workDaysByUser.get(userId) ?? DEFAULT_WORK_DAYS,
+        workDayHours: workHoursByUser.get(userId) ?? null,
+        startPortion: (e.start_portion as LeavePortion) ?? 'full',
+        endPortion: (e.end_portion as LeavePortion) ?? 'full',
+        startHours: (e.start_hours as number | null) ?? null,
+        endHours: (e.end_hours as number | null) ?? null,
+      },
     )
     bal.takenDays += days
     bal.takenHours += hours
   }
 
   for (const bal of balances.values()) {
-    // Round hours to 2dp to avoid float noise.
+    // Round to avoid float noise now that days can be fractional (0.5, etc.).
     bal.takenHours = Math.round(bal.takenHours * 100) / 100
+    bal.takenDays = Math.round(bal.takenDays * 100) / 100
     if (bal.entitlementDays != null) {
-      bal.remainingDays = Math.max(0, bal.entitlementDays - bal.takenDays)
+      bal.remainingDays = Math.max(0, Math.round((bal.entitlementDays - bal.takenDays) * 100) / 100)
     }
     if (bal.entitlementHours != null) {
       bal.remainingHours = Math.max(0, Math.round((bal.entitlementHours - bal.takenHours) * 100) / 100)

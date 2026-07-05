@@ -18,6 +18,15 @@ import type { EmergencyContact, SiteBuildingInfo } from '@/lib/types/database'
 interface BuildingInfoFormProps {
   siteId: string
   info: SiteBuildingInfo | null
+  /**
+   * Persist handler. Defaults to the staff dashboard action, but the public
+   * (QR) log book passes an occupier-facing action so clients can edit too.
+   */
+  onSave?: (
+    siteId: string,
+    values: BuildingInfoValues,
+  ) => Promise<{ ok: boolean; error?: string }>
+  submitLabel?: string
 }
 
 function initialValues(info: SiteBuildingInfo | null): BuildingInfoValues {
@@ -39,7 +48,12 @@ function initialValues(info: SiteBuildingInfo | null): BuildingInfoValues {
   }
 }
 
-export function BuildingInfoForm({ siteId, info }: BuildingInfoFormProps) {
+export function BuildingInfoForm({
+  siteId,
+  info,
+  onSave = saveSiteBuildingInfo,
+  submitLabel = 'Save building information',
+}: BuildingInfoFormProps) {
   const router = useRouter()
   const [values, setValues] = useState<BuildingInfoValues>(() => initialValues(info))
   const [submitting, setSubmitting] = useState(false)
@@ -70,7 +84,7 @@ export function BuildingInfoForm({ siteId, info }: BuildingInfoFormProps) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSubmitting(true)
-    const result = await saveSiteBuildingInfo(siteId, values)
+    const result = await onSave(siteId, values)
     setSubmitting(false)
     if (!result.ok) {
       toast.error(result.error ?? 'Could not save building information.')
@@ -294,7 +308,7 @@ export function BuildingInfoForm({ siteId, info }: BuildingInfoFormProps) {
       </section>
 
       <Button type="submit" disabled={submitting}>
-        {submitting ? 'Saving…' : 'Save building information'}
+        {submitting ? 'Saving…' : submitLabel}
       </Button>
     </form>
   )

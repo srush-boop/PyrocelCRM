@@ -5,7 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LogbookTimeline } from '@/components/logbook/logbook-timeline'
 import { LogbookEntryForm, type LogbookEntryFormValues } from '@/components/logbook/logbook-entry-form'
-import { addOccupierEntry, type PublicLogbookData } from '@/app/logbook/[siteId]/actions'
+import { BuildingInfoForm } from '@/components/dashboard/sites/building-info-form'
+import {
+  addOccupierEntry,
+  saveOccupierBuildingInfo,
+  type PublicLogbookData,
+} from '@/app/logbook/[siteId]/actions'
 
 export function PublicLogbook({ data }: { data: PublicLogbookData }) {
   const router = useRouter()
@@ -37,8 +42,9 @@ export function PublicLogbook({ data }: { data: PublicLogbookData }) {
       </header>
 
       <Tabs defaultValue="timeline" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="timeline">Log book</TabsTrigger>
+          <TabsTrigger value="building">Building info</TabsTrigger>
           <TabsTrigger value="add">Add entry</TabsTrigger>
         </TabsList>
 
@@ -52,6 +58,26 @@ export function PublicLogbook({ data }: { data: PublicLogbookData }) {
             </CardHeader>
             <CardContent>
               <LogbookTimeline reports={data.reports} entries={data.entries} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="building" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">General building information</CardTitle>
+              <CardDescription>
+                Keep the responsible person, competent person, Fire Risk Assessment and emergency
+                contacts up to date for this premises.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <BuildingInfoForm
+                siteId={data.site.id}
+                info={data.buildingInfo}
+                onSave={saveOccupierBuildingInfo}
+                submitLabel="Save building information"
+              />
             </CardContent>
           </Card>
         </TabsContent>

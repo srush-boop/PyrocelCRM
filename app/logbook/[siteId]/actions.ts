@@ -3,7 +3,8 @@
 import crypto from 'crypto'
 import { cookies } from 'next/headers'
 import { createAdminClient } from '@/lib/supabase/admin'
-import type { LogbookEntry, LogbookEntryType } from '@/lib/types/database'
+import type { LogbookEntry, LogbookEntryType, SiteBuildingInfo } from '@/lib/types/database'
+import type { BuildingInfoValues } from '@/app/(dashboard)/dashboard/sites/[id]/logbook-actions'
 import { LOGBOOK_ENTRY_TYPES } from '@/lib/logbook'
 
 const COOKIE_PREFIX = 'lb_access_'
@@ -84,6 +85,7 @@ export async function unlockLogbook(
 
 export interface PublicLogbookData {
   site: { id: string; name: string; address: string }
+  buildingInfo: SiteBuildingInfo | null
   reports: {
     id: string
     date: string
@@ -106,6 +108,12 @@ export async function getPublicLogbook(siteId: string): Promise<PublicLogbookDat
     .eq('id', siteId)
     .single()
   if (!site) return null
+
+  const { data: buildingInfo } = await admin
+    .from('site_building_info')
+    .select('*')
+    .eq('site_id', siteId)
+    .maybeSingle()
 
   // Professional service history: completed tasks for this site.
   const { data: tasks } = await admin
@@ -135,6 +143,7 @@ export async function getPublicLogbook(siteId: string): Promise<PublicLogbookDat
 
   return {
     site,
+    buildingInfo: (buildingInfo as SiteBuildingInfo | null) ?? null,
     reports,
     entries: (entries ?? []) as LogbookEntry[],
   }
@@ -180,5 +189,54 @@ export async function addOccupierEntry(
   })
 
   if (error) return { ok: false, error: 'Could not save entry. Please try again.' }
+  return { ok: true }
+}
+
+/** Update the General Building Information after re-verifying occupier access. */
+export async function saveOccupierBuildingInfo(
+  siteId: string,
+  values: BuildingInfoValues,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!(await hasLogbookAccess(siteId))) {
+    return { ok: false, error: 'Your session has expired. Please re-enter the postcode.' }
+  }
+
+  // Keep only non-empty contacts and normalise to the stored shape.
+  const contacts = (values.emergency_contacts || [])
+    .map((c) => ({
+      name: (c.name || '').trim(),
+      role: (c.role || '').trim(),
+      phone: (c.phone || '').trim(),
+    }))
+    .filter((c) => c.name || c.role || c.phone)
+
+  const admin = createAdminClient()
+  const { error } = await admin.from('site_building_info').upsert(
+    {
+      site_id: siteId,
+      responsible_person_name: values.responsible_person_name.trim() || null,
+      responsible_person_role: values.responsible_person_role.trim() || null,
+      responsible_person_phone: values.responsible_person_phone.trim() || null,
+      responsible_person_email: values.responsible_person_email.trim() || null,
+      competent_person_name: values.competent_person_name.trim() || null,
+      competent_person_company: values.competent_person_company.trim() || null,
+      competent_person_phone: values.competent_person_phone.trim() || null,
+      competent_person_email: values.competent_person_email.trim() || null,
+      fra_location: values.fra_location.trim() || null,
+      fra_last_date: values.fra_last_date || null,
+      fra_next_date: values.fra_next_date || null,
+      fra_assessor: values.fra_assessor.trim() || null,
+      fra_notes: values.fra_notes.trim() || null,
+      emergency_contacts: contacts,
+      updated_at: new Date().toISOString(),
+      // Occupier edits are not tied to a staff profile.
+      updated_by: null,
+    },
+    { onConflict: 'site_id' },
+  )
+
+  if (error) {
+    return { ok: false, error: 'Could not save building information. Please try again.' }
+  }
   return { ok: true }
 }

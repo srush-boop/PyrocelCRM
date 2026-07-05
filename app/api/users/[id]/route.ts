@@ -71,6 +71,7 @@ export async function PUT(
       holiday_entitlement_hours,
       role_id,
       job_title,
+      timesheet_required,
     } = body as {
       full_name?: string
       email?: string
@@ -84,6 +85,7 @@ export async function PUT(
       holiday_entitlement_hours?: number | null
       role_id?: string | null
       job_title?: string | null
+      timesheet_required?: boolean | null
     }
 
     // Verify the caller is an authenticated admin
@@ -151,6 +153,11 @@ export async function PUT(
     if (job_title !== undefined) {
       const trimmed = typeof job_title === 'string' ? job_title.trim() : ''
       profilePatch.job_title = trimmed || null
+    }
+    // Per-user timesheet override. null = inherit from role; boolean = explicit.
+    if (timesheet_required !== undefined) {
+      profilePatch.timesheet_required =
+        timesheet_required === null ? null : Boolean(timesheet_required)
     }
     // Holiday entitlement: accept a non-negative number or null to clear.
     const parseEntitlement = (v: unknown): number | null => {

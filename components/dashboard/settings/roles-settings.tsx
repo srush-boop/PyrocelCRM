@@ -47,10 +47,11 @@ interface FormState {
   name: string
   description: string
   active: boolean
+  timesheet_required: boolean
 }
 
 function emptyForm(): FormState {
-  return { name: '', description: '', active: true }
+  return { name: '', description: '', active: true, timesheet_required: true }
 }
 
 export function RolesSettings({ roles }: RolesSettingsProps) {
@@ -74,6 +75,7 @@ export function RolesSettings({ roles }: RolesSettingsProps) {
       name: role.name,
       description: role.description ?? '',
       active: role.active,
+      timesheet_required: role.timesheet_required,
     })
     setMessage(null)
     setDialogOpen(true)
@@ -89,6 +91,7 @@ export function RolesSettings({ roles }: RolesSettingsProps) {
         name: form.name.trim(),
         description: form.description.trim() || null,
         active: form.active,
+        timesheet_required: form.timesheet_required,
         updated_at: new Date().toISOString(),
       }
       const { error } = form.id
@@ -150,6 +153,7 @@ export function RolesSettings({ roles }: RolesSettingsProps) {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Description</TableHead>
+                <TableHead>Timesheet</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-24" />
               </TableRow>
@@ -157,7 +161,7 @@ export function RolesSettings({ roles }: RolesSettingsProps) {
             <TableBody>
               {roles.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
                     No roles yet. Add one to assign it to your team members.
                   </TableCell>
                 </TableRow>
@@ -167,6 +171,11 @@ export function RolesSettings({ roles }: RolesSettingsProps) {
                     <TableCell className="font-medium">{role.name}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {role.description || '—'}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={role.timesheet_required ? 'default' : 'outline'}>
+                        {role.timesheet_required ? 'Required' : 'Not required'}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       <Badge variant={role.active ? 'default' : 'secondary'}>
@@ -237,6 +246,20 @@ export function RolesSettings({ roles }: RolesSettingsProps) {
                 className="h-4 w-4 rounded border-input"
               />
               Active
+            </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.timesheet_required}
+                onChange={(e) => setForm({ ...form, timesheet_required: e.target.checked })}
+                className="mt-0.5 h-4 w-4 rounded border-input"
+              />
+              <span>
+                Timesheet required
+                <span className="block text-xs text-muted-foreground">
+                  Default for users with this role. Can be overridden per user.
+                </span>
+              </span>
             </label>
           </div>
           <DialogFooter>

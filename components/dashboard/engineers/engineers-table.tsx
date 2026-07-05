@@ -194,6 +194,8 @@ export function EngineersTable({
     status: 'active' as 'active' | 'inactive',
     manager_id: NO_MANAGER,
     role_id: NO_ROLE,
+    // 'inherit' = use the assigned role's default; 'yes'/'no' = per-user override.
+    timesheet_required: 'inherit' as 'inherit' | 'yes' | 'no',
     employee_number: '',
     holiday_entitlement_days: '',
     holiday_entitlement_hours: '',
@@ -325,6 +327,12 @@ export function EngineersTable({
       status: user.status,
       manager_id: user.manager_id ?? NO_MANAGER,
       role_id: user.role_id ?? NO_ROLE,
+      timesheet_required:
+        user.timesheet_required === null || user.timesheet_required === undefined
+          ? 'inherit'
+          : user.timesheet_required
+            ? 'yes'
+            : 'no',
       employee_number: user.employee_number ?? '',
       holiday_entitlement_days:
         user.holiday_entitlement_days != null ? String(user.holiday_entitlement_days) : '',
@@ -370,6 +378,10 @@ export function EngineersTable({
           status: editForm.status,
           manager_id: editForm.manager_id === NO_MANAGER ? null : editForm.manager_id,
           role_id: editForm.role_id === NO_ROLE ? null : editForm.role_id,
+          timesheet_required:
+            editForm.timesheet_required === 'inherit'
+              ? null
+              : editForm.timesheet_required === 'yes',
           employee_number: editForm.employee_number.trim() || null,
           holiday_entitlement_days: days === '' ? null : Number(days),
           holiday_entitlement_hours: hours === '' ? null : Number(hours),
@@ -733,6 +745,34 @@ export function EngineersTable({
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">Shown on documents. Manage in Settings.</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-timesheet">Timesheet</Label>
+                <Select
+                  value={editForm.timesheet_required}
+                  onValueChange={(value) =>
+                    setEditForm({
+                      ...editForm,
+                      timesheet_required: value as 'inherit' | 'yes' | 'no',
+                    })
+                  }
+                >
+                  <SelectTrigger id="edit-timesheet">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="inherit">
+                      {(() => {
+                        const r = roles.find((x) => x.id === editForm.role_id)
+                        const dflt = r ? (r.timesheet_required ? 'Required' : 'Not required') : 'Not required'
+                        return `Use role default (${dflt})`
+                      })()}
+                    </SelectItem>
+                    <SelectItem value="yes">Required</SelectItem>
+                    <SelectItem value="no">Not required</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Overrides the role&apos;s default for this user.</p>
               </div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">

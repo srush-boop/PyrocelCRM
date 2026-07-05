@@ -7,7 +7,7 @@ import { CatalogueManager } from '@/components/dashboard/sales/catalogue-manager
 import { ProductSheetPanel } from '@/components/dashboard/sales/product-sheet-panel'
 import { fetchCataloguePage } from '@/app/(dashboard)/dashboard/sales/actions'
 import { getProductSuppliers } from '@/lib/stock'
-import type { Profile, ProductSheet, ServiceType } from '@/lib/types/database'
+import type { Profile, ProductSheet, SystemType } from '@/lib/types/database'
 
 export const metadata = { title: 'Quote Catalogue | Pyrocel' }
 
@@ -23,10 +23,14 @@ export default async function StockCataloguePage() {
     redirect('/dashboard')
   }
 
-  const [firstPage, { data: serviceTypes }, { data: currentSheet }, productSuppliers] =
+  const [firstPage, { data: systemTypes }, { data: currentSheet }, productSuppliers] =
     await Promise.all([
       fetchCataloguePage({ page: 0, pageSize: 50 }),
-      supabase.from('service_types').select('id, name').eq('status', 'live').order('name'),
+      supabase
+        .from('system_types')
+        .select('id, name')
+        .eq('status', 'live')
+        .order('position'),
       supabase
         .from('product_sheets')
         .select('*')
@@ -59,7 +63,7 @@ export default async function StockCataloguePage() {
         initialTotal={firstPage.total}
         initialStockedIds={firstPage.stockedItemIds}
         pageSize={50}
-        serviceTypes={(serviceTypes ?? []) as ServiceType[]}
+        systemTypes={(systemTypes ?? []) as SystemType[]}
         suppliers={productSuppliers}
       />
     </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState, useTransition } from 'react'
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -54,18 +54,21 @@ import {
   ImageIcon,
   Upload,
   X,
+  Download,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatPence, penceToPounds, poundsToPence, sellFromCost } from '@/lib/sales'
-import type { QuoteCatalogueItem, ServiceType } from '@/lib/types/database'
+import type { QuoteCatalogueItem, SystemType } from '@/lib/types/database'
 import {
   saveCatalogueItem,
   deleteCatalogueItem,
   fetchCataloguePage,
+  fetchAllCatalogueItems,
+  importCatalogueItems,
   addCatalogueItemsToStock,
 } from '@/app/(dashboard)/dashboard/sales/actions'
 
-const NO_SERVICE = '__none__'
+const NO_SYSTEM = '__none__'
 const NO_SUPPLIER = '__none__'
 
 interface FormState {
@@ -74,7 +77,7 @@ interface FormState {
   product_code: string
   description: string
   category: string
-  service_type_id: string
+  system_type_id: string
   supplier_id: string
   default_unit: string
   cost: string
@@ -91,7 +94,7 @@ function emptyForm(): FormState {
     product_code: '',
     description: '',
     category: '',
-    service_type_id: NO_SERVICE,
+    system_type_id: NO_SYSTEM,
     supplier_id: NO_SUPPLIER,
     default_unit: '',
     cost: '0.00',
@@ -108,14 +111,14 @@ export function CatalogueManager({
   initialTotal,
   initialStockedIds,
   pageSize,
-  serviceTypes,
+  systemTypes,
   suppliers = [],
 }: {
   initialItems: QuoteCatalogueItem[]
   initialTotal: number
   initialStockedIds: string[]
   pageSize: number
-  serviceTypes: ServiceType[]
+  systemTypes: SystemType[]
   suppliers?: { id: string; name: string }[]
 }) {
   const [isPending, startTransition] = useTransition()
@@ -131,6 +134,9 @@ export function CatalogueManager({
   // Currently ticked rows, for bulk "Add to stock".
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [addingToStock, setAddingToStock] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // The catalogue can hold thousands of rows, so we fetch one page at a time
   // from the server (with the search term applied in SQL) instead of loading
@@ -207,6 +213,158 @@ export function CatalogueManager({
     })
   }
 
+  // Export the whole catalogue (respecting the current search) to a CSV file
+  // the user can open in Excel. We fetch every page server-side because the UI
+  // only holds one page in memory at a time.
+  async function handleDownload() {
+    setDownloading(true)
+    try {
+      const all = await fetchAllCatalogueItems(search)
+      if (all.length === 0) {
+        toast.info('Nothing to export')
+        return
+      }
+      const systemName = new Map(systemTypes.map((s) => [s.id, s.name]))
+      const supplierName = new Map(suppliers.map((s) => [s.id, s.name]))
+      const esc = (v: unknown) => {
+        const s = v == null ? '' : String(v)
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+      }
+      const headers = [
+        'Product code',
+        'Name',
+        'Description',
+        'Category',
+        'System type',
+        'Supplier',
+        'Unit',
+        'Unit cost (£)',
+        'Margin (%)',
+        'Sell price (£)',
+        'Service sale price (£)',
+        'Ecommerce price (£)',
+        'Active',
+      ]
+      const rows = all.map((i) =>
+        [
+          i.product_code,
+          i.name,
+          i.description,
+          i.category,
+          i.system_type_id ? (systemName.get(i.system_type_id) ?? '') : '',
+          i.supplier_id ? (supplierName.get(i.supplier_id) ?? '') : '',
+          i.default_unit,
+          penceToPounds(i.unit_cost_pence),
+          i.margin_percent,
+          penceToPounds(i.default_unit_price_pence),
+          penceToPounds(i.service_sale_price_pence),
+          penceToPounds(i.ecommerce_price_pence),
+          i.active ? 'Yes' : 'No',
+        ]
+          .map(esc)
+          .join(','),
+      )
+      const csv = [headers.join(','), ...rows].join('\r\n')
+      // Prefix with a BOM so Excel reads UTF-8 characters (e.g. £) correctly.
+      const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `quote-catalogue-${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      toast.success(`Exported ${all.length} item${all.length === 1 ? '' : 's'}`)
+    } catch {
+      toast.error('Could not export the catalogue')
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  // Parse CSV text into row objects keyed by lower-cased header. Handles quoted
+  // fields, escaped double-quotes, and CRLF/LF line endings.
+  function parseCsv(text: string): Record<string, string>[] {
+    const rows: string[][] = []
+    let field = ''
+    let row: string[] = []
+    let inQuotes = false
+    // Strip a leading UTF-8 BOM if present.
+    const src = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text
+    for (let i = 0; i < src.length; i++) {
+      const c = src[i]
+      if (inQuotes) {
+        if (c === '"') {
+          if (src[i + 1] === '"') {
+            field += '"'
+            i++
+          } else inQuotes = false
+        } else field += c
+      } else if (c === '"') {
+        inQuotes = true
+      } else if (c === ',') {
+        row.push(field)
+        field = ''
+      } else if (c === '\n' || c === '\r') {
+        if (c === '\r' && src[i + 1] === '\n') i++
+        row.push(field)
+        field = ''
+        if (row.some((f) => f.trim() !== '')) rows.push(row)
+        row = []
+      } else field += c
+    }
+    if (field !== '' || row.length > 0) {
+      row.push(field)
+      if (row.some((f) => f.trim() !== '')) rows.push(row)
+    }
+    if (rows.length < 2) return []
+    const headers = rows[0].map((h) => h.trim().toLowerCase())
+    return rows.slice(1).map((r) => {
+      const obj: Record<string, string> = {}
+      headers.forEach((h, idx) => {
+        obj[h] = (r[idx] ?? '').trim()
+      })
+      return obj
+    })
+  }
+
+  // Import catalogue items from a CSV file (same columns as the Download export).
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    // Reset the input so selecting the same file again re-triggers onChange.
+    e.target.value = ''
+    if (!file) return
+    setUploading(true)
+    try {
+      const text = await file.text()
+      const parsed = parseCsv(text)
+      if (parsed.length === 0) {
+        toast.error('No rows found. The file needs a header row and at least one item.')
+        return
+      }
+      const res = await importCatalogueItems(parsed)
+      if (!res.ok) {
+        toast.error(res.errors[0] ?? 'Could not import the catalogue.')
+        return
+      }
+      const summary = `Imported ${res.created} new, updated ${res.updated}`
+      if (res.errors.length > 0) {
+        toast.warning(`${summary}. ${res.errors.length} row(s) had issues.`, {
+          description: res.errors.slice(0, 5).join(' '),
+        })
+      } else {
+        toast.success(summary)
+      }
+      await loadPage({ search, page: 0 })
+      setPage(0)
+    } catch {
+      toast.error('Could not read the file. Please upload a valid CSV.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
   // Debounce search; refetch immediately on page changes. We skip the very
   // first render because the server already supplied page 0 with no search.
   const [hydrated, setHydrated] = useState(false)
@@ -238,7 +396,7 @@ export function CatalogueManager({
       product_code: item.product_code ?? '',
       description: item.description ?? '',
       category: item.category ?? '',
-      service_type_id: item.service_type_id ?? NO_SERVICE,
+      system_type_id: item.system_type_id ?? NO_SYSTEM,
       supplier_id: item.supplier_id ?? NO_SUPPLIER,
       default_unit: item.default_unit ?? '',
       cost: penceToPounds(item.unit_cost_pence),
@@ -259,7 +417,7 @@ export function CatalogueManager({
         product_code: form.product_code || null,
         description: form.description || null,
         category: form.category || null,
-        service_type_id: form.service_type_id === NO_SERVICE ? null : form.service_type_id,
+        system_type_id: form.system_type_id === NO_SYSTEM ? null : form.system_type_id,
         supplier_id: form.supplier_id === NO_SUPPLIER ? null : form.supplier_id,
         default_unit: form.default_unit || null,
         unit_cost_pence: poundsToPence(form.cost),
@@ -350,6 +508,39 @@ export function CatalogueManager({
               Add {selectedIds.size} to stock
             </Button>
           )}
+          <Button
+            variant="outline"
+            onClick={handleDownload}
+            disabled={downloading}
+            title={search.trim() ? 'Download the filtered catalogue as CSV' : 'Download the full catalogue as CSV'}
+          >
+            {downloading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 h-4 w-4" />
+            )}
+            Download
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={handleUpload}
+          />
+          <Button
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            title="Upload a CSV to add or update catalogue items"
+          >
+            {uploading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Upload className="mr-2 h-4 w-4" />
+            )}
+            Upload
+          </Button>
           <Button onClick={openNew}>
             <Plus className="mr-2 h-4 w-4" />
             Add Item
@@ -589,17 +780,17 @@ export function CatalogueManager({
                 </div>
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="c-service">Service type</Label>
+                <Label htmlFor="c-system">System type</Label>
                 <Select
-                  value={form.service_type_id}
-                  onValueChange={(v) => setForm({ ...form, service_type_id: v })}
+                  value={form.system_type_id}
+                  onValueChange={(v) => setForm({ ...form, system_type_id: v })}
                 >
-                  <SelectTrigger id="c-service">
+                  <SelectTrigger id="c-system">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={NO_SERVICE}>None</SelectItem>
-                    {serviceTypes.map((st) => (
+                    <SelectItem value={NO_SYSTEM}>None</SelectItem>
+                    {systemTypes.map((st) => (
                       <SelectItem key={st.id} value={st.id}>
                         {st.name}
                       </SelectItem>

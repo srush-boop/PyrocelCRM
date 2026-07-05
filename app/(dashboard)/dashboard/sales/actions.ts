@@ -566,6 +566,36 @@ export async function fetchCataloguePage(options: {
   return { items, total: count ?? 0, stockedItemIds }
 }
 
+// Returns the entire catalogue (all pages) for exporting to CSV. Honours the
+// same search filter as the paged view so users can export a filtered subset.
+// Batched to stay within Supabase's default 1000-row response cap.
+export async function fetchAllCatalogueItems(
+  search?: string,
+): Promise<QuoteCatalogueItem[]> {
+  const { supabase, error } = await requireStaff()
+  if (error) return []
+
+  const term = (search ?? '').trim()
+  const batchSize = 1000
+  const all: QuoteCatalogueItem[] = []
+
+  for (let from = 0; ; from += batchSize) {
+    let q = supabase.from('quote_catalogue_items').select('*')
+    if (term) {
+      const escaped = term.replace(/[%_,]/g, (m) => `\\${m}`)
+      q = q.or(
+        `name.ilike.%${escaped}%,product_code.ilike.%${escaped}%,category.ilike.%${escaped}%,description.ilike.%${escaped}%`,
+      )
+    }
+    const { data, error: dbError } = await q.order('name').range(from, from + batchSize - 1)
+    if (dbError || !data || data.length === 0) break
+    all.push(...(data as QuoteCatalogueItem[]))
+    if (data.length < batchSize) break
+  }
+
+  return all
+}
+
 // Create stock parts from selected sales-catalogue items so they can be issued
 // to locations. Each part links back to its catalogue item; items already
 // stocked are skipped so nothing is added twice.

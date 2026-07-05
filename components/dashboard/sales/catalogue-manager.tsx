@@ -54,6 +54,7 @@ import {
   ImageIcon,
   Upload,
   X,
+  Download,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatPence, penceToPounds, poundsToPence, sellFromCost } from '@/lib/sales'
@@ -62,6 +63,7 @@ import {
   saveCatalogueItem,
   deleteCatalogueItem,
   fetchCataloguePage,
+  fetchAllCatalogueItems,
   addCatalogueItemsToStock,
 } from '@/app/(dashboard)/dashboard/sales/actions'
 
@@ -131,6 +133,7 @@ export function CatalogueManager({
   // Currently ticked rows, for bulk "Add to stock".
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [addingToStock, setAddingToStock] = useState(false)
+  const [downloading, setDownloading] = useState(false)
 
   // The catalogue can hold thousands of rows, so we fetch one page at a time
   // from the server (with the search term applied in SQL) instead of loading
@@ -205,6 +208,76 @@ export function CatalogueManager({
         toast.error(res.error ?? 'Could not add items to stock')
       }
     })
+  }
+
+  // Export the whole catalogue (respecting the current search) to a CSV file
+  // the user can open in Excel. We fetch every page server-side because the UI
+  // only holds one page in memory at a time.
+  async function handleDownload() {
+    setDownloading(true)
+    try {
+      const all = await fetchAllCatalogueItems(search)
+      if (all.length === 0) {
+        toast.info('Nothing to export')
+        return
+      }
+      const systemName = new Map(systemTypes.map((s) => [s.id, s.name]))
+      const supplierName = new Map(suppliers.map((s) => [s.id, s.name]))
+      const esc = (v: unknown) => {
+        const s = v == null ? '' : String(v)
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+      }
+      const headers = [
+        'Product code',
+        'Name',
+        'Description',
+        'Category',
+        'System type',
+        'Supplier',
+        'Unit',
+        'Unit cost (£)',
+        'Margin (%)',
+        'Sell price (£)',
+        'Service sale price (£)',
+        'Ecommerce price (£)',
+        'Active',
+      ]
+      const rows = all.map((i) =>
+        [
+          i.product_code,
+          i.name,
+          i.description,
+          i.category,
+          i.system_type_id ? (systemName.get(i.system_type_id) ?? '') : '',
+          i.supplier_id ? (supplierName.get(i.supplier_id) ?? '') : '',
+          i.default_unit,
+          penceToPounds(i.unit_cost_pence),
+          i.margin_percent,
+          penceToPounds(i.default_unit_price_pence),
+          penceToPounds(i.service_sale_price_pence),
+          penceToPounds(i.ecommerce_price_pence),
+          i.active ? 'Yes' : 'No',
+        ]
+          .map(esc)
+          .join(','),
+      )
+      const csv = [headers.join(','), ...rows].join('\r\n')
+      // Prefix with a BOM so Excel reads UTF-8 characters (e.g. £) correctly.
+      const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `quote-catalogue-${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      toast.success(`Exported ${all.length} item${all.length === 1 ? '' : 's'}`)
+    } catch {
+      toast.error('Could not export the catalogue')
+    } finally {
+      setDownloading(false)
+    }
   }
 
   // Debounce search; refetch immediately on page changes. We skip the very

@@ -16,7 +16,16 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Plus, Loader2 } from 'lucide-react'
+
+const NONE_VALUE = '__none__'
 
 const emptyForm = {
   name: '',
@@ -25,9 +34,14 @@ const emptyForm = {
   unit_cost: '',
   default_min_level: '',
   description: '',
+  supplier_id: '',
 }
 
-export function AddPartDialog() {
+interface AddPartDialogProps {
+  suppliers?: { id: string; name: string }[]
+}
+
+export function AddPartDialog({ suppliers = [] }: AddPartDialogProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState(emptyForm)
@@ -47,6 +61,7 @@ export function AddPartDialog() {
         ? Math.max(0, Number.parseInt(formData.default_min_level, 10) || 0)
         : 0,
       description: formData.description || null,
+      supplier_id: formData.supplier_id || null,
     })
 
     setLoading(false)
@@ -133,6 +148,30 @@ export function AddPartDialog() {
                   placeholder="0"
                 />
               </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="supplier">Product supplier</Label>
+              <Select
+                value={formData.supplier_id || NONE_VALUE}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, supplier_id: value === NONE_VALUE ? '' : value })
+                }
+              >
+                <SelectTrigger id="supplier">
+                  <SelectValue placeholder="No supplier" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE_VALUE}>No supplier</SelectItem>
+                  {suppliers.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                The supplier this part is ordered from. Used for future equipment ordering.
+              </p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="description">Description</Label>

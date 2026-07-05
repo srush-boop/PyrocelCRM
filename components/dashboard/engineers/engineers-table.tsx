@@ -62,10 +62,11 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import type { Profile, UserRole, Department, Branch, WorkDayHours, Role } from '@/lib/types/database'
-import type { LeaveBalance } from '@/lib/leave'
+import type { LeaveBalance } from '@/lib/leave-utils'
 import { formatDateUK } from '@/lib/utils'
 import { InviteEngineerDialog } from './invite-engineer-dialog'
 import { MenuAccessDialog } from './menu-access-dialog'
+import { PrintButton } from '@/components/ui/print-button'
 
 const NO_DEPARTMENT = '__none__'
 const NO_BRANCH = '__none__'
@@ -501,6 +502,7 @@ export function EngineersTable({
             <SelectItem value="office">Office</SelectItem>
           </SelectContent>
         </Select>
+        <PrintButton targetId="engineers-grid" title="Team Members" className="ml-auto" />
         <Button onClick={() => setInviteOpen(true)} className="gap-2">
           <Plus className="h-4 w-4" />
           Add Member
@@ -508,7 +510,7 @@ export function EngineersTable({
       </div>
 
       <div className="rounded-md border">
-        <Table>
+        <Table id="engineers-grid">
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>

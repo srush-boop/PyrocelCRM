@@ -31,6 +31,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { MoreHorizontal, Pencil, Trash2, Search, Package } from 'lucide-react'
+import { PrintButton } from '@/components/ui/print-button'
 import { EditPartDialog } from './edit-part-dialog'
 import type { Part } from '@/lib/types/database'
 import { formatGBP } from '@/lib/utils'
@@ -69,18 +70,21 @@ export function PartsTable({ parts }: PartsTableProps) {
 
   return (
     <div className="space-y-4">
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search parts..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-        />
+      <div className="flex items-center gap-3">
+        <div className="relative max-w-sm flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search parts..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <PrintButton targetId="parts-grid" title="Parts" className="ml-auto" />
       </div>
 
       <div className="rounded-md border">
-        <Table>
+        <Table id="parts-grid">
           <TableHeader>
             <TableRow>
               <TableHead>Part</TableHead>

@@ -32,6 +32,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { MoreHorizontal, Pencil, Trash2, Search, Building, Plus, ChevronRight, ChevronDown, MapPin, ExternalLink, ListChecks, Link2 } from 'lucide-react'
+import { PrintButton } from '@/components/ui/print-button'
 import type { Client, Site, SystemType, ServiceType } from '@/lib/types/database'
 import { AddClientDialog } from './add-client-dialog'
 import { EditClientDialog } from './edit-client-dialog'
@@ -100,6 +101,7 @@ export function ClientsTable({
             className="pl-9"
           />
         </div>
+        <PrintButton targetId="clients-grid" title="Clients" className="ml-auto" />
         <Button onClick={() => setAddOpen(true)} className="gap-2">
           <Plus className="h-4 w-4" />
           Add Client
@@ -107,7 +109,7 @@ export function ClientsTable({
       </div>
 
       <div className="rounded-md border">
-        <Table>
+        <Table id="clients-grid">
           <TableHeader>
             <TableRow>
               <TableHead className="w-[40px]"></TableHead>

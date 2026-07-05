@@ -30,6 +30,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { MoreHorizontal, Pencil, Trash2, Wrench } from 'lucide-react'
+import { PrintButton } from '@/components/ui/print-button'
 import { EditServiceTypeDialog } from './edit-service-type-dialog'
 import { SystemBadge } from '@/lib/system-types'
 import type { ServiceType, SystemType } from '@/lib/types/database'
@@ -55,8 +56,11 @@ export function ServiceTypesTable({ serviceTypes, systemTypes }: ServiceTypesTab
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-end">
+        <PrintButton targetId="service-types-grid" title="Service Types" />
+      </div>
       <div className="rounded-md border">
-        <Table>
+        <Table id="service-types-grid">
           <TableHeader>
             <TableRow>
               <TableHead>Service Name</TableHead>

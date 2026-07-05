@@ -134,11 +134,17 @@ interface SeedServiceInput {
 /**
  * Build the initial set of scheduled task rows for newly-added site services.
  *
- * For services with more than one visit type (e.g. Fire Alarm = Annual +
- * Periodic) the whole first cycle is seeded up front: one task per visit type,
- * evenly split across the service frequency. Services with zero or one visit
- * type get a single task (legacy behaviour), tagged with the lone visit type if
- * one exists so reports can still pick the right checklist.
+ * Only calls that fall in the SETUP MONTH (the calendar month of `startDate`)
+ * are seeded up front. For a multi-visit service (e.g. Fire Alarm = Annual +
+ * Periodic) the visit dates are still spread evenly across the service
+ * frequency, but any visit landing in a later month is deferred — it is created
+ * later by the monthly call-generation workflow, which derives each visit's due
+ * date from the service cadence. This stops future months from being populated
+ * before the office generates them.
+ *
+ * Services with zero or one visit type get a single task on `startDate` (always
+ * in the setup month), tagged with the lone visit type if one exists so reports
+ * can still pick the right checklist.
  *
  * `visitsByServiceType` maps a service_type_id to its visit types ordered by
  * sort_order.
@@ -150,6 +156,14 @@ export function buildSeedTaskRows(
 ): SeedTaskRow[] {
   const taskData: SeedTaskRow[] = []
 
+  const seed = parseDateString(startDate)
+  const seedYear = seed.getFullYear()
+  const seedMonth = seed.getMonth()
+  const inSeedMonth = (dateStr: string) => {
+    const d = parseDateString(dateStr)
+    return d.getFullYear() === seedYear && d.getMonth() === seedMonth
+  }
+
   for (const svc of services) {
     const visits = visitsByServiceType.get(svc.service_type_id) ?? []
     if (visits.length > 1) {
@@ -159,6 +173,9 @@ export function buildSeedTaskRows(
         visits.length,
       )
       visits.forEach((visit, i) => {
+        // Defer visits that fall outside the setup month to the monthly
+        // generator so we don't pre-populate future months.
+        if (!inSeedMonth(dates[i])) return
         taskData.push({
           site_service_id: svc.id,
           scheduled_date: dates[i],

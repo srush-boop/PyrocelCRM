@@ -43,6 +43,55 @@ function netHoursForWeekday(hours: WorkDayHours | null, weekday: number): number
   return net > 0 ? net / 60 : null
 }
 
+// Rounds a number to at most `dp` decimals and drops trailing zeros (e.g. 1.0 →
+// "1", 0.5 → "0.5").
+function trim(n: number, dp = 2): string {
+  return String(Math.round(n * 10 ** dp) / 10 ** dp)
+}
+
+/**
+ * Human-readable length of a leave request. Uses hours when the request is
+ * expressed in hours (part-time staff), otherwise days — with a half-day shown
+ * as "0.5 day". Falls back gracefully for whole-day bookings.
+ */
+export function formatLeaveLength(
+  days: number,
+  hours: number,
+  opts: { hourly?: boolean } = {},
+): string {
+  if (opts.hourly) {
+    return `${trim(hours, 1)} hr${hours === 1 ? '' : 's'}`
+  }
+  return `${trim(days)} day${days === 1 ? '' : 's'}`
+}
+
+/**
+ * Short label describing the partial-day portions of a request, e.g.
+ * "Half day (AM)", "PM → AM", "4 hrs", or "" for a plain full-day request.
+ */
+export function formatPortionNote(
+  startPortion: LeavePortion,
+  endPortion: LeavePortion,
+  startHours: number | null,
+  endHours: number | null,
+  sameDay: boolean,
+): string {
+  if (startPortion === 'hours' || endPortion === 'hours') {
+    const parts: string[] = []
+    if (startHours != null) parts.push(`${trim(startHours, 1)} hrs`)
+    if (!sameDay && endHours != null) parts.push(`${trim(endHours, 1)} hrs`)
+    return parts.join(' + ')
+  }
+  const label = (p: LeavePortion) => (p === 'am' ? 'AM' : p === 'pm' ? 'PM' : '')
+  if (sameDay) {
+    return startPortion === 'am' || startPortion === 'pm' ? `Half day (${label(startPortion)})` : ''
+  }
+  const s = label(startPortion)
+  const e = label(endPortion)
+  if (!s && !e) return ''
+  return `${s || 'Full'} → ${e || 'Full'}`
+}
+
 /**
  * Resolves how much of a single working day a portion consumes, given that
  * day's net working hours and (for 'hours' portions) the hours booked.

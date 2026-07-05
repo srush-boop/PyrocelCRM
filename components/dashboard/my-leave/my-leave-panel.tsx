@@ -9,7 +9,6 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { CalendarDays, Clock, CheckCircle2, Hourglass } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
-import { formatLeaveLength, formatPortionNote } from '@/lib/leave'
 import type { MyLeaveData } from '@/lib/my-leave'
 
 // Formats an inclusive leave span for display.
@@ -95,29 +94,12 @@ export function MyLeavePanel({ data }: { data: MyLeaveData }) {
                   className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"
                 >
                   <div className="min-w-0 space-y-0.5">
-                    <p className="flex flex-wrap items-center gap-1.5 font-medium">
+                    <p className="flex items-center gap-1.5 font-medium">
                       <CalendarDays className="h-4 w-4 text-muted-foreground" />
                       {formatSpan(r.startAt, r.endAt)}
                       <span className="text-sm font-normal text-muted-foreground">
-                        ·{' '}
-                        {formatLeaveLength(r.workingDays, r.workingHours, {
-                          hourly: r.startPortion === 'hours' || r.endPortion === 'hours',
-                        })}
+                        · {r.workingDays} working day{r.workingDays === 1 ? '' : 's'}
                       </span>
-                      {(() => {
-                        const note = formatPortionNote(
-                          r.startPortion,
-                          r.endPortion,
-                          r.startHours,
-                          r.endHours,
-                          r.startAt.slice(0, 10) === r.endAt.slice(0, 10),
-                        )
-                        return note ? (
-                          <Badge variant="outline" className="font-normal">
-                            {note}
-                          </Badge>
-                        ) : null
-                      })()}
                     </p>
                     {r.status === 'rejected' && r.rejectionReason && (
                       <p className="text-sm text-destructive">Reason: {r.rejectionReason}</p>

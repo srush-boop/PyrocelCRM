@@ -1,7 +1,6 @@
 import 'server-only'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import type { LeavePortion } from '@/lib/types/database'
 
 // Determines whether the current user may view the diary summary (Accounts dept
 // members and admins only). Returns the profile when allowed, else null.
@@ -45,10 +44,6 @@ export interface SummaryEntry {
   allDay: boolean
   approvalStatus: 'requested' | 'approved' | 'rejected' | null
   notes: string | null
-  startPortion: LeavePortion
-  endPortion: LeavePortion
-  startHours: number | null
-  endHours: number | null
 }
 
 // Options used to populate the summary's filter dropdowns.
@@ -66,10 +61,6 @@ interface SummaryQueryRow {
   all_day: boolean
   notes: string | null
   approval_status: 'requested' | 'approved' | 'rejected' | null
-  start_portion: LeavePortion | null
-  end_portion: LeavePortion | null
-  start_hours: number | null
-  end_hours: number | null
   entry_type: { id: string; name: string | null; color: string | null } | null
   user: {
     id: string
@@ -112,8 +103,7 @@ export async function getSummaryEntries(filters: SummaryFilters): Promise<Summar
     .from('calendar_entries')
     .select(
       `id, start_at, end_at, all_day, notes, approval_status,
-         start_portion, end_portion, start_hours, end_hours,
-         entry_type:calendar_entry_types(id, name, color),
+       entry_type:calendar_entry_types(id, name, color),
        user:profiles!calendar_entries_user_id_fkey(
          id, full_name, department_id, branch_id,
          department:departments(name),
@@ -150,11 +140,7 @@ export async function getSummaryEntries(filters: SummaryFilters): Promise<Summar
       startAt: r.start_at,
       endAt: r.end_at,
       allDay: r.all_day,
-    approvalStatus: r.approval_status,
-    notes: r.notes,
-    startPortion: r.start_portion ?? 'full',
-    endPortion: r.end_portion ?? 'full',
-    startHours: r.start_hours,
-    endHours: r.end_hours,
-  }))
+      approvalStatus: r.approval_status,
+      notes: r.notes,
+    }))
 }

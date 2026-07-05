@@ -1,15 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import { syncUkBankHolidays } from '@/lib/bank-holidays'
 import { getBranchScope, type BranchScope } from '@/lib/branches'
-import { formatPortionNote } from '@/lib/leave'
-import { ANNUAL_LEAVE_TYPE_ID } from '@/lib/constants/leave'
 import type {
   CalendarItem,
   CalendarEntryType,
   Profile,
   RouteCalendarSource,
   LeaveApprovalStatus,
-  LeavePortion,
 } from '@/lib/types/database'
 
 // Default colour used for booked service tasks on the calendar.
@@ -101,10 +98,6 @@ interface EntryRow {
   is_public: boolean
   notes: string | null
   approval_status: LeaveApprovalStatus | null
-  start_portion: LeavePortion | null
-  end_portion: LeavePortion | null
-  start_hours: number | null
-  end_hours: number | null
   entry_type: CalendarEntryType | null
   user: AttendeeProfile | null
   // Every person invited to this entry (the entry shows on each of their calendars).
@@ -198,7 +191,6 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
       .from('calendar_entries')
       .select(
         `id, entry_type_id, user_id, title, start_at, end_at, all_day, is_public, notes, approval_status,
-           start_portion, end_portion, start_hours, end_hours,
            entry_type:calendar_entry_types(*),
            user:profiles(id, full_name, email, branch_id),
            attendees:calendar_entry_attendees(user:profiles(id, full_name, email, branch_id))`,
@@ -326,20 +318,6 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
     const owners: (AttendeeProfile | null)[] =
       attendeeProfiles.length > 0 ? attendeeProfiles : [e.user]
 
-    // For annual leave, append any partial-day note (e.g. "Half day (AM)",
-    // "4 hrs") to the subtitle so the calendar shows it isn't a full day off.
-    let subtitle = e.entry_type?.name ?? null
-    if (e.entry_type_id === ANNUAL_LEAVE_TYPE_ID) {
-      const note = formatPortionNote(
-        e.start_portion ?? 'full',
-        e.end_portion ?? 'full',
-        e.start_hours,
-        e.end_hours,
-        e.start_at.slice(0, 10) === e.end_at.slice(0, 10),
-      )
-      if (note) subtitle = subtitle ? `${subtitle} · ${note}` : note
-    }
-
     const base = {
       kind: 'entry' as const,
       title: e.title || e.entry_type?.name || 'Entry',
@@ -347,7 +325,7 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
       end: e.end_at,
       allDay: e.all_day,
       color: e.entry_type?.color || '#64748b',
-      subtitle,
+      subtitle: e.entry_type?.name ?? null,
       entryId: e.id,
       entryTypeName: e.entry_type?.name,
       isPublic: e.is_public,

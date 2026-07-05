@@ -17,7 +17,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { X, CalendarRange } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
-import { formatPortionNote } from '@/lib/leave'
 import { FilterMultiSelect } from './filter-multi-select'
 import type { SummaryEntry, SummaryFilterOptions } from '@/lib/leave-summary'
 
@@ -190,18 +189,6 @@ export function LeaveSummary({ entries, options, initial }: Props) {
                       {formatDateUK(e.startAt)}
                       {e.startAt.slice(0, 10) !== e.endAt.slice(0, 10) &&
                         ` – ${formatDateUK(e.endAt)}`}
-                      {(() => {
-                        const note = formatPortionNote(
-                          e.startPortion,
-                          e.endPortion,
-                          e.startHours,
-                          e.endHours,
-                          e.startAt.slice(0, 10) === e.endAt.slice(0, 10),
-                        )
-                        return note ? (
-                          <span className="ml-1.5 text-xs text-muted-foreground">({note})</span>
-                        ) : null
-                      })()}
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={e.approvalStatus} />

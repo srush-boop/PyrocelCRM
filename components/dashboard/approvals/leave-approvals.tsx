@@ -25,7 +25,6 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { CalendarDays, Check, X, Clock, CheckCircle2 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
-import { formatLeaveLength, formatPortionNote } from '@/lib/leave'
 import type { LeaveRequestRow } from '@/lib/leave-approvals'
 
 interface Props {
@@ -111,29 +110,12 @@ export function LeaveApprovals({ pending, decided }: Props) {
                           </Badge>
                         )}
                       </div>
-                      <p className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+                      <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                         <CalendarDays className="h-4 w-4" />
                         {formatSpan(r.startAt, r.endAt)}
                         <span className="text-foreground">
-                          ·{' '}
-                          {formatLeaveLength(r.workingDays, r.workingHours, {
-                            hourly: r.startPortion === 'hours' || r.endPortion === 'hours',
-                          })}
+                          · {r.workingDays} working day{r.workingDays === 1 ? '' : 's'}
                         </span>
-                        {(() => {
-                          const note = formatPortionNote(
-                            r.startPortion,
-                            r.endPortion,
-                            r.startHours,
-                            r.endHours,
-                            r.startAt.slice(0, 10) === r.endAt.slice(0, 10),
-                          )
-                          return note ? (
-                            <Badge variant="outline" className="font-normal">
-                              {note}
-                            </Badge>
-                          ) : null
-                        })()}
                       </p>
                       {r.notes && <p className="text-sm text-muted-foreground">{r.notes}</p>}
                     </div>
@@ -188,29 +170,12 @@ export function LeaveApprovals({ pending, decided }: Props) {
                           <Badge variant="destructive">Declined</Badge>
                         )}
                       </div>
-                      <p className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+                      <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                         <CalendarDays className="h-4 w-4" />
                         {formatSpan(r.startAt, r.endAt)}
                         <span className="text-foreground">
-                          ·{' '}
-                          {formatLeaveLength(r.workingDays, r.workingHours, {
-                            hourly: r.startPortion === 'hours' || r.endPortion === 'hours',
-                          })}
+                          · {r.workingDays} working day{r.workingDays === 1 ? '' : 's'}
                         </span>
-                        {(() => {
-                          const note = formatPortionNote(
-                            r.startPortion,
-                            r.endPortion,
-                            r.startHours,
-                            r.endHours,
-                            r.startAt.slice(0, 10) === r.endAt.slice(0, 10),
-                          )
-                          return note ? (
-                            <Badge variant="outline" className="font-normal">
-                              {note}
-                            </Badge>
-                          ) : null
-                        })()}
                       </p>
                       {r.status === 'rejected' && r.rejectionReason && (
                         <p className="text-sm text-destructive">Reason: {r.rejectionReason}</p>

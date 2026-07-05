@@ -10,7 +10,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ClipboardCheck, CheckCircle2, ChevronRight, CalendarDays } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
-import { formatLeaveLength } from '@/lib/leave'
 import { getVisibleLeaveRequests } from '@/lib/leave-approvals'
 
 // Dashboard card summarising leave requests awaiting the current user's
@@ -57,11 +56,9 @@ export async function ApprovalsWidget() {
                     ` – ${formatDateUK(r.endAt)}`}
                 </p>
               </div>
-                <Badge variant="outline" className="shrink-0">
-                  {formatLeaveLength(r.workingDays, r.workingHours, {
-                    hourly: r.startPortion === 'hours' || r.endPortion === 'hours',
-                  })}
-                </Badge>
+              <Badge variant="outline" className="shrink-0">
+                {r.workingDays} day{r.workingDays === 1 ? '' : 's'}
+              </Badge>
             </Link>
           ))}
         </div>

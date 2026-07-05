@@ -121,7 +121,7 @@ export function SalesNav() {
               )}
             >
               <Settings className="h-4 w-4" />
-              Sales Configuration
+              Configure
               <ChevronDown className="h-4 w-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">

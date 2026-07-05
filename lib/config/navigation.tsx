@@ -157,7 +157,7 @@ const salesNavItem: NavItem = {
     { title: 'Quotes', href: '/dashboard/sales/quotes', icon: ReceiptText },
     { title: 'Quote Bank', href: '/dashboard/sales/quote-bank', icon: Landmark },
     {
-      title: 'Sales Configuration',
+      title: 'Configure',
       icon: Settings,
       children: [
         { title: 'Direct Costs', href: '/dashboard/sales/direct-costs', icon: Coins },

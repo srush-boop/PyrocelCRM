@@ -31,16 +31,29 @@ export async function GET(
       ? supabase.from('sites').select('name').eq('id', doc.site_id).maybeSingle()
       : Promise.resolve({ data: null }),
     doc.prepared_by
-      ? supabase.from('profiles').select('full_name').eq('id', doc.prepared_by).maybeSingle()
+      ? supabase
+          .from('profiles')
+          .select('full_name, signature_url, job_title, role_ref:roles(name)')
+          .eq('id', doc.prepared_by)
+          .maybeSingle()
       : Promise.resolve({ data: null }),
   ])
+
+  const preparer = preparerRes.data as {
+    full_name?: string | null
+    signature_url?: string | null
+    job_title?: string | null
+    role_ref?: { name?: string } | null
+  } | null
 
   const buffer = await renderRamsPdf({
     doc: doc as RamsDocument,
     settings,
     clientName: (clientRes.data as { name?: string } | null)?.name ?? null,
     siteName: (siteRes.data as { name?: string } | null)?.name ?? null,
-    preparedByName: (preparerRes.data as { full_name?: string } | null)?.full_name ?? null,
+    preparedByName: preparer?.full_name ?? null,
+    preparedByRole: preparer?.role_ref?.name ?? preparer?.job_title ?? null,
+    preparedBySignatureUrl: preparer?.signature_url ?? null,
   })
 
   return new NextResponse(buffer as unknown as BodyInit, {

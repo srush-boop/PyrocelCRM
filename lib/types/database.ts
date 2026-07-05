@@ -1,6 +1,34 @@
 // Database types for PyrocelCRM
 
+// The user's permission level / user type. Shown in the UI as "User Type".
+// Governs access and RLS. Do not confuse with `Role` below.
 export type UserRole = 'admin' | 'engineer' | 'office' | 'client'
+
+// A descriptive, admin-managed job role (e.g. "Lead Engineer", "Estimator").
+// Purely a label used on documents and communications alongside a signature;
+// it does NOT affect permissions.
+export interface Role {
+  id: string
+  name: string
+  description: string | null
+  active: boolean
+  // Whether people with this role must submit timesheets. This is the default
+  // applied to users who don't have their own override (see Profile).
+  timesheet_required: boolean
+  created_at: string
+  updated_at: string
+}
+
+// Resolve whether a user must submit timesheets: an explicit per-user override
+// wins; otherwise fall back to the assigned role's default; otherwise false.
+export function isTimesheetRequired(
+  profile: Pick<Profile, 'timesheet_required'> & { role_ref?: Role | null },
+): boolean {
+  if (profile.timesheet_required !== null && profile.timesheet_required !== undefined) {
+    return profile.timesheet_required
+  }
+  return profile.role_ref?.timesheet_required ?? false
+}
 
 // Who performs a service. Independent of how the work is routed/assigned.
 export type WorkerType = 'cdo' | 'engineer' | 'subcontractor'
@@ -97,11 +125,25 @@ export interface Profile {
   // HR employee/payroll reference. Used to match rows during training CSV
   // imports and to anonymise client-facing training exports.
   employee_number: string | null
+  // Job title (free text). Legacy/optional; the managed `role_id` is preferred
+  // for the label shown on documents.
+  job_title: string | null
+  // Assigned descriptive job role (see Role). NULL = none assigned.
+  role_id: string | null
+  // Public Blob URL of the user's signature image, applied to reports, RAMS and
+  // other documents they generate or sign off.
+  signature_url: string | null
+  // Per-user timesheet requirement override. NULL = inherit from the assigned
+  // role; an explicit true/false overrides the role default. Resolve with
+  // `isTimesheetRequired()`.
+  timesheet_required: boolean | null
   created_at: string
   updated_at: string
   department?: Department | null
   branch?: Branch | null
   manager?: Profile | null
+  // Joined descriptive role, when selected with `*, role:roles(*)`.
+  role_ref?: Role | null
   }
 
 // A single training/qualification record for an employee. Managed by staff;

@@ -61,7 +61,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import type { Profile, UserRole, Department, Branch, WorkDayHours } from '@/lib/types/database'
+import type { Profile, UserRole, Department, Branch, WorkDayHours, Role } from '@/lib/types/database'
 import type { LeaveBalance } from '@/lib/leave'
 import { formatDateUK } from '@/lib/utils'
 import { InviteEngineerDialog } from './invite-engineer-dialog'
@@ -70,6 +70,7 @@ import { MenuAccessDialog } from './menu-access-dialog'
 const NO_DEPARTMENT = '__none__'
 const NO_BRANCH = '__none__'
 const NO_MANAGER = '__none__'
+const NO_ROLE = '__none__'
 
 // ISO weekday numbers (1 = Monday ... 7 = Sunday) used for working patterns.
 const WEEKDAYS: { value: number; label: string }[] = [
@@ -147,6 +148,8 @@ interface EngineersTableProps {
   users: Profile[]
   departments: Department[]
   branches?: Branch[]
+  /** Descriptive job roles available to assign. */
+  roles?: Role[]
   /** Current-year annual leave balances, keyed by user id. */
   leaveBalances?: Record<string, LeaveBalance>
 }
@@ -162,12 +165,15 @@ export function EngineersTable({
   users,
   departments,
   branches = [],
+  roles = [],
   leaveBalances = {},
 }: EngineersTableProps) {
   const departmentName = (id: string | null) =>
     id ? departments.find((d) => d.id === id)?.name ?? null : null
   const branchName = (id: string | null) =>
     id ? branches.find((b) => b.id === id)?.name ?? null : null
+  const roleName = (id: string | null) =>
+    id ? roles.find((r) => r.id === id)?.name ?? null : null
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
   const [inviteOpen, setInviteOpen] = useState(false)
@@ -187,6 +193,9 @@ export function EngineersTable({
     branch_id: NO_BRANCH,
     status: 'active' as 'active' | 'inactive',
     manager_id: NO_MANAGER,
+    role_id: NO_ROLE,
+    // 'inherit' = use the assigned role's default; 'yes'/'no' = per-user override.
+    timesheet_required: 'inherit' as 'inherit' | 'yes' | 'no',
     employee_number: '',
     holiday_entitlement_days: '',
     holiday_entitlement_hours: '',
@@ -317,6 +326,13 @@ export function EngineersTable({
       branch_id: user.branch_id ?? NO_BRANCH,
       status: user.status,
       manager_id: user.manager_id ?? NO_MANAGER,
+      role_id: user.role_id ?? NO_ROLE,
+      timesheet_required:
+        user.timesheet_required === null || user.timesheet_required === undefined
+          ? 'inherit'
+          : user.timesheet_required
+            ? 'yes'
+            : 'no',
       employee_number: user.employee_number ?? '',
       holiday_entitlement_days:
         user.holiday_entitlement_days != null ? String(user.holiday_entitlement_days) : '',
@@ -361,6 +377,11 @@ export function EngineersTable({
           branch_id: editForm.branch_id === NO_BRANCH ? null : editForm.branch_id,
           status: editForm.status,
           manager_id: editForm.manager_id === NO_MANAGER ? null : editForm.manager_id,
+          role_id: editForm.role_id === NO_ROLE ? null : editForm.role_id,
+          timesheet_required:
+            editForm.timesheet_required === 'inherit'
+              ? null
+              : editForm.timesheet_required === 'yes',
           employee_number: editForm.employee_number.trim() || null,
           holiday_entitlement_days: days === '' ? null : Number(days),
           holiday_entitlement_hours: hours === '' ? null : Number(hours),
@@ -471,10 +492,10 @@ export function EngineersTable({
         </div>
         <Select value={roleFilter} onValueChange={setRoleFilter}>
           <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Filter by role" />
+            <SelectValue placeholder="Filter by user type" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Roles</SelectItem>
+            <SelectItem value="all">All User Types</SelectItem>
             <SelectItem value="admin">Admin</SelectItem>
             <SelectItem value="engineer">Engineer</SelectItem>
             <SelectItem value="office">Office</SelectItem>
@@ -492,6 +513,7 @@ export function EngineersTable({
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Email</TableHead>
+              <TableHead>User Type</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Department</TableHead>
               {branches.length > 0 && <TableHead>Branch</TableHead>}
@@ -504,7 +526,7 @@ export function EngineersTable({
           <TableBody>
             {filteredUsers.length === 0 ? (
               <TableRow>
-                    <TableCell colSpan={branches.length > 0 ? 9 : 8} className="h-24 text-center">
+                    <TableCell colSpan={branches.length > 0 ? 10 : 9} className="h-24 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <Users className="h-8 w-8 text-muted-foreground/50 mb-2" />
                     <p className="text-muted-foreground">No users found</p>
@@ -524,6 +546,16 @@ export function EngineersTable({
                     <Badge className={roleColors[user.role]} variant="secondary">
                       {user.role}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {(() => {
+                      const label = user.role_ref?.name ?? roleName(user.role_id)
+                      return label ? (
+                        <Badge variant="outline">{label}</Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">-</span>
+                      )
+                    })()}
                   </TableCell>
                   <TableCell>
                     <Select
@@ -675,7 +707,7 @@ export function EngineersTable({
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="edit-role">Role</Label>
+                <Label htmlFor="edit-role">User Type</Label>
                 <Select
                   value={editForm.role}
                   onValueChange={(value) => setEditForm({ ...editForm, role: value as UserRole })}
@@ -690,7 +722,60 @@ export function EngineersTable({
                     <SelectItem value="client">Client</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">Controls access and permissions.</p>
               </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-role-id">Role</Label>
+                <Select
+                  value={editForm.role_id}
+                  onValueChange={(value) => setEditForm({ ...editForm, role_id: value })}
+                >
+                  <SelectTrigger id="edit-role-id">
+                    <SelectValue placeholder="No role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_ROLE}>No role</SelectItem>
+                    {roles
+                      .filter((r) => r.active || r.id === editForm.role_id)
+                      .map((r) => (
+                        <SelectItem key={r.id} value={r.id}>
+                          {r.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Shown on documents. Manage in Settings.</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-timesheet">Timesheet</Label>
+                <Select
+                  value={editForm.timesheet_required}
+                  onValueChange={(value) =>
+                    setEditForm({
+                      ...editForm,
+                      timesheet_required: value as 'inherit' | 'yes' | 'no',
+                    })
+                  }
+                >
+                  <SelectTrigger id="edit-timesheet">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="inherit">
+                      {(() => {
+                        const r = roles.find((x) => x.id === editForm.role_id)
+                        const dflt = r ? (r.timesheet_required ? 'Required' : 'Not required') : 'Not required'
+                        return `Use role default (${dflt})`
+                      })()}
+                    </SelectItem>
+                    <SelectItem value="yes">Required</SelectItem>
+                    <SelectItem value="no">Not required</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Overrides the role&apos;s default for this user.</p>
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="edit-status">Status</Label>
                 <Select

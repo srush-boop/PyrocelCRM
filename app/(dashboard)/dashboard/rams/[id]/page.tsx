@@ -67,7 +67,11 @@ export default async function RamsDetailPage({
       ? supabase.from('sites').select('name').eq('id', doc.site_id).maybeSingle()
       : Promise.resolve({ data: null }),
     doc.prepared_by
-      ? supabase.from('profiles').select('full_name').eq('id', doc.prepared_by).maybeSingle()
+      ? supabase
+          .from('profiles')
+          .select('full_name, signature_url, job_title, role_ref:roles(name)')
+          .eq('id', doc.prepared_by)
+          .maybeSingle()
       : Promise.resolve({ data: null }),
     doc.approved_by
       ? supabase.from('profiles').select('full_name').eq('id', doc.approved_by).maybeSingle()
@@ -94,6 +98,15 @@ export default async function RamsDetailPage({
         clientName={(clientRes.data as { name?: string } | null)?.name ?? null}
         siteName={(siteRes.data as { name?: string } | null)?.name ?? null}
         preparedByName={(preparerRes.data as { full_name?: string } | null)?.full_name ?? null}
+        preparedByRole={
+          (preparerRes.data as { role_ref?: { name?: string } | null; job_title?: string | null } | null)
+            ?.role_ref?.name ??
+          (preparerRes.data as { job_title?: string | null } | null)?.job_title ??
+          null
+        }
+        preparedBySignatureUrl={
+          (preparerRes.data as { signature_url?: string | null } | null)?.signature_url ?? null
+        }
         approvedByName={(approverRes.data as { full_name?: string } | null)?.full_name ?? null}
         confirmations={(confirmations as RamsEngineerConfirmation[]) ?? []}
         signatures={(signatures as RamsSignature[]) ?? []}

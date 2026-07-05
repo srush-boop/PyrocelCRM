@@ -72,6 +72,8 @@ interface RamsDetailProps {
   clientName: string | null
   siteName: string | null
   preparedByName: string | null
+  preparedByRole?: string | null
+  preparedBySignatureUrl?: string | null
   approvedByName: string | null
   confirmations: RamsEngineerConfirmation[]
   signatures: RamsSignature[]
@@ -93,6 +95,8 @@ export function RamsDetail({
   clientName,
   siteName,
   preparedByName,
+  preparedByRole,
+  preparedBySignatureUrl,
   approvedByName,
   confirmations,
   signatures,
@@ -491,7 +495,28 @@ export function RamsDetail({
             <CardTitle className="text-base">Approval</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <Row label="Prepared by" value={preparedByName || '—'} />
+            <Row
+              label="Prepared by"
+              value={
+                preparedByName
+                  ? preparedByRole
+                    ? `${preparedByName} (${preparedByRole})`
+                    : preparedByName
+                  : '—'
+              }
+            />
+            {preparedBySignatureUrl && (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Signature</span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={preparedBySignatureUrl || '/placeholder.svg'}
+                  alt={`Signature of ${preparedByName || 'preparer'}`}
+                  crossOrigin="anonymous"
+                  className="max-h-10 w-auto object-contain"
+                />
+              </div>
+            )}
             <Row
               label="Prepared date"
               value={doc.prepared_date ? formatDateUK(doc.prepared_date) : '—'}

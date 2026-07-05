@@ -8,11 +8,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { User, Lock, LogOut, Loader2, Building2, Users } from 'lucide-react'
+import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase } from 'lucide-react'
 import type { User as AuthUser } from '@supabase/supabase-js'
-import type { Profile, CompanyInfo, Branch, Department } from '@/lib/types/database'
+import type { Profile, CompanyInfo, Branch, Department, Role } from '@/lib/types/database'
 import { CompanySettings } from './company-settings'
 import { DepartmentsSettings } from './departments-settings'
+import { RolesSettings } from './roles-settings'
+import { SignatureManager } from './signature-manager'
 
 interface SettingsContentProps {
   user: AuthUser
@@ -20,10 +22,13 @@ interface SettingsContentProps {
   company: CompanyInfo | null
   branches: Branch[]
   departments: Department[]
+  roles: Role[]
 }
 
-export function SettingsContent({ user, profile, company, branches, departments }: SettingsContentProps) {
+export function SettingsContent({ user, profile, company, branches, departments, roles }: SettingsContentProps) {
   const isAdmin = profile.role === 'admin'
+  const userTypeLabel = profile.role.charAt(0).toUpperCase() + profile.role.slice(1)
+  const assignedRole = profile.role_ref?.name ?? profile.job_title ?? 'Not assigned'
   const [fullName, setFullName] = useState(profile.full_name || '')
   const [loadingProfile, setLoadingProfile] = useState(false)
   const [loadingPassword, setLoadingPassword] = useState(false)
@@ -114,6 +119,12 @@ export function SettingsContent({ user, profile, company, branches, departments 
             Departments
           </TabsTrigger>
         )}
+        {isAdmin && (
+          <TabsTrigger value="roles" className="gap-2">
+            <Briefcase className="h-4 w-4" />
+            Roles
+          </TabsTrigger>
+        )}
       </TabsList>
 
       <TabsContent value="account" className="space-y-4">
@@ -147,15 +158,33 @@ export function SettingsContent({ user, profile, company, branches, departments 
                 />
               </div>
 
-              <div className="grid gap-2">
-                <Label htmlFor="role">Role</Label>
-                <Input
-                  id="role"
-                  type="text"
-                  value={profile.role.charAt(0).toUpperCase() + profile.role.slice(1)}
-                  disabled
-                  className="bg-muted capitalize"
-                />
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="user_type">User Type</Label>
+                  <Input
+                    id="user_type"
+                    type="text"
+                    value={userTypeLabel}
+                    disabled
+                    className="bg-muted"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Controls your access. Managed by an administrator.
+                  </p>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="role">Role</Label>
+                  <Input
+                    id="role"
+                    type="text"
+                    value={assignedRole}
+                    disabled
+                    className="bg-muted"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Shown on your documents. Set by an administrator.
+                  </p>
+                </div>
               </div>
 
               {message && (
@@ -175,6 +204,19 @@ export function SettingsContent({ user, profile, company, branches, departments 
                 Save Changes
               </Button>
             </form>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Signature</CardTitle>
+            <CardDescription>
+              Your signature is applied to reports, RAMS, documents and receipt confirmations you
+              generate. Upload an image or draw one.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SignatureManager signatureUrl={profile.signature_url} />
           </CardContent>
         </Card>
       </TabsContent>
@@ -239,6 +281,12 @@ export function SettingsContent({ user, profile, company, branches, departments 
       {isAdmin && (
         <TabsContent value="departments" className="space-y-4">
           <DepartmentsSettings departments={departments} />
+        </TabsContent>
+      )}
+
+      {isAdmin && (
+        <TabsContent value="roles" className="space-y-4">
+          <RolesSettings roles={roles} />
         </TabsContent>
       )}
 

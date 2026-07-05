@@ -10,7 +10,7 @@ import {
   CalendarDays,
   FileText,
   MapPinned,
-  HardHat,
+  Truck,
   KeyRound,
   FolderOpen,
   Gauge,
@@ -131,7 +131,6 @@ const adminServiceManagementNavItem: NavItem = {
     { title: 'System Types', href: '/dashboard/sales/system-types', icon: Layers },
     { title: 'Checklists', href: '/dashboard/checklists', icon: ClipboardList },
     { title: 'Client Logins', href: '/dashboard/client-logins', icon: KeyRound },
-    { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
   ],
 }
 
@@ -142,7 +141,6 @@ const officeServiceManagementNavItem: NavItem = {
   children: [
     { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
     { title: 'System Types', href: '/dashboard/sales/system-types', icon: Layers },
-    { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },
   ],
 }
 
@@ -275,6 +273,7 @@ const documentsNavItem: NavItem = {
 const adminNavItems: NavItem[] = [
   { key: 'dashboard', title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { key: 'clients', title: 'Clients', href: '/dashboard/clients', icon: Building },
+  { key: 'suppliers', title: 'Suppliers', href: '/dashboard/suppliers', icon: Truck },
   sitesNavItem,
   adminCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
@@ -291,6 +290,7 @@ const adminNavItems: NavItem[] = [
 const officeNavItems: NavItem[] = [
   { key: 'dashboard', title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { key: 'clients', title: 'Clients', href: '/dashboard/clients', icon: Building },
+  { key: 'suppliers', title: 'Suppliers', href: '/dashboard/suppliers', icon: Truck },
   sitesNavItem,
   officeCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },

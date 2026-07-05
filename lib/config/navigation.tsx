@@ -36,6 +36,11 @@ import {
   ClipboardCheck,
   CalendarCheck,
   CalendarClock,
+  Sparkles,
+  FileSignature,
+  Paperclip,
+  MessageSquareText,
+  History,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { UserRole } from '@/lib/types/database'
@@ -190,6 +195,26 @@ const engineerStockNavItem: NavItem = {
   ],
 }
 
+// Tender AI: an expandable group. The trigger opens the module dashboard and
+// reveals the nine sub-sections. Shared by admin and office.
+const tenderAiNavItem: NavItem = {
+  key: 'tender-ai',
+  title: 'Tender AI',
+  href: '/dashboard/tender-ai',
+  icon: Sparkles,
+  children: [
+    { title: 'Dashboard', href: '/dashboard/tender-ai', icon: LayoutDashboard },
+    { title: 'Active Tenders', href: '/dashboard/tender-ai/tenders', icon: FileSignature },
+    { title: 'Knowledge Centre', href: '/dashboard/tender-ai/knowledge', icon: BookOpen },
+    { title: 'Evidence Library', href: '/dashboard/tender-ai/evidence', icon: Paperclip },
+    { title: 'AI Prompt Library', href: '/dashboard/tender-ai/prompts', icon: MessageSquareText },
+    { title: 'Templates', href: '/dashboard/tender-ai/templates', icon: LayoutList },
+    { title: 'Previous Responses', href: '/dashboard/tender-ai/previous-responses', icon: History },
+    { title: 'Requested Documents', href: '/dashboard/tender-ai/requested-documents', icon: FileText },
+    { title: 'AI Settings', href: '/dashboard/tender-ai/settings', icon: SlidersHorizontal },
+  ],
+}
+
 // ---------------------------------------------------------------------------
 // Role default menus
 // ---------------------------------------------------------------------------
@@ -214,6 +239,7 @@ const adminNavItems: NavItem[] = [
   managerStockNavItem,
   { key: 'documents', title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
   { key: 'rams', title: 'RAMS', href: '/dashboard/rams', icon: ShieldCheck },
+  tenderAiNavItem,
   { key: 'vault', title: 'Employee Vault', href: '/dashboard/vault', icon: Vault },
 ]
 
@@ -234,6 +260,7 @@ const officeNavItems: NavItem[] = [
   managerStockNavItem,
   { key: 'documents', title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
   { key: 'rams', title: 'RAMS', href: '/dashboard/rams', icon: ShieldCheck },
+  tenderAiNavItem,
   { key: 'vault', title: 'Employee Vault', href: '/dashboard/vault', icon: Vault },
 ]
 

@@ -3,14 +3,13 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { SystemIcon, SystemBadge } from '@/lib/system-types'
+import { SystemIcon } from '@/lib/system-types'
 import { useBackNavigation } from '@/hooks/use-back-navigation'
 import { formatDateUK, formatTimeUK, cn } from '@/lib/utils'
 import {
   ArrowLeft,
   MapPin,
   Navigation,
-  Wrench,
   CalendarClock,
   Clock,
 } from 'lucide-react'
@@ -87,80 +86,80 @@ export function TaskHeader({
   const statusStyle = STATUS_STYLES[status] ?? STATUS_STYLES.pending
 
   return (
-    <div className="flex items-start gap-3">
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={handleBack}
-        className="mt-0.5 shrink-0"
-        aria-label="Go back"
-      >
-        <ArrowLeft className="h-4 w-4" />
-      </Button>
+    <div className="space-y-3">
+      {/* Row 1: back + status, always reachable at the top on mobile */}
+      <div className="flex items-center justify-between gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleBack}
+          className="-ml-2 gap-1.5 text-muted-foreground"
+          aria-label="Go back"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </Button>
+        <Badge className={cn('capitalize', statusStyle.className)}>{statusStyle.label}</Badge>
+      </div>
 
-      <div className="min-w-0 flex-1 space-y-3">
-        {/* Status + classification badges */}
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge className={cn('capitalize', statusStyle.className)}>{statusStyle.label}</Badge>
-          {systemType?.name ? (
-            <SystemBadge system={systemType} />
-          ) : (
-            serviceType?.name && <Badge variant="outline">{serviceType.name}</Badge>
-          )}
-          {visitName && <Badge variant="secondary">{visitName}</Badge>}
+      {/* Row 2: site identity */}
+      <div className="flex items-start gap-3">
+        {systemType && <SystemIcon system={systemType} boxed boxClassName="h-9 w-9 shrink-0" />}
+        <div className="min-w-0 flex-1">
+          <h1 className="text-balance text-xl font-bold leading-tight sm:text-2xl">
+            {site?.name ?? 'Call'}
+          </h1>
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">{serviceType?.name ?? 'Service'}</span>
+            {visitName && <span>· {visitName}</span>}
+          </p>
         </div>
+      </div>
 
-        {/* Site name */}
-        <div className="flex items-start gap-3">
-          {systemType && <SystemIcon system={systemType} boxed boxClassName="h-10 w-10 shrink-0" />}
-          <div className="min-w-0">
-            <h1 className="text-balance text-2xl font-bold leading-tight">{site?.name ?? 'Call'}</h1>
-            {(address || postcode) && (
-              <p className="mt-0.5 flex items-center gap-1.5 text-sm text-muted-foreground">
-                <MapPin className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">
-                  {address}
-                  {address && postcode ? ', ' : ''}
-                  {postcode && <span className="font-medium text-foreground">{postcode}</span>}
-                </span>
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Key facts: service + complete-by date */}
-        <div className="flex flex-col gap-2 rounded-lg border bg-muted/40 p-3 sm:flex-row sm:items-center sm:justify-between">
-          <span className="inline-flex items-center gap-2 text-sm">
-            <Wrench className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="font-medium">{serviceType?.name ?? 'Service'}</span>
-            {visitName && <span className="text-muted-foreground">· {visitName}</span>}
-          </span>
-          <span className={cn('inline-flex items-center gap-2 text-sm', dueClass)}>
-            <CalendarClock className="h-4 w-4 shrink-0" />
-            <span>
-              Complete by {formatDateUK(task.scheduled_date)}
-              {dueHint && <span className="ml-1 font-normal opacity-90">({dueHint})</span>}
+      {/* Row 3: address (tap for directions) */}
+      {(address || postcode) &&
+        (directionsUrl ? (
+          <a
+            href={directionsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm transition-colors hover:bg-accent"
+          >
+            <MapPin className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1 truncate">
+              {address}
+              {address && postcode ? ', ' : ''}
+              {postcode && <span className="font-medium text-foreground">{postcode}</span>}
             </span>
-          </span>
-        </div>
-
-        {/* Commenced timestamp + directions link */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          {task.started_at && (
-            <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-              <Clock className="h-3.5 w-3.5 shrink-0" />
-              Commenced {formatDateUK(task.started_at)} at {formatTimeUK(task.started_at)}
+            <span className="inline-flex shrink-0 items-center gap-1 text-primary">
+              <Navigation className="h-4 w-4" />
+              <span className="hidden sm:inline">Directions</span>
             </span>
-          )}
-          {directionsUrl && (
-            <Button asChild variant="outline" size="sm" className="gap-1.5">
-              <a href={directionsUrl} target="_blank" rel="noopener noreferrer">
-                <Navigation className="h-4 w-4" />
-                Directions &amp; travel time
-              </a>
-            </Button>
-          )}
-        </div>
+          </a>
+        ) : (
+          <p className="flex items-center gap-2 px-1 text-sm text-muted-foreground">
+            <MapPin className="h-4 w-4 shrink-0" />
+            <span className="truncate">
+              {address}
+              {address && postcode ? ', ' : ''}
+              {postcode}
+            </span>
+          </p>
+        ))}
+
+      {/* Row 4: due date + commenced, compact single line */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-sm">
+        <span className={cn('inline-flex items-center gap-1.5', dueClass)}>
+          <CalendarClock className="h-4 w-4 shrink-0" />
+          Complete by {formatDateUK(task.scheduled_date)}
+          {dueHint && <span className="font-normal opacity-90">({dueHint})</span>}
+        </span>
+        {task.started_at && (
+          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+            <Clock className="h-3.5 w-3.5 shrink-0" />
+            Commenced {formatTimeUK(task.started_at)}
+          </span>
+        )}
       </div>
     </div>
   )

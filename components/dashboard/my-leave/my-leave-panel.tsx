@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { CalendarDays, Clock, CheckCircle2, Hourglass } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
-import { formatLeaveLength, formatPortionNote } from '@/lib/leave'
+import { formatLeaveLength, formatPortionNote } from '@/lib/leave-utils'
 import type { MyLeaveData } from '@/lib/my-leave'
 
 // Formats an inclusive leave span for display.

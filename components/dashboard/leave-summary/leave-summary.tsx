@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { X, CalendarRange } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
-import { formatPortionNote } from '@/lib/leave'
+import { formatPortionNote } from '@/lib/leave-utils'
 import { FilterMultiSelect } from './filter-multi-select'
 import type { SummaryEntry, SummaryFilterOptions } from '@/lib/leave-summary'
 

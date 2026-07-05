@@ -62,7 +62,7 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import type { Profile, UserRole, Department, Branch, WorkDayHours, Role } from '@/lib/types/database'
-import type { LeaveBalance } from '@/lib/leave'
+import type { LeaveBalance } from '@/lib/leave-utils'
 import { formatDateUK } from '@/lib/utils'
 import { InviteEngineerDialog } from './invite-engineer-dialog'
 import { MenuAccessDialog } from './menu-access-dialog'

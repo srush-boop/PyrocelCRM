@@ -25,7 +25,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { CalendarDays, Check, X, Clock, CheckCircle2 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
-import { formatLeaveLength, formatPortionNote } from '@/lib/leave'
+import { formatLeaveLength, formatPortionNote } from '@/lib/leave-utils'
 import type { LeaveRequestRow } from '@/lib/leave-approvals'
 
 interface Props {

@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ClipboardCheck, CheckCircle2, ChevronRight, CalendarDays } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
-import { formatLeaveLength } from '@/lib/leave'
+import { formatLeaveLength } from '@/lib/leave-utils'
 import { getVisibleLeaveRequests } from '@/lib/leave-approvals'
 
 // Dashboard card summarising leave requests awaiting the current user's

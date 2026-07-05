@@ -61,7 +61,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import type { Profile, UserRole, Department, Branch } from '@/lib/types/database'
+import type { Profile, UserRole, Department, Branch, WorkDayHours } from '@/lib/types/database'
+import type { LeaveBalance } from '@/lib/leave'
 import { formatDateUK } from '@/lib/utils'
 import { InviteEngineerDialog } from './invite-engineer-dialog'
 import { MenuAccessDialog } from './menu-access-dialog'
@@ -81,10 +82,73 @@ const WEEKDAYS: { value: number; label: string }[] = [
   { value: 7, label: 'Sun' },
 ]
 
+// One weekday's row in the working-hours editor. `break_minutes` is kept as a
+// string for the controlled number input.
+type DayHoursForm = { active: boolean; start: string; end: string; break_minutes: string }
+
+// A fresh, all-days-off week used to seed the working-hours form.
+const emptyWeek = (): Record<number, DayHoursForm> =>
+  WEEKDAYS.reduce(
+    (acc, d) => {
+      acc[d.value] = { active: false, start: '', end: '', break_minutes: '' }
+      return acc
+    },
+    {} as Record<number, DayHoursForm>,
+  )
+
+// Normalises a stored "HH:MM:SS" time to the "HH:MM" an <input type="time"> wants.
+const toTimeInput = (t: string | null) => (t ? t.slice(0, 5) : '')
+
+// Net minutes for a day = (finish - start) - break. Returns null when the times
+// are incomplete/invalid or the break exceeds the worked time.
+const netDayMinutes = (start: string, end: string, breakMin: string): number | null => {
+  if (!start || !end) return null
+  const [sh, sm] = start.split(':').map(Number)
+  const [eh, em] = end.split(':').map(Number)
+  const startMin = sh * 60 + sm
+  const endMin = eh * 60 + em
+  if (Number.isNaN(startMin) || Number.isNaN(endMin) || endMin <= startMin) return null
+  const brk = breakMin === '' ? 0 : Number(breakMin)
+  const net = endMin - startMin - (Number.isNaN(brk) ? 0 : brk)
+  return net > 0 ? net : null
+}
+
+// Formats net minutes as decimal hours (e.g. 450 -> "7.5"), trimming trailing zeros.
+const formatDecimalHours = (mins: number): string =>
+  (mins / 60).toFixed(2).replace(/\.?0+$/, '')
+
+// Trims trailing zeros from a day count (e.g. 12.50 -> "12.5", 12.00 -> "12").
+const formatDays = (n: number): string => n.toFixed(2).replace(/\.?0+$/, '')
+
+// Renders the current-year remaining annual leave for a user's table row. Shows
+// a dash when no entitlement is set, and highlights when leave is still owed.
+const renderLeaveCell = (bal?: LeaveBalance) => {
+  if (!bal || bal.entitlementDays == null || bal.remainingDays == null) {
+    return <span className="text-sm text-muted-foreground">—</span>
+  }
+  const remaining = bal.remainingDays
+  const label = `${formatDays(remaining)} / ${formatDays(bal.entitlementDays)} days`
+  return (
+    <Badge
+      variant={remaining > 0 ? 'secondary' : 'outline'}
+      className={
+        remaining > 0
+          ? 'bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-300'
+          : 'text-muted-foreground'
+      }
+      title={`${formatDays(bal.takenDays)} days taken this year`}
+    >
+      {label}
+    </Badge>
+  )
+}
+
 interface EngineersTableProps {
   users: Profile[]
   departments: Department[]
   branches?: Branch[]
+  /** Current-year annual leave balances, keyed by user id. */
+  leaveBalances?: Record<string, LeaveBalance>
 }
 
 const roleColors: Record<UserRole, string> = {
@@ -94,7 +158,12 @@ const roleColors: Record<UserRole, string> = {
   client: 'bg-muted text-muted-foreground',
 }
 
-export function EngineersTable({ users, departments, branches = [] }: EngineersTableProps) {
+export function EngineersTable({
+  users,
+  departments,
+  branches = [],
+  leaveBalances = {},
+}: EngineersTableProps) {
   const departmentName = (id: string | null) =>
     id ? departments.find((d) => d.id === id)?.name ?? null : null
   const branchName = (id: string | null) =>
@@ -119,92 +188,106 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
     status: 'active' as 'active' | 'inactive',
     manager_id: NO_MANAGER,
     employee_number: '',
+    holiday_entitlement_days: '',
+    holiday_entitlement_hours: '',
   })
   const [editError, setEditError] = useState<string | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
   const [hoursUser, setHoursUser] = useState<Profile | null>(null)
-  const [hoursForm, setHoursForm] = useState<{
-    work_start_time: string
-    work_end_time: string
-    lunch_minutes: string
-    work_days: number[]
-  }>({
-    work_start_time: '',
-    work_end_time: '',
-    lunch_minutes: '',
-    work_days: [1, 2, 3, 4, 5],
-  })
+  const [hoursForm, setHoursForm] = useState<Record<number, DayHoursForm>>(emptyWeek)
   const [hoursError, setHoursError] = useState<string | null>(null)
   const [savingHours, setSavingHours] = useState(false)
   const [menuAccessUser, setMenuAccessUser] = useState<Profile | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
-  // Normalises a stored "HH:MM:SS" time to the "HH:MM" an <input type="time"> wants.
-  const toTimeInput = (t: string | null) => (t ? t.slice(0, 5) : '')
-
-  // Net daily hours = (finish - start) - lunch, formatted as "Xh Ym". Returns
-  // null when the times are incomplete/invalid so the UI can hide the readout.
-  const netDailyHours = (() => {
-    const { work_start_time, work_end_time, lunch_minutes } = hoursForm
-    if (!work_start_time || !work_end_time) return null
-    const [sh, sm] = work_start_time.split(':').map(Number)
-    const [eh, em] = work_end_time.split(':').map(Number)
-    const startMin = sh * 60 + sm
-    const endMin = eh * 60 + em
-    if (Number.isNaN(startMin) || Number.isNaN(endMin) || endMin <= startMin) return null
-    const lunch = lunch_minutes === '' ? 0 : Number(lunch_minutes)
-    const net = endMin - startMin - (Number.isNaN(lunch) ? 0 : lunch)
-    if (net <= 0) return null
-    const h = Math.floor(net / 60)
-    const m = net % 60
-    return m === 0 ? `${h}h` : `${h}h ${m}m`
-  })()
-
   const openHoursDialog = (user: Profile) => {
     setHoursUser(user)
-    setHoursForm({
-      work_start_time: toTimeInput(user.work_start_time),
-      work_end_time: toTimeInput(user.work_end_time),
-      lunch_minutes: user.lunch_minutes != null ? String(user.lunch_minutes) : '',
-      work_days:
-        user.work_days && user.work_days.length > 0
-          ? [...user.work_days].sort((a, b) => a - b)
-          : [1, 2, 3, 4, 5],
-    })
+    const form = emptyWeek()
+    const stored = user.work_day_hours
+    if (stored && Object.keys(stored).length > 0) {
+      // Preferred: per-day hours already saved.
+      for (const [day, entry] of Object.entries(stored)) {
+        const d = Number(day)
+        if (form[d]) {
+          form[d] = {
+            active: true,
+            start: toTimeInput(entry.start),
+            end: toTimeInput(entry.end),
+            break_minutes: entry.break_minutes != null ? String(entry.break_minutes) : '',
+          }
+        }
+      }
+    } else {
+      // Legacy fallback: apply the single start/finish/lunch to each work day.
+      const days =
+        user.work_days && user.work_days.length > 0 ? user.work_days : [1, 2, 3, 4, 5]
+      for (const d of days) {
+        if (form[d]) {
+          form[d] = {
+            active: true,
+            start: toTimeInput(user.work_start_time),
+            end: toTimeInput(user.work_end_time),
+            break_minutes: user.lunch_minutes != null ? String(user.lunch_minutes) : '',
+          }
+        }
+      }
+    }
+    setHoursForm(form)
     setHoursError(null)
   }
 
+  // Total net minutes across all active, valid days.
+  const weeklyMinutes = WEEKDAYS.reduce((sum, d) => {
+    const f = hoursForm[d.value]
+    if (!f?.active) return sum
+    const mins = netDayMinutes(f.start, f.end, f.break_minutes)
+    return sum + (mins ?? 0)
+  }, 0)
+
   const handleSaveHours = async () => {
     if (!hoursUser) return
-    const { work_start_time, work_end_time, lunch_minutes, work_days } = hoursForm
-    // Either set both times or neither.
-    if ((work_start_time && !work_end_time) || (!work_start_time && work_end_time)) {
-      setHoursError('Please set both a start and end time, or leave both blank.')
+    const activeDays = WEEKDAYS.filter((d) => hoursForm[d.value]?.active)
+    if (activeDays.length === 0) {
+      setHoursError('Please enable at least one working day.')
       return
     }
-    if (work_start_time && work_end_time && work_end_time <= work_start_time) {
-      setHoursError('End time must be after the start time.')
-      return
+    const workDayHours: WorkDayHours = {}
+    for (const d of activeDays) {
+      const { start, end, break_minutes } = hoursForm[d.value]
+      if (!start || !end) {
+        setHoursError(`${d.label}: please set both a start and finish time.`)
+        return
+      }
+      if (end <= start) {
+        setHoursError(`${d.label}: finish time must be after the start time.`)
+        return
+      }
+      const brk = break_minutes === '' ? 0 : Number(break_minutes)
+      if (Number.isNaN(brk) || brk < 0 || brk > 480) {
+        setHoursError(`${d.label}: break must be between 0 and 480 minutes.`)
+        return
+      }
+      if (netDayMinutes(start, end, String(brk)) == null) {
+        setHoursError(`${d.label}: the break is longer than the working time.`)
+        return
+      }
+      workDayHours[String(d.value)] = { start, end, break_minutes: brk }
     }
-    const lunch = lunch_minutes === '' ? null : Number(lunch_minutes)
-    if (lunch != null && (Number.isNaN(lunch) || lunch < 0 || lunch > 480)) {
-      setHoursError('Lunch allowance must be between 0 and 480 minutes.')
-      return
-    }
-    if (work_days.length === 0) {
-      setHoursError('Please select at least one working day.')
-      return
-    }
+    const workDays = activeDays.map((d) => d.value).sort((a, b) => a - b)
+    // Keep the legacy single fields in sync (using the earliest working day) so
+    // anything still reading them gets sensible values.
+    const first = workDayHours[String(workDays[0])]
     setHoursError(null)
     setSavingHours(true)
     const { error } = await supabase
       .from('profiles')
       .update({
-        work_start_time: work_start_time || null,
-        work_end_time: work_end_time || null,
-        lunch_minutes: lunch,
-        work_days: [...work_days].sort((a, b) => a - b),
+        work_day_hours: workDayHours,
+        work_days: workDays,
+        work_start_time: first.start,
+        work_end_time: first.end,
+        lunch_minutes: first.break_minutes,
         updated_at: new Date().toISOString(),
       })
       .eq('id', hoursUser.id)
@@ -235,6 +318,10 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
       status: user.status,
       manager_id: user.manager_id ?? NO_MANAGER,
       employee_number: user.employee_number ?? '',
+      holiday_entitlement_days:
+        user.holiday_entitlement_days != null ? String(user.holiday_entitlement_days) : '',
+      holiday_entitlement_hours:
+        user.holiday_entitlement_hours != null ? String(user.holiday_entitlement_hours) : '',
     })
     setEditError(null)
   }
@@ -247,6 +334,17 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editForm.email.trim())) {
       setEditError('Please enter a valid email address.')
+      return
+    }
+    // Holiday entitlement is optional; when provided it must be a non-negative number.
+    const days = editForm.holiday_entitlement_days.trim()
+    const hours = editForm.holiday_entitlement_hours.trim()
+    if (days !== '' && (Number.isNaN(Number(days)) || Number(days) < 0)) {
+      setEditError('Holiday entitlement (days) must be a positive number.')
+      return
+    }
+    if (hours !== '' && (Number.isNaN(Number(hours)) || Number(hours) < 0)) {
+      setEditError('Holiday entitlement (hours) must be a positive number.')
       return
     }
     setEditError(null)
@@ -264,6 +362,8 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
           status: editForm.status,
           manager_id: editForm.manager_id === NO_MANAGER ? null : editForm.manager_id,
           employee_number: editForm.employee_number.trim() || null,
+          holiday_entitlement_days: days === '' ? null : Number(days),
+          holiday_entitlement_hours: hours === '' ? null : Number(hours),
         }),
       })
       const data = await res.json()
@@ -396,6 +496,7 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
               <TableHead>Department</TableHead>
               {branches.length > 0 && <TableHead>Branch</TableHead>}
                       <TableHead>Status</TableHead>
+                      <TableHead className="hidden md:table-cell">Leave left</TableHead>
                       <TableHead className="hidden lg:table-cell">Added</TableHead>
               <TableHead className="w-[70px]"></TableHead>
             </TableRow>
@@ -403,7 +504,7 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
           <TableBody>
             {filteredUsers.length === 0 ? (
               <TableRow>
-                    <TableCell colSpan={branches.length > 0 ? 8 : 7} className="h-24 text-center">
+                    <TableCell colSpan={branches.length > 0 ? 9 : 8} className="h-24 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <Users className="h-8 w-8 text-muted-foreground/50 mb-2" />
                     <p className="text-muted-foreground">No users found</p>
@@ -467,6 +568,9 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
                         Inactive
                       </span>
                     )}
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell">
+                    {renderLeaveCell(leaveBalances[user.id])}
                   </TableCell>
                   <TableCell className="hidden text-muted-foreground lg:table-cell">
                     {user.created_at ? formatDateUK(user.created_at) : '-'}
@@ -684,6 +788,55 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
                 </p>
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-holiday-days">Holiday entitlement (days)</Label>
+                <Input
+                  id="edit-holiday-days"
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  inputMode="decimal"
+                  value={editForm.holiday_entitlement_days}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, holiday_entitlement_days: e.target.value })
+                  }
+                  placeholder="e.g. 25"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-holiday-hours">Holiday entitlement (hours)</Label>
+                <Input
+                  id="edit-holiday-hours"
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  inputMode="decimal"
+                  value={editForm.holiday_entitlement_hours}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, holiday_entitlement_hours: e.target.value })
+                  }
+                  placeholder="e.g. 200"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Annual holiday entitlement. Days and hours are recorded separately.
+            </p>
+            {(() => {
+              const bal = editUser ? leaveBalances[editUser.id] : undefined
+              if (!bal || bal.entitlementDays == null || bal.remainingDays == null) return null
+              return (
+                <div className="flex items-center justify-between rounded-md border bg-muted/50 px-3 py-2">
+                  <span className="text-sm text-muted-foreground">
+                    Remaining this year (from {formatDays(bal.takenDays)} taken)
+                  </span>
+                  <span className="text-sm font-semibold tabular-nums">
+                    {formatDays(bal.remainingDays)} / {formatDays(bal.entitlementDays)} days
+                  </span>
+                </div>
+              )
+            })()}
             {editError && <p className="text-sm text-destructive">{editError}</p>}
           </div>
           <DialogFooter>
@@ -756,95 +909,83 @@ export function EngineersTable({ users, departments, branches = [] }: EngineersT
         open={!!hoursUser}
         onOpenChange={(open) => !open && !savingHours && setHoursUser(null)}
       >
-        <DialogContent>
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Working Hours</DialogTitle>
             <DialogDescription>
-              Set the standard working hours for{' '}
-              <strong>{hoursUser?.full_name || hoursUser?.email}</strong>. These are optional
-              and will be used for future timesheets.
+              Set working hours per day for{' '}
+              <strong>{hoursUser?.full_name || hoursUser?.email}</strong>. Enable each working
+              day, then enter the start and finish time and any break. Net hours are worked out
+              for you.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="work-start">Start time</Label>
-                <Input
-                  id="work-start"
-                  type="time"
-                  value={hoursForm.work_start_time}
-                  onChange={(e) =>
-                    setHoursForm({ ...hoursForm, work_start_time: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="work-end">End time</Label>
-                <Input
-                  id="work-end"
-                  type="time"
-                  value={hoursForm.work_end_time}
-                  onChange={(e) =>
-                    setHoursForm({ ...hoursForm, work_end_time: e.target.value })
-                  }
-                />
-              </div>
+          <div className="space-y-3">
+            {/* Column headers (hidden on narrow screens where rows stack). */}
+            <div className="hidden items-center gap-2 px-1 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[4.5rem_1fr_1fr_6rem_4.5rem]">
+              <span>Day</span>
+              <span>Start</span>
+              <span>Finish</span>
+              <span>Break (min)</span>
+              <span className="text-right">Hours</span>
             </div>
-            <div className="space-y-1.5">
-              <Label>Days worked</Label>
-              <div className="flex flex-wrap gap-1.5">
-                {WEEKDAYS.map((day) => {
-                  const active = hoursForm.work_days.includes(day.value)
-                  return (
-                    <Button
-                      key={day.value}
-                      type="button"
-                      size="sm"
-                      variant={active ? 'default' : 'outline'}
-                      aria-pressed={active}
-                      onClick={() =>
-                        setHoursForm((prev) => ({
-                          ...prev,
-                          work_days: active
-                            ? prev.work_days.filter((d) => d !== day.value)
-                            : [...prev.work_days, day.value],
-                        }))
-                      }
-                    >
-                      {day.label}
-                    </Button>
-                  )
-                })}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Select the days this employee normally works (supports part-time patterns).
-              </p>
+            {WEEKDAYS.map((day) => {
+              const f = hoursForm[day.value]
+              const mins = f.active ? netDayMinutes(f.start, f.end, f.break_minutes) : null
+              const update = (patch: Partial<DayHoursForm>) =>
+                setHoursForm((prev) => ({ ...prev, [day.value]: { ...prev[day.value], ...patch } }))
+              return (
+                <div
+                  key={day.value}
+                  className="grid grid-cols-2 items-center gap-2 rounded-md border px-2 py-2 sm:grid-cols-[4.5rem_1fr_1fr_6rem_4.5rem]"
+                >
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={f.active ? 'default' : 'outline'}
+                    aria-pressed={f.active}
+                    className="w-full"
+                    onClick={() => update({ active: !f.active })}
+                  >
+                    {day.label}
+                  </Button>
+                  <Input
+                    type="time"
+                    aria-label={`${day.label} start time`}
+                    value={f.start}
+                    disabled={!f.active}
+                    onChange={(e) => update({ start: e.target.value })}
+                  />
+                  <Input
+                    type="time"
+                    aria-label={`${day.label} finish time`}
+                    value={f.end}
+                    disabled={!f.active}
+                    onChange={(e) => update({ end: e.target.value })}
+                  />
+                  <Input
+                    type="number"
+                    min={0}
+                    max={480}
+                    step={5}
+                    inputMode="numeric"
+                    aria-label={`${day.label} break minutes`}
+                    placeholder="0"
+                    value={f.break_minutes}
+                    disabled={!f.active}
+                    onChange={(e) => update({ break_minutes: e.target.value })}
+                  />
+                  <span className="text-right text-sm font-medium tabular-nums">
+                    {f.active ? (mins != null ? `${formatDecimalHours(mins)} h` : '—') : ''}
+                  </span>
+                </div>
+              )
+            })}
+            <div className="flex items-center justify-between rounded-md border bg-muted/50 px-3 py-2">
+              <span className="text-sm text-muted-foreground">Total weekly hours</span>
+              <span className="text-sm font-semibold tabular-nums">
+                {weeklyMinutes > 0 ? `${formatDecimalHours(weeklyMinutes)} h` : '—'}
+              </span>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="lunch-minutes">Lunch allowance (minutes per day)</Label>
-              <Input
-                id="lunch-minutes"
-                type="number"
-                min={0}
-                max={480}
-                step={5}
-                inputMode="numeric"
-                value={hoursForm.lunch_minutes}
-                onChange={(e) =>
-                  setHoursForm({ ...hoursForm, lunch_minutes: e.target.value })
-                }
-                placeholder="e.g. 30"
-              />
-              <p className="text-xs text-muted-foreground">
-                Deducted from daily working time when calculating timesheets.
-              </p>
-            </div>
-            {netDailyHours && (
-              <div className="flex items-center justify-between rounded-md border bg-muted/50 px-3 py-2">
-                <span className="text-sm text-muted-foreground">Net daily hours</span>
-                <span className="text-sm font-medium">{netDailyHours}</span>
-              </div>
-            )}
             {hoursError && <p className="text-sm text-destructive">{hoursError}</p>}
           </div>
           <DialogFooter>

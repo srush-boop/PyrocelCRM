@@ -34,6 +34,8 @@ import {
 } from '@/components/dashboard/overview/completions-chart'
 import { fetchKpiData } from '@/lib/kpi-data'
 import { buildKpiReport } from '@/lib/kpi'
+import { ApprovalsWidget } from '@/components/dashboard/approvals/approvals-widget'
+import { Suspense } from 'react'
 import {
   startOfMonth,
   startOfWeek,
@@ -258,6 +260,11 @@ export default async function DashboardPage() {
           </Button>
         </div>
       </div>
+
+      {/* Leave approvals waiting on this user (managers/accounts/admins only) */}
+      <Suspense fallback={null}>
+        <ApprovalsWidget />
+      </Suspense>
 
       {/* Stat tiles */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">

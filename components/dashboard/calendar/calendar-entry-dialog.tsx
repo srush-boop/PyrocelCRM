@@ -40,7 +40,8 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { Loader2, Trash2 } from 'lucide-react'
-import type { CalendarEntryType, Profile } from '@/lib/types/database'
+import type { CalendarEntryType, Profile, LeaveApprovalStatus } from '@/lib/types/database'
+import { ANNUAL_LEAVE_TYPE_ID } from '@/lib/constants/leave'
 
 interface PersonOption {
   id: string
@@ -134,6 +135,9 @@ export function CalendarEntryDialog({
   const [loadingEntry, setLoadingEntry] = useState(false)
   // Whether the current user is allowed to edit/delete the loaded entry.
   const [editable, setEditable] = useState(true)
+  // Approval status of the loaded leave entry (null for new/non-leave entries).
+  const [approvalStatus, setApprovalStatus] = useState<LeaveApprovalStatus | null>(null)
+  const [rejectionReason, setRejectionReason] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   // Reset / load whenever the dialog opens.
@@ -144,6 +148,8 @@ export function CalendarEntryDialog({
     if (!entryId) {
       setForm(buildDefault(profile, entryTypes, defaultDate))
       setEditable(true)
+      setApprovalStatus(null)
+      setRejectionReason(null)
       return
     }
 
@@ -181,6 +187,8 @@ export function CalendarEntryDialog({
         is_public: data.is_public,
         notes: data.notes ?? '',
       })
+      setApprovalStatus((data.approval_status as LeaveApprovalStatus | null) ?? null)
+      setRejectionReason((data.rejection_reason as string | null) ?? null)
       // Managers can edit anything; engineers only their own entries they created.
       setEditable(
         canManageOthers ||
@@ -241,8 +249,9 @@ export function CalendarEntryDialog({
       return
     }
 
-    // Engineers can only ever add entries to their own calendar.
-    const companyWide = canManageOthers && form.company_wide
+    const isAnnualLeave = form.entry_type_id === ANNUAL_LEAVE_TYPE_ID
+    // Annual leave is always a personal request, never company-wide.
+    const companyWide = canManageOthers && form.company_wide && !isAnnualLeave
 
     // Resolve the final attendee set: directly-picked people plus everyone in
     // any selected department.
@@ -277,6 +286,19 @@ export function CalendarEntryDialog({
         ? attendeeIds[0] ?? null
         : profile.id
 
+    // Annual leave enters the diary as "requested". New requests and any edit
+    // by the leave-taker (re-request) reset the approval; a manager editing an
+    // existing entry leaves its current status untouched.
+    const willRequest = isAnnualLeave && (!entryId || !canManageOthers)
+    const leaveFields = willRequest
+      ? {
+          approval_status: 'requested' as const,
+          approved_by: null,
+          approved_at: null,
+          rejection_reason: null,
+        }
+      : {}
+
     setSaving(true)
     const payload = {
       entry_type_id: form.entry_type_id || null,
@@ -287,6 +309,7 @@ export function CalendarEntryDialog({
       end_at,
       is_public: form.is_public,
       notes: form.notes.trim() || null,
+      ...leaveFields,
     }
 
     let targetId = entryId
@@ -328,8 +351,27 @@ export function CalendarEntryDialog({
       }
     }
 
+    // For annual leave, fan out the approval request to the manager server-side.
+    if (willRequest) {
+      try {
+        await fetch('/api/leave/request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entryId: targetId }),
+        })
+      } catch {
+        // Non-fatal: the entry is saved; the manager can still see it in Approvals.
+      }
+    }
+
     setSaving(false)
-    toast.success(entryId ? 'Entry updated' : 'Entry added')
+    toast.success(
+      willRequest
+        ? 'Leave requested — sent to your manager for approval'
+        : entryId
+          ? 'Entry updated'
+          : 'Entry added',
+    )
     onOpenChange(false)
     router.refresh()
   }
@@ -371,6 +413,25 @@ export function CalendarEntryDialog({
             </div>
           ) : (
             <fieldset disabled={readOnly} className="grid gap-4 py-4">
+              {approvalStatus && (
+                <div
+                  className={
+                    'flex items-start gap-2 rounded-md border px-3 py-2 text-sm ' +
+                    (approvalStatus === 'approved'
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300'
+                      : approvalStatus === 'rejected'
+                        ? 'border-destructive/30 bg-destructive/10 text-destructive'
+                        : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300')
+                  }
+                >
+                  <span className="font-medium capitalize">
+                    {approvalStatus === 'requested' ? 'Awaiting approval' : approvalStatus}
+                  </span>
+                  {approvalStatus === 'rejected' && rejectionReason && (
+                    <span className="text-muted-foreground">— {rejectionReason}</span>
+                  )}
+                </div>
+              )}
               <div className="grid gap-2">
                 <Label>Type</Label>
                 <Select

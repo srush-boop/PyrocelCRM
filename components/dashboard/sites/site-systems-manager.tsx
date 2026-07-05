@@ -36,7 +36,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Pencil, Trash2, Layers, Wrench, ExternalLink } from 'lucide-react'
+import { Plus, Pencil, Trash2, Layers, Wrench, ExternalLink, Settings2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { buildSeedTaskRows, fetchVisitsByServiceType } from '@/lib/scheduling'
 import { SystemPanelsManager } from '@/components/dashboard/sites/system-panels-manager'
@@ -182,6 +182,13 @@ export function SiteSystemsManager({
     }
     toast.success('System removed')
     router.refresh()
+  }
+
+  // Open the full service setup (frequency, assignment, KPIs) for a service by
+  // routing to the overview tab with ?editService=, which auto-opens its edit
+  // dialog in SiteServicesManager.
+  function openServiceSetup(serviceId: string) {
+    router.push(`${pathname}?tab=overview&editService=${serviceId}`)
   }
 
   async function assignService(serviceId: string, systemId: string | null) {
@@ -411,10 +418,18 @@ export function SiteSystemsManager({
                           key={svc.id}
                           className="flex items-center justify-between gap-3 px-3 py-2"
                         >
-                          <span className="flex items-center gap-2 text-sm">
-                            <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
-                            {svc.service_type?.name ?? 'Service'}
-                          </span>
+                          <button
+                            type="button"
+                            onClick={() => openServiceSetup(svc.id)}
+                            className="group flex flex-1 items-center gap-2 text-left text-sm hover:text-primary"
+                            title="Open service set up"
+                          >
+                            <Wrench className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary" />
+                            <span className="group-hover:underline">
+                              {svc.service_type?.name ?? 'Service'}
+                            </span>
+                            <Settings2 className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                          </button>
                           <Button
                             variant="ghost"
                             size="sm"

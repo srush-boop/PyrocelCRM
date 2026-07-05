@@ -355,7 +355,9 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
               </p>
             )}
             <SiteFlagBadges
-              flags={resolveSiteFlags(task.site_service?.site, task.site_service)}
+              flags={resolveSiteFlags(task.site_service?.site, task.site_service, {
+                remedialOpen: task.is_remedial,
+              })}
               variant="full"
               className="pt-1"
             />
@@ -444,7 +446,9 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <SiteFlagBadges
-              flags={resolveSiteFlags(task.site_service?.site, task.site_service)}
+              flags={resolveSiteFlags(task.site_service?.site, task.site_service, {
+                remedialOpen: task.is_remedial,
+              })}
               variant="compact"
             />
             {isOverdue && (

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -56,8 +56,11 @@ import type {
   CalendarEntryType,
   Profile,
   RouteCalendarSource,
+  CalendarFilterTemplate,
+  CalendarFilterState,
 } from '@/lib/types/database'
 import { CalendarEntryDialog } from './calendar-entry-dialog'
+import { CalendarTemplateControls } from './calendar-template-controls'
 
 type ViewMode = 'day' | 'week' | 'month' | 'list'
 
@@ -81,6 +84,8 @@ interface CalendarViewProps {
   departments: DepartmentOption[]
   profile: Profile
   canManageOthers: boolean
+  // The current user's saved calendar filter templates.
+  templates: CalendarFilterTemplate[]
 }
 
 const ALL = '__all__'
@@ -152,6 +157,7 @@ export function CalendarView({
   departments,
   profile,
   canManageOthers,
+  templates,
   }: CalendarViewProps) {
   const router = useRouter()
   const [view, setView] = useState<ViewMode>('day')
@@ -162,6 +168,31 @@ export function CalendarView({
   const [personFilter, setPersonFilter] = useState<string>(ALL)
   const [typeFilter, setTypeFilter] = useState<string>(ALL)
   const [kindFilter, setKindFilter] = useState<string>(ALL)
+
+  // Snapshot of the toolbar filters, used when saving a template.
+  const currentFilters = useMemo<CalendarFilterState>(
+    () => ({ kindFilter, personFilter, typeFilter, view }),
+    [kindFilter, personFilter, typeFilter, view],
+  )
+
+  // Apply a saved template's filters to the toolbar. Missing keys fall back to
+  // "all" so older templates stay valid as the filter set evolves.
+  const applyFilters = (f: CalendarFilterState) => {
+    setKindFilter(f.kindFilter ?? ALL)
+    setPersonFilter(f.personFilter ?? ALL)
+    setTypeFilter(f.typeFilter ?? ALL)
+    if (f.view) setView(f.view)
+  }
+
+  // On first load, auto-apply the user's default template (if any).
+  const appliedDefault = useRef(false)
+  useEffect(() => {
+    if (appliedDefault.current) return
+    appliedDefault.current = true
+    const def = templates.find((t) => t.is_default)
+    if (def) applyFilters(def.filters)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templates])
 
   // Entry create/edit dialog state
   const [entryDialogOpen, setEntryDialogOpen] = useState(false)
@@ -329,6 +360,14 @@ export function CalendarView({
             ))}
           </SelectContent>
         </Select>
+
+        <div className="ml-auto">
+          <CalendarTemplateControls
+            templates={templates}
+            currentFilters={currentFilters}
+            onApply={applyFilters}
+          />
+        </div>
       </div>
 
       {/* Views */}
@@ -396,9 +435,28 @@ export function CalendarView({
                   <p className="text-muted-foreground">{selected.subtitle}</p>
                 )}
                 {selected.kind === 'entry' && (
-                  <Badge variant={selected.isPublic ? 'default' : 'secondary'}>
-                    {selected.isPublic ? 'Public' : 'Private'}
-                  </Badge>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={selected.isPublic ? 'default' : 'secondary'}>
+                      {selected.isPublic ? 'Public' : 'Private'}
+                    </Badge>
+                    {selected.approvalStatus && (
+                      <Badge
+                        variant={
+                          selected.approvalStatus === 'approved'
+                            ? 'default'
+                            : selected.approvalStatus === 'rejected'
+                              ? 'destructive'
+                              : 'secondary'
+                        }
+                      >
+                        {selected.approvalStatus === 'requested'
+                          ? 'Awaiting approval'
+                          : selected.approvalStatus === 'approved'
+                            ? 'Approved'
+                            : 'Declined'}
+                      </Badge>
+                    )}
+                  </div>
                 )}
 
                 <div className="flex gap-2 pt-2">

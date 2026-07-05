@@ -67,6 +67,8 @@ export async function PUT(
       status,
       manager_id,
       employee_number,
+      holiday_entitlement_days,
+      holiday_entitlement_hours,
     } = body as {
       full_name?: string
       email?: string
@@ -76,6 +78,8 @@ export async function PUT(
       status?: string
       manager_id?: string | null
       employee_number?: string | null
+      holiday_entitlement_days?: number | null
+      holiday_entitlement_hours?: number | null
     }
 
     // Verify the caller is an authenticated admin
@@ -137,6 +141,18 @@ export async function PUT(
     if (employee_number !== undefined) {
       const trimmed = typeof employee_number === 'string' ? employee_number.trim() : ''
       profilePatch.employee_number = trimmed || null
+    }
+    // Holiday entitlement: accept a non-negative number or null to clear.
+    const parseEntitlement = (v: unknown): number | null => {
+      if (v === null || v === undefined || v === '') return null
+      const n = Number(v)
+      return Number.isFinite(n) && n >= 0 ? n : null
+    }
+    if (holiday_entitlement_days !== undefined) {
+      profilePatch.holiday_entitlement_days = parseEntitlement(holiday_entitlement_days)
+    }
+    if (holiday_entitlement_hours !== undefined) {
+      profilePatch.holiday_entitlement_hours = parseEntitlement(holiday_entitlement_hours)
     }
 
     const { error: profileError } = await adminClient

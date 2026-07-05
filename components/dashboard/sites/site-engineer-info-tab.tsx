@@ -61,7 +61,6 @@ export function SiteEngineerInfoTab({
               access_required: site.access_required ?? false,
               keys_required: site.keys_required ?? false,
               two_engineers_required: site.two_engineers_required ?? false,
-              remedial_required: site.remedial_required ?? false,
               remedial_notes: site.remedial_notes ?? null,
             }}
           />

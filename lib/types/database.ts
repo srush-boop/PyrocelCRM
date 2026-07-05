@@ -47,6 +47,18 @@ export interface Client {
   updated_at: string
 }
 
+// A single day's working hours. `start`/`end` are 24h "HH:MM" strings and
+// `break_minutes` is the unpaid break to deduct when computing net hours.
+export interface WorkDayHoursEntry {
+  start: string
+  end: string
+  break_minutes: number
+}
+
+// Per-day working hours keyed by ISO weekday number ("1" = Monday ... "7" =
+// Sunday). Absent keys mean the day is not worked.
+export type WorkDayHours = Record<string, WorkDayHoursEntry>
+
 export interface Profile {
   id: string
   email: string
@@ -59,14 +71,23 @@ export interface Profile {
   branch_id: string | null
   invited_at: string | null
   accepted_at: string | null
-  // Optional working hours (24h "HH:MM[:SS]") and daily lunch allowance in
-  // minutes. Used for future timesheet calculations.
+  // Legacy single working-hours fields (24h "HH:MM[:SS]") and daily lunch
+  // allowance in minutes. Superseded by `work_day_hours` (per-day). Retained for
+  // backwards compatibility / historical data.
   work_start_time: string | null
   work_end_time: string | null
   lunch_minutes: number | null
   // Days normally worked, as ISO weekday numbers (1 = Monday ... 7 = Sunday).
-  // Supports part-time patterns. Defaults to Monday–Friday.
+  // Kept in sync with the keys of `work_day_hours`. Defaults to Monday–Friday.
   work_days: number[] | null
+  // Per-day working hours, keyed by ISO weekday number ("1" = Monday ... "7" =
+  // Sunday). Only worked days appear. Each entry records the start/finish time
+  // and the break to deduct, from which net daily hours are derived.
+  work_day_hours: WorkDayHours | null
+  // Annual holiday entitlement, recorded as a single figure per user. Days and
+  // hours are entered independently (no automatic conversion between them).
+  holiday_entitlement_days: number | null
+  holiday_entitlement_hours: number | null
   // Per-user top-level menu visibility override. NULL/undefined = use role
   // defaults. Otherwise an array of enabled top-level menu keys.
   menu_permissions: string[] | null
@@ -582,6 +603,13 @@ export interface Task {
   updated_at: string
   // The visit type this task fulfils (null = single/legacy service-wide visit).
   visit_type_id?: string | null
+  // True when this call was raised as remedial works (e.g. auto-created when a
+  // remedial quote is accepted). Drives the automatic "remedial works required"
+  // pre-attendance alert at site and service level.
+  is_remedial: boolean
+  // When this is a remedial call, the quote/defect it originated from.
+  source_quote_id: string | null
+  source_defect_id: string | null
   site_service?: SiteService
   assigned_engineer?: Profile | null
   visit_type?: ServiceVisitType | null
@@ -1490,10 +1518,43 @@ export interface CalendarEntry {
   // the upsert so imports stay idempotent.
   source: string | null
   source_uid: string | null
+  // Leave approval workflow. Only used by leave-type entries (e.g. Annual Leave);
+  // null means "not applicable" (ordinary entries). 'requested' entries are
+  // pending a manager's decision; balances only count 'approved' entries.
+  approval_status: LeaveApprovalStatus | null
+  approved_by: string | null
+  approved_at: string | null
+  rejection_reason: string | null
   created_at: string
   updated_at: string
   entry_type?: CalendarEntryType
   user?: Profile | null
+  // Populated in oversight/approval views.
+  approver?: Profile | null
+}
+
+export type LeaveApprovalStatus = 'requested' | 'approved' | 'rejected'
+
+// A saved set of calendar filters a user can quickly re-apply. One template per
+// user may be flagged as their default (auto-applied on load).
+export interface CalendarFilterTemplate {
+  id: string
+  user_id: string
+  name: string
+  filters: CalendarFilterState
+  is_default: boolean
+  created_at: string
+  updated_at: string
+}
+
+// The serialisable shape of the calendar's filter controls. Values mirror the
+// calendar toolbar: 'all' for no filter, a kind ('task'|'route'|'entry'), an
+// owner id (or 'company'), and an entry type name. `view` restores the layout.
+export interface CalendarFilterState {
+  kindFilter?: string
+  personFilter?: string
+  typeFilter?: string
+  view?: 'day' | 'week' | 'month' | 'list'
 }
 
 // A normalised item the calendar can render, derived from a booked task, a
@@ -1519,6 +1580,9 @@ export interface CalendarItem {
   routeId?: string
   entryTypeName?: string
   isPublic?: boolean
+  // Leave approval state for leave-type entries; drives calendar styling
+  // (e.g. pending requests render muted/hatched).
+  approvalStatus?: LeaveApprovalStatus | null
 }
 
 // A route that recurs weekly on the calendar. The weekday is derived from the

@@ -12,6 +12,7 @@ import { isEmergencyLightService } from '@/lib/emergency-lights'
 import { isExtinguisherService } from '@/lib/extinguishers'
 import { PreAttendancePanel } from '@/components/dashboard/site-info/pre-attendance-panel'
 import { resolveSiteFlags } from '@/lib/site-flags'
+import { getOpenRemedialForSite } from '@/lib/remedial'
 import type { DocumentFile, DocumentFolder, SiteInternalNote } from '@/lib/types/database'
 import type {
   Profile,
@@ -104,7 +105,14 @@ export default async function TaskPage({ params }: PageProps) {
         .order('created_at', { ascending: false }),
     ])
 
-    const flags = resolveSiteFlags(task.site_service?.site, task.site_service)
+    // Derive the "remedial works required" alert automatically from any
+    // outstanding remedial call on this site (site + service scope) rather than
+    // a manual toggle.
+    const { siteOpen: remedialOpen } = await getOpenRemedialForSite(
+      supabase,
+      preAttendanceSiteId,
+    )
+    const flags = resolveSiteFlags(task.site_service?.site, task.site_service, { remedialOpen })
 
     preAttendancePanel = (
       <PreAttendancePanel

@@ -323,9 +323,23 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
         {template?.include_signature !== false && (
           <section className="avoid-break mb-6 grid grid-cols-2 gap-8 pt-4 text-sm">
             <div>
-              <div className="mb-1 h-12 border-b border-dashed" />
+              {engineer?.signature_url ? (
+                <div className="mb-1 flex h-12 items-end">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={engineer.signature_url || '/placeholder.svg'}
+                    alt={`Signature of ${engineer.full_name || 'engineer'}`}
+                    crossOrigin="anonymous"
+                    className="max-h-12 w-auto object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="mb-1 h-12 border-b border-dashed" />
+              )}
               <p className="font-medium">{sections.signatory_name || engineer?.full_name || ''}</p>
-              <p className="text-xs text-muted-foreground">{sections.signatory_title || 'Engineer'}</p>
+              <p className="text-xs text-muted-foreground">
+                {engineer?.role_ref?.name || engineer?.job_title || sections.signatory_title || 'Engineer'}
+              </p>
             </div>
             <div>
               <div className="mb-1 h-12 border-b border-dashed" />

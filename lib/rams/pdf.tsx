@@ -3,6 +3,7 @@ import {
   Page,
   Text,
   View,
+  Image,
   StyleSheet,
   renderToBuffer,
 } from '@react-pdf/renderer'
@@ -52,6 +53,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 16, fontFamily: 'Helvetica-Bold', marginBottom: 8 },
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 16 },
   metaCol: { width: '50%', marginBottom: 6 },
+  signatureImage: { marginTop: 4, height: 32, width: 'auto', objectFit: 'contain' },
   sectionLabel: {
     fontSize: 7,
     fontFamily: 'Helvetica-Bold',
@@ -146,12 +148,16 @@ function RamsPdfDocument({
   clientName,
   siteName,
   preparedByName,
+  preparedByRole,
+  preparedBySignatureUrl,
 }: {
   doc: RamsDocument
   settings: RamsCompanySettings | null
   clientName: string | null
   siteName: string | null
   preparedByName: string | null
+  preparedByRole?: string | null
+  preparedBySignatureUrl?: string | null
 }) {
   const company = settings?.company_name || 'Pyrocel Fire & Security'
   return (
@@ -201,7 +207,16 @@ function RamsPdfDocument({
           </View>
           <View style={styles.metaCol}>
             <Text style={styles.sectionLabel}>Prepared By</Text>
-            <Text>{preparedByName || '—'}</Text>
+            <Text>
+              {preparedByName
+                ? preparedByRole
+                  ? `${preparedByName} (${preparedByRole})`
+                  : preparedByName
+                : '—'}
+            </Text>
+            {preparedBySignatureUrl ? (
+              <Image src={preparedBySignatureUrl} style={styles.signatureImage} />
+            ) : null}
           </View>
           <View style={styles.metaCol}>
             <Text style={styles.sectionLabel}>Prepared Date</Text>
@@ -330,6 +345,8 @@ export async function renderRamsPdf(args: {
   clientName: string | null
   siteName: string | null
   preparedByName: string | null
+  preparedByRole?: string | null
+  preparedBySignatureUrl?: string | null
 }): Promise<Buffer> {
   return renderToBuffer(<RamsPdfDocument {...args} />)
 }

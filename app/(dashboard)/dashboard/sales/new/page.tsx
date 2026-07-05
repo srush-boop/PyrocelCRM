@@ -115,7 +115,7 @@ export default async function NewQuotePage({
         `id, site_id, client_id, reference_number,
          task_result:task_results(checklist_results, engineer_notes),
          site:sites(name),
-         task:tasks(site_service:site_services(service_type:service_types(name, system_type_id)))`,
+         task:tasks!defects_task_id_fkey(site_service:site_services(service_type:service_types(name, system_type_id)))`,
       )
       .eq('id', defectParam)
       .maybeSingle()

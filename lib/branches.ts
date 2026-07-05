@@ -25,8 +25,8 @@ export interface BranchScope {
 /**
  * Resolves the branch a given view should be scoped to.
  *
- * - admin/office: default to their own branch (if set), but may pass a
- *   `branch` search param to switch to another branch or `all`.
+ * - admin/office: default to all branches (no scoping), but may pass a
+ *   `branch` search param to narrow to a specific branch (or explicit `all`).
  * - everyone else: always locked to their own assigned branch. If they have no
  *   branch they simply see everything (no branch to scope by).
  *
@@ -57,8 +57,12 @@ export async function getBranchScope(
   } else if (selected && branches.some((b) => b.id === selected)) {
     activeBranchId = selected
   } else {
-    // No explicit selection: default to the user's own branch, else all.
-    activeBranchId = userBranchId
+    // No explicit selection: show all branches. Many staff operate across the
+    // whole business, so we intentionally do NOT auto-scope to the viewer's own
+    // branch — otherwise cross-branch items (e.g. another branch's leave) would
+    // silently disappear. Users can still pick a specific branch from the
+    // filter when they want to narrow the view.
+    activeBranchId = null
   }
 
   return { canSwitch: true, branches, activeBranchId, userBranchId }

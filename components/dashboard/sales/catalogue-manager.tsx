@@ -423,6 +423,19 @@ export function CatalogueManager({
               Add {selectedIds.size} to stock
             </Button>
           )}
+          <Button
+            variant="outline"
+            onClick={handleDownload}
+            disabled={downloading}
+            title={search.trim() ? 'Download the filtered catalogue as CSV' : 'Download the full catalogue as CSV'}
+          >
+            {downloading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 h-4 w-4" />
+            )}
+            Download
+          </Button>
           <Button onClick={openNew}>
             <Plus className="mr-2 h-4 w-4" />
             Add Item

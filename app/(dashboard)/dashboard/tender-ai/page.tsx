@@ -12,6 +12,7 @@ import {
   History,
   Sparkles,
   ArrowRight,
+  Archive,
 } from 'lucide-react'
 
 export default async function TenderAiDashboardPage() {
@@ -25,6 +26,7 @@ export default async function TenderAiDashboardPage() {
     { label: 'AI Prompts', value: stats.promptCount, icon: MessageSquareText },
     { label: 'Active Tenders', value: stats.tenderCount, icon: FileSignature },
     { label: 'Winning Responses', value: stats.winningCount, icon: History },
+    { label: 'Vault Tenders', value: stats.vaultCount, icon: Archive },
   ]
 
   const quickLinks = [
@@ -48,7 +50,7 @@ export default async function TenderAiDashboardPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {statCards.map((s) => (
           <Card key={s.label}>
             <CardContent className="flex items-center gap-3 p-4">

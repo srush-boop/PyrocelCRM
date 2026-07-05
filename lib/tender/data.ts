@@ -9,6 +9,7 @@ import type {
   TenderPrompt,
   TenderQuestion,
   TenderSettings,
+  TenderVaultEntry,
 } from './types'
 
 export async function getKnowledgeItems(): Promise<TenderKnowledgeItem[]> {
@@ -81,6 +82,16 @@ export async function getWinningResponses(): Promise<TenderQuestion[]> {
   return (data ?? []) as TenderQuestion[]
 }
 
+// Completed tenders stored in the vault, newest first.
+export async function getVaultEntries(): Promise<TenderVaultEntry[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('tender_vault')
+    .select('*')
+    .order('created_at', { ascending: false })
+  return (data ?? []) as TenderVaultEntry[]
+}
+
 export async function getSettings(): Promise<TenderSettings | null> {
   const supabase = await createClient()
   const { data } = await supabase
@@ -98,11 +109,12 @@ export interface KnowledgeStats {
   promptCount: number
   tenderCount: number
   winningCount: number
+  vaultCount: number
 }
 
 export async function getTenderStats(): Promise<KnowledgeStats> {
   const supabase = await createClient()
-  const [k, crit, e, p, t, w] = await Promise.all([
+  const [k, crit, e, p, t, w, v] = await Promise.all([
     supabase.from('tender_knowledge_items').select('id', { count: 'exact', head: true }),
     supabase
       .from('tender_knowledge_items')
@@ -115,6 +127,7 @@ export async function getTenderStats(): Promise<KnowledgeStats> {
       .from('tender_questions')
       .select('id', { count: 'exact', head: true })
       .eq('is_winning_response', true),
+    supabase.from('tender_vault').select('id', { count: 'exact', head: true }),
   ])
   return {
     knowledgeCount: k.count ?? 0,
@@ -123,6 +136,7 @@ export async function getTenderStats(): Promise<KnowledgeStats> {
     promptCount: p.count ?? 0,
     tenderCount: t.count ?? 0,
     winningCount: w.count ?? 0,
+    vaultCount: v.count ?? 0,
   }
 }
 

@@ -57,7 +57,7 @@ export async function embedText(text: string): Promise<number[]> {
 }
 
 export interface IndexSourceInput {
-  sourceType: 'knowledge' | 'prompt' | 'winning_response'
+  sourceType: 'knowledge' | 'prompt' | 'winning_response' | 'completed_tender'
   sourceId: string
   title: string
   content: string

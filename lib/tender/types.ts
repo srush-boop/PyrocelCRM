@@ -80,6 +80,40 @@ export interface Tender {
   updated_at: string
 }
 
+export type TenderVaultOutcome = 'won' | 'lost' | 'awaiting'
+
+// A completed tender submission stored in the vault. Its summary, winning
+// content and client feedback are embedded so the AI can learn from past bids.
+export interface TenderVaultEntry {
+  id: string
+  title: string
+  client_name: string | null
+  reference: string | null
+  outcome: TenderVaultOutcome
+  submitted_date: string | null
+  decision_date: string | null
+  contract_value: number | null
+  summary: string | null
+  winning_content: string | null
+  client_feedback: string | null
+  file_url: string | null
+  file_name: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export const VAULT_OUTCOME_META: Record<
+  TenderVaultOutcome,
+  { label: string; description: string }
+> = {
+  won: { label: 'Won', description: 'This bid was successful.' },
+  lost: { label: 'Lost', description: 'This bid was unsuccessful.' },
+  awaiting: { label: 'Awaiting', description: 'Decision still pending.' },
+}
+
+export const VAULT_OUTCOME_ORDER: TenderVaultOutcome[] = ['won', 'lost', 'awaiting']
+
 // A single source the AI drew on, surfaced to the user under an answer.
 export interface TenderAnswerSource {
   sourceType: string

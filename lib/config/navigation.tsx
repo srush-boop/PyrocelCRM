@@ -41,6 +41,7 @@ import {
   Paperclip,
   MessageSquareText,
   History,
+  Archive,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { UserRole } from '@/lib/types/database'
@@ -210,6 +211,7 @@ const tenderAiNavItem: NavItem = {
     { title: 'AI Prompt Library', href: '/dashboard/tender-ai/prompts', icon: MessageSquareText },
     { title: 'Templates', href: '/dashboard/tender-ai/templates', icon: LayoutList },
     { title: 'Previous Responses', href: '/dashboard/tender-ai/previous-responses', icon: History },
+    { title: 'Tender Vault', href: '/dashboard/tender-ai/vault', icon: Archive },
     { title: 'Requested Documents', href: '/dashboard/tender-ai/requested-documents', icon: FileText },
     { title: 'AI Settings', href: '/dashboard/tender-ai/settings', icon: SlidersHorizontal },
   ],

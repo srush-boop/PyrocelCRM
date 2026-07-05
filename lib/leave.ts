@@ -1,12 +1,16 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
+import type { WorkDayHours } from '@/lib/types/database'
+import { ANNUAL_LEAVE_TYPE_ID, BANK_HOLIDAY_TYPE_ID } from '@/lib/constants/leave'
 
-// The calendar entry type that represents booked annual leave.
-export const ANNUAL_LEAVE_TYPE_ID = '150124a6-481b-43f6-819f-d2d02525ed3a'
+// Re-export for existing server-side importers.
+export { ANNUAL_LEAVE_TYPE_ID, BANK_HOLIDAY_TYPE_ID }
 
 // Default working pattern (Mon–Fri) as ISO weekday numbers when a user has no
 // explicit `work_days` configured.
 const DEFAULT_WORK_DAYS = [1, 2, 3, 4, 5]
+// Fallback net hours for a working day when a user has no per-day hours set.
+const DEFAULT_DAY_HOURS = 7.5
 
 /**
  * Converts a Date to an ISO weekday number (1 = Monday ... 7 = Sunday).
@@ -16,23 +20,45 @@ function isoWeekday(d: Date): number {
   return day === 0 ? 7 : day
 }
 
+/** Formats a UTC date as "YYYY-MM-DD" for calendar-day comparisons. */
+function dayKey(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10)
+}
+
 /**
- * Counts the number of working days a leave entry consumes within a given
- * calendar year. Only whole days that fall on the user's working days and
- * inside the year are counted. Entries are stored as all-day ranges where
- * `end_at` is the last day (end of that day), so we iterate date-by-date on the
- * inclusive range, clamped to the year.
+ * Net working hours for a given ISO weekday from a user's per-day hours.
+ * Returns null when that weekday has no configured hours.
  */
-function workingDaysInRange(
+function netHoursForWeekday(hours: WorkDayHours | null, weekday: number): number | null {
+  if (!hours) return null
+  const entry = hours[String(weekday)]
+  if (!entry?.start || !entry?.end) return null
+  const [sh, sm] = entry.start.split(':').map(Number)
+  const [eh, em] = entry.end.split(':').map(Number)
+  const startMin = sh * 60 + sm
+  const endMin = eh * 60 + em
+  if (Number.isNaN(startMin) || Number.isNaN(endMin) || endMin <= startMin) return null
+  const brk = Number(entry.break_minutes) || 0
+  const net = endMin - startMin - brk
+  return net > 0 ? net / 60 : null
+}
+
+/**
+ * Walks the inclusive day range of a leave entry (clamped to the calendar year)
+ * and accumulates the working days and net working hours it consumes. Weekends,
+ * bank holidays and any day the user does not normally work are excluded.
+ */
+function consumeRange(
   startAt: string,
   endAt: string,
   year: number,
   workDays: number[],
-): number {
+  workDayHours: WorkDayHours | null,
+  bankHolidays: Set<string>,
+): { days: number; hours: number } {
   const yearStart = Date.UTC(year, 0, 1)
   const yearEnd = Date.UTC(year, 11, 31)
 
-  // Normalise to UTC midnight of each boundary day.
   const start = new Date(startAt)
   const end = new Date(endAt)
   let cursor = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate())
@@ -41,29 +67,39 @@ function workingDaysInRange(
   if (cursor < yearStart) cursor = yearStart
   const stop = Math.min(last, yearEnd)
 
-  let count = 0
+  let days = 0
+  let hours = 0
   const oneDay = 24 * 60 * 60 * 1000
   while (cursor <= stop) {
     const d = new Date(cursor)
-    if (workDays.includes(isoWeekday(d))) count += 1
+    const weekday = isoWeekday(d)
+    // Skip non-working days and bank holidays.
+    if (workDays.includes(weekday) && !bankHolidays.has(dayKey(cursor))) {
+      days += 1
+      hours += netHoursForWeekday(workDayHours, weekday) ?? DEFAULT_DAY_HOURS
+    }
     cursor += oneDay
   }
-  return count
+  return { days, hours }
 }
 
 export interface LeaveBalance {
   entitlementDays: number | null
   entitlementHours: number | null
   takenDays: number
+  takenHours: number
   /** entitlementDays - takenDays, or null when no day entitlement is set. */
   remainingDays: number | null
+  /** entitlementHours - takenHours, or null when no hour entitlement is set. */
+  remainingHours: number | null
 }
 
 /**
  * Computes each user's annual-leave balance for the given calendar year.
- * "Taken" is derived from Annual Leave calendar entries overlapping the year,
- * so on 1 Jan the balance naturally refreshes to the full entitlement without
- * any stored value being reset. Returns a map keyed by user id.
+ * Only APPROVED Annual Leave entries count. "Taken" is derived from those
+ * entries overlapping the year, so on 1 Jan the balance naturally refreshes to
+ * the full entitlement without any stored value being reset. Weekends, bank
+ * holidays and non-working days are excluded. Returns a map keyed by user id.
  */
 export async function computeLeaveBalances(
   year: number = new Date().getUTCFullYear(),
@@ -72,52 +108,135 @@ export async function computeLeaveBalances(
 
   const { data: profiles } = await admin
     .from('profiles')
-    .select('id, work_days, holiday_entitlement_days, holiday_entitlement_hours')
+    .select('id, work_days, work_day_hours, holiday_entitlement_days, holiday_entitlement_hours')
 
   const balances = new Map<string, LeaveBalance>()
+  const workDaysByUser = new Map<string, number[]>()
+  const workHoursByUser = new Map<string, WorkDayHours | null>()
   for (const p of profiles ?? []) {
     balances.set(p.id as string, {
       entitlementDays: (p.holiday_entitlement_days as number | null) ?? null,
       entitlementHours: (p.holiday_entitlement_hours as number | null) ?? null,
       takenDays: 0,
+      takenHours: 0,
       remainingDays: null,
+      remainingHours: null,
     })
+    const wd = p.work_days as number[] | null
+    workDaysByUser.set(p.id as string, wd && wd.length > 0 ? wd : DEFAULT_WORK_DAYS)
+    workHoursByUser.set(p.id as string, (p.work_day_hours as WorkDayHours | null) ?? null)
   }
 
-  // Fetch Annual Leave entries that could overlap the target year.
   const rangeStart = `${year}-01-01T00:00:00.000Z`
   const rangeEnd = `${year}-12-31T23:59:59.999Z`
+
+  // Bank holidays in the year (company-wide, so exclude their calendar days).
+  const { data: holidays } = await admin
+    .from('calendar_entries')
+    .select('start_at, end_at')
+    .eq('entry_type_id', BANK_HOLIDAY_TYPE_ID)
+    .lte('start_at', rangeEnd)
+    .gte('end_at', rangeStart)
+
+  const bankHolidays = new Set<string>()
+  for (const h of holidays ?? []) {
+    const s = new Date(h.start_at as string)
+    const e = new Date(h.end_at as string)
+    let cur = Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), s.getUTCDate())
+    const end = Date.UTC(e.getUTCFullYear(), e.getUTCMonth(), e.getUTCDate())
+    while (cur <= end) {
+      bankHolidays.add(dayKey(cur))
+      cur += 24 * 60 * 60 * 1000
+    }
+  }
+
+  // Only APPROVED annual leave counts towards taken balances.
   const { data: entries } = await admin
     .from('calendar_entries')
     .select('user_id, start_at, end_at')
     .eq('entry_type_id', ANNUAL_LEAVE_TYPE_ID)
+    .eq('approval_status', 'approved')
     .lte('start_at', rangeEnd)
     .gte('end_at', rangeStart)
-
-  const workDaysByUser = new Map<string, number[]>()
-  for (const p of profiles ?? []) {
-    const wd = p.work_days as number[] | null
-    workDaysByUser.set(p.id as string, wd && wd.length > 0 ? wd : DEFAULT_WORK_DAYS)
-  }
 
   for (const e of entries ?? []) {
     const userId = e.user_id as string
     const bal = balances.get(userId)
     if (!bal) continue
-    const workDays = workDaysByUser.get(userId) ?? DEFAULT_WORK_DAYS
-    bal.takenDays += workingDaysInRange(
+    const { days, hours } = consumeRange(
       e.start_at as string,
       e.end_at as string,
       year,
-      workDays,
+      workDaysByUser.get(userId) ?? DEFAULT_WORK_DAYS,
+      workHoursByUser.get(userId) ?? null,
+      bankHolidays,
     )
+    bal.takenDays += days
+    bal.takenHours += hours
   }
 
   for (const bal of balances.values()) {
+    // Round hours to 2dp to avoid float noise.
+    bal.takenHours = Math.round(bal.takenHours * 100) / 100
     if (bal.entitlementDays != null) {
       bal.remainingDays = Math.max(0, bal.entitlementDays - bal.takenDays)
+    }
+    if (bal.entitlementHours != null) {
+      bal.remainingHours = Math.max(0, Math.round((bal.entitlementHours - bal.takenHours) * 100) / 100)
     }
   }
 
   return balances
+}
+
+/**
+ * Resolves who should approve a user's leave request: their nominated manager,
+ * or all admins as a fallback when no manager is set. Returns user ids.
+ */
+export async function getLeaveApprovers(userId: string): Promise<string[]> {
+  const admin = createAdminClient()
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('manager_id')
+    .eq('id', userId)
+    .single()
+
+  if (profile?.manager_id) return [profile.manager_id as string]
+
+  const { data: admins } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('role', 'admin')
+    .eq('status', 'active')
+  return (admins ?? []).map((a) => a.id as string)
+}
+
+/**
+ * Returns the user ids of Accounts-department members plus admins, used to
+ * notify "accounts" when leave is approved.
+ */
+export async function getAccountsAndAdminIds(): Promise<string[]> {
+  const admin = createAdminClient()
+  const { data: dept } = await admin
+    .from('departments')
+    .select('id')
+    .ilike('name', 'accounts')
+    .maybeSingle()
+
+  const ids = new Set<string>()
+  if (dept?.id) {
+    const { data: accts } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('department_id', dept.id as string)
+      .eq('status', 'active')
+    for (const a of accts ?? []) ids.add(a.id as string)
+  }
+  const { data: admins } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('role', 'admin')
+    .eq('status', 'active')
+  for (const a of admins ?? []) ids.add(a.id as string)
+  return [...ids]
 }

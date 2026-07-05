@@ -6,6 +6,7 @@ import type {
   CalendarEntryType,
   Profile,
   RouteCalendarSource,
+  LeaveApprovalStatus,
 } from '@/lib/types/database'
 
 // Default colour used for booked service tasks on the calendar.
@@ -96,6 +97,7 @@ interface EntryRow {
   all_day: boolean
   is_public: boolean
   notes: string | null
+  approval_status: LeaveApprovalStatus | null
   entry_type: CalendarEntryType | null
   user: AttendeeProfile | null
   // Every person invited to this entry (the entry shows on each of their calendars).
@@ -184,7 +186,7 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
     supabase
       .from('calendar_entries')
       .select(
-        `id, entry_type_id, user_id, title, start_at, end_at, all_day, is_public, notes,
+        `id, entry_type_id, user_id, title, start_at, end_at, all_day, is_public, notes, approval_status,
            entry_type:calendar_entry_types(*),
            user:profiles(id, full_name, email, branch_id),
            attendees:calendar_entry_attendees(user:profiles(id, full_name, email, branch_id))`,
@@ -317,6 +319,7 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
       entryId: e.id,
       entryTypeName: e.entry_type?.name,
       isPublic: e.is_public,
+      approvalStatus: e.approval_status,
     }
 
     for (const owner of owners) {

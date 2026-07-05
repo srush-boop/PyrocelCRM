@@ -1518,10 +1518,44 @@ export interface CalendarEntry {
   // the upsert so imports stay idempotent.
   source: string | null
   source_uid: string | null
+  // Leave approval workflow. Only used by leave-type entries (e.g. Annual Leave);
+  // null means "not applicable" (ordinary entries). 'requested' entries are
+  // pending a manager's decision; balances only count 'approved' entries.
+  approval_status: LeaveApprovalStatus | null
+  approved_by: string | null
+  approved_at: string | null
+  rejection_reason: string | null
   created_at: string
   updated_at: string
   entry_type?: CalendarEntryType
   user?: Profile | null
+  // Populated in oversight/approval views.
+  approver?: Profile | null
+}
+
+export type LeaveApprovalStatus = 'requested' | 'approved' | 'rejected'
+
+// A saved set of calendar filters a user can quickly re-apply. One template per
+// user may be flagged as their default (auto-applied on load).
+export interface CalendarFilterTemplate {
+  id: string
+  user_id: string
+  name: string
+  filters: CalendarFilterState
+  is_default: boolean
+  created_at: string
+  updated_at: string
+}
+
+// The serialisable shape of the calendar's filter controls.
+export interface CalendarFilterState {
+  entryTypeIds?: string[]
+  departmentIds?: string[]
+  branchIds?: string[]
+  userIds?: string[]
+  showTasks?: boolean
+  showEntries?: boolean
+  showRoutes?: boolean
 }
 
 // A normalised item the calendar can render, derived from a booked task, a
@@ -1547,6 +1581,9 @@ export interface CalendarItem {
   routeId?: string
   entryTypeName?: string
   isPublic?: boolean
+  // Leave approval state for leave-type entries; drives calendar styling
+  // (e.g. pending requests render muted/hatched).
+  approvalStatus?: LeaveApprovalStatus | null
 }
 
 // A route that recurs weekly on the calendar. The weekday is derived from the

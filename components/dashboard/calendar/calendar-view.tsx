@@ -396,9 +396,28 @@ export function CalendarView({
                   <p className="text-muted-foreground">{selected.subtitle}</p>
                 )}
                 {selected.kind === 'entry' && (
-                  <Badge variant={selected.isPublic ? 'default' : 'secondary'}>
-                    {selected.isPublic ? 'Public' : 'Private'}
-                  </Badge>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={selected.isPublic ? 'default' : 'secondary'}>
+                      {selected.isPublic ? 'Public' : 'Private'}
+                    </Badge>
+                    {selected.approvalStatus && (
+                      <Badge
+                        variant={
+                          selected.approvalStatus === 'approved'
+                            ? 'default'
+                            : selected.approvalStatus === 'rejected'
+                              ? 'destructive'
+                              : 'secondary'
+                        }
+                      >
+                        {selected.approvalStatus === 'requested'
+                          ? 'Awaiting approval'
+                          : selected.approvalStatus === 'approved'
+                            ? 'Approved'
+                            : 'Declined'}
+                      </Badge>
+                    )}
+                  </div>
                 )}
 
                 <div className="flex gap-2 pt-2">

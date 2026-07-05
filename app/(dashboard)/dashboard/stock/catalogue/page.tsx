@@ -6,6 +6,7 @@ import { ArrowLeft } from 'lucide-react'
 import { CatalogueManager } from '@/components/dashboard/sales/catalogue-manager'
 import { ProductSheetPanel } from '@/components/dashboard/sales/product-sheet-panel'
 import { fetchCataloguePage } from '@/app/(dashboard)/dashboard/sales/actions'
+import { getProductSuppliers } from '@/lib/stock'
 import type { Profile, ProductSheet, ServiceType } from '@/lib/types/database'
 
 export const metadata = { title: 'Quote Catalogue | Pyrocel' }
@@ -22,17 +23,19 @@ export default async function StockCataloguePage() {
     redirect('/dashboard')
   }
 
-  const [firstPage, { data: serviceTypes }, { data: currentSheet }] = await Promise.all([
-    fetchCataloguePage({ page: 0, pageSize: 50 }),
-    supabase.from('service_types').select('id, name').eq('status', 'live').order('name'),
-    supabase
-      .from('product_sheets')
-      .select('*')
-      .eq('is_current', true)
-      .order('uploaded_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-  ])
+  const [firstPage, { data: serviceTypes }, { data: currentSheet }, productSuppliers] =
+    await Promise.all([
+      fetchCataloguePage({ page: 0, pageSize: 50 }),
+      supabase.from('service_types').select('id, name').eq('status', 'live').order('name'),
+      supabase
+        .from('product_sheets')
+        .select('*')
+        .eq('is_current', true)
+        .order('uploaded_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      getProductSuppliers(),
+    ])
 
   return (
     <div className="space-y-6">
@@ -57,6 +60,7 @@ export default async function StockCataloguePage() {
         initialStockedIds={firstPage.stockedItemIds}
         pageSize={50}
         serviceTypes={(serviceTypes ?? []) as ServiceType[]}
+        suppliers={productSuppliers}
       />
     </div>
   )

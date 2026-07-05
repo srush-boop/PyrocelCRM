@@ -1049,12 +1049,21 @@ export interface QuoteCatalogueItem {
   unit_cost_pence: number
   margin_percent: number
   default_unit_price_pence: number
+  // Price when sold on a service call/job (parts sold on calls).
+  service_sale_price_pence: number
+  // Price for an e-commerce/online store listing.
+  ecommerce_price_pence: number
+  // Product supplier we order this item from (see Supplier of type 'product').
+  supplier_id: string | null
+  // Private Vercel Blob pathname for the product image; served via /api/file.
+  image_pathname: string | null
   active: boolean
   created_by: string | null
   created_at: string
   updated_at: string
   service_type?: ServiceType | null
   system_type?: SystemType | null
+  supplier?: Supplier | null
 }
 
 export interface QuoteLineItem {

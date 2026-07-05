@@ -51,6 +51,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Boxes,
+  ImageIcon,
+  Upload,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatPence, penceToPounds, poundsToPence, sellFromCost } from '@/lib/sales'
@@ -63,6 +66,7 @@ import {
 } from '@/app/(dashboard)/dashboard/sales/actions'
 
 const NO_SERVICE = '__none__'
+const NO_SUPPLIER = '__none__'
 
 interface FormState {
   id?: string
@@ -71,9 +75,13 @@ interface FormState {
   description: string
   category: string
   service_type_id: string
+  supplier_id: string
   default_unit: string
   cost: string
   margin: string
+  serviceSalePrice: string
+  ecommercePrice: string
+  imagePathname: string | null
   active: boolean
 }
 
@@ -84,9 +92,13 @@ function emptyForm(): FormState {
     description: '',
     category: '',
     service_type_id: NO_SERVICE,
+    supplier_id: NO_SUPPLIER,
     default_unit: '',
     cost: '0.00',
     margin: '0',
+    serviceSalePrice: '0.00',
+    ecommercePrice: '0.00',
+    imagePathname: null,
     active: true,
   }
 }
@@ -97,16 +109,19 @@ export function CatalogueManager({
   initialStockedIds,
   pageSize,
   serviceTypes,
+  suppliers = [],
 }: {
   initialItems: QuoteCatalogueItem[]
   initialTotal: number
   initialStockedIds: string[]
   pageSize: number
   serviceTypes: ServiceType[]
+  suppliers?: { id: string; name: string }[]
 }) {
   const [isPending, startTransition] = useTransition()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [form, setForm] = useState<FormState>(emptyForm())
+  const [uploadingImage, setUploadingImage] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<QuoteCatalogueItem | null>(null)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
@@ -224,9 +239,13 @@ export function CatalogueManager({
       description: item.description ?? '',
       category: item.category ?? '',
       service_type_id: item.service_type_id ?? NO_SERVICE,
+      supplier_id: item.supplier_id ?? NO_SUPPLIER,
       default_unit: item.default_unit ?? '',
       cost: penceToPounds(item.unit_cost_pence),
       margin: String(item.margin_percent ?? 0),
+      serviceSalePrice: penceToPounds(item.service_sale_price_pence ?? 0),
+      ecommercePrice: penceToPounds(item.ecommerce_price_pence ?? 0),
+      imagePathname: item.image_pathname ?? null,
       active: item.active,
     })
     setDialogOpen(true)
@@ -241,9 +260,13 @@ export function CatalogueManager({
         description: form.description || null,
         category: form.category || null,
         service_type_id: form.service_type_id === NO_SERVICE ? null : form.service_type_id,
+        supplier_id: form.supplier_id === NO_SUPPLIER ? null : form.supplier_id,
         default_unit: form.default_unit || null,
         unit_cost_pence: poundsToPence(form.cost),
         margin_percent: Number.parseFloat(form.margin) || 0,
+        service_sale_price_pence: poundsToPence(form.serviceSalePrice),
+        ecommerce_price_pence: poundsToPence(form.ecommercePrice),
+        image_pathname: form.imagePathname,
         active: form.active,
       })
       if (res.ok) {
@@ -254,6 +277,31 @@ export function CatalogueManager({
         toast.error(res.error ?? 'Could not save item')
       }
     })
+  }
+
+  async function handleImageSelect(file: File) {
+    setUploadingImage(true)
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      const res = await fetch('/api/catalogue/image', { method: 'POST', body })
+      const data = (await res.json()) as { pathname?: string; error?: string }
+      if (!res.ok || !data.pathname) {
+        toast.error(data.error ?? 'Could not upload image')
+        return
+      }
+      setForm((prev) => ({ ...prev, imagePathname: data.pathname! }))
+    } catch {
+      toast.error('Could not upload image')
+    } finally {
+      setUploadingImage(false)
+    }
+  }
+
+  function handleImageRemove() {
+    // Only delete from Blob if it isn't already saved on the item (avoid removing
+    // an image an existing quote/catalogue row still references until save).
+    setForm((prev) => ({ ...prev, imagePathname: null }))
   }
 
   function handleDelete() {
@@ -455,7 +503,7 @@ export function CatalogueManager({
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-[520px]">
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-[520px]">
           <DialogHeader>
             <DialogTitle>{form.id ? 'Edit item' : 'Add item'}</DialogTitle>
             <DialogDescription>Reusable line item available across all quotes.</DialogDescription>
@@ -558,6 +606,115 @@ export function CatalogueManager({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="c-supplier">Supplier</Label>
+              <Select
+                value={form.supplier_id}
+                onValueChange={(v) => setForm({ ...form, supplier_id: v })}
+              >
+                <SelectTrigger id="c-supplier">
+                  <SelectValue placeholder="Who we order this from" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_SUPPLIER}>None</SelectItem>
+                  {suppliers.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Used to raise purchase orders. Non-stock items can still be ordered as required.
+              </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label htmlFor="c-service-price">Service sale price (£)</Label>
+                <Input
+                  id="c-service-price"
+                  inputMode="decimal"
+                  value={form.serviceSalePrice}
+                  onChange={(e) => setForm({ ...form, serviceSalePrice: e.target.value })}
+                  onBlur={(e) =>
+                    setForm({ ...form, serviceSalePrice: penceToPounds(poundsToPence(e.target.value)) })
+                  }
+                  placeholder="Price on calls"
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="c-ecom-price">E-commerce price (£)</Label>
+                <Input
+                  id="c-ecom-price"
+                  inputMode="decimal"
+                  value={form.ecommercePrice}
+                  onChange={(e) => setForm({ ...form, ecommercePrice: e.target.value })}
+                  onBlur={(e) =>
+                    setForm({ ...form, ecommercePrice: penceToPounds(poundsToPence(e.target.value)) })
+                  }
+                  placeholder="Online price"
+                />
+              </div>
+            </div>
+            <div className="grid gap-1.5">
+              <Label>Product image</Label>
+              <div className="flex items-center gap-3">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted/40">
+                  {form.imagePathname ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={`/api/file?pathname=${encodeURIComponent(form.imagePathname)}`}
+                      alt="Product preview"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <ImageIcon className="h-6 w-6 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={uploadingImage}
+                      onClick={() => document.getElementById('c-image-input')?.click()}
+                    >
+                      {uploadingImage ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Upload className="mr-2 h-4 w-4" />
+                      )}
+                      {form.imagePathname ? 'Replace' : 'Upload'}
+                    </Button>
+                    {form.imagePathname && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive"
+                        onClick={handleImageRemove}
+                      >
+                        <X className="mr-1 h-4 w-4" />
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">JPG, PNG, WEBP or GIF, up to 5MB.</p>
+                </div>
+                <input
+                  id="c-image-input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) void handleImageSelect(file)
+                    e.target.value = ''
+                  }}
+                />
               </div>
             </div>
             <div className="flex items-center gap-2">

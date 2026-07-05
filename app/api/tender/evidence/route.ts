@@ -33,7 +33,9 @@ export async function POST(request: NextRequest) {
         access: 'private',
         addRandomSuffix: true,
       })
-      file_url = blob.url
+      // Store the pathname (not the URL); private blobs are streamed back through
+      // our own authenticated serve route by evidence id.
+      file_url = blob.pathname
       file_name = file.name
       file_type = file.type || null
     }

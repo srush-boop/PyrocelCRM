@@ -158,3 +158,17 @@ export const TENDER_STATUS_META: Record<TenderStatus, { label: string }> = {
 export const KNOWLEDGE_TYPES = Object.keys(
   KNOWLEDGE_TYPE_META,
 ) as TenderKnowledgeType[]
+
+// Convenience exports derived from the META maps above, so UI code can pull a
+// simple label lookup or ordered list without recomputing.
+export const KNOWLEDGE_TYPE_ORDER = KNOWLEDGE_TYPES
+
+export const KNOWLEDGE_TYPE_LABELS = Object.fromEntries(
+  KNOWLEDGE_TYPES.map((t) => [t, KNOWLEDGE_TYPE_META[t].label]),
+) as Record<TenderKnowledgeType, string>
+
+export const IMPORTANCE_ORDER: TenderImportance[] = ['critical', 'high', 'normal']
+
+export const IMPORTANCE_LABELS = Object.fromEntries(
+  IMPORTANCE_ORDER.map((i) => [i, IMPORTANCE_META[i].label]),
+) as Record<TenderImportance, string>

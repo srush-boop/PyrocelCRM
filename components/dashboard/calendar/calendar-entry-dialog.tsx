@@ -173,6 +173,12 @@ export function CalendarEntryDialog({
       const attendeeIds = (attendees || []).map((a) => a.user_id as string)
       const start = new Date(data.start_at)
       const end = new Date(data.end_at)
+      // All-day entries are stored at UTC midnight, so read their calendar date
+      // from UTC parts to avoid a timezone shift when re-opening the form.
+      const dateStr = (dt: Date) =>
+        data.all_day
+          ? `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`
+          : format(dt, 'yyyy-MM-dd')
       setForm({
         entry_type_id: data.entry_type_id,
         company_wide: data.user_id === null && attendeeIds.length === 0,
@@ -180,8 +186,8 @@ export function CalendarEntryDialog({
         department_ids: [],
         title: data.title ?? '',
         all_day: data.all_day,
-        start_date: format(start, 'yyyy-MM-dd'),
-        end_date: format(end, 'yyyy-MM-dd'),
+        start_date: dateStr(start),
+        end_date: dateStr(end),
         start_time: format(start, 'HH:mm'),
         end_time: format(end, 'HH:mm'),
         is_public: data.is_public,
@@ -223,9 +229,13 @@ export function CalendarEntryDialog({
   // Build ISO timestamps from the date + optional time fields.
   const toTimestamps = () => {
     if (form.all_day) {
+      // All-day entries are timezone-independent: anchor them to UTC midnight so
+      // they land on the exact dates picked, no matter the viewer's timezone.
+      // This matches how leave day-counts and bank holidays are read elsewhere
+      // (UTC date parts / the ISO date prefix).
       return {
-        start_at: new Date(`${form.start_date}T00:00:00`).toISOString(),
-        end_at: new Date(`${form.end_date}T23:59:00`).toISOString(),
+        start_at: `${form.start_date}T00:00:00.000Z`,
+        end_at: `${form.end_date}T23:59:59.999Z`,
       }
     }
     return {
@@ -307,7 +317,9 @@ export function CalendarEntryDialog({
       all_day: form.all_day,
       start_at,
       end_at,
-      is_public: form.is_public,
+      // Leave is always shared so the whole team can plan around it. Other
+      // entry types respect the "Visible to all staff" toggle.
+      is_public: isAnnualLeave ? true : form.is_public,
       notes: form.notes.trim() || null,
       ...leaveFields,
     }
@@ -612,12 +624,15 @@ export function CalendarEntryDialog({
                 <div className="space-y-0.5">
                   <Label htmlFor="entry-public">Visible to all staff</Label>
                   <p className="text-xs text-muted-foreground">
-                    When off, only the people invited and admin/office can see it.
+                    {form.entry_type_id === ANNUAL_LEAVE_TYPE_ID
+                      ? 'Leave is always shared so the team can plan around it.'
+                      : 'When off, only the people invited and admin/office can see it.'}
                   </p>
                 </div>
                 <Switch
                   id="entry-public"
-                  checked={form.is_public}
+                  checked={form.entry_type_id === ANNUAL_LEAVE_TYPE_ID ? true : form.is_public}
+                  disabled={form.entry_type_id === ANNUAL_LEAVE_TYPE_ID}
                   onCheckedChange={(v) => update({ is_public: v })}
                 />
               </div>

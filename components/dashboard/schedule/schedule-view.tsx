@@ -48,7 +48,6 @@ import {
   HardHat,
   UserPlus,
   Loader2,
-  ChevronRight,
   UserCheck,
   ArrowUpDown,
   Eye,
@@ -426,7 +425,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
         )}
         <Link
           href={`/dashboard/tasks/${task.id}?from=/dashboard/schedule`}
-          className={cn('flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-1.5', canAssign && 'pl-0')}
+          className={cn('flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-2.5', canAssign && 'pl-0')}
         >
           <SystemIcon system={system ?? {}} className="h-4 w-4" />
           <div className="min-w-0 flex-1">
@@ -470,7 +469,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 shrink-0"
+                className="h-8 w-8 shrink-0"
                 aria-label={`View call at ${task.site_service?.site?.name}`}
                 onClick={(e) => {
                   e.preventDefault()
@@ -481,7 +480,24 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                 <Eye className="h-4 w-4 text-muted-foreground" />
               </Button>
             )}
-            {actionable && <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
+            {actionable && (
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 shrink-0 gap-1.5 font-semibold"
+                aria-label={`${task.status === 'pending' ? 'Start' : 'Continue'} call at ${task.site_service?.site?.name}`}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  router.push(`/dashboard/tasks/${task.id}?from=/dashboard/schedule`)
+                }}
+              >
+                <Wrench className="h-4 w-4" />
+                <span className="hidden sm:inline">
+                  {task.status === 'pending' ? 'Start Task' : 'Continue'}
+                </span>
+              </Button>
+            )}
           </div>
         </Link>
       </div>
@@ -710,51 +726,57 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
           </Select>
         )}
 
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              className={cn(
-                "w-[140px] justify-start text-left font-normal",
-                !dateFrom && "text-muted-foreground"
-              )}
-            >
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              {dateFrom ? format(dateFrom, "dd/MM/yy") : "From"}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <CalendarComponent
-              mode="single"
-              selected={dateFrom}
-              onSelect={setDateFrom}
-              initialFocus
-            />
-          </PopoverContent>
-        </Popover>
+        {/* Date range filtering is for admin/office planning only; engineers just
+            see their own upcoming/overdue/completed lists without date pickers. */}
+        {!isEngineer && (
+          <>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-[140px] justify-start text-left font-normal",
+                    !dateFrom && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {dateFrom ? format(dateFrom, "dd/MM/yy") : "From"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <CalendarComponent
+                  mode="single"
+                  selected={dateFrom}
+                  onSelect={setDateFrom}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
 
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              className={cn(
-                "w-[140px] justify-start text-left font-normal",
-                !dateTo && "text-muted-foreground"
-              )}
-            >
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              {dateTo ? format(dateTo, "dd/MM/yy") : "To"}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <CalendarComponent
-              mode="single"
-              selected={dateTo}
-              onSelect={setDateTo}
-              initialFocus
-            />
-          </PopoverContent>
-        </Popover>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-[140px] justify-start text-left font-normal",
+                    !dateTo && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {dateTo ? format(dateTo, "dd/MM/yy") : "To"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <CalendarComponent
+                  mode="single"
+                  selected={dateTo}
+                  onSelect={setDateTo}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+          </>
+        )}
 
         {hasActiveFilters && (
           <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-2">

@@ -1,6 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import type { ReactNode } from 'react'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -23,7 +29,7 @@ import { TaskAttachments } from '@/components/dashboard/tasks/task-attachments'
 import { ReportNotesAssist } from '@/components/dashboard/reports/report-notes-assist'
 import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
 import { useBackNavigation } from '@/hooks/use-back-navigation'
-import { formatDateUK, formatTimeUK } from '@/lib/utils'
+import { formatDateUK, formatTimeUK, cn } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import {
   AlertDialog,
@@ -54,7 +60,8 @@ import {
   Link2,
   ExternalLink,
   UserPlus,
-  Wrench
+  Wrench,
+  ChevronDown
 } from 'lucide-react'
 import type { 
   Profile, 
@@ -98,6 +105,56 @@ function buildInitialResults(
   })
   if (panels.length === 0) return items.map((item) => makeRow(item, null))
   return panels.flatMap((panel) => items.map((item) => makeRow(item, panel)))
+}
+
+// A card whose body collapses behind its header. Used to tuck away
+// non-vital overview detail (site contacts, reference links) so the call
+// overview leads with the essentials and stays tidy.
+function CollapsibleCard({
+  icon,
+  title,
+  description,
+  defaultOpen = false,
+  children,
+}: {
+  icon?: ReactNode
+  title: string
+  description?: string
+  defaultOpen?: boolean
+  children: ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <Card>
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex w-full items-start gap-3 px-6 py-4 text-left"
+          >
+            {icon}
+            <div className="flex-1">
+              <div className="flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
+                {title}
+              </div>
+              {description && (
+                <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>
+              )}
+            </div>
+            <ChevronDown
+              className={cn(
+                'mt-0.5 h-5 w-5 shrink-0 text-muted-foreground transition-transform',
+                open && 'rotate-180',
+              )}
+            />
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent className="pt-0">{children}</CardContent>
+        </CollapsibleContent>
+      </Collapsible>
+    </Card>
+  )
 }
 
 export function TaskExecution({ 
@@ -465,6 +522,13 @@ export function TaskExecution({
               </span>
             </div>
           )}
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground">Scheduled</span>
+            <span className="inline-flex items-center gap-1.5 text-right font-medium">
+              <Calendar className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              {formatDateUK(task.scheduled_date)}
+            </span>
+          </div>
           {isAdminOrOffice ? (
             <div className="space-y-1.5 pt-1">
               <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
@@ -508,15 +572,13 @@ export function TaskExecution({
         </CardContent>
       </Card>
 
-      {/* Site Details Card */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Building2 className="h-5 w-5" />
-            Site Details
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      {/* Site Details (collapsible — address & contacts are reference detail) */}
+      <CollapsibleCard
+        icon={<Building2 className="h-5 w-5 shrink-0" />}
+        title="Site Details"
+        description={site?.address || undefined}
+      >
+        <div className="space-y-3">
           <div className="flex items-start gap-2 text-sm">
             <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
             <span>{site?.address}</span>
@@ -539,26 +601,17 @@ export function TaskExecution({
               {site.contact_email}
             </a>
           )}
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Calendar className="h-4 w-4" />
-            Scheduled: {formatDateUK(task.scheduled_date)}
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+      </CollapsibleCard>
 
       {/* Client reference links scoped to this task's system/service */}
       {clientLinks.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Link2 className="h-5 w-5" />
-              Reference links
-            </CardTitle>
-            <CardDescription>
-              Resources provided by the client for this visit.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
+        <CollapsibleCard
+          icon={<Link2 className="h-5 w-5 shrink-0" />}
+          title="Reference links"
+          description="Resources provided by the client for this visit."
+        >
+          <div className="space-y-2">
             {clientLinks.map((link) => (
               <a
                 key={link.id}
@@ -577,8 +630,8 @@ export function TaskExecution({
                 <ExternalLink className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
               </a>
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </CollapsibleCard>
       )}
 
       {/* Book Visit */}

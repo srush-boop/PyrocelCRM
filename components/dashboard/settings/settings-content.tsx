@@ -8,12 +8,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase } from 'lucide-react'
+import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home } from 'lucide-react'
 import type { User as AuthUser } from '@supabase/supabase-js'
-import type { Profile, CompanyInfo, Branch, Department, Role } from '@/lib/types/database'
+import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType } from '@/lib/types/database'
 import { CompanySettings } from './company-settings'
 import { DepartmentsSettings } from './departments-settings'
 import { RolesSettings } from './roles-settings'
+import { PropertyTypesSettings } from './property-types-settings'
 import { SignatureManager } from './signature-manager'
 
 interface SettingsContentProps {
@@ -23,9 +24,10 @@ interface SettingsContentProps {
   branches: Branch[]
   departments: Department[]
   roles: Role[]
+  propertyTypes: PropertyType[]
 }
 
-export function SettingsContent({ user, profile, company, branches, departments, roles }: SettingsContentProps) {
+export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes }: SettingsContentProps) {
   const isAdmin = profile.role === 'admin'
   const userTypeLabel = profile.role.charAt(0).toUpperCase() + profile.role.slice(1)
   const assignedRole = profile.role_ref?.name ?? profile.job_title ?? 'Not assigned'
@@ -123,6 +125,12 @@ export function SettingsContent({ user, profile, company, branches, departments,
           <TabsTrigger value="roles" className="gap-2">
             <Briefcase className="h-4 w-4" />
             Roles
+          </TabsTrigger>
+        )}
+        {isAdmin && (
+          <TabsTrigger value="property-types" className="gap-2">
+            <Home className="h-4 w-4" />
+            Property Types
           </TabsTrigger>
         )}
       </TabsList>
@@ -287,6 +295,12 @@ export function SettingsContent({ user, profile, company, branches, departments,
       {isAdmin && (
         <TabsContent value="roles" className="space-y-4">
           <RolesSettings roles={roles} />
+        </TabsContent>
+      )}
+
+      {isAdmin && (
+        <TabsContent value="property-types" className="space-y-4">
+          <PropertyTypesSettings propertyTypes={propertyTypes} />
         </TabsContent>
       )}
 

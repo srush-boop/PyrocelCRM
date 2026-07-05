@@ -26,14 +26,15 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Plus, Loader2, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import type { Client, Branch } from '@/lib/types/database'
+import type { Client, Branch, PropertyType } from '@/lib/types/database'
 
 interface AddSiteDialogProps {
   clients: Client[]
   branches?: Branch[]
+  propertyTypes?: PropertyType[]
 }
 
-export function AddSiteDialog({ clients, branches = [] }: AddSiteDialogProps) {
+export function AddSiteDialog({ clients, branches = [], propertyTypes = [] }: AddSiteDialogProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
@@ -45,6 +46,7 @@ export function AddSiteDialog({ clients, branches = [] }: AddSiteDialogProps) {
     contact_phone: '',
     client_id: '',
     branch_id: '',
+    property_type_id: '',
     site_id_cash: '',
     uprn: '',
     status: 'live' as 'live' | 'dead',
@@ -87,6 +89,7 @@ export function AddSiteDialog({ clients, branches = [] }: AddSiteDialogProps) {
       ...formData,
       client_id: formData.client_id || null,
       branch_id: formData.branch_id || null,
+      property_type_id: formData.property_type_id || null,
       remote_monitoring_type: formData.has_remote_monitoring
         ? formData.remote_monitoring_type || null
         : null,
@@ -116,6 +119,7 @@ export function AddSiteDialog({ clients, branches = [] }: AddSiteDialogProps) {
         contact_phone: '',
         client_id: '',
         branch_id: '',
+        property_type_id: '',
         site_id_cash: '',
         uprn: '',
         status: 'live',
@@ -252,6 +256,29 @@ export function AddSiteDialog({ clients, branches = [] }: AddSiteDialogProps) {
                     {branches.map((branch) => (
                       <SelectItem key={branch.id} value={branch.id}>
                         {branch.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {propertyTypes.length > 0 && (
+              <div className="grid gap-2">
+                <Label htmlFor="property_type">Property Type</Label>
+                <Select
+                  value={formData.property_type_id || 'none'}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, property_type_id: value === 'none' ? '' : value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="No property type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No property type</SelectItem>
+                    {propertyTypes.map((pt) => (
+                      <SelectItem key={pt.id} value={pt.id}>
+                        {pt.name}
                       </SelectItem>
                     ))}
                   </SelectContent>

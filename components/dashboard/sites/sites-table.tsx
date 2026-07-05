@@ -40,7 +40,7 @@ import {
 import { MoreHorizontal, Pencil, Trash2, Search, Building2, X } from 'lucide-react'
 import { PrintButton } from '@/components/ui/print-button'
 import { EditSiteDialog } from './edit-site-dialog'
-import type { Site, Route, Client, Branch } from '@/lib/types/database'
+import type { Site, Route, Client, Branch, PropertyType } from '@/lib/types/database'
 import Link from 'next/link'
 
 interface SitesTableProps {
@@ -48,9 +48,10 @@ interface SitesTableProps {
   routes: Route[]
   clients: Client[]
   branches?: Branch[]
+  propertyTypes?: PropertyType[]
 }
 
-export function SitesTable({ sites, routes, clients, branches = [] }: SitesTableProps) {
+export function SitesTable({ sites, routes, clients, branches = [], propertyTypes = [] }: SitesTableProps) {
   const [search, setSearch] = useState('')
   const [selectedRoute, setSelectedRoute] = useState<string>('all')
   const [selectedClient, setSelectedClient] = useState<string>('all')
@@ -283,6 +284,7 @@ export function SitesTable({ sites, routes, clients, branches = [] }: SitesTable
           site={editSite}
           clients={clients}
           branches={branches}
+          propertyTypes={propertyTypes}
           open={!!editSite}
           onOpenChange={() => setEditSite(null)}
         />

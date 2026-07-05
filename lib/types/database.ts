@@ -193,6 +193,15 @@ export interface Department {
   updated_at: string
 }
 
+// An admin-configurable property/building type that a site can be tagged with.
+export interface PropertyType {
+  id: string
+  name: string
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
 // A site a client login is permitted to view (join row).
 export interface ClientSiteAccess {
   id: string
@@ -386,6 +395,8 @@ export interface Site {
   site_id_cash: string | null
   // Unique Property Reference Number (UK national property identifier).
   uprn: string | null
+  // Admin-configurable property/building type (see PropertyType).
+  property_type_id: string | null
   status: 'live' | 'dead'
   notes: string | null
   // Pre-attendance flags engineers/office can set at site level. Individual
@@ -412,6 +423,7 @@ export interface Site {
   route?: Route
   client?: Client
   branch?: Branch | null
+  property_type?: PropertyType | null
   }
 
   export type LogbookEntryType =

@@ -24,7 +24,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { SystemIcon, SystemBadge } from '@/lib/system-types'
 import { TaskAttachments } from '@/components/dashboard/tasks/task-attachments'
 import { TaskHeader } from '@/components/dashboard/tasks/task-header'
 import { ReportNotesAssist } from '@/components/dashboard/reports/report-notes-assist'
@@ -462,90 +461,64 @@ export function TaskExecution({
   })()
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto pb-20">
+    <div
+      className={cn(
+        'mx-auto max-w-3xl space-y-6',
+        // Extra room so the fixed mobile action bar (raised above the bottom nav)
+        // never hides the last cards while a task is in progress.
+        status === 'in_progress' ? 'pb-44 lg:pb-6' : 'pb-6',
+      )}
+    >
       <TaskHeader task={task} status={status} />
 
-      {/* Call Summary */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <SystemIcon system={systemType ?? {}} className="h-5 w-5" />
-            Call Summary
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          {systemType && (
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">System</span>
-              <SystemBadge system={systemType} />
-            </div>
-          )}
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-muted-foreground">Service</span>
-            <span className="inline-flex items-center gap-1.5 text-right font-medium">
-              <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              {serviceType?.name ?? '—'}
-              {task.visit_type?.name ? ` · ${task.visit_type.name}` : ''}
-            </span>
-          </div>
-          {clientName && (
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">Client</span>
-              <span className="inline-flex items-center gap-1.5 text-right font-medium">
-                <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                {clientName}
-              </span>
-            </div>
-          )}
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-muted-foreground">Scheduled</span>
-            <span className="inline-flex items-center gap-1.5 text-right font-medium">
-              <Calendar className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              {formatDateUK(task.scheduled_date)}
-            </span>
-          </div>
-          {isAdminOrOffice ? (
-            <div className="space-y-1.5 pt-1">
-              <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <UserPlus className="h-3.5 w-3.5" />
-                Assign engineer
-              </span>
-              <Select
-                value={assignedEngineerId ?? 'unassigned'}
-                onValueChange={assignEngineer}
-                disabled={assigning}
-              >
-                <SelectTrigger>
-                  {assigning ? (
-                    <span className="flex items-center gap-1.5">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving...
-                    </span>
-                  ) : (
-                    <SelectValue placeholder="Assign to..." />
-                  )}
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="unassigned">Unassigned</SelectItem>
-                  {engineers.map((eng) => (
-                    <SelectItem key={eng.id} value={eng.id}>
-                      {eng.full_name || eng.email}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">Engineer</span>
-              <span className="text-right font-medium">
-                {task.assigned_engineer
-                  ? task.assigned_engineer.full_name || task.assigned_engineer.email
-                  : 'Unassigned'}
-              </span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Call Summary — only the details the header doesn't already show
+          (system, service, address and dates all live in the header). */}
+      {(clientName || isAdminOrOffice) && (
+        <Card>
+          <CardContent className="space-y-3 p-4 text-sm">
+            {clientName && (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Client</span>
+                <span className="inline-flex items-center gap-1.5 text-right font-medium">
+                  <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  {clientName}
+                </span>
+              </div>
+            )}
+            {isAdminOrOffice && (
+              <div className="space-y-1.5">
+                <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <UserPlus className="h-3.5 w-3.5" />
+                  Assign engineer
+                </span>
+                <Select
+                  value={assignedEngineerId ?? 'unassigned'}
+                  onValueChange={assignEngineer}
+                  disabled={assigning}
+                >
+                  <SelectTrigger>
+                    {assigning ? (
+                      <span className="flex items-center gap-1.5">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving...
+                      </span>
+                    ) : (
+                      <SelectValue placeholder="Assign to..." />
+                    )}
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned">Unassigned</SelectItem>
+                    {engineers.map((eng) => (
+                      <SelectItem key={eng.id} value={eng.id}>
+                        {eng.full_name || eng.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Site Details (collapsible — address & contacts are reference detail) */}
       <CollapsibleCard
@@ -609,19 +582,23 @@ export function TaskExecution({
         </CollapsibleCard>
       )}
 
-      {/* Book Visit */}
+      {/* Start Task — the primary action, kept prominent and above the
+          optional booking panel so engineers can begin in one tap. */}
+      {status === 'pending' && canEdit && (
+        <Button onClick={handleStartTask} size="lg" className="w-full">
+          <Play className="mr-2 h-5 w-5" />
+          Start Inspection
+        </Button>
+      )}
+
+      {/* Book Visit (collapsed by default — only needed when rescheduling) */}
       {canEdit && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
-              Book Visit
-            </CardTitle>
-            <CardDescription>
-              Set the date and time for this visit to add it to your calendar.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <CollapsibleCard
+          icon={<Calendar className="h-5 w-5 shrink-0" />}
+          title="Book Visit"
+          description="Set the date and time to add this visit to your calendar."
+        >
+          <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="booked-date">Date</Label>
               <Input
@@ -682,16 +659,8 @@ export function TaskExecution({
                 </>
               )}
             </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Start Task Button */}
-      {status === 'pending' && canEdit && (
-        <Button onClick={handleStartTask} size="lg" className="w-full">
-          <Play className="mr-2 h-5 w-5" />
-          Start Inspection
-        </Button>
+          </div>
+        </CollapsibleCard>
       )}
 
       {/* Checklist */}
@@ -958,7 +927,7 @@ export function TaskExecution({
 
       {/* Action Buttons */}
       {status === 'in_progress' && canEdit && (
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-background border-t flex gap-2 md:relative md:border-0 md:p-0">
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-50 flex gap-2 border-t bg-background p-4 lg:relative lg:inset-x-auto lg:bottom-auto lg:z-auto lg:border-0 lg:p-0">
           <Button variant="outline" onClick={handleSave} disabled={saving} className="flex-1">
             {saving ? (
               <>

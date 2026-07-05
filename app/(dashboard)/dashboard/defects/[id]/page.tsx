@@ -65,7 +65,7 @@ export default async function DefectDetailPage({
        client:clients(id, name),
        quote:quotes(id, reference, status),
        task_result:task_results(id, engineer_notes, created_at, checklist_results),
-       task:tasks(id, site_service:site_services(service_type:service_types(name)))`,
+       task:tasks!defects_task_id_fkey(id, site_service:site_services(service_type:service_types(name)))`,
     )
     .eq('id', id)
     .maybeSingle()

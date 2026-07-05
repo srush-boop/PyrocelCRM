@@ -16,7 +16,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Loader2, RotateCcw, Lock } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
-import { getMenuForRole, getDefaultMenuKeys } from '@/lib/config/navigation'
+import { getMenuForRole, getDefaultMenuKeys, migratePermissionKeys } from '@/lib/config/navigation'
 
 interface MenuAccessDialogProps {
   user: Profile | null
@@ -42,11 +42,15 @@ export function MenuAccessDialog({ user, onOpenChange }: MenuAccessDialogProps) 
   useEffect(() => {
     if (!user) return
     const defaults = getDefaultMenuKeys(user.role)
-    const initial =
-      user.menu_permissions && user.menu_permissions.length >= 0
-        ? user.menu_permissions
-        : defaults
-    setEnabled(new Set(user.menu_permissions ? initial : defaults))
+    // Translate any legacy (pre-grouping) keys to the current group keys so the
+    // checkboxes reflect what the user can actually see today.
+    setEnabled(
+      new Set(
+        user.menu_permissions
+          ? migratePermissionKeys(user.menu_permissions)
+          : defaults,
+      ),
+    )
     setError(null)
   }, [user])
 

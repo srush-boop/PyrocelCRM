@@ -217,6 +217,59 @@ const tenderAiNavItem: NavItem = {
   ],
 }
 
+// People: consolidates staff/HR concerns into one group. The admin variant
+// includes Users and is `locked` so an admin can never hide their own access to
+// user/menu management and lock everyone out.
+const adminPeopleNavItem: NavItem = {
+  key: 'people',
+  title: 'People',
+  icon: Users,
+  locked: true,
+  children: [
+    { title: 'Users', href: '/dashboard/engineers', icon: Users },
+    { title: 'Approvals', href: '/dashboard/approvals', icon: ClipboardCheck },
+    { title: 'Training', href: '/dashboard/training', icon: GraduationCap },
+    { title: 'My Leave', href: '/dashboard/my-leave', icon: CalendarClock },
+    { title: 'Leave Summary', href: '/dashboard/leave-summary', icon: CalendarCheck },
+    { title: 'Employee Vault', href: '/dashboard/vault', icon: Vault },
+  ],
+}
+
+const officePeopleNavItem: NavItem = {
+  key: 'people',
+  title: 'People',
+  icon: Users,
+  children: [
+    { title: 'Approvals', href: '/dashboard/approvals', icon: ClipboardCheck },
+    { title: 'Training', href: '/dashboard/training', icon: GraduationCap },
+    { title: 'My Leave', href: '/dashboard/my-leave', icon: CalendarClock },
+    { title: 'Leave Summary', href: '/dashboard/leave-summary', icon: CalendarCheck },
+    { title: 'Employee Vault', href: '/dashboard/vault', icon: Vault },
+  ],
+}
+
+const engineerPeopleNavItem: NavItem = {
+  key: 'people',
+  title: 'People',
+  icon: Users,
+  children: [
+    { title: 'My Leave', href: '/dashboard/my-leave', icon: CalendarClock },
+    { title: 'Approvals', href: '/dashboard/approvals', icon: ClipboardCheck },
+    { title: 'Employee Vault', href: '/dashboard/vault', icon: Vault },
+  ],
+}
+
+// Documents: groups the two document stores (general Documents + RAMS).
+const documentsNavItem: NavItem = {
+  key: 'documents',
+  title: 'Documents',
+  icon: FolderOpen,
+  children: [
+    { title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
+    { title: 'RAMS', href: '/dashboard/rams', icon: ShieldCheck },
+  ],
+}
+
 // ---------------------------------------------------------------------------
 // Role default menus
 // ---------------------------------------------------------------------------
@@ -226,23 +279,15 @@ const adminNavItems: NavItem[] = [
   { key: 'clients', title: 'Clients', href: '/dashboard/clients', icon: Building },
   sitesNavItem,
   adminCallsNavItem,
-  { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
-  { key: 'my-leave', title: 'My Leave', href: '/dashboard/my-leave', icon: CalendarClock },
-  { key: 'approvals', title: 'Approvals', href: '/dashboard/approvals', icon: ClipboardCheck },
-  { key: 'leave-summary', title: 'Leave Summary', href: '/dashboard/leave-summary', icon: CalendarCheck },
+  { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   adminServiceManagementNavItem,
-  // Users is locked so an admin can never hide their own access to user/menu
-  // management and lock everyone out.
-  { key: 'users', title: 'Users', href: '/dashboard/engineers', icon: Users, locked: true },
-  { key: 'training', title: 'Training', href: '/dashboard/training', icon: GraduationCap },
-  { key: 'notifications', title: 'Notifications', href: '/dashboard/notifications', icon: Bell },
   salesNavItem,
   managerStockNavItem,
-  { key: 'documents', title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
-  { key: 'rams', title: 'RAMS', href: '/dashboard/rams', icon: ShieldCheck },
+  adminPeopleNavItem,
+  documentsNavItem,
   tenderAiNavItem,
-  { key: 'vault', title: 'Employee Vault', href: '/dashboard/vault', icon: Vault },
+  { key: 'notifications', title: 'Notifications', href: '/dashboard/notifications', icon: Bell },
 ]
 
 const officeNavItems: NavItem[] = [
@@ -250,30 +295,23 @@ const officeNavItems: NavItem[] = [
   { key: 'clients', title: 'Clients', href: '/dashboard/clients', icon: Building },
   sitesNavItem,
   officeCallsNavItem,
-  { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
-  { key: 'my-leave', title: 'My Leave', href: '/dashboard/my-leave', icon: CalendarClock },
-  { key: 'approvals', title: 'Approvals', href: '/dashboard/approvals', icon: ClipboardCheck },
-  { key: 'leave-summary', title: 'Leave Summary', href: '/dashboard/leave-summary', icon: CalendarCheck },
+  { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   officeServiceManagementNavItem,
-  { key: 'training', title: 'Training', href: '/dashboard/training', icon: GraduationCap },
-  { key: 'notifications', title: 'Notifications', href: '/dashboard/notifications', icon: Bell },
   salesNavItem,
   managerStockNavItem,
-  { key: 'documents', title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
-  { key: 'rams', title: 'RAMS', href: '/dashboard/rams', icon: ShieldCheck },
+  officePeopleNavItem,
+  documentsNavItem,
   tenderAiNavItem,
-  { key: 'vault', title: 'Employee Vault', href: '/dashboard/vault', icon: Vault },
+  { key: 'notifications', title: 'Notifications', href: '/dashboard/notifications', icon: Bell },
 ]
 
 const engineerNavItems: NavItem[] = [
   engineerCallsNavItem,
-  { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
-  { key: 'my-leave', title: 'My Leave', href: '/dashboard/my-leave', icon: CalendarClock },
-  { key: 'approvals', title: 'Approvals', href: '/dashboard/approvals', icon: ClipboardCheck },
+  { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
+  engineerPeopleNavItem,
   engineerStockNavItem,
-  { key: 'vault', title: 'Employee Vault', href: '/dashboard/vault', icon: Vault },
 ]
 
 // Returns the full default top-level menu for a role (before applying any
@@ -294,6 +332,24 @@ export function getDefaultMenuKeys(role: UserRole): string[] {
   return getMenuForRole(role).map((item) => item.key)
 }
 
+// Menu items were regrouped (leave/HR items merged into `people`, RAMS merged
+// into `documents`). Older per-user permission arrays stored the pre-grouping
+// keys, so we translate them to their new group key on read. This keeps
+// existing overrides working without a data migration.
+const PERMISSION_KEY_MIGRATION: Record<string, string> = {
+  'my-leave': 'people',
+  'leave-summary': 'people',
+  approvals: 'people',
+  training: 'people',
+  users: 'people',
+  vault: 'people',
+  rams: 'documents',
+}
+
+export function migratePermissionKeys(keys: string[]): string[] {
+  return Array.from(new Set(keys.map((k) => PERMISSION_KEY_MIGRATION[k] ?? k)))
+}
+
 // Applies a per-user permission override to a role's menu. `menuPermissions` is
 // either null/undefined (use role defaults) or an array of enabled keys.
 // Locked items are always kept regardless of the override.
@@ -303,6 +359,6 @@ export function getVisibleMenu(
 ): NavItem[] {
   const menu = getMenuForRole(role)
   if (!menuPermissions) return menu
-  const enabled = new Set(menuPermissions)
+  const enabled = new Set(migratePermissionKeys(menuPermissions))
   return menu.filter((item) => item.locked || enabled.has(item.key))
 }

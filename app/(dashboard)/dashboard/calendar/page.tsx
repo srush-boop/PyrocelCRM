@@ -5,6 +5,8 @@ import { Settings2 } from 'lucide-react'
 import { getCalendarData } from '@/lib/calendar'
 import { CalendarView } from '@/components/dashboard/calendar/calendar-view'
 import { BranchFilter } from '@/components/dashboard/branch-filter'
+import { createClient } from '@/lib/supabase/server'
+import type { CalendarFilterTemplate } from '@/lib/types/database'
 
 export default async function CalendarPage({
   searchParams,
@@ -18,6 +20,13 @@ export default async function CalendarPage({
   const { items, routes, entryTypes, people, departments, profile, canManageOthers, branchScope } =
     data
   const isAdmin = profile.role === 'admin'
+
+  // The current user's saved calendar filter templates (RLS scopes to them).
+  const supabase = await createClient()
+  const { data: templates } = await supabase
+    .from('calendar_filter_templates')
+    .select('*')
+    .order('name')
 
   return (
     <div className="space-y-6">
@@ -51,6 +60,7 @@ export default async function CalendarPage({
         departments={departments}
         profile={profile}
         canManageOthers={canManageOthers}
+        templates={(templates ?? []) as CalendarFilterTemplate[]}
       />
     </div>
   )

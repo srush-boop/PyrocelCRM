@@ -1547,15 +1547,14 @@ export interface CalendarFilterTemplate {
   updated_at: string
 }
 
-// The serialisable shape of the calendar's filter controls.
+// The serialisable shape of the calendar's filter controls. Values mirror the
+// calendar toolbar: 'all' for no filter, a kind ('task'|'route'|'entry'), an
+// owner id (or 'company'), and an entry type name. `view` restores the layout.
 export interface CalendarFilterState {
-  entryTypeIds?: string[]
-  departmentIds?: string[]
-  branchIds?: string[]
-  userIds?: string[]
-  showTasks?: boolean
-  showEntries?: boolean
-  showRoutes?: boolean
+  kindFilter?: string
+  personFilter?: string
+  typeFilter?: string
+  view?: 'day' | 'week' | 'month' | 'list'
 }
 
 // A normalised item the calendar can render, derived from a booked task, a

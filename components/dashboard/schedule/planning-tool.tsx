@@ -1,8 +1,8 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useMemo, useTransition } from 'react'
-import { CalendarClock, Download, Loader2 } from 'lucide-react'
+import { useMemo, useState, useTransition } from 'react'
+import { CalendarClock, Download, Loader2, Filter, X } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table,
@@ -16,6 +16,13 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { PrintButton } from '@/components/ui/print-button'
 import { formatDateUK } from '@/lib/utils'
 import { downloadCsv } from '@/lib/csv'
@@ -26,6 +33,9 @@ interface PlanningToolProps {
   from: string
   to: string
 }
+
+// Sentinel value for "no filter" in the Select controls.
+const ALL = 'all'
 
 const PRESETS: { label: string; months: number }[] = [
   { label: 'Next 3 months', months: 3 },
@@ -63,20 +73,65 @@ export function PlanningTool({ rows, from, to }: PlanningToolProps) {
     })
   }
 
-  const stats = useMemo(() => {
-    const created = rows.filter((r) => r.status === 'created').length
-    const sites = new Set(rows.map((r) => r.siteId)).size
-    return { total: rows.length, created, forecast: rows.length - created, sites }
+  // Client-side filters applied on top of the loaded forecast rows.
+  const [system, setSystem] = useState(ALL)
+  const [serviceType, setServiceType] = useState(ALL)
+  const [route, setRoute] = useState(ALL)
+  const [client, setClient] = useState(ALL)
+  const [status, setStatus] = useState(ALL)
+
+  // Build sorted, de-duplicated option lists from the data itself.
+  const options = useMemo(() => {
+    const uniq = (vals: (string | null)[]) =>
+      Array.from(new Set(vals.filter((v): v is string => !!v))).sort((a, b) =>
+        a.localeCompare(b),
+      )
+    return {
+      systems: uniq(rows.map((r) => r.systemTypeName)),
+      serviceTypes: uniq(rows.map((r) => r.serviceTypeName)),
+      routes: uniq(rows.map((r) => r.routeName)),
+      clients: uniq(rows.map((r) => r.clientName)),
+    }
   }, [rows])
+
+  const filtered = useMemo(() => {
+    return rows.filter((r) => {
+      if (system !== ALL && r.systemTypeName !== system) return false
+      if (serviceType !== ALL && r.serviceTypeName !== serviceType) return false
+      if (route !== ALL && (r.routeName ?? '') !== route) return false
+      if (client !== ALL && (r.clientName ?? '') !== client) return false
+      if (status !== ALL && r.status !== status) return false
+      return true
+    })
+  }, [rows, system, serviceType, route, client, status])
+
+  const activeFilterCount = [system, serviceType, route, client, status].filter(
+    (v) => v !== ALL,
+  ).length
+
+  const clearFilters = () => {
+    setSystem(ALL)
+    setServiceType(ALL)
+    setRoute(ALL)
+    setClient(ALL)
+    setStatus(ALL)
+  }
+
+  const stats = useMemo(() => {
+    const created = filtered.filter((r) => r.status === 'created').length
+    const sites = new Set(filtered.map((r) => r.siteId)).size
+    return { total: filtered.length, created, forecast: filtered.length - created, sites }
+  }, [filtered])
 
   const handleDownload = () => {
     downloadCsv(
       `call-plan_${from}_to_${to}`,
-      ['Date', 'Site', 'Client', 'Service', 'Visit', 'Route', 'Frequency', 'Engineer', 'Status'],
-      rows.map((r) => [
+      ['Date', 'Site', 'Client', 'System', 'Service', 'Visit', 'Route', 'Frequency', 'Engineer', 'Status'],
+      filtered.map((r) => [
         r.date,
         r.siteName,
         r.clientName ?? '',
+        r.systemTypeName ?? '',
         r.serviceTypeName,
         r.visitName ?? '',
         r.routeName ?? '',
@@ -144,6 +199,66 @@ export function PlanningTool({ rows, from, to }: PlanningToolProps) {
         </CardContent>
       </Card>
 
+      {/* Filters */}
+      <Card>
+        <CardContent className="flex flex-col gap-4 pt-6">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              Filters
+              {activeFilterCount > 0 && (
+                <Badge variant="secondary">{activeFilterCount} active</Badge>
+              )}
+            </div>
+            {activeFilterCount > 0 && (
+              <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
+                <X className="h-4 w-4" />
+                Clear
+              </Button>
+            )}
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <FilterSelect
+              label="System"
+              value={system}
+              onChange={setSystem}
+              options={options.systems}
+            />
+            <FilterSelect
+              label="Service type"
+              value={serviceType}
+              onChange={setServiceType}
+              options={options.serviceTypes}
+            />
+            <FilterSelect
+              label="Route"
+              value={route}
+              onChange={setRoute}
+              options={options.routes}
+            />
+            <FilterSelect
+              label="Client"
+              value={client}
+              onChange={setClient}
+              options={options.clients}
+            />
+            <div className="grid gap-1.5">
+              <Label>Status</Label>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>All statuses</SelectItem>
+                  <SelectItem value="created">Created</SelectItem>
+                  <SelectItem value="forecast">Forecast</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Summary */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Total calls" value={stats.total} />
@@ -161,9 +276,11 @@ export function PlanningTool({ rows, from, to }: PlanningToolProps) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {rows.length === 0 ? (
+          {filtered.length === 0 ? (
             <p className="py-10 text-center text-sm text-muted-foreground">
-              No calls fall within this date range.
+              {rows.length === 0
+                ? 'No calls fall within this date range.'
+                : 'No calls match the selected filters.'}
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -173,6 +290,7 @@ export function PlanningTool({ rows, from, to }: PlanningToolProps) {
                     <TableHead>Date</TableHead>
                     <TableHead>Site</TableHead>
                     <TableHead>Client</TableHead>
+                    <TableHead>System</TableHead>
                     <TableHead>Service</TableHead>
                     <TableHead>Visit</TableHead>
                     <TableHead>Route</TableHead>
@@ -182,13 +300,16 @@ export function PlanningTool({ rows, from, to }: PlanningToolProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rows.map((r, i) => (
+                  {filtered.map((r, i) => (
                     <TableRow key={`${r.siteServiceId}-${r.visitTypeId ?? 'none'}-${r.date}-${i}`}>
                       <TableCell className="whitespace-nowrap font-medium">
                         {formatDateUK(r.date)}
                       </TableCell>
                       <TableCell>{r.siteName}</TableCell>
                       <TableCell className="text-muted-foreground">{r.clientName ?? '—'}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {r.systemTypeName ?? '—'}
+                      </TableCell>
                       <TableCell>{r.serviceTypeName}</TableCell>
                       <TableCell className="text-muted-foreground">{r.visitName ?? '—'}</TableCell>
                       <TableCell className="text-muted-foreground">{r.routeName ?? '—'}</TableCell>
@@ -211,6 +332,37 @@ export function PlanningTool({ rows, from, to }: PlanningToolProps) {
           )}
         </CardContent>
       </Card>
+    </div>
+  )
+}
+
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  options: string[]
+}) {
+  return (
+    <div className="grid gap-1.5">
+      <Label>{label}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger>
+          <SelectValue placeholder={`All ${label.toLowerCase()}`} />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL}>All {label.toLowerCase()}</SelectItem>
+          {options.map((opt) => (
+            <SelectItem key={opt} value={opt}>
+              {opt}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   )
 }

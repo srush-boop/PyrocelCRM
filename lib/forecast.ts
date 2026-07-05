@@ -9,6 +9,7 @@ export interface ForecastRow {
   siteName: string
   clientName: string | null
   serviceTypeName: string
+  systemTypeName: string | null
   visitName: string | null
   routeName: string | null
   date: string
@@ -32,7 +33,11 @@ interface ServiceRow {
     client: { name: string | null } | null
   } | null
   route: { name: string | null } | null
-  service_type: { name: string | null; status: string | null } | null
+  service_type: {
+    name: string | null
+    status: string | null
+    system_type: { name: string | null } | null
+  } | null
 }
 
 interface TaskRow {
@@ -77,7 +82,7 @@ export async function forecastCalls(
     `id, service_type_id, frequency_value, frequency_unit, next_service_date, active,
        site:sites(id, name, status, branch_id, client:clients(name)),
        route:routes(name),
-       service_type:service_types(name, status)`,
+       service_type:service_types(name, status, system_type:system_types(name))`,
   )
 
   let services = ((serviceData || []) as unknown as ServiceRow[]).filter(
@@ -194,6 +199,7 @@ export async function forecastCalls(
           siteName: svc.site?.name ?? 'Unknown site',
           clientName: svc.site?.client?.name ?? null,
           serviceTypeName: svc.service_type?.name ?? 'Service',
+          systemTypeName: svc.service_type?.system_type?.name ?? null,
           visitName: g.name,
           routeName: svc.route?.name ?? null,
           date: dateStr,

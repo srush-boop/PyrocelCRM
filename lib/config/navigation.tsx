@@ -33,6 +33,9 @@ import {
   Settings,
   ShieldCheck,
   GraduationCap,
+  ClipboardCheck,
+  CalendarCheck,
+  CalendarClock,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { UserRole } from '@/lib/types/database'
@@ -198,6 +201,9 @@ const adminNavItems: NavItem[] = [
   adminCallsNavItem,
   { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
+  { key: 'my-leave', title: 'My Leave', href: '/dashboard/my-leave', icon: CalendarClock },
+  { key: 'approvals', title: 'Approvals', href: '/dashboard/approvals', icon: ClipboardCheck },
+  { key: 'leave-summary', title: 'Leave Summary', href: '/dashboard/leave-summary', icon: CalendarCheck },
   adminServiceManagementNavItem,
   // Users is locked so an admin can never hide their own access to user/menu
   // management and lock everyone out.
@@ -218,6 +224,9 @@ const officeNavItems: NavItem[] = [
   officeCallsNavItem,
   { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
+  { key: 'my-leave', title: 'My Leave', href: '/dashboard/my-leave', icon: CalendarClock },
+  { key: 'approvals', title: 'Approvals', href: '/dashboard/approvals', icon: ClipboardCheck },
+  { key: 'leave-summary', title: 'Leave Summary', href: '/dashboard/leave-summary', icon: CalendarCheck },
   officeServiceManagementNavItem,
   { key: 'training', title: 'Training', href: '/dashboard/training', icon: GraduationCap },
   { key: 'notifications', title: 'Notifications', href: '/dashboard/notifications', icon: Bell },
@@ -232,6 +241,8 @@ const engineerNavItems: NavItem[] = [
   engineerCallsNavItem,
   { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
+  { key: 'my-leave', title: 'My Leave', href: '/dashboard/my-leave', icon: CalendarClock },
+  { key: 'approvals', title: 'Approvals', href: '/dashboard/approvals', icon: ClipboardCheck },
   engineerStockNavItem,
   { key: 'vault', title: 'Employee Vault', href: '/dashboard/vault', icon: Vault },
 ]

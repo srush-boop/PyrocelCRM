@@ -83,6 +83,34 @@ function consumeRange(
   return { days, hours }
 }
 
+// Re-export the working-hours type for consumers that build day/hour views.
+export type { WorkDayHours }
+
+/**
+ * Counts the working days a leave entry spans (weekends, bank holidays and the
+ * user's non-working days excluded). Not year-clamped — intended for showing the
+ * length of a single request in the Approvals area.
+ */
+export function countWorkingDays(
+  startAt: string,
+  endAt: string,
+  bankHolidays: Set<string>,
+  workDays: number[] = DEFAULT_WORK_DAYS,
+): number {
+  const start = new Date(startAt)
+  const end = new Date(endAt)
+  let cursor = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate())
+  const last = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate())
+  let days = 0
+  const oneDay = 24 * 60 * 60 * 1000
+  while (cursor <= last) {
+    const weekday = isoWeekday(new Date(cursor))
+    if (workDays.includes(weekday) && !bankHolidays.has(dayKey(cursor))) days += 1
+    cursor += oneDay
+  }
+  return days
+}
+
 export interface LeaveBalance {
   entitlementDays: number | null
   entitlementHours: number | null

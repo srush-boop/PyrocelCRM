@@ -126,7 +126,6 @@ const adminServiceManagementNavItem: NavItem = {
   title: 'Service Management',
   icon: Wrench,
   children: [
-    { title: 'Routes', href: '/dashboard/routes', icon: Route },
     { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
     { title: 'Service Types', href: '/dashboard/service-types', icon: Wrench },
     { title: 'System Types', href: '/dashboard/sales/system-types', icon: Layers },
@@ -141,7 +140,6 @@ const officeServiceManagementNavItem: NavItem = {
   title: 'Service Management',
   icon: Wrench,
   children: [
-    { title: 'Routes', href: '/dashboard/routes', icon: Route },
     { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
     { title: 'System Types', href: '/dashboard/sales/system-types', icon: Layers },
     { title: 'Sub-contractors', href: '/dashboard/subcontractors', icon: HardHat },

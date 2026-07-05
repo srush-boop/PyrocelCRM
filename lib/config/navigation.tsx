@@ -173,7 +173,7 @@ const salesNavItem: NavItem = {
 
 const managerStockNavItem: NavItem = {
   key: 'stock',
-  title: 'Stock',
+  title: 'Products',
   icon: Boxes,
   children: [
     { title: 'Overview', href: '/dashboard/stock', icon: Boxes },
@@ -186,7 +186,7 @@ const managerStockNavItem: NavItem = {
 
 const engineerStockNavItem: NavItem = {
   key: 'stock',
-  title: 'Stock',
+  title: 'Products',
   icon: Boxes,
   children: [
     { title: 'Overview', href: '/dashboard/stock', icon: Boxes },

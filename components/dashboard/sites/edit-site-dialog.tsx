@@ -25,12 +25,13 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Loader2, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import type { Site, Route, Client, Branch } from '@/lib/types/database'
+import type { Site, Route, Client, Branch, PropertyType } from '@/lib/types/database'
 
 interface EditSiteDialogProps {
   site: Site & { route: Route | null; client?: Client | null }
   clients: Client[]
   branches?: Branch[]
+  propertyTypes?: PropertyType[]
   open: boolean
   onOpenChange: (open: boolean) => void
 }
@@ -39,6 +40,7 @@ export function EditSiteDialog({
   site,
   clients,
   branches = [],
+  propertyTypes = [],
   open,
   onOpenChange,
 }: EditSiteDialogProps) {
@@ -52,6 +54,7 @@ export function EditSiteDialog({
     contact_phone: site.contact_phone || '',
     client_id: site.client_id || '',
     branch_id: site.branch_id || '',
+    property_type_id: site.property_type_id || '',
     uprn: site.uprn || '',
     status: site.status || 'live',
     notes: site.notes || '',
@@ -99,6 +102,7 @@ export function EditSiteDialog({
         ...formData,
         client_id: formData.client_id || null,
         branch_id: formData.branch_id || null,
+        property_type_id: formData.property_type_id || null,
         remote_monitoring_type: formData.has_remote_monitoring
           ? formData.remote_monitoring_type || null
           : null,
@@ -244,6 +248,29 @@ export function EditSiteDialog({
                     {branches.map((branch) => (
                       <SelectItem key={branch.id} value={branch.id}>
                         {branch.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {propertyTypes.length > 0 && (
+              <div className="grid gap-2">
+                <Label htmlFor="property_type">Property Type</Label>
+                <Select
+                  value={formData.property_type_id || 'none'}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, property_type_id: value === 'none' ? '' : value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="No property type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No property type</SelectItem>
+                    {propertyTypes.map((pt) => (
+                      <SelectItem key={pt.id} value={pt.id}>
+                        {pt.name}
                       </SelectItem>
                     ))}
                   </SelectContent>

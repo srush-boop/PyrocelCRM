@@ -144,11 +144,26 @@ export async function getLocationWithItems(locationId: string): Promise<{
   }
 }
 
-export async function getParts(): Promise<Part[]> {
+  export async function getParts(): Promise<Part[]> {
   const supabase = await createClient()
-  const { data } = await supabase.from('parts').select('*').order('name')
+  const { data } = await supabase
+  .from('parts')
+  .select('*, supplier:suppliers!parts_supplier_id_fkey(id, name)')
+  .order('name')
   return (data || []) as Part[]
-}
+  }
+
+  // Product suppliers only — used to link parts to the supplier they're ordered from.
+  export async function getProductSuppliers(): Promise<{ id: string; name: string }[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+  .from('suppliers')
+  .select('id, name')
+  .eq('supplier_type', 'product')
+  .eq('status', 'active')
+  .order('name')
+  return (data || []) as { id: string; name: string }[]
+  }
 
 export async function getStockLocations(): Promise<StockLocation[]> {
   const supabase = await createClient()

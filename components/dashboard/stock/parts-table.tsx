@@ -38,9 +38,10 @@ import { formatGBP } from '@/lib/utils'
 
 interface PartsTableProps {
   parts: Part[]
+  suppliers?: { id: string; name: string }[]
 }
 
-export function PartsTable({ parts }: PartsTableProps) {
+export function PartsTable({ parts, suppliers = [] }: PartsTableProps) {
   const [search, setSearch] = useState('')
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -89,6 +90,7 @@ export function PartsTable({ parts }: PartsTableProps) {
             <TableRow>
               <TableHead>Part</TableHead>
               <TableHead className="hidden sm:table-cell">SKU</TableHead>
+              <TableHead className="hidden lg:table-cell">Supplier</TableHead>
               <TableHead className="hidden md:table-cell">Unit</TableHead>
               <TableHead className="text-right">Unit cost</TableHead>
               <TableHead className="hidden text-right sm:table-cell">Min level</TableHead>
@@ -99,7 +101,7 @@ export function PartsTable({ parts }: PartsTableProps) {
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center">
+                <TableCell colSpan={8} className="h-24 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <Package className="mb-2 h-8 w-8 text-muted-foreground/50" />
                     <p className="text-muted-foreground">No parts in the catalogue yet</p>
@@ -119,6 +121,9 @@ export function PartsTable({ parts }: PartsTableProps) {
                   </TableCell>
                   <TableCell className="hidden text-muted-foreground sm:table-cell">
                     {part.sku ?? '-'}
+                  </TableCell>
+                  <TableCell className="hidden text-muted-foreground lg:table-cell">
+                    {part.supplier?.name ?? '-'}
                   </TableCell>
                   <TableCell className="hidden text-muted-foreground md:table-cell">
                     {part.unit}
@@ -203,6 +208,7 @@ export function PartsTable({ parts }: PartsTableProps) {
           part={editPart}
           open={!!editPart}
           onOpenChange={() => setEditPart(null)}
+          suppliers={suppliers}
         />
       )}
     </div>

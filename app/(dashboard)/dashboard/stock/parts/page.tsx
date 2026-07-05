@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { Profile } from '@/lib/types/database'
-import { getParts } from '@/lib/stock'
+import { getParts, getProductSuppliers } from '@/lib/stock'
 import { PartsTable } from '@/components/dashboard/stock/parts-table'
 import { AddPartDialog } from '@/components/dashboard/stock/add-part-dialog'
 
@@ -28,7 +28,7 @@ export default async function PartsPage() {
     redirect('/dashboard/stock')
   }
 
-  const parts = await getParts()
+  const [parts, productSuppliers] = await Promise.all([getParts(), getProductSuppliers()])
 
   return (
     <div className="space-y-6">
@@ -46,11 +46,11 @@ export default async function PartsPage() {
               Define the parts you hold, their unit cost and default minimum level
             </p>
           </div>
-          <AddPartDialog />
+          <AddPartDialog suppliers={productSuppliers} />
         </div>
       </div>
 
-      <PartsTable parts={parts} />
+      <PartsTable parts={parts} suppliers={productSuppliers} />
     </div>
   )
 }

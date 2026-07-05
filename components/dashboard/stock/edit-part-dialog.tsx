@@ -16,16 +16,26 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Loader2 } from 'lucide-react'
 import type { Part } from '@/lib/types/database'
+
+const NONE_VALUE = '__none__'
 
 interface EditPartDialogProps {
   part: Part
   open: boolean
   onOpenChange: (open: boolean) => void
+  suppliers?: { id: string; name: string }[]
 }
 
-export function EditPartDialog({ part, open, onOpenChange }: EditPartDialogProps) {
+export function EditPartDialog({ part, open, onOpenChange, suppliers = [] }: EditPartDialogProps) {
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: part.name,
@@ -35,6 +45,7 @@ export function EditPartDialog({ part, open, onOpenChange }: EditPartDialogProps
     default_min_level: String(part.default_min_level ?? 0),
     description: part.description ?? '',
     is_active: part.is_active,
+    supplier_id: part.supplier_id ?? '',
   })
   const router = useRouter()
   const supabase = createClient()
@@ -53,6 +64,7 @@ export function EditPartDialog({ part, open, onOpenChange }: EditPartDialogProps
         default_min_level: Math.max(0, Number.parseInt(formData.default_min_level, 10) || 0),
         description: formData.description || null,
         is_active: formData.is_active,
+        supplier_id: formData.supplier_id || null,
       })
       .eq('id', part.id)
 
@@ -128,6 +140,30 @@ export function EditPartDialog({ part, open, onOpenChange }: EditPartDialogProps
                   }
                 />
               </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit_supplier">Product supplier</Label>
+              <Select
+                value={formData.supplier_id || NONE_VALUE}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, supplier_id: value === NONE_VALUE ? '' : value })
+                }
+              >
+                <SelectTrigger id="edit_supplier">
+                  <SelectValue placeholder="No supplier" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE_VALUE}>No supplier</SelectItem>
+                  {suppliers.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                The supplier this part is ordered from. Used for future equipment ordering.
+              </p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="edit_description">Description</Label>

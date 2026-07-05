@@ -13,141 +13,133 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Plus, Loader2 } from 'lucide-react'
+import { SupplierFormFields, type SupplierFormData } from './supplier-form-fields'
+import type { ServiceType, SupplierType } from '@/lib/types/database'
 
-const EMPTY = {
+const EMPTY: SupplierFormData = {
   name: '',
+  supplier_type: 'product',
   contact_name: '',
   contact_email: '',
   contact_phone: '',
   website: '',
   address: '',
   account_number: '',
+  order_email: '',
+  portal_url: '',
+  portal_username: '',
+  portal_password: '',
   notes: '',
+  status: 'active',
 }
 
-export function AddSupplierDialog() {
+interface AddSupplierDialogProps {
+  serviceTypes: Pick<ServiceType, 'id' | 'name'>[]
+  /** Preselect a supplier type (e.g. when adding from a filtered view). */
+  defaultType?: SupplierType
+}
+
+export function AddSupplierDialog({ serviceTypes, defaultType }: AddSupplierDialogProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [formData, setFormData] = useState(EMPTY)
+  const [formData, setFormData] = useState<SupplierFormData>({
+    ...EMPTY,
+    supplier_type: defaultType ?? 'product',
+  })
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([])
   const router = useRouter()
   const supabase = createClient()
+
+  const handleChange = <K extends keyof SupplierFormData>(field: K, value: SupplierFormData[K]) => {
+    setFormData((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const toggleService = (id: string) => {
+    setSelectedServiceIds((prev) =>
+      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id],
+    )
+  }
+
+  const reset = () => {
+    setFormData({ ...EMPTY, supplier_type: defaultType ?? 'product' })
+    setSelectedServiceIds([])
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
-    const { error } = await supabase.from('suppliers').insert({
-      name: formData.name,
-      contact_name: formData.contact_name || null,
-      contact_email: formData.contact_email || null,
-      contact_phone: formData.contact_phone || null,
-      website: formData.website || null,
-      address: formData.address || null,
-      account_number: formData.account_number || null,
-      notes: formData.notes || null,
-    })
+    const isSub = formData.supplier_type === 'subcontractor'
+
+    const { data: inserted, error } = await supabase
+      .from('suppliers')
+      .insert({
+        name: formData.name,
+        supplier_type: formData.supplier_type,
+        contact_name: formData.contact_name || null,
+        contact_email: formData.contact_email || null,
+        contact_phone: formData.contact_phone || null,
+        website: formData.website || null,
+        address: formData.address || null,
+        account_number: formData.account_number || null,
+        order_email: formData.order_email || null,
+        portal_url: formData.portal_url || null,
+        portal_username: formData.portal_username || null,
+        portal_password: formData.portal_password || null,
+        notes: formData.notes || null,
+      })
+      .select('id')
+      .single()
+
+    // Persist provided services for sub-contractors.
+    if (!error && isSub && inserted && selectedServiceIds.length > 0) {
+      await supabase.from('supplier_services').insert(
+        selectedServiceIds.map((service_type_id) => ({
+          supplier_id: (inserted as { id: string }).id,
+          service_type_id,
+        })),
+      )
+    }
 
     setLoading(false)
 
     if (!error) {
       setOpen(false)
-      setFormData(EMPTY)
+      reset()
       router.refresh()
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o)
+        if (!o) reset()
+      }}
+    >
       <DialogTrigger asChild>
         <Button>
           <Plus className="mr-2 h-4 w-4" />
           Add Supplier
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Add Supplier</DialogTitle>
-            <DialogDescription>Add a supplier you order parts and products from</DialogDescription>
+            <DialogDescription>
+              Add a product supplier or a sub-contractor
+            </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="name">Company / Name *</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g., Acme Supplies Ltd"
-                required
-              />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="grid gap-2">
-                <Label htmlFor="contact_name">Contact Name</Label>
-                <Input
-                  id="contact_name"
-                  value={formData.contact_name}
-                  onChange={(e) => setFormData({ ...formData, contact_name: e.target.value })}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="contact_phone">Contact Phone</Label>
-                <Input
-                  id="contact_phone"
-                  value={formData.contact_phone}
-                  onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="grid gap-2">
-                <Label htmlFor="contact_email">Contact Email</Label>
-                <Input
-                  id="contact_email"
-                  type="email"
-                  value={formData.contact_email}
-                  onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="website">Website</Label>
-                <Input
-                  id="website"
-                  value={formData.website}
-                  onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                  placeholder="https://"
-                />
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="account_number">Account Number</Label>
-              <Input
-                id="account_number"
-                value={formData.account_number}
-                onChange={(e) => setFormData({ ...formData, account_number: e.target.value })}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="address">Address</Label>
-              <Textarea
-                id="address"
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="notes">Notes</Label>
-              <Textarea
-                id="notes"
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              />
-            </div>
-          </div>
+          <SupplierFormFields
+            formData={formData}
+            onChange={handleChange}
+            serviceTypes={serviceTypes}
+            selectedServiceIds={selectedServiceIds}
+            onToggleService={toggleService}
+          />
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel

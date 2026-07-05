@@ -65,6 +65,10 @@ interface SiteServicesManagerProps {
   subcontractors?: Subcontractor[]
   tasks?: Task[]
   siteStatus?: 'live' | 'dead'
+  // Cascade defaults: a service with no explicit sub-contractor inherits its
+  // system's default, then the site's default.
+  siteDefaultSubcontractorId?: string | null
+  systemDefaultsById?: Record<string, string | null>
 }
 
 export function SiteServicesManager({
@@ -78,6 +82,8 @@ export function SiteServicesManager({
   subcontractors = [],
   tasks = [],
   siteStatus = 'live',
+  siteDefaultSubcontractorId = null,
+  systemDefaultsById = {},
 }: SiteServicesManagerProps) {
   const [selectedServiceTypes, setSelectedServiceTypes] = useState<string[]>([])
   const [addServicesOpen, setAddServicesOpen] = useState(false)
@@ -119,6 +125,34 @@ export function SiteServicesManager({
   const supabase = createClient()
 
   const isDead = siteStatus === 'dead'
+
+  // Sub-contractor cascade for the service currently being edited.
+  const editingService = editingId ? siteServices.find((s) => s.id === editingId) : undefined
+  const editServiceTypeId = editingService?.service_type_id ?? null
+  // Only offer sub-contractors that provide this service type. Sub-contractors
+  // with no tagged services (e.g. freshly migrated) fall back to being eligible
+  // so the list is never unexpectedly empty.
+  const eligibleSubcontractors = editServiceTypeId
+    ? (() => {
+        const matching = subcontractors.filter(
+          (s) =>
+            !s.service_type_ids ||
+            s.service_type_ids.length === 0 ||
+            s.service_type_ids.includes(editServiceTypeId),
+        )
+        return matching.length > 0 ? matching : subcontractors
+      })()
+    : subcontractors
+  // Inherited default: system default first, then site default.
+  const inheritedSubcontractorId =
+    (editingService?.site_system_id
+      ? systemDefaultsById[editingService.site_system_id]
+      : null) ||
+    siteDefaultSubcontractorId ||
+    null
+  const inheritedSubcontractorName = inheritedSubcontractorId
+    ? subcontractors.find((s) => s.id === inheritedSubcontractorId)?.name ?? null
+    : null
 
   const handleToggleService = (serviceTypeId: string) => {
     setSelectedServiceTypes(prev =>
@@ -1043,8 +1077,12 @@ export function SiteServicesManager({
                       <SelectValue placeholder="Select a sub-contractor" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={NONE_VALUE}>Unassigned sub-contractor</SelectItem>
-                      {subcontractors.map((sub) => (
+                      <SelectItem value={NONE_VALUE}>
+                        {inheritedSubcontractorName
+                          ? `Inherit default (${inheritedSubcontractorName})`
+                          : 'Unassigned sub-contractor'}
+                      </SelectItem>
+                      {eligibleSubcontractors.map((sub) => (
                         <SelectItem key={sub.id} value={sub.id}>
                           {sub.name}
                         </SelectItem>
@@ -1052,6 +1090,9 @@ export function SiteServicesManager({
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
+                    {inheritedSubcontractorName
+                      ? `Leave unset to inherit the default sub-contractor (${inheritedSubcontractorName}). `
+                      : ''}
                     Sub-contracted work is tracked for completion but is not assigned to an
                     internal engineer.
                   </p>

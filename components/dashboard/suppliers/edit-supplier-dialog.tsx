@@ -12,40 +12,55 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Loader2 } from 'lucide-react'
-import type { Supplier } from '@/lib/types/database'
+import { SupplierFormFields, type SupplierFormData } from './supplier-form-fields'
+import type { ServiceType, Supplier } from '@/lib/types/database'
 
 interface EditSupplierDialogProps {
   supplier: Supplier
+  serviceTypes: Pick<ServiceType, 'id' | 'name'>[]
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-export function EditSupplierDialog({ supplier, open, onOpenChange }: EditSupplierDialogProps) {
+export function EditSupplierDialog({
+  supplier,
+  serviceTypes,
+  open,
+  onOpenChange,
+}: EditSupplierDialogProps) {
   const [loading, setLoading] = useState(false)
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<SupplierFormData>({
     name: supplier.name,
+    supplier_type: supplier.supplier_type,
     contact_name: supplier.contact_name || '',
     contact_email: supplier.contact_email || '',
     contact_phone: supplier.contact_phone || '',
     website: supplier.website || '',
     address: supplier.address || '',
     account_number: supplier.account_number || '',
+    order_email: supplier.order_email || '',
+    portal_url: supplier.portal_url || '',
+    portal_username: supplier.portal_username || '',
+    portal_password: supplier.portal_password || '',
     notes: supplier.notes || '',
     status: supplier.status,
   })
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>(
+    supplier.service_type_ids ?? [],
+  )
   const router = useRouter()
   const supabase = createClient()
+
+  const handleChange = <K extends keyof SupplierFormData>(field: K, value: SupplierFormData[K]) => {
+    setFormData((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const toggleService = (id: string) => {
+    setSelectedServiceIds((prev) =>
+      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id],
+    )
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -55,17 +70,35 @@ export function EditSupplierDialog({ supplier, open, onOpenChange }: EditSupplie
       .from('suppliers')
       .update({
         name: formData.name,
+        supplier_type: formData.supplier_type,
         contact_name: formData.contact_name || null,
         contact_email: formData.contact_email || null,
         contact_phone: formData.contact_phone || null,
         website: formData.website || null,
         address: formData.address || null,
         account_number: formData.account_number || null,
+        order_email: formData.order_email || null,
+        portal_url: formData.portal_url || null,
+        portal_username: formData.portal_username || null,
+        portal_password: formData.portal_password || null,
         notes: formData.notes || null,
         status: formData.status,
         updated_at: new Date().toISOString(),
       })
       .eq('id', supplier.id)
+
+    // Re-sync provided services: clear then insert current selection.
+    if (!error) {
+      await supabase.from('supplier_services').delete().eq('supplier_id', supplier.id)
+      if (formData.supplier_type === 'subcontractor' && selectedServiceIds.length > 0) {
+        await supabase.from('supplier_services').insert(
+          selectedServiceIds.map((service_type_id) => ({
+            supplier_id: supplier.id,
+            service_type_id,
+          })),
+        )
+      }
+    }
 
     setLoading(false)
 
@@ -77,104 +110,20 @@ export function EditSupplierDialog({ supplier, open, onOpenChange }: EditSupplie
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Edit Supplier</DialogTitle>
             <DialogDescription>Update supplier details</DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="name">Company / Name *</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
-              />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="grid gap-2">
-                <Label htmlFor="contact_name">Contact Name</Label>
-                <Input
-                  id="contact_name"
-                  value={formData.contact_name}
-                  onChange={(e) => setFormData({ ...formData, contact_name: e.target.value })}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="contact_phone">Contact Phone</Label>
-                <Input
-                  id="contact_phone"
-                  value={formData.contact_phone}
-                  onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="grid gap-2">
-                <Label htmlFor="contact_email">Contact Email</Label>
-                <Input
-                  id="contact_email"
-                  type="email"
-                  value={formData.contact_email}
-                  onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="website">Website</Label>
-                <Input
-                  id="website"
-                  value={formData.website}
-                  onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                  placeholder="https://"
-                />
-              </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="grid gap-2">
-                <Label htmlFor="account_number">Account Number</Label>
-                <Input
-                  id="account_number"
-                  value={formData.account_number}
-                  onChange={(e) => setFormData({ ...formData, account_number: e.target.value })}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="status">Status</Label>
-                <Select
-                  value={formData.status}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, status: value as 'active' | 'inactive' })
-                  }
-                >
-                  <SelectTrigger id="status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="address">Address</Label>
-              <Textarea
-                id="address"
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="notes">Notes</Label>
-              <Textarea
-                id="notes"
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              />
-            </div>
-          </div>
+          <SupplierFormFields
+            formData={formData}
+            onChange={handleChange}
+            serviceTypes={serviceTypes}
+            selectedServiceIds={selectedServiceIds}
+            onToggleService={toggleService}
+            showStatus
+          />
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel

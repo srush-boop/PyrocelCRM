@@ -43,7 +43,7 @@ export default async function SchedulePage({
         *,
         route:routes(*),
         area:areas(*),
-        subcontractor:subcontractors(*),
+        subcontractor:suppliers!site_services_subcontractor_id_fkey(*),
         site:sites(*, route:routes(*), branch:branches(*), client:clients(id, name)),
         service_type:service_types(*, system_type:system_types(*))
       ),

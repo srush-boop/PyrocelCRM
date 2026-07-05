@@ -4,12 +4,11 @@ import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useBackNavigation } from '@/hooks/use-back-navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { TaskHeader } from '@/components/dashboard/tasks/task-header'
 import { Progress } from '@/components/ui/progress'
 import {
   AlertDialog,
@@ -37,7 +36,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
-  ArrowLeft,
   MapPin,
   Calendar,
   Building2,
@@ -168,7 +166,6 @@ export function ExtinguisherTaskExecution({
   const [scanError, setScanError] = useState<string | null>(null)
   const [showDone, setShowDone] = useState(false)
   const router = useRouter()
-  const handleBack = useBackNavigation('/dashboard/schedule')
   const supabase = createClient()
 
   const [states, setStates] = useState<Record<string, InspectionState>>(() => {
@@ -438,31 +435,17 @@ export function ExtinguisherTaskExecution({
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-28">
-      <div className="flex items-start gap-4">
-        <Button variant="ghost" size="icon" onClick={handleBack} className="mt-1" aria-label="Go back">
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex-1">
-          <div className="mb-1 flex items-center gap-2">
-            <Badge variant={status === 'completed' ? 'default' : status === 'in_progress' ? 'secondary' : 'outline'}>
-              {status.replace('_', ' ')}
-            </Badge>
-            <Badge variant="outline">{serviceType?.name}</Badge>
-            {task.visit_type?.name && (
-              <Badge variant="secondary">{task.visit_type.name}</Badge>
-            )}
-          </div>
-          <h1 className="text-2xl font-bold">{site?.name}</h1>
-        </div>
+      <TaskHeader task={task} status={status} />
+      <div className="flex flex-wrap items-center justify-end gap-2">
         {status === 'completed' && (
-          <Button variant="outline" size="sm" asChild className="mt-1">
+          <Button variant="outline" size="sm" asChild>
             <Link href={`/dashboard/extinguishers/report/${task.id}`}>
               <FileText className="mr-2 h-4 w-4" />
               View Report
             </Link>
           </Button>
         )}
-        <ScanQrButton className="mt-1" onScan={handleScanToExtinguisher} />
+        <ScanQrButton onScan={handleScanToExtinguisher} />
       </div>
 
       <Card>

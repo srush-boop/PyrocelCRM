@@ -47,32 +47,35 @@ export interface Area {
   assigned_engineer?: Profile | null
 }
 
-export interface Subcontractor {
-  id: string
-  name: string
-  contact_name: string | null
-  contact_email: string | null
-  contact_phone: string | null
-  notes: string | null
-  status: 'active' | 'inactive'
-  created_at: string
-  updated_at: string
-}
+export type SupplierType = 'subcontractor' | 'product'
 
 export interface Supplier {
   id: string
   name: string
+  supplier_type: SupplierType
   contact_name: string | null
   contact_email: string | null
   contact_phone: string | null
   website: string | null
   address: string | null
   account_number: string | null
+  // Email address to send equipment orders to (product suppliers).
+  order_email: string | null
+  // Login details for our account on the supplier's portal.
+  portal_url: string | null
+  portal_username: string | null
+  portal_password: string | null
   notes: string | null
   status: 'active' | 'inactive'
   created_at: string
   updated_at: string
+  // Populated for sub-contractors: the service types they provide.
+  service_type_ids?: string[]
+  provided_services?: ServiceType[]
 }
+
+// Legacy alias — sub-contractors are now unified into the suppliers table.
+export type Subcontractor = Supplier
 
 export interface Client {
   id: string
@@ -188,6 +191,15 @@ export interface Department {
   id: string
   name: string
   default_margin_percent: number
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+// An admin-configurable property/building type that a site can be tagged with.
+export interface PropertyType {
+  id: string
+  name: string
   active: boolean
   created_at: string
   updated_at: string
@@ -386,6 +398,10 @@ export interface Site {
   site_id_cash: string | null
   // Unique Property Reference Number (UK national property identifier).
   uprn: string | null
+  // Admin-configurable property/building type (see PropertyType).
+  property_type_id: string | null
+  // Default sub-contractor for sub-contracted services at this site.
+  default_subcontractor_id: string | null
   status: 'live' | 'dead'
   notes: string | null
   // Pre-attendance flags engineers/office can set at site level. Individual
@@ -412,6 +428,8 @@ export interface Site {
   route?: Route
   client?: Client
   branch?: Branch | null
+  property_type?: PropertyType | null
+  default_subcontractor?: Supplier | null
   }
 
   export type LogbookEntryType =
@@ -485,12 +503,15 @@ export interface Site {
     nimbus_url: string | null
     active: boolean
     position: number
+    /** Default sub-contractor for sub-contracted services under this system. */
+    default_subcontractor_id: string | null
     created_at: string
     updated_at: string
     site?: Site
     system_type?: SystemType | null
     site_services?: SiteService[]
     panels?: SystemPanel[]
+    default_subcontractor?: Supplier | null
   }
 
   // Admin-configurable definition of a panel field, scoped to a system type.
@@ -1028,12 +1049,21 @@ export interface QuoteCatalogueItem {
   unit_cost_pence: number
   margin_percent: number
   default_unit_price_pence: number
+  // Price when sold on a service call/job (parts sold on calls).
+  service_sale_price_pence: number
+  // Price for an e-commerce/online store listing.
+  ecommerce_price_pence: number
+  // Product supplier we order this item from (see Supplier of type 'product').
+  supplier_id: string | null
+  // Private Vercel Blob pathname for the product image; served via /api/file.
+  image_pathname: string | null
   active: boolean
   created_by: string | null
   created_at: string
   updated_at: string
   service_type?: ServiceType | null
   system_type?: SystemType | null
+  supplier?: Supplier | null
 }
 
 export interface QuoteLineItem {
@@ -1458,7 +1488,10 @@ export interface Part {
   unit_cost: number
   default_min_level: number
   is_active: boolean
+  // Product supplier this part is ordered from (see Supplier of type 'product').
+  supplier_id: string | null
   created_at: string
+  supplier?: Supplier | null
 }
 
 // An internal-only suggested part an engineer attaches to a task when a defect

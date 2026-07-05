@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
 import { SystemBadge, SystemIcon, systemAccentStyle } from '@/lib/system-types'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -47,6 +46,7 @@ import type {
   SystemType,
   PanelFieldDef,
   SystemPanel,
+  Supplier,
 } from '@/lib/types/database'
 
 type ServiceWithType = SiteService & { service_type?: ServiceType }
@@ -62,6 +62,8 @@ interface SiteSystemsManagerProps {
   siteStatus?: 'live' | 'dead'
   panelFieldDefs?: PanelFieldDef[]
   panels?: SystemPanel[]
+  // Active sub-contractors, for the per-system default assignment.
+  subcontractors?: Supplier[]
 }
 
 export function SiteSystemsManager({
@@ -73,6 +75,7 @@ export function SiteSystemsManager({
   siteStatus = 'live',
   panelFieldDefs = [],
   panels = [],
+  subcontractors = [],
 }: SiteSystemsManagerProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -89,6 +92,7 @@ export function SiteSystemsManager({
     description: '',
     install_date: '',
     nimbus_url: '',
+    default_subcontractor_id: '',
   })
 
   // Add-services-to-a-system flow
@@ -124,7 +128,13 @@ export function SiteSystemsManager({
 
   function openAdd() {
     setEditing(null)
-    setForm({ system_type_id: '', description: '', install_date: '', nimbus_url: '' })
+    setForm({
+      system_type_id: '',
+      description: '',
+      install_date: '',
+      nimbus_url: '',
+      default_subcontractor_id: '',
+    })
     setDialogOpen(true)
   }
 
@@ -135,6 +145,7 @@ export function SiteSystemsManager({
       description: system.description ?? '',
       install_date: system.install_date ?? '',
       nimbus_url: system.nimbus_url ?? '',
+      default_subcontractor_id: system.default_subcontractor_id ?? '',
     })
     setDialogOpen(true)
   }
@@ -156,6 +167,7 @@ export function SiteSystemsManager({
       nimbus_url: isFireAlarmSystemType(form.system_type_id)
         ? form.nimbus_url.trim() || null
         : null,
+      default_subcontractor_id: form.default_subcontractor_id || null,
     }
     const { error } = editing
       ? await supabase.from('site_systems').update(payload).eq('id', editing.id)
@@ -215,16 +227,14 @@ export function SiteSystemsManager({
     )
   }
 
-  // Service types available to add, with those matching the system's type
-  // sorted to the top (and flagged as suggested) so nothing is hidden.
+  // Only service types belonging to this system's type may be added, so every
+  // service stays linked to the correct system (e.g. only emergency-lighting
+  // services can be attached to an Emergency Lighting system).
   function serviceTypesForSystem(system: SiteSystem | undefined): ServiceType[] {
-    if (!system) return availableServiceTypes
-    return [...availableServiceTypes].sort((a, b) => {
-      const am = a.system_type_id === system.system_type_id ? 0 : 1
-      const bm = b.system_type_id === system.system_type_id ? 0 : 1
-      if (am !== bm) return am - bm
-      return a.name.localeCompare(b.name)
-    })
+    if (!system) return []
+    return availableServiceTypes
+      .filter((st) => st.system_type_id === system.system_type_id)
+      .sort((a, b) => a.name.localeCompare(b.name))
   }
 
   async function handleAddServicesToSystem() {
@@ -278,15 +288,10 @@ export function SiteSystemsManager({
     setServiceSelection([])
     toast.success(`Added ${insertData.length} service${insertData.length !== 1 ? 's' : ''}`)
 
-    // Bring up the full services edit page for the newly added service so the
-    // user can configure frequency, assignment and KPIs straight away. With
-    // multiple, the first opens; the rest keep their defaults.
-    const firstId = (inserted as { id: string }[] | null)?.[0]?.id
-    if (firstId) {
-      router.push(`${pathname}?tab=overview&editService=${firstId}`)
-    } else {
-      router.refresh()
-    }
+    // Stay on the Systems tab and refresh in place so the new service appears
+    // under its system straight away. Users can click a service to open its full
+    // set up (frequency, assignment, KPIs) via openServiceSetup.
+    router.refresh()
   }
 
   // Group services by their site_system_id.
@@ -354,9 +359,10 @@ export function SiteSystemsManager({
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4">
+        <div className="grid gap-3">
           {siteSystems.map((system) => {
             const services = servicesBySystem.get(system.id) ?? []
+            const addableForSystem = serviceTypesForSystem(system)
             const typeLabel = systemTypeLabel(system.system_type_id)
             const st = systemTypes.find((s) => s.id === system.system_type_id)
             const systemPanelDefs = system.system_type_id
@@ -369,9 +375,9 @@ export function SiteSystemsManager({
                 className={st ? 'border-l-4' : undefined}
                 style={st ? systemAccentStyle(st.color) : undefined}
               >
-                <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
-                  <div className="space-y-1">
-                    <CardTitle className="flex items-center gap-2 text-base">
+                <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 py-3">
+                  <div className="space-y-0.5">
+                    <CardTitle className="flex items-center gap-2 text-sm">
                       {st ? (
                         <SystemIcon system={st} />
                       ) : (
@@ -398,17 +404,17 @@ export function SiteSystemsManager({
                     )}
                   </div>
                   <div className="flex gap-1">
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(system)}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(system)}>
                       <Pencil className="h-4 w-4" />
                       <span className="sr-only">Edit system</span>
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => setDeleteId(system.id)}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDeleteId(system.id)}>
                       <Trash2 className="h-4 w-4" />
                       <span className="sr-only">Delete system</span>
                     </Button>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent className="space-y-2 py-3">
                   {services.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No services attached.</p>
                   ) : (
@@ -416,7 +422,7 @@ export function SiteSystemsManager({
                       {services.map((svc) => (
                         <li
                           key={svc.id}
-                          className="flex items-center justify-between gap-3 px-3 py-2"
+                          className="flex items-center justify-between gap-3 px-3 py-1.5"
                         >
                           <button
                             type="button"
@@ -445,7 +451,12 @@ export function SiteSystemsManager({
                     variant="outline"
                     size="sm"
                     onClick={() => openAddServices(system.id)}
-                    disabled={availableServiceTypes.length === 0}
+                    disabled={addableForSystem.length === 0}
+                    title={
+                      addableForSystem.length === 0
+                        ? 'No more service types available for this system type'
+                        : undefined
+                    }
                   >
                     <Plus className="h-4 w-4" />
                     Add service
@@ -577,6 +588,36 @@ export function SiteSystemsManager({
                 </p>
               </div>
             )}
+            <div className="grid gap-2">
+              <Label htmlFor="system-subcontractor">
+                Default sub-contractor <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <Select
+                value={form.default_subcontractor_id || UNASSIGNED}
+                onValueChange={(value) =>
+                  setForm({
+                    ...form,
+                    default_subcontractor_id: value === UNASSIGNED ? '' : value,
+                  })
+                }
+              >
+                <SelectTrigger id="system-subcontractor">
+                  <SelectValue placeholder="Inherit site default" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={UNASSIGNED}>Inherit site default</SelectItem>
+                  {subcontractors.map((sub) => (
+                    <SelectItem key={sub.id} value={sub.id}>
+                      {sub.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Sub-contracted services under this system default to this sub-contractor unless
+                overridden per service.
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>
@@ -605,35 +646,27 @@ export function SiteSystemsManager({
           <div className="grid gap-4 py-2">
             {serviceTypeOptions.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                All service types are already on this site.
+                No matching service types are available for this system
+                {activeServiceSystem ? ` (${systemTitle(activeServiceSystem)})` : ''}. They may
+                already be added, or none are configured for this system type yet.
               </p>
             ) : (
               <>
                 <div className="grid gap-2">
                   <Label>Service types</Label>
                   <div className="max-h-60 space-y-1 overflow-y-auto rounded-md border p-1">
-                    {serviceTypeOptions.map((st) => {
-                      const suggested =
-                        !!activeServiceSystem &&
-                        st.system_type_id === activeServiceSystem.system_type_id
-                      return (
-                        <label
-                          key={st.id}
-                          className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-accent"
-                        >
-                          <Checkbox
-                            checked={serviceSelection.includes(st.id)}
-                            onCheckedChange={() => toggleServiceType(st.id)}
-                          />
-                          <span className="flex-1 text-sm">{st.name}</span>
-                          {suggested && (
-                            <Badge variant="secondary" className="text-xs">
-                              Suggested
-                            </Badge>
-                          )}
-                        </label>
-                      )
-                    })}
+                    {serviceTypeOptions.map((st) => (
+                      <label
+                        key={st.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-accent"
+                      >
+                        <Checkbox
+                          checked={serviceSelection.includes(st.id)}
+                          onCheckedChange={() => toggleServiceType(st.id)}
+                        />
+                        <span className="flex-1 text-sm">{st.name}</span>
+                      </label>
+                    ))}
                   </div>
                 </div>
                 <div className="grid gap-2">

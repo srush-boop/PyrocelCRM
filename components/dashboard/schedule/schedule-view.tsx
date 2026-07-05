@@ -376,7 +376,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                 View Call
               </Button>
               <Button asChild className="flex-1" size="sm">
-                <Link href={`/dashboard/tasks/${task.id}`}>
+                <Link href={`/dashboard/tasks/${task.id}?from=/dashboard/schedule`}>
                   {task.status === 'pending' ? 'Start Task' : 'Continue Task'}
                 </Link>
               </Button>
@@ -384,7 +384,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
           )}
           {task.status === 'completed' && (
             <Button asChild variant="outline" className="w-full mt-4" size="sm">
-              <Link href={`/dashboard/tasks/${task.id}`}>
+              <Link href={`/dashboard/tasks/${task.id}?from=/dashboard/schedule`}>
                 View Details
               </Link>
             </Button>
@@ -425,7 +425,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
           </div>
         )}
         <Link
-          href={`/dashboard/tasks/${task.id}`}
+          href={`/dashboard/tasks/${task.id}?from=/dashboard/schedule`}
           className={cn('flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-1.5', canAssign && 'pl-0')}
         >
           <SystemIcon system={system ?? {}} className="h-4 w-4" />
@@ -1026,8 +1026,8 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                   </Button>
                   {(isEngineer || profile.role === 'admin') && canStart && (
                     <Button asChild>
-                      <Link href={`/dashboard/tasks/${viewTask.id}`}>
-                        {viewTask.status === 'pending' ? 'Start Call' : 'Continue Call'}
+              <Link href={`/dashboard/tasks/${viewTask.id}?from=/dashboard/schedule`}>
+                {viewTask.status === 'pending' ? 'Start Call' : 'Continue Call'}
                       </Link>
                     </Button>
                   )}

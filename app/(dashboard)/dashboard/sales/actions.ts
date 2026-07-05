@@ -421,6 +421,10 @@ export interface CatalogueInput {
   default_unit?: string | null
   unit_cost_pence: number
   margin_percent: number
+  service_sale_price_pence?: number
+  ecommerce_price_pence?: number
+  supplier_id?: string | null
+  image_pathname?: string | null
   active: boolean
   }
 
@@ -444,6 +448,10 @@ export async function saveCatalogueItem(
   margin_percent: margin,
   // Derived sell price kept in sync for display + back-compat.
   default_unit_price_pence: sellFromCost(unitCost, margin),
+  service_sale_price_pence: Math.max(0, Math.round(input.service_sale_price_pence ?? 0)),
+  ecommerce_price_pence: Math.max(0, Math.round(input.ecommerce_price_pence ?? 0)),
+  supplier_id: input.supplier_id || null,
+  image_pathname: input.image_pathname ?? null,
   active: input.active,
   }
 
@@ -569,7 +577,7 @@ export async function addCatalogueItemsToStock(
   // Load the chosen catalogue items.
   const { data: catItems, error: catErr } = await supabase
     .from('quote_catalogue_items')
-    .select('id, name, product_code, description, default_unit, unit_cost_pence')
+    .select('id, name, product_code, description, default_unit, unit_cost_pence, supplier_id')
     .in('id', ids)
   if (catErr || !catItems) {
     return { ok: false, added: 0, skipped: 0, error: 'Could not load catalogue items.' }
@@ -594,6 +602,7 @@ export async function addCatalogueItemsToStock(
       description: string | null
       default_unit: string | null
       unit_cost_pence: number
+      supplier_id: string | null
     }[]
   )
     .filter((c) => !alreadyStocked.has(c.id))
@@ -606,6 +615,8 @@ export async function addCatalogueItemsToStock(
       default_min_level: 0,
       description: c.description?.trim() || null,
       catalogue_item_id: c.id,
+      // Inherit the product supplier from the catalogue item.
+      supplier_id: c.supplier_id ?? null,
       is_active: true,
     }))
 

@@ -9,6 +9,7 @@ import { ArrowLeft, MapPin, Phone, Mail, Building2, Radio, Building, User, Exter
 import { EditSiteButton } from '@/components/dashboard/sites/edit-site-button'
 import { SiteServicesManager } from '@/components/dashboard/sites/site-services-manager'
 import { SiteSystemsManager } from '@/components/dashboard/sites/site-systems-manager'
+import { SiteDefaultSubcontractor } from '@/components/dashboard/sites/site-default-subcontractor'
 import { QuotesTable } from '@/components/dashboard/sales/quotes-table'
 import { SiteAssetsTab, type SiteAsset } from '@/components/dashboard/sites/site-assets-tab'
 import { SiteReports } from '@/components/dashboard/sites/site-reports'
@@ -98,7 +99,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
         service_type:service_types(*),
         route:routes(*),
         area:areas(*),
-        subcontractor:subcontractors(*),
+        subcontractor:suppliers!site_services_subcontractor_id_fkey(*),
         assigned_engineer:profiles(*)
       `)
       .eq('site_id', id),
@@ -110,7 +111,12 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
       .order('full_name'),
     supabase.from('routes').select('*').order('name'),
     supabase.from('areas').select('*').order('name'),
-    supabase.from('subcontractors').select('*').eq('status', 'active').order('name'),
+    supabase
+      .from('suppliers')
+      .select('*')
+      .eq('supplier_type', 'subcontractor')
+      .eq('status', 'active')
+      .order('name'),
     supabase.from('clients').select('*').order('name'),
     supabase.from('site_systems').select('*').eq('site_id', id).order('position').order('name'),
     supabase.from('system_types').select('*').eq('active', true).order('name'),
@@ -127,7 +133,38 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
   const engineers = (engineersResult.data || []) as Profile[]
   const routes = (routesResult.data || []) as Route[]
   const areas = (areasResult.data || []) as Area[]
-  const subcontractors = (subcontractorsResult.data || []) as Subcontractor[]
+  const subcontractorsBase = (subcontractorsResult.data || []) as Subcontractor[]
+
+  // Attach each sub-contractor's provided service types so the assignment UI can
+  // filter the list to those that can perform a given service.
+  const subServiceLinks =
+    subcontractorsBase.length > 0
+      ? (
+          await supabase
+            .from('supplier_services')
+            .select('supplier_id, service_type_id')
+            .in(
+              'supplier_id',
+              subcontractorsBase.map((s) => s.id),
+            )
+        ).data ?? []
+      : []
+  const serviceIdsBySupplier = new Map<string, string[]>()
+  for (const link of subServiceLinks as { supplier_id: string; service_type_id: string }[]) {
+    const list = serviceIdsBySupplier.get(link.supplier_id) ?? []
+    list.push(link.service_type_id)
+    serviceIdsBySupplier.set(link.supplier_id, list)
+  }
+  const subcontractors = subcontractorsBase.map((s) => ({
+    ...s,
+    service_type_ids: serviceIdsBySupplier.get(s.id) ?? [],
+  }))
+
+  // Per-system default sub-contractor lookup for the assignment cascade.
+  const systemDefaultsById: Record<string, string | null> = {}
+  for (const sys of (siteSystemsResult.data ?? []) as SiteSystem[]) {
+    systemDefaultsById[sys.id] = sys.default_subcontractor_id ?? null
+  }
   const clients = (clientsResult.data || []) as Client[]
   const siteSystems = (siteSystemsResult.data || []) as SiteSystem[]
   const systemTypes = (systemTypesResult.data || []) as SystemType[]
@@ -527,18 +564,26 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
           </CardContent>
         </Card>
 
-        <SiteServicesManager
-          siteId={id}
-          initialEditServiceId={editServiceParam}
+                <SiteDefaultSubcontractor
+                  siteId={id}
+                  defaultSubcontractorId={(site as Site).default_subcontractor_id}
+                  subcontractors={subcontractors}
+                />
+
+                <SiteServicesManager
+                  siteId={id}
+                  initialEditServiceId={editServiceParam}
           siteServices={siteServices}
           availableServiceTypes={availableServiceTypes}
           engineers={engineers}
           routes={routes}
           areas={areas}
-          subcontractors={subcontractors}
-          tasks={tasks}
-          siteStatus={(site as Site).status}
-        />
+                  subcontractors={subcontractors}
+                  tasks={tasks}
+                  siteStatus={(site as Site).status}
+                  siteDefaultSubcontractorId={(site as Site).default_subcontractor_id}
+                  systemDefaultsById={systemDefaultsById}
+                />
           </div>
         </TabsContent>
 
@@ -549,10 +594,11 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
                 siteServices={siteServices}
                 systemTypes={systemTypes}
                 availableServiceTypes={availableServiceTypes}
-                siteStatus={(site as Site).status}
-                panelFieldDefs={panelFieldDefs}
-                panels={panels}
-              />
+                  siteStatus={(site as Site).status}
+                  panelFieldDefs={panelFieldDefs}
+                  panels={panels}
+                  subcontractors={subcontractors}
+                />
         </TabsContent>
 
         <TabsContent value="quotes" className="mt-0">

@@ -47,6 +47,7 @@ import type {
   SystemType,
   PanelFieldDef,
   SystemPanel,
+  Supplier,
 } from '@/lib/types/database'
 
 type ServiceWithType = SiteService & { service_type?: ServiceType }
@@ -62,6 +63,8 @@ interface SiteSystemsManagerProps {
   siteStatus?: 'live' | 'dead'
   panelFieldDefs?: PanelFieldDef[]
   panels?: SystemPanel[]
+  // Active sub-contractors, for the per-system default assignment.
+  subcontractors?: Supplier[]
 }
 
 export function SiteSystemsManager({
@@ -73,6 +76,7 @@ export function SiteSystemsManager({
   siteStatus = 'live',
   panelFieldDefs = [],
   panels = [],
+  subcontractors = [],
 }: SiteSystemsManagerProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -89,6 +93,7 @@ export function SiteSystemsManager({
     description: '',
     install_date: '',
     nimbus_url: '',
+    default_subcontractor_id: '',
   })
 
   // Add-services-to-a-system flow
@@ -124,7 +129,13 @@ export function SiteSystemsManager({
 
   function openAdd() {
     setEditing(null)
-    setForm({ system_type_id: '', description: '', install_date: '', nimbus_url: '' })
+    setForm({
+      system_type_id: '',
+      description: '',
+      install_date: '',
+      nimbus_url: '',
+      default_subcontractor_id: '',
+    })
     setDialogOpen(true)
   }
 
@@ -135,6 +146,7 @@ export function SiteSystemsManager({
       description: system.description ?? '',
       install_date: system.install_date ?? '',
       nimbus_url: system.nimbus_url ?? '',
+      default_subcontractor_id: system.default_subcontractor_id ?? '',
     })
     setDialogOpen(true)
   }
@@ -156,6 +168,7 @@ export function SiteSystemsManager({
       nimbus_url: isFireAlarmSystemType(form.system_type_id)
         ? form.nimbus_url.trim() || null
         : null,
+      default_subcontractor_id: form.default_subcontractor_id || null,
     }
     const { error } = editing
       ? await supabase.from('site_systems').update(payload).eq('id', editing.id)
@@ -577,6 +590,36 @@ export function SiteSystemsManager({
                 </p>
               </div>
             )}
+            <div className="grid gap-2">
+              <Label htmlFor="system-subcontractor">
+                Default sub-contractor <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <Select
+                value={form.default_subcontractor_id || UNASSIGNED}
+                onValueChange={(value) =>
+                  setForm({
+                    ...form,
+                    default_subcontractor_id: value === UNASSIGNED ? '' : value,
+                  })
+                }
+              >
+                <SelectTrigger id="system-subcontractor">
+                  <SelectValue placeholder="Inherit site default" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={UNASSIGNED}>Inherit site default</SelectItem>
+                  {subcontractors.map((sub) => (
+                    <SelectItem key={sub.id} value={sub.id}>
+                      {sub.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Sub-contracted services under this system default to this sub-contractor unless
+                overridden per service.
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>

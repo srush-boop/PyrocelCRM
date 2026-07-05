@@ -17,6 +17,43 @@ export const TASK_COLOR = '#2563eb'
 // Accent colour for jobs that are currently underway (commenced, in progress).
 export const COMMENCED_COLOR = '#f59e0b'
 
+// A working day is treated as 8 hours when converting a booked duration (which
+// the engineer enters as days + hours) into a calendar span. Keep in sync with
+// the Book Visit form in components/dashboard/tasks/task-execution.tsx.
+const WORKDAY_MINUTES = 480
+
+// Adds whole days to a yyyy-mm-dd date string, returning the same format.
+function addDays(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00`)
+  d.setDate(d.getDate() + days)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+// Adds minutes to an "HH:MM[:SS]" time, clamped to the same day. Returns null
+// when the duration is zero or the result would spill past midnight.
+function addMinutesToTime(time: string, minutes: number): string | null {
+  if (minutes <= 0) return null
+  const parts = time.split(':')
+  const total = (parseInt(parts[0] ?? '0', 10) || 0) * 60 + (parseInt(parts[1] ?? '0', 10) || 0) + minutes
+  if (total >= 24 * 60) return null
+  const hh = String(Math.floor(total / 60)).padStart(2, '0')
+  const mm = String(total % 60).padStart(2, '0')
+  return `${hh}:${mm}:00`
+}
+
+// Human label for a duration, e.g. "2 days" or "1 day 4 hrs".
+function formatSpan(totalMinutes: number): string {
+  const days = Math.floor(totalMinutes / WORKDAY_MINUTES)
+  const hours = Math.round((totalMinutes % WORKDAY_MINUTES) / 60)
+  const parts: string[] = []
+  if (days > 0) parts.push(`${days} day${days === 1 ? '' : 's'}`)
+  if (hours > 0) parts.push(`${hours} hr${hours === 1 ? '' : 's'}`)
+  return parts.join(' ') || 'Booked'
+}
+
 // Maps an English weekday name to its JS index (0 = Sunday … 6 = Saturday).
 const WEEKDAY_INDEX: Record<string, number> = {
   sunday: 0,
@@ -55,6 +92,8 @@ interface TaskRow {
   scheduled_date: string
   booked_start_time: string | null
   booked_end_time: string | null
+  // Anticipated time to complete, in minutes; spans the task across the calendar.
+  booked_duration_minutes: number | null
   status: string
   // Actual on-site commencement timestamp, set when an engineer taps "Start".
   started_at: string | null
@@ -156,7 +195,7 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
   let taskQuery = supabase
     .from('tasks')
     .select(
-      `id, scheduled_date, booked_start_time, booked_end_time, status, started_at, assigned_engineer_id,
+      `id, scheduled_date, booked_start_time, booked_end_time, booked_duration_minutes, status, started_at, assigned_engineer_id,
        assigned_engineer:profiles(id, full_name, email, branch_id),
        site_service:site_services(
          site:sites(name, branch_id),
@@ -258,14 +297,29 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
     // a recorded started_at) but hasn't yet submitted its final on-site times.
     const hasCommenced = t.status === 'in_progress' && !!t.started_at
 
+    // Anticipated duration → number of calendar days the booking blocks out.
+    const durationMin = t.booked_duration_minutes ?? 0
+    const dayCells = durationMin > 0 ? Math.max(1, Math.ceil(durationMin / WORKDAY_MINUTES)) : 1
+    const hasMultiDay = dayCells > 1 && !!t.scheduled_date
+
     let start: string
     let end: string
     let allDay: boolean
     let timeNote: string | null = null
 
-    if (hasSlot) {
+    if (hasMultiDay) {
+      // Span the booking across the anticipated number of days as an all-day
+      // block so it clearly shows the engineer is committed for that period.
+      start = combineDateTime(t.scheduled_date, null, '00:00:00')
+      end = combineDateTime(addDays(t.scheduled_date, dayCells - 1), null, '23:59:00')
+      allDay = true
+      timeNote = hasCommenced ? 'Commenced' : formatSpan(durationMin)
+    } else if (hasSlot) {
       start = combineDateTime(t.scheduled_date, t.booked_start_time, '00:00:00')
-      end = combineDateTime(t.scheduled_date, t.booked_end_time ?? t.booked_start_time, '23:59:00')
+      // Prefer an explicit end time; otherwise derive it from the duration.
+      const endTime =
+        t.booked_end_time ?? addMinutesToTime(t.booked_start_time as string, durationMin)
+      end = combineDateTime(t.scheduled_date, endTime ?? t.booked_start_time, '23:59:00')
       allDay = false
       // Keep the booked window but flag that the job is already underway.
       if (hasCommenced) timeNote = 'Commenced'

@@ -672,6 +672,10 @@ export interface Task {
   // Optional booked appointment slot on the scheduled date (24h "HH:MM[:SS]").
   booked_start_time: string | null
   booked_end_time: string | null
+  // Anticipated time to complete the visit, in minutes (days + hours entered by
+  // the engineer). Drives how long the task blocks out on the calendar; a
+  // working day is treated as 8 hours (480 minutes).
+  booked_duration_minutes: number | null
   status: TaskStatus
   started_at: string | null
   completed_at: string | null

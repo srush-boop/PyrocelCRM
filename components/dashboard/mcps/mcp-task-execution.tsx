@@ -81,6 +81,16 @@ function stateFromInspection(insp: McpInspection): McpInspectionState {
   }
 }
 
+function summarize(statesMap: Record<string, McpInspectionState>, total: number) {
+  const values = Object.values(statesMap)
+  const tested = values.filter((s) => s.touched).length
+  const passed = values.filter((s) => s.touched && s.result === 'pass').length
+  const failed = values.filter((s) => s.touched && s.result === 'fail').length
+  const remedial = values.filter((s) => s.touched && s.result === 'remedial').length
+  const na = values.filter((s) => s.touched && s.result === 'na').length
+  return { total, tested, passed, failed, remedial, na }
+}
+
 export function McpTaskExecution({
   task,
   profile,
@@ -99,6 +109,8 @@ export function McpTaskExecution({
   const [submitting, setSubmitting] = useState(false)
   const [showSubmit, setShowSubmit] = useState(false)
   const [showPassAll, setShowPassAll] = useState(false)
+  // Quick weekly close-out: mark the call point due this week as all-OK and finish.
+  const [showAllOk, setShowAllOk] = useState(false)
   // "No access" outcome: engineer attended but couldn't get into the site.
   const [showNoAccess, setShowNoAccess] = useState(false)
   const [noAccessNotes, setNoAccessNotes] = useState('')
@@ -157,15 +169,7 @@ export function McpTaskExecution({
     setAddOpen(false)
   }
 
-  const summary = useMemo(() => {
-    const values = Object.values(states)
-    const tested = values.filter((s) => s.touched).length
-    const passed = values.filter((s) => s.touched && s.result === 'pass').length
-    const failed = values.filter((s) => s.touched && s.result === 'fail').length
-    const remedial = values.filter((s) => s.touched && s.result === 'remedial').length
-    const na = values.filter((s) => s.touched && s.result === 'na').length
-    return { total: mcpList.length, tested, passed, failed, remedial, na }
-  }, [states, mcpList.length])
+  const summary = useMemo(() => summarize(states, mcpList.length), [states, mcpList.length])
 
   const filtered = mcpList.filter((m) => {
     const q = search.toLowerCase()
@@ -228,12 +232,12 @@ export function McpTaskExecution({
     setShowPassAll(false)
   }
 
-  const buildRows = () => {
+  const buildRows = (sourceStates: Record<string, McpInspectionState> = states) => {
     const today = new Date().toISOString().split('T')[0]
     return mcpList
-      .filter((m) => states[m.id].touched)
+      .filter((m) => sourceStates[m.id]?.touched)
       .map((m) => {
-        const s = states[m.id]
+        const s = sourceStates[m.id]
         return {
           mcp_id: m.id,
           task_id: task.id,
@@ -247,9 +251,11 @@ export function McpTaskExecution({
       })
   }
 
-  const persistInspections = async () => {
+  const persistInspections = async (
+    sourceStates: Record<string, McpInspectionState> = states,
+  ) => {
     await supabase.from('mcp_inspections').delete().eq('task_id', task.id)
-    const rows = buildRows()
+    const rows = buildRows(sourceStates)
     if (rows.length > 0) {
       await supabase.from('mcp_inspections').insert(rows)
     }
@@ -377,6 +383,62 @@ export function McpTaskExecution({
     setShowSubmit(false)
   }
 
+  // Weekly one-tap close-out: only the call point due this week needs testing.
+  // Autofill it as a full pass, then complete the visit (starting the task
+  // automatically if the engineer hasn't pressed Start yet).
+  const handleAllTestedOk = async () => {
+    if (!nextMcp) return
+    setSubmitting(true)
+
+    if (status === 'pending') {
+      await supabase
+        .from('tasks')
+        .update({
+          status: 'in_progress',
+          started_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', task.id)
+      setStatus('in_progress')
+    }
+
+    const checklist: Record<string, CheckValue> = {}
+    for (const item of MCP_CHECKLIST) checklist[item.id] = 'pass'
+    const nextStates: Record<string, McpInspectionState> = {
+      ...states,
+      [nextMcp.id]: {
+        result: 'pass',
+        checklist,
+        comments: states[nextMcp.id]?.comments ?? '',
+        photos: states[nextMcp.id]?.photos ?? [],
+        touched: true,
+      },
+    }
+    setStates(nextStates)
+    await persistInspections(nextStates)
+
+    const s = summarize(nextStates, mcpList.length)
+    const overall: 'pass' | 'fail' | 'partial' =
+      s.failed > 0 ? 'fail' : s.remedial > 0 ? 'partial' : 'pass'
+    const checklistResults = [
+      { item_id: 'total', label: 'Call points on register', type: 'number', value: s.total, passed: null, notes: '' },
+      { item_id: 'tested', label: 'Call points tested', type: 'number', value: s.tested, passed: null, notes: '' },
+      { item_id: 'passed', label: 'Passed', type: 'number', value: s.passed, passed: null, notes: '' },
+      { item_id: 'remedial', label: 'Remedial', type: 'number', value: s.remedial, passed: null, notes: '' },
+      { item_id: 'failed', label: 'Failed', type: 'number', value: s.failed, passed: null, notes: '' },
+      { item_id: 'na', label: 'N/A', type: 'number', value: s.na, passed: null, notes: '' },
+    ]
+    await completeTask({
+      overall,
+      engineerNotes: `Weekly fire alarm test: call point ${describeMcp(nextMcp)} tested and passed (all checks OK). ${s.tested}/${s.total} call point(s) recorded this visit.`,
+      checklistResults,
+      updateLastService: true,
+    })
+
+    setSubmitting(false)
+    setShowAllOk(false)
+  }
+
   // Records the visit as "no access" — a non-failure outcome. The service was
   // not carried out, so last_service_date is left untouched, but the next
   // scheduled visit is still generated.
@@ -406,7 +468,7 @@ export function McpTaskExecution({
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 pb-28">
+    <div className="mx-auto max-w-3xl space-y-6 pb-72 md:pb-6">
       <TaskHeader task={task} status={status} />
 
       <Card>
@@ -475,6 +537,23 @@ export function McpTaskExecution({
                 'No previous weekly test recorded — start the rotation with the call point above.'
               )}
             </p>
+            {canEdit && (
+              <div className="space-y-1.5">
+                <Button
+                  onClick={() => setShowAllOk(true)}
+                  disabled={submitting}
+                  size="lg"
+                  className="w-full"
+                >
+                  <CheckCheck className="mr-2 h-5 w-5" />
+                  All tested OK — close call
+                </Button>
+                <p className="text-center text-xs text-muted-foreground">
+                  Records this call point as passed and completes the visit. Found a fault?
+                  Use “Start Test” below instead.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -587,7 +666,7 @@ export function McpTaskExecution({
       )}
 
       {status === 'in_progress' && canEdit && (
-        <div className="fixed bottom-0 left-0 right-0 flex flex-col gap-2 border-t bg-background p-4 md:relative md:flex-row md:border-0 md:p-0">
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-50 flex flex-col gap-2 border-t bg-background p-4 md:relative md:inset-x-auto md:bottom-auto md:z-auto md:flex-row md:border-0 md:p-0">
           {mcpList.length > 0 && (
             <Button variant="outline" onClick={handleSave} disabled={saving} className="flex-1">
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
@@ -768,6 +847,26 @@ export function McpTaskExecution({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={passAllMcps}>Mark all passed</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showAllOk} onOpenChange={setShowAllOk}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark this week&apos;s test as all OK?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This records {nextMcp ? describeMcp(nextMcp) : 'the call point due this week'} as
+              fully tested and passed, completes the visit and emails the report. Only use this
+              when there are no faults.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleAllTestedOk} disabled={submitting}>
+              {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              All tested OK
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

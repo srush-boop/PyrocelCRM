@@ -24,7 +24,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { SystemIcon, SystemBadge } from '@/lib/system-types'
 import { TaskAttachments } from '@/components/dashboard/tasks/task-attachments'
 import { TaskHeader } from '@/components/dashboard/tasks/task-header'
 import { ReportNotesAssist } from '@/components/dashboard/reports/report-notes-assist'
@@ -156,6 +155,20 @@ function CollapsibleCard({
   )
 }
 
+// A working day is treated as 8 hours when converting the "days" part of the
+// anticipated duration into minutes. Keep in sync with lib/calendar.ts.
+const WORKDAY_MINUTES = 480
+
+// Renders a minutes total as e.g. "1 day 2 hrs" using the working-day length.
+function formatDuration(totalMinutes: number): string {
+  const days = Math.floor(totalMinutes / WORKDAY_MINUTES)
+  const hours = Math.round((totalMinutes % WORKDAY_MINUTES) / 60)
+  const parts: string[] = []
+  if (days > 0) parts.push(`${days} day${days === 1 ? '' : 's'}`)
+  if (hours > 0) parts.push(`${hours} hr${hours === 1 ? '' : 's'}`)
+  return parts.join(' ') || '0 hrs'
+}
+
 export function TaskExecution({ 
   task, 
   checklistTemplate, 
@@ -194,7 +207,14 @@ export function TaskExecution({
   // a date and an optional appointment time slot.
   const [bookedDate, setBookedDate] = useState(task.scheduled_date)
   const [bookedStart, setBookedStart] = useState((task.booked_start_time || '').slice(0, 5))
-  const [bookedEnd, setBookedEnd] = useState((task.booked_end_time || '').slice(0, 5))
+  // Anticipated time to complete, split into whole days + hours for the engineer
+  // to enter. A working day is treated as 8 hours (see WORKDAY_MINUTES).
+  const [bookedDays, setBookedDays] = useState(
+    task.booked_duration_minutes ? String(Math.floor(task.booked_duration_minutes / 480)) : '',
+  )
+  const [bookedHours, setBookedHours] = useState(
+    task.booked_duration_minutes ? String(Math.round((task.booked_duration_minutes % 480) / 60)) : '',
+  )
   const [bookingVisit, setBookingVisit] = useState(false)
   const [bookError, setBookError] = useState<string | null>(null)
   const [bookSaved, setBookSaved] = useState(false)
@@ -249,26 +269,44 @@ export function TaskExecution({
     router.refresh()
   }
 
+  // Total anticipated minutes from the days + hours inputs (0 when neither set).
+  const durationMinutes =
+    (parseInt(bookedDays || '0', 10) || 0) * WORKDAY_MINUTES +
+    (parseInt(bookedHours || '0', 10) || 0) * 60
+
   const handleBookVisit = async () => {
     if (!bookedDate) {
       setBookError('Please choose a date for the visit.')
       return
     }
-    // If both times are given, the end must be after the start.
-    if (bookedStart && bookedEnd && bookedEnd <= bookedStart) {
-      setBookError('End time must be after the start time.')
+    if (durationMinutes < 0) {
+      setBookError('Please enter a valid duration.')
       return
     }
     setBookError(null)
     setBookSaved(false)
     setBookingVisit(true)
 
+    // When a start time and a same-day duration are set, also store an end time
+    // so single-day bookings still show a precise slot on the calendar.
+    let endTime: string | null = null
+    if (bookedStart && durationMinutes > 0 && durationMinutes <= WORKDAY_MINUTES) {
+      const [h, m] = bookedStart.split(':').map((n) => parseInt(n, 10))
+      const endMinutes = h * 60 + m + durationMinutes
+      if (endMinutes < 24 * 60) {
+        const eh = Math.floor(endMinutes / 60)
+        const em = endMinutes % 60
+        endTime = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`
+      }
+    }
+
     const { error } = await supabase
       .from('tasks')
       .update({
         scheduled_date: bookedDate,
         booked_start_time: bookedStart || null,
-        booked_end_time: bookedEnd || null,
+        booked_end_time: endTime,
+        booked_duration_minutes: durationMinutes > 0 ? durationMinutes : null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', task.id)
@@ -462,90 +500,64 @@ export function TaskExecution({
   })()
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto pb-20">
+    <div
+      className={cn(
+        'mx-auto max-w-3xl space-y-6',
+        // Extra room so the fixed mobile action bar (raised above the bottom nav)
+        // never hides the last cards while a task is in progress.
+        status === 'in_progress' ? 'pb-44 lg:pb-6' : 'pb-6',
+      )}
+    >
       <TaskHeader task={task} status={status} />
 
-      {/* Call Summary */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <SystemIcon system={systemType ?? {}} className="h-5 w-5" />
-            Call Summary
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          {systemType && (
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">System</span>
-              <SystemBadge system={systemType} />
-            </div>
-          )}
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-muted-foreground">Service</span>
-            <span className="inline-flex items-center gap-1.5 text-right font-medium">
-              <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              {serviceType?.name ?? '—'}
-              {task.visit_type?.name ? ` · ${task.visit_type.name}` : ''}
-            </span>
-          </div>
-          {clientName && (
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">Client</span>
-              <span className="inline-flex items-center gap-1.5 text-right font-medium">
-                <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                {clientName}
-              </span>
-            </div>
-          )}
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-muted-foreground">Scheduled</span>
-            <span className="inline-flex items-center gap-1.5 text-right font-medium">
-              <Calendar className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              {formatDateUK(task.scheduled_date)}
-            </span>
-          </div>
-          {isAdminOrOffice ? (
-            <div className="space-y-1.5 pt-1">
-              <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <UserPlus className="h-3.5 w-3.5" />
-                Assign engineer
-              </span>
-              <Select
-                value={assignedEngineerId ?? 'unassigned'}
-                onValueChange={assignEngineer}
-                disabled={assigning}
-              >
-                <SelectTrigger>
-                  {assigning ? (
-                    <span className="flex items-center gap-1.5">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving...
-                    </span>
-                  ) : (
-                    <SelectValue placeholder="Assign to..." />
-                  )}
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="unassigned">Unassigned</SelectItem>
-                  {engineers.map((eng) => (
-                    <SelectItem key={eng.id} value={eng.id}>
-                      {eng.full_name || eng.email}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">Engineer</span>
-              <span className="text-right font-medium">
-                {task.assigned_engineer
-                  ? task.assigned_engineer.full_name || task.assigned_engineer.email
-                  : 'Unassigned'}
-              </span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Call Summary — only the details the header doesn't already show
+          (system, service, address and dates all live in the header). */}
+      {(clientName || isAdminOrOffice) && (
+        <Card>
+          <CardContent className="space-y-3 p-4 text-sm">
+            {clientName && (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Client</span>
+                <span className="inline-flex items-center gap-1.5 text-right font-medium">
+                  <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  {clientName}
+                </span>
+              </div>
+            )}
+            {isAdminOrOffice && (
+              <div className="space-y-1.5">
+                <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <UserPlus className="h-3.5 w-3.5" />
+                  Assign engineer
+                </span>
+                <Select
+                  value={assignedEngineerId ?? 'unassigned'}
+                  onValueChange={assignEngineer}
+                  disabled={assigning}
+                >
+                  <SelectTrigger>
+                    {assigning ? (
+                      <span className="flex items-center gap-1.5">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving...
+                      </span>
+                    ) : (
+                      <SelectValue placeholder="Assign to..." />
+                    )}
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned">Unassigned</SelectItem>
+                    {engineers.map((eng) => (
+                      <SelectItem key={eng.id} value={eng.id}>
+                        {eng.full_name || eng.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Site Details (collapsible — address & contacts are reference detail) */}
       <CollapsibleCard
@@ -609,19 +621,23 @@ export function TaskExecution({
         </CollapsibleCard>
       )}
 
-      {/* Book Visit */}
+      {/* Start Task — the primary action, kept prominent and above the
+          optional booking panel so engineers can begin in one tap. */}
+      {status === 'pending' && canEdit && (
+        <Button onClick={handleStartTask} size="lg" className="w-full">
+          <Play className="mr-2 h-5 w-5" />
+          Start Inspection
+        </Button>
+      )}
+
+      {/* Book Visit (collapsed by default — only needed when rescheduling) */}
       {canEdit && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
-              Book Visit
-            </CardTitle>
-            <CardDescription>
-              Set the date and time for this visit to add it to your calendar.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <CollapsibleCard
+          icon={<Calendar className="h-5 w-5 shrink-0" />}
+          title="Book Visit"
+          description="Set the date and time to add this visit to your calendar."
+        >
+          <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="booked-date">Date</Label>
               <Input
@@ -634,30 +650,52 @@ export function TaskExecution({
                 }}
               />
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="booked-start">Start time (optional)</Label>
-                <Input
-                  id="booked-start"
-                  type="time"
-                  value={bookedStart}
-                  onChange={(e) => {
-                    setBookedStart(e.target.value)
-                    setBookSaved(false)
-                  }}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="booked-end">End time (optional)</Label>
-                <Input
-                  id="booked-end"
-                  type="time"
-                  value={bookedEnd}
-                  onChange={(e) => {
-                    setBookedEnd(e.target.value)
-                    setBookSaved(false)
-                  }}
-                />
+            <div className="space-y-2">
+              <Label htmlFor="booked-start">Start time (optional)</Label>
+              <Input
+                id="booked-start"
+                type="time"
+                value={bookedStart}
+                onChange={(e) => {
+                  setBookedStart(e.target.value)
+                  setBookSaved(false)
+                }}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Anticipated time to complete</Label>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="booked-days"
+                    type="number"
+                    min={0}
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={bookedDays}
+                    onChange={(e) => {
+                      setBookedDays(e.target.value)
+                      setBookSaved(false)
+                    }}
+                  />
+                  <span className="text-sm text-muted-foreground">days</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="booked-hours"
+                    type="number"
+                    min={0}
+                    max={23}
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={bookedHours}
+                    onChange={(e) => {
+                      setBookedHours(e.target.value)
+                      setBookSaved(false)
+                    }}
+                  />
+                  <span className="text-sm text-muted-foreground">hours</span>
+                </div>
               </div>
             </div>
             {bookError ? (
@@ -666,7 +704,13 @@ export function TaskExecution({
               <p className="text-sm text-green-600">Visit booked and added to your calendar.</p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Leave the times blank to book the whole day.
+                {durationMinutes > 0
+                  ? `Blocks out ${formatDuration(durationMinutes)} on the calendar${
+                      Math.ceil(durationMinutes / WORKDAY_MINUTES) > 1
+                        ? ` (about ${Math.ceil(durationMinutes / WORKDAY_MINUTES)} days)`
+                        : ''
+                    }. A working day counts as 8 hours.`
+                  : 'Leave the duration blank to book the whole day.'}
               </p>
             )}
             <Button onClick={handleBookVisit} disabled={bookingVisit} className="w-full sm:w-auto">
@@ -682,16 +726,8 @@ export function TaskExecution({
                 </>
               )}
             </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Start Task Button */}
-      {status === 'pending' && canEdit && (
-        <Button onClick={handleStartTask} size="lg" className="w-full">
-          <Play className="mr-2 h-5 w-5" />
-          Start Inspection
-        </Button>
+          </div>
+        </CollapsibleCard>
       )}
 
       {/* Checklist */}
@@ -958,7 +994,7 @@ export function TaskExecution({
 
       {/* Action Buttons */}
       {status === 'in_progress' && canEdit && (
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-background border-t flex gap-2 md:relative md:border-0 md:p-0">
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-50 flex gap-2 border-t bg-background p-4 lg:relative lg:inset-x-auto lg:bottom-auto lg:z-auto lg:border-0 lg:p-0">
           <Button variant="outline" onClick={handleSave} disabled={saving} className="flex-1">
             {saving ? (
               <>

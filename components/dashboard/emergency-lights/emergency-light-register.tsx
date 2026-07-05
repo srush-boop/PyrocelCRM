@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
+import { PrintButton } from '@/components/ui/print-button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -210,16 +211,19 @@ export function EmergencyLightRegister({ siteId, lights }: EmergencyLightRegiste
       <CollapsibleContent>
       <CardContent className="space-y-4">
         {lights.length > 0 && (
-          <Input
-            placeholder="Search by URN, map ref, location, floor…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="max-w-sm"
-          />
+          <div className="flex items-center gap-3">
+            <Input
+              placeholder="Search by URN, map ref, location, floor…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="max-w-sm"
+            />
+            <PrintButton targetId="emergency-lights-grid" title="Emergency Light Register" className="ml-auto" />
+          </div>
         )}
 
         <div className="rounded-md border">
-          <Table>
+          <Table id="emergency-lights-grid">
             <TableHeader>
               <TableRow>
                 <TableHead>URN</TableHead>

@@ -1552,6 +1552,15 @@ export interface CalendarEntry {
   start_at: string
   end_at: string
   all_day: boolean
+  // Partial-day leave. Portions describe how much of the first/last working day
+  // the leave covers: 'full' = whole day, 'am'/'pm' = half day, 'hours' = a
+  // custom number of hours (see start_hours/end_hours). Middle days of a range
+  // are always full. Defaults to 'full' so ordinary entries behave as before.
+  start_portion: LeavePortion
+  end_portion: LeavePortion
+  // Hours booked on the first/last day when the matching portion is 'hours'.
+  start_hours: number | null
+  end_hours: number | null
   // Visible to all staff (incl. engineers) when true.
   is_public: boolean
   notes: string | null
@@ -1576,6 +1585,11 @@ export interface CalendarEntry {
 }
 
 export type LeaveApprovalStatus = 'requested' | 'approved' | 'rejected'
+
+// How much of a working day a leave entry covers on its first/last day.
+// 'full' = whole day, 'am'/'pm' = morning/afternoon half, 'hours' = a custom
+// number of hours (part-time staff who work, e.g., 4-hour days).
+export type LeavePortion = 'full' | 'am' | 'pm' | 'hours'
 
 // A saved set of calendar filters a user can quickly re-apply. One template per
 // user may be flagged as their default (auto-applied on load).

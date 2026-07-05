@@ -59,6 +59,21 @@ export interface Subcontractor {
   updated_at: string
 }
 
+export interface Supplier {
+  id: string
+  name: string
+  contact_name: string | null
+  contact_email: string | null
+  contact_phone: string | null
+  website: string | null
+  address: string | null
+  account_number: string | null
+  notes: string | null
+  status: 'active' | 'inactive'
+  created_at: string
+  updated_at: string
+}
+
 export interface Client {
   id: string
   name: string

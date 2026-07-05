@@ -72,6 +72,9 @@ export interface Tender {
   status: TenderStatus
   due_date: string | null
   notes: string | null
+  // The uploaded client tender pack (private Blob pathname + original filename).
+  pack_file_url: string | null
+  pack_file_name: string | null
   created_by: string | null
   created_at: string
   updated_at: string

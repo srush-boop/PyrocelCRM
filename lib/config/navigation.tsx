@@ -42,6 +42,7 @@ import {
   MessageSquareText,
   History,
   Archive,
+  Truck,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { UserRole } from '@/lib/types/database'
@@ -175,20 +176,21 @@ const salesNavItem: NavItem = {
 
 const managerStockNavItem: NavItem = {
   key: 'stock',
-  title: 'Stock',
+  title: 'Products',
   icon: Boxes,
   children: [
     { title: 'Overview', href: '/dashboard/stock', icon: Boxes },
     { title: 'Transfer Stock', href: '/dashboard/stock/transfer', icon: Route },
     { title: 'Parts Catalogue', href: '/dashboard/stock/parts', icon: BookOpen },
     { title: 'Quote Catalogue', href: '/dashboard/stock/catalogue', icon: BookOpen },
+    { title: 'Suppliers', href: '/dashboard/suppliers', icon: Truck },
     { title: 'Transfers Report', href: '/dashboard/stock/report', icon: FileText },
   ],
 }
 
 const engineerStockNavItem: NavItem = {
   key: 'stock',
-  title: 'Stock',
+  title: 'Products',
   icon: Boxes,
   children: [
     { title: 'Overview', href: '/dashboard/stock', icon: Boxes },

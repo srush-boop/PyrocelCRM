@@ -57,7 +57,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatPence, penceToPounds, poundsToPence, sellFromCost } from '@/lib/sales'
-import type { QuoteCatalogueItem, ServiceType } from '@/lib/types/database'
+import type { QuoteCatalogueItem, SystemType } from '@/lib/types/database'
 import {
   saveCatalogueItem,
   deleteCatalogueItem,
@@ -65,7 +65,7 @@ import {
   addCatalogueItemsToStock,
 } from '@/app/(dashboard)/dashboard/sales/actions'
 
-const NO_SERVICE = '__none__'
+const NO_SYSTEM = '__none__'
 const NO_SUPPLIER = '__none__'
 
 interface FormState {
@@ -74,7 +74,7 @@ interface FormState {
   product_code: string
   description: string
   category: string
-  service_type_id: string
+  system_type_id: string
   supplier_id: string
   default_unit: string
   cost: string
@@ -91,7 +91,7 @@ function emptyForm(): FormState {
     product_code: '',
     description: '',
     category: '',
-    service_type_id: NO_SERVICE,
+    system_type_id: NO_SYSTEM,
     supplier_id: NO_SUPPLIER,
     default_unit: '',
     cost: '0.00',
@@ -108,14 +108,14 @@ export function CatalogueManager({
   initialTotal,
   initialStockedIds,
   pageSize,
-  serviceTypes,
+  systemTypes,
   suppliers = [],
 }: {
   initialItems: QuoteCatalogueItem[]
   initialTotal: number
   initialStockedIds: string[]
   pageSize: number
-  serviceTypes: ServiceType[]
+  systemTypes: SystemType[]
   suppliers?: { id: string; name: string }[]
 }) {
   const [isPending, startTransition] = useTransition()
@@ -238,7 +238,7 @@ export function CatalogueManager({
       product_code: item.product_code ?? '',
       description: item.description ?? '',
       category: item.category ?? '',
-      service_type_id: item.service_type_id ?? NO_SERVICE,
+      system_type_id: item.system_type_id ?? NO_SYSTEM,
       supplier_id: item.supplier_id ?? NO_SUPPLIER,
       default_unit: item.default_unit ?? '',
       cost: penceToPounds(item.unit_cost_pence),
@@ -259,7 +259,7 @@ export function CatalogueManager({
         product_code: form.product_code || null,
         description: form.description || null,
         category: form.category || null,
-        service_type_id: form.service_type_id === NO_SERVICE ? null : form.service_type_id,
+        system_type_id: form.system_type_id === NO_SYSTEM ? null : form.system_type_id,
         supplier_id: form.supplier_id === NO_SUPPLIER ? null : form.supplier_id,
         default_unit: form.default_unit || null,
         unit_cost_pence: poundsToPence(form.cost),
@@ -589,17 +589,17 @@ export function CatalogueManager({
                 </div>
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="c-service">Service type</Label>
+                <Label htmlFor="c-system">System type</Label>
                 <Select
-                  value={form.service_type_id}
-                  onValueChange={(v) => setForm({ ...form, service_type_id: v })}
+                  value={form.system_type_id}
+                  onValueChange={(v) => setForm({ ...form, system_type_id: v })}
                 >
-                  <SelectTrigger id="c-service">
+                  <SelectTrigger id="c-system">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={NO_SERVICE}>None</SelectItem>
-                    {serviceTypes.map((st) => (
+                    <SelectItem value={NO_SYSTEM}>None</SelectItem>
+                    {systemTypes.map((st) => (
                       <SelectItem key={st.id} value={st.id}>
                         {st.name}
                       </SelectItem>

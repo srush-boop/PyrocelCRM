@@ -417,7 +417,9 @@ export interface CatalogueInput {
   product_code?: string | null
   description?: string | null
   category?: string | null
-  service_type_id?: string | null
+  // Parts/catalogue items are classified by system type (e.g. Fire Alarm),
+  // not by the narrower service type.
+  system_type_id?: string | null
   default_unit?: string | null
   unit_cost_pence: number
   margin_percent: number
@@ -442,7 +444,9 @@ export async function saveCatalogueItem(
   product_code: input.product_code?.trim() || null,
   description: input.description?.trim() || null,
   category: input.category?.trim() || null,
-  service_type_id: input.service_type_id || null,
+  system_type_id: input.system_type_id || null,
+  // Legacy classification; parts are now scoped by system type.
+  service_type_id: null,
   default_unit: input.default_unit?.trim() || null,
   unit_cost_pence: unitCost,
   margin_percent: margin,

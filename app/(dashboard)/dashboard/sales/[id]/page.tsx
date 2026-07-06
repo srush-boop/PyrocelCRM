@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { QuoteBuilder } from '@/components/dashboard/sales/quote-builder'
 import { QuoteStatusPanel } from '@/components/dashboard/sales/quote-status-panel'
 import { QuoteGroupPanel } from '@/components/dashboard/sales/quote-group-panel'
+import { QuoteQueriesPanel } from '@/components/dashboard/sales/quote-queries-panel'
 import { resolveDefaultMargin } from '@/lib/sales'
 import { isRequirementStatus } from '@/lib/sales-requirements'
 import type {
@@ -26,6 +27,7 @@ import type {
   AssetType,
   QuoteSystemPpm,
   Site,
+  QuoteMessage,
 } from '@/lib/types/database'
 
 export default async function QuoteDetailPage({
@@ -124,6 +126,11 @@ export default async function QuoteDetailPage({
       .eq('quote_id', id)
       .order('created_at', { ascending: false })
       .limit(1),
+    supabase
+      .from('quote_messages')
+      .select('*')
+      .eq('quote_id', id)
+      .order('created_at', { ascending: true }),
   ])
 
   const defaultHourlyCostPence = (ppmEngineerCost as { hourly_cost_pence: number } | null)?.hourly_cost_pence ?? 0
@@ -187,6 +194,11 @@ export default async function QuoteDetailPage({
       </div>
 
       <QuoteStatusPanel quote={typedQuote} />
+
+      <QuoteQueriesPanel
+        quoteId={typedQuote.id}
+        initialMessages={(quoteMessages ?? []) as QuoteMessage[]}
+      />
 
       <QuoteGroupPanel
         currentId={typedQuote.id}

@@ -43,6 +43,19 @@ export default async function QuotesPage({
       )
     : ((rawQuotes ?? []) as Quote[])
 
+  // Count unread client queries per quote for the "new questions" row badge.
+  const { data: unreadRows } = await supabase
+    .from('quote_messages')
+    .select('quote_id')
+    .eq('author_type', 'client')
+    .is('read_at', null)
+  const unreadQueries = ((unreadRows ?? []) as Array<{ quote_id: string }>).reduce<
+    Record<string, number>
+  >((acc, row) => {
+    acc[row.quote_id] = (acc[row.quote_id] ?? 0) + 1
+    return acc
+  }, {})
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -55,7 +68,7 @@ export default async function QuotesPage({
         <BranchFilter branches={scope.branches} activeBranchId={scope.activeBranchId} />
       </div>
 
-      <QuotesTable quotes={quotes} />
+      <QuotesTable quotes={quotes} unreadQueries={unreadQueries} />
     </div>
   )
 }

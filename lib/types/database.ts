@@ -1234,7 +1234,26 @@ export interface SystemSpecTemplate {
   created_by: string | null
   created_at: string
   updated_at: string
+  // Optional uploaded sample specification document (e.g. a BAFE SP203 spec).
+  // source_text is the parsed plain text used to ground the AI spec builder.
+  source_file_url: string | null
+  source_file_name: string | null
+  source_mime_type: string | null
+  source_text: string | null
   system_type?: SystemType | null
+}
+
+// A single message in a quote's client<->staff query thread. Clients raise
+// queries from the public/portal quote page; staff reply from the dashboard.
+export interface QuoteMessage {
+  id: string
+  quote_id: string
+  author_type: 'client' | 'staff'
+  author_name: string | null
+  body: string
+  read_at: string | null
+  created_by: string | null
+  created_at: string
 }
 
 // Admin-managed conditional "IF" field definition shown on a system based on

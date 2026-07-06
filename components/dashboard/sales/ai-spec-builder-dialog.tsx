@@ -48,6 +48,10 @@ export function AiSpecBuilderDialog({
   workTypeCode,
   existingAnswers,
   existingSpecification,
+  knowledgeBaseText,
+  clientContext,
+  templateName,
+  hasClientBrief,
   onGenerated,
   disabled,
 }: {
@@ -56,6 +60,12 @@ export function AiSpecBuilderDialog({
   workTypeCode: string
   existingAnswers?: Record<string, string | number | boolean>
   existingSpecification?: string
+  // Discipline knowledge base (uploaded sample spec) + the client's own brief.
+  knowledgeBaseText?: string
+  clientContext?: string
+  // Provenance labels shown to the estimator.
+  templateName?: string
+  hasClientBrief?: boolean
   onGenerated: (specification: string) => void
   disabled?: boolean
 }) {
@@ -73,6 +83,8 @@ export function AiSpecBuilderDialog({
         workTypeCode,
         existingAnswers,
         existingSpecification,
+        knowledgeBaseText,
+        clientContext,
       })
       if (!res.ok || !res.questions) {
         toast.error(res.error ?? 'Could not generate questions.')
@@ -121,6 +133,8 @@ export function AiSpecBuilderDialog({
         workTypeLabel,
         workTypeCode,
         answers: payload,
+        knowledgeBaseText,
+        clientContext,
       })
       if (!res.ok || !res.text) {
         toast.error(res.error ?? 'Could not compile the specification.')
@@ -156,6 +170,20 @@ export function AiSpecBuilderDialog({
             {workTypeLabel} — {systemTypeName}. Review the suggested answers, adjust anything, then
             generate the specification.
           </DialogDescription>
+          {(templateName || hasClientBrief) && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              <span className="text-xs text-muted-foreground">Using:</span>
+              <Badge variant="outline" className="gap-1 text-[10px]">
+                <Sparkles className="h-3 w-3 text-primary" />
+                {templateName ? `Template: ${templateName}` : 'Built-in fire alarm knowledge base'}
+              </Badge>
+              {hasClientBrief && (
+                <Badge variant="outline" className="text-[10px]">
+                  Client brief attached
+                </Badge>
+              )}
+            </div>
+          )}
         </DialogHeader>
 
         {loadingQuestions || !questions ? (

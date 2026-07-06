@@ -2,6 +2,8 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { put } from '@vercel/blob'
+import { parseDocumentFile } from '@/lib/ai/parse-document'
 import type {
   QuoteSection,
   QuoteSectionElement,
@@ -173,6 +175,92 @@ export async function deleteSpecTemplate(id: string): Promise<Result> {
   const { supabase, error } = await requireStaff()
   if (!supabase) return { ok: false, error }
   const { error: dbError } = await supabase.from('system_spec_templates').delete().eq('id', id)
+  if (dbError) return { ok: false, error: dbError.message }
+  revalidatePath('/dashboard/sales/spec-templates')
+  return { ok: true }
+}
+
+// Upload a sample specification document (e.g. a BAFE SP203 spec) for a system
+// type x work type. The parsed plain text becomes the AI spec builder's
+// knowledge base for that discipline. Accepts .docx/.txt/.md (parsed to text);
+// PDFs are rejected here because we need plain text to ground the model.
+export async function uploadSpecTemplateDoc(
+  formData: FormData,
+): Promise<Result & { fileName?: string; charCount?: number }> {
+  const { supabase, error } = await requireStaff()
+  if (!supabase) return { ok: false, error }
+
+  const systemTypeId = String(formData.get('system_type_id') ?? '')
+  const workType = String(formData.get('work_type') ?? '')
+  const file = formData.get('file')
+
+  if (!systemTypeId || !workType) {
+    return { ok: false, error: 'Select a system type and type of work first.' }
+  }
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: 'No file was provided.' }
+  }
+
+  const parsed = await parseDocumentFile(file)
+  if (!parsed.ok || !parsed.doc) {
+    return { ok: false, error: parsed.error ?? 'Could not read that file.' }
+  }
+  if (parsed.doc.kind !== 'text') {
+    return {
+      ok: false,
+      error: 'PDF spec documents are not supported here. Please upload a Word (.docx) or text file.',
+    }
+  }
+
+  // Store the original document privately for provenance/re-download. Private
+  // blobs are served through the authenticated /api/file route.
+  let fileUrl: string | null = null
+  try {
+    const blob = await put(`spec-templates/${systemTypeId}/${file.name}`, file, {
+      access: 'private',
+      addRandomSuffix: true,
+    })
+    fileUrl = `/api/file?pathname=${encodeURIComponent(blob.pathname)}`
+  } catch (e) {
+    console.error('[v0] spec-template blob upload failed (continuing with text only):', e)
+  }
+
+  const { error: dbError } = await supabase.from('system_spec_templates').upsert(
+    {
+      system_type_id: systemTypeId,
+      work_type: workType,
+      source_file_url: fileUrl,
+      source_file_name: file.name,
+      source_mime_type: file.type || null,
+      source_text: parsed.doc.text,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'system_type_id,work_type' },
+  )
+  if (dbError) return { ok: false, error: dbError.message }
+
+  revalidatePath('/dashboard/sales/spec-templates')
+  return { ok: true, fileName: file.name, charCount: parsed.doc.text.length }
+}
+
+// Remove the uploaded sample document from a template (keeps the master spec text).
+export async function removeSpecTemplateDoc(input: {
+  system_type_id: string
+  work_type: string
+}): Promise<Result> {
+  const { supabase, error } = await requireStaff()
+  if (!supabase) return { ok: false, error }
+  const { error: dbError } = await supabase
+    .from('system_spec_templates')
+    .update({
+      source_file_url: null,
+      source_file_name: null,
+      source_mime_type: null,
+      source_text: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('system_type_id', input.system_type_id)
+    .eq('work_type', input.work_type)
   if (dbError) return { ok: false, error: dbError.message }
   revalidatePath('/dashboard/sales/spec-templates')
   return { ok: true }

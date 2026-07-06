@@ -1049,6 +1049,7 @@ export function QuoteBuilder({
                   workTypeSettings={workTypeSettings}
                   designCategories={designCategories}
                   bankValues={bankValues}
+                  requirementSource={requirementSource}
                   onUpdate={(patch) => updateSystem(system.key, patch)}
                   onRemove={() => removeSystem(system.key)}
                   onAddLine={() => addLine(system.key)}
@@ -1247,6 +1248,8 @@ interface SystemCardProps {
   workTypeSettings: WorkTypeSetting[]
   designCategories: QuoteDesignCategory[]
   bankValues: QuoteBankValue[]
+  // The client's own brief for this quote (used to ground the AI spec builder).
+  requirementSource: RequirementSourceInfo | null
   onUpdate: (patch: Partial<EditSystem>) => void
   onRemove: () => void
   onAddLine: () => void
@@ -1273,6 +1276,7 @@ function SystemCard({
   workTypeSettings,
   designCategories,
   bankValues,
+  requirementSource,
   onUpdate,
   onRemove,
   onAddLine,
@@ -1447,11 +1451,22 @@ function SystemCard({
 
   const systemType = systemTypes.find((s) => s.id === system.system_type_id)
 
-  // The AI specification builder is currently scoped to fire detection & alarm
-  // systems (backed by the BAFE SP203 knowledge base). Detect by system type
-  // name/code so other disciplines fall back to the manual/template flow.
+  // Fire detection & alarm systems always have the built-in BAFE SP203
+  // knowledge base as a fallback. Detect by system type name/code.
   const isFireAlarm =
     /fire/i.test(systemType?.name ?? '') || /^(FA|FD|FDA)/i.test(systemType?.code ?? '')
+
+  // The AI specification builder is available whenever there is an uploaded
+  // sample-spec knowledge base for this system type + work type, OR it is a
+  // fire alarm system (built-in KB). This generalises the feature to every
+  // discipline that has a template in the vault.
+  const specKnowledgeBase = matchingTemplate?.source_text ?? matchingTemplate?.specification ?? ''
+  const canBuildWithAi = Boolean(specKnowledgeBase) || isFireAlarm
+
+  // The client's own brief for this quote, condensed for AI grounding.
+  const clientContext = [requirementSource?.summary?.trim(), requirementSource?.raw_text?.trim()]
+    .filter(Boolean)
+    .join('\n\n')
 
   return (
     <Card className={systemType ? 'border-l-2' : undefined} style={systemType ? { borderLeftColor: getSystemHex(systemType.color) } : undefined}>
@@ -1681,10 +1696,12 @@ function SystemCard({
           </div>
         )}
 
-        {/* ---- AI specification builder (fire alarm systems) ----
-             Asks the relevant BAFE SP203 questions with suggested answers, then
-             compiles them into the system's specification text. */}
-        {isFireAlarm && !readOnly && (
+        {/* ---- AI specification builder ----
+             Asks the relevant questions (grounded in the discipline's uploaded
+             sample spec, or the built-in BAFE SP203 KB for fire alarm) with
+             suggested answers biased toward the client's brief, then compiles
+             them into the system's specification text. */}
+        {canBuildWithAi && !readOnly && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2.5">
             <div className="grid gap-0.5">
               <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-primary">
@@ -1692,27 +1709,40 @@ function SystemCard({
                 Build the specification with AI
               </p>
               <p className="text-xs text-muted-foreground">
-                Answer a few guided questions — suggested answers included — and AI drafts the fire
-                alarm specification for you.
+                Answer a few guided questions — suggested answers included — and AI drafts the
+                specification for you
+                {matchingTemplate?.source_file_name
+                  ? `, grounded in ${matchingTemplate.source_file_name}`
+                  : ''}
+                {clientContext ? ' and the client brief' : ''}.
               </p>
             </div>
             <AiSpecBuilderDialog
-              systemTypeName={systemType?.name ?? 'Fire alarm'}
+              systemTypeName={systemType?.name ?? 'System'}
               workTypeLabel={
                 WORK_TYPES.find((w) => w.code === system.work_type)?.label ?? system.work_type
               }
               workTypeCode={system.work_type}
               existingAnswers={system.conditional_values}
               existingSpecification={system.specification}
+              knowledgeBaseText={specKnowledgeBase || undefined}
+              clientContext={clientContext || undefined}
+              templateName={
+                specKnowledgeBase
+                  ? matchingTemplate?.source_file_name ??
+                    `${systemType?.name ?? 'System'} specification template`
+                  : undefined
+              }
+              hasClientBrief={Boolean(clientContext)}
               onGenerated={(specification) => onUpdate({ specification })}
               disabled={disabled}
             />
           </div>
         )}
 
-        {/* Fallback specification editor for fire alarm systems that have no
-            configured spec_template section, so the AI-built spec is visible. */}
-        {isFireAlarm && !hasConfiguredSections && (
+        {/* Fallback specification editor when the AI builder is available but no
+            configured spec_template section exists, so the built spec is visible. */}
+        {canBuildWithAi && !hasConfiguredSections && (
           <div className="grid gap-1.5">
             <Label>Specification</Label>
             <Textarea

@@ -2,9 +2,19 @@ import { put } from '@vercel/blob'
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getDocumentAuth } from '@/lib/documents/auth'
+import { extractDocumentText } from '@/lib/ai/parse-document'
 import type { DocumentOwnerType } from '@/lib/types/database'
 
-const OWNER_TYPES: DocumentOwnerType[] = ['client', 'site', 'site_service', 'site_engineer']
+const OWNER_TYPES: DocumentOwnerType[] = [
+  'client',
+  'site',
+  'site_service',
+  'site_engineer',
+  'system_reference',
+]
+
+// PDF text extraction for system references can take a little while.
+export const maxDuration = 60
 
 export async function POST(request: NextRequest) {
   const auth = await getDocumentAuth()
@@ -19,6 +29,10 @@ export async function POST(request: NextRequest) {
     const ownerId = formData.get('owner_id') as string | null
     const folderIdRaw = formData.get('folder_id') as string | null
     const folderId = folderIdRaw && folderIdRaw !== 'null' ? folderIdRaw : null
+    const isSystemReference = ownerType === 'system_reference'
+    const description = (formData.get('description') as string | null)?.trim() || null
+    const systemTypeIdRaw = (formData.get('system_type_id') as string | null)?.trim()
+    const systemTypeId = systemTypeIdRaw && systemTypeIdRaw !== 'null' ? systemTypeIdRaw : null
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
@@ -27,10 +41,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid owner' }, { status: 400 })
     }
 
-    // Engineers may only upload to the shared engineer folder; other stores need canManage.
-    const allowed = ownerType === 'site_engineer' ? auth.canManageEngineer : auth.canManage
+    // Permission by store: engineers -> shared engineer folder only;
+    // system references -> admin only; everything else -> canManage (admin/office).
+    let allowed: boolean
+    if (isSystemReference) {
+      allowed = auth.profile?.role === 'admin'
+    } else if (ownerType === 'site_engineer') {
+      allowed = auth.canManageEngineer
+    } else {
+      allowed = auth.canManage
+    }
     if (!allowed) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    if (isSystemReference && !systemTypeId) {
+      return NextResponse.json({ error: 'Please choose a system.' }, { status: 400 })
+    }
+
+    // System references get their text extracted up-front for AI grounding.
+    let extractedText: string | null = null
+    if (isSystemReference) {
+      const result = await extractDocumentText(file)
+      if (result.ok && result.text) extractedText = result.text
     }
 
     // Namespaced path keeps blobs organised and avoids collisions.
@@ -55,6 +88,9 @@ export async function POST(request: NextRequest) {
         content_type: file.type || null,
         size_bytes: file.size || null,
         uploaded_by: auth.profile?.id ?? null,
+        description,
+        system_type_id: systemTypeId,
+        extracted_text: extractedText,
       })
       .select()
       .single()

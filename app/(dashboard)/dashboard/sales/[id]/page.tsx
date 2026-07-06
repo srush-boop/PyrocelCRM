@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { QuoteBuilder } from '@/components/dashboard/sales/quote-builder'
 import { QuoteStatusPanel } from '@/components/dashboard/sales/quote-status-panel'
 import { QuoteGroupPanel } from '@/components/dashboard/sales/quote-group-panel'
+import { QuoteQueriesPanel } from '@/components/dashboard/sales/quote-queries-panel'
 import { resolveDefaultMargin } from '@/lib/sales'
 import { isRequirementStatus } from '@/lib/sales-requirements'
 import type {
@@ -26,6 +27,7 @@ import type {
   AssetType,
   QuoteSystemPpm,
   Site,
+  QuoteMessage,
 } from '@/lib/types/database'
 
 export default async function QuoteDetailPage({
@@ -78,6 +80,8 @@ export default async function QuoteDetailPage({
     { data: department },
     { data: requirements },
     { data: requirementSources },
+    { data: quoteMessages },
+    { data: systemReferences },
   ] = await Promise.all([
     supabase.from('quote_systems').select('*').eq('quote_id', id).order('position'),
     supabase.from('quote_line_items').select('*').eq('quote_id', id).order('position'),
@@ -123,6 +127,16 @@ export default async function QuoteDetailPage({
       .eq('quote_id', id)
       .order('created_at', { ascending: false })
       .limit(1),
+    supabase
+      .from('quote_messages')
+      .select('*')
+      .eq('quote_id', id)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('documents')
+      .select('id, name, description, system_type_id, extracted_text')
+      .eq('owner_type', 'system_reference')
+      .not('extracted_text', 'is', null),
   ])
 
   const defaultHourlyCostPence = (ppmEngineerCost as { hourly_cost_pence: number } | null)?.hourly_cost_pence ?? 0
@@ -187,6 +201,11 @@ export default async function QuoteDetailPage({
 
       <QuoteStatusPanel quote={typedQuote} />
 
+      <QuoteQueriesPanel
+        quoteId={typedQuote.id}
+        initialMessages={(quoteMessages ?? []) as QuoteMessage[]}
+      />
+
       <QuoteGroupPanel
         currentId={typedQuote.id}
         members={(groupMembers ?? []) as Parameters<typeof QuoteGroupPanel>[0]['members']}
@@ -202,6 +221,7 @@ export default async function QuoteDetailPage({
         defaultHourlyCostPence={defaultHourlyCostPence}
         defaultMarginPercent={defaultMarginPercent}
         specTemplates={(specTemplates ?? []) as SystemSpecTemplate[]}
+        systemReferences={systemReferences ?? []}
         workTypeFields={(workTypeFields ?? []) as WorkTypeField[]}
         systemWorkTypeMargins={(systemWorkTypeMargins ?? []) as SystemWorkTypeMargin[]}
         workTypeSettings={(workTypeSettings ?? []) as WorkTypeSetting[]}

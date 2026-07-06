@@ -15,6 +15,7 @@ import type {
   QuoteSystem,
   QuoteLineItem,
   CompanyInfo,
+  QuoteMessage,
 } from '@/lib/types/database'
 
 const VALID_QUOTE_TYPES = new Set(QUOTE_TYPES.map((t) => t.value))
@@ -1254,4 +1255,83 @@ export async function createRevision(
   revalidatePath('/dashboard/sales/quotes')
   revalidatePath(`/dashboard/sales/${masterId}`)
   return { ok: true, id: newId }
+}
+
+// --- Client query thread (staff side) -------------------------------------
+
+// Mark all outstanding client queries on a quote as read. Called when staff
+// open the quote so the unread badge clears.
+export async function markQuoteQueriesRead(
+  quoteId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const { supabase, user, error } = await requireStaff()
+  if (!user) return { ok: false, error: error ?? 'Not authorised.' }
+
+  const { error: updateError } = await supabase
+    .from('quote_messages')
+    .update({ read_at: new Date().toISOString() })
+    .eq('quote_id', quoteId)
+    .eq('author_type', 'client')
+    .is('read_at', null)
+
+  if (updateError) {
+    console.log('[v0] markQuoteQueriesRead error:', updateError.message)
+    return { ok: false, error: 'Could not update messages.' }
+  }
+
+  revalidatePath('/dashboard/sales/quotes')
+  revalidatePath(`/dashboard/sales/${quoteId}`)
+  return { ok: true }
+}
+
+// Post a staff reply to a quote's client query thread and mark any outstanding
+// client queries as read. Returns the refreshed thread.
+export async function replyToQuoteMessage(args: {
+  quoteId: string
+  body: string
+}): Promise<{ ok: boolean; error?: string; messages?: QuoteMessage[] }> {
+  const { supabase, user, error } = await requireStaff()
+  if (!user) return { ok: false, error: error ?? 'Not authorised.' }
+
+  const body = args.body?.trim()
+  if (!body) return { ok: false, error: 'Please enter a reply.' }
+  if (body.length > 4000) return { ok: false, error: 'Your reply is too long.' }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('full_name')
+    .eq('id', user.id)
+    .maybeSingle()
+  const authorName = (profile as { full_name?: string | null } | null)?.full_name || null
+
+  const { error: insertError } = await supabase.from('quote_messages').insert({
+    quote_id: args.quoteId,
+    author_type: 'staff',
+    author_name: authorName,
+    body,
+    created_by: user.id,
+  })
+
+  if (insertError) {
+    console.log('[v0] replyToQuoteMessage insert error:', insertError.message)
+    return { ok: false, error: 'Could not send your reply. Please try again.' }
+  }
+
+  // Clear the unread badge now that staff have engaged with the thread.
+  await supabase
+    .from('quote_messages')
+    .update({ read_at: new Date().toISOString() })
+    .eq('quote_id', args.quoteId)
+    .eq('author_type', 'client')
+    .is('read_at', null)
+
+  const { data: messages } = await supabase
+    .from('quote_messages')
+    .select('*')
+    .eq('quote_id', args.quoteId)
+    .order('created_at', { ascending: true })
+
+  revalidatePath('/dashboard/sales/quotes')
+  revalidatePath(`/dashboard/sales/${args.quoteId}`)
+  return { ok: true, messages: (messages ?? []) as QuoteMessage[] }
 }

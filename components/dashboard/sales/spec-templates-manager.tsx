@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -15,7 +15,12 @@ import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
-import { saveSpecTemplate } from '@/app/(dashboard)/dashboard/sales/quote-config-actions'
+import { FileText, Upload, X, Sparkles, Loader2 } from 'lucide-react'
+import {
+  saveSpecTemplate,
+  uploadSpecTemplateDoc,
+  removeSpecTemplateDoc,
+} from '@/app/(dashboard)/dashboard/sales/quote-config-actions'
 import { WORK_TYPES, workTypeLabel } from '@/lib/sales'
 import type { SystemType, SystemSpecTemplate } from '@/lib/types/database'
 import { SystemColorDot } from '@/lib/system-types'
@@ -51,6 +56,9 @@ export function SpecTemplatesManager({
     setSpec(existing?.specification ?? '')
   }
 
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+
   function handleSave() {
     if (!systemTypeId) {
       toast.error('Select a system type first')
@@ -69,6 +77,50 @@ export function SpecTemplatesManager({
         toast.error(res.error ?? 'Could not save template')
       }
     })
+  }
+
+  function handleUpload(file: File) {
+    if (!systemTypeId) {
+      toast.error('Select a system type first')
+      return
+    }
+    setUploading(true)
+    const formData = new FormData()
+    formData.set('system_type_id', systemTypeId)
+    formData.set('work_type', workType)
+    formData.set('file', file)
+    uploadSpecTemplateDoc(formData)
+      .then((res) => {
+        if (res.ok) {
+          toast.success(`Uploaded ${res.fileName} (${res.charCount?.toLocaleString()} characters)`) 
+          router.refresh()
+        } else {
+          toast.error(res.error ?? 'Could not upload the document')
+        }
+      })
+      .finally(() => {
+        setUploading(false)
+        if (fileInputRef.current) fileInputRef.current.value = ''
+      })
+  }
+
+  function handleRemoveDoc() {
+    startTransition(async () => {
+      const res = await removeSpecTemplateDoc({ system_type_id: systemTypeId, work_type: workType })
+      if (res.ok) {
+        toast.success('Removed uploaded document')
+        router.refresh()
+      } else {
+        toast.error(res.error ?? 'Could not remove the document')
+      }
+    })
+  }
+
+  function handleUseDocText() {
+    if (existing?.source_text) {
+      setSpec(existing.source_text)
+      toast.info('Loaded document text into the editor. Review and save.')
+    }
   }
 
   if (systemTypes.length === 0) {
@@ -126,6 +178,99 @@ export function SpecTemplatesManager({
               <Badge variant="secondary">Template exists</Badge>
             ) : (
               <Badge variant="outline">No template yet</Badge>
+            )}
+          </div>
+
+          <div className="grid gap-2 border-t pt-4">
+            <Label className="flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              Sample specification document
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Upload a sample spec (Word or text). Its content becomes the AI knowledge base used to
+              draft quote specifications for this system and type of work.
+            </p>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".docx,.txt,.md,text/plain"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) handleUpload(file)
+              }}
+            />
+
+            {existing?.source_file_name ? (
+              <div className="grid gap-2 rounded-md border bg-muted/40 p-2.5">
+                <div className="flex items-start gap-2">
+                  <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    {existing.source_file_url ? (
+                      <a
+                        href={existing.source_file_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block truncate text-sm font-medium text-primary hover:underline"
+                      >
+                        {existing.source_file_name}
+                      </a>
+                    ) : (
+                      <span className="block truncate text-sm font-medium">
+                        {existing.source_file_name}
+                      </span>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {existing.source_text?.length.toLocaleString() ?? 0} characters parsed
+                    </span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0"
+                    onClick={handleRemoveDoc}
+                    disabled={isPending}
+                    aria-label="Remove document"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                  >
+                    {uploading ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Upload className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    Replace
+                  </Button>
+                  {existing.source_text ? (
+                    <Button variant="outline" size="sm" onClick={handleUseDocText}>
+                      Use as master spec
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+              >
+                {uploading ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Upload className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                Upload document
+              </Button>
             )}
           </div>
         </CardContent>

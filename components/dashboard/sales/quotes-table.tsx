@@ -38,7 +38,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Search, MoreHorizontal, GitBranch, Trash2, BookOpen, FileText } from 'lucide-react'
+import {
+  Plus,
+  Search,
+  MoreHorizontal,
+  GitBranch,
+  Trash2,
+  BookOpen,
+  FileText,
+  MessageCircle,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { cn, formatDateUK } from '@/lib/utils'
 import { formatPence, quoteTypeLabel, QUOTE_STATUS_META, QUOTE_TYPES } from '@/lib/sales'
@@ -48,11 +57,15 @@ import { deleteQuote, createRevision } from '@/app/(dashboard)/dashboard/sales/a
 export function QuotesTable({
   quotes,
   newQuoteHref = '/dashboard/sales/new',
+  unreadQueries = {},
 }: {
   quotes: Quote[]
   // Lets callers (e.g. a site's Quotes tab) deep-link "New Quote" with context
   // such as a preselected site.
   newQuoteHref?: string
+  // Map of quote id -> number of unread client queries, for the "new questions"
+  // badge on each row.
+  unreadQueries?: Record<string, number>
 }) {
   const router = useRouter()
   const [search, setSearch] = useState('')
@@ -236,6 +249,12 @@ export function QuotesTable({
                       {quote.variant_label && (
                         <Badge variant="outline" className="text-[10px]">
                           {quote.variant_label}
+                        </Badge>
+                      )}
+                      {(unreadQueries[quote.id] ?? 0) > 0 && (
+                        <Badge variant="destructive" className="gap-1 text-[10px]">
+                          <MessageCircle className="h-3 w-3" />
+                          {unreadQueries[quote.id]}
                         </Badge>
                       )}
                     </div>

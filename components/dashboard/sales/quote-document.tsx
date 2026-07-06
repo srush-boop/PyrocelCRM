@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, Printer } from 'lucide-react'
@@ -43,6 +44,46 @@ interface QuoteDocumentProps {
 }
 
 const HEADER_COLOR = '#0f172a'
+
+// Two-digit section label (01, 02, ...) for the specification-style numbering.
+function sectionLabel(n: number): string {
+  return n.toString().padStart(2, '0')
+}
+
+// A numbered section heading used throughout the document to give it the look
+// of a formal technical specification (numbered sections with a rule).
+function SectionHeading({
+  number,
+  title,
+  meta,
+}: {
+  number: number
+  title: string
+  meta?: string
+}) {
+  return (
+    <div className="mb-4 flex items-baseline gap-3 border-b-2 border-foreground/80 pb-2">
+      <span className="font-mono text-sm font-semibold tabular-nums text-primary">
+        {sectionLabel(number)}
+      </span>
+      <h2 className="flex-1 text-base font-bold uppercase tracking-wide text-balance">{title}</h2>
+      {meta ? (
+        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          {meta}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
+// A small labelled sub-heading used inside sections (e.g. "Specification").
+function FieldLabel({ children }: { children: ReactNode }) {
+  return (
+    <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+      {children}
+    </p>
+  )
+}
 
 // Humanise a conditional field key (e.g. "cable_type" -> "Cable type").
 function humanizeKey(key: string): string {
@@ -99,6 +140,13 @@ export function QuoteDocument({
     ? buildEquipmentSpecSections(systems, lines, catalogue)
     : []
   const sortedRequirements = requirements.slice().sort((a, b) => a.position - b.position)
+  const sortedSystems = systems.slice().sort((a, b) => a.position - b.position)
+
+  // Section numbering: systems occupy 1..N, then the optional matrix / equipment
+  // spec sections follow, so the whole document reads like a numbered spec.
+  let nextSection = sortedSystems.length
+  const requirementsSectionNo = showRequirements ? ++nextSection : 0
+  const equipmentSectionNo = equipmentSpecSections.length > 0 ? ++nextSection : 0
   const companyName = company?.name || 'Pyrocel Ltd'
   const recipientName = quote.client?.name || quote.prospect_name || 'Prospective client'
   const recipientContact = quote.client?.contact_name || quote.prospect_contact
@@ -138,14 +186,14 @@ export function QuoteDocument({
         </Button>
       </div>
 
-      <div className="report-page rounded-lg border bg-card p-8 text-card-foreground shadow-sm print:border-0 print:p-0 print:shadow-none">
-        {/* Header */}
+      <div className="report-page rounded-lg border bg-card p-8 text-card-foreground shadow-sm print:border-0 print:p-0 print:shadow-none sm:p-10">
+        {/* Masthead */}
         <header
-          className="-mx-8 -mt-8 mb-8 flex items-start justify-between gap-4 px-8 py-6 text-white print:mx-0 print:mt-0 print:rounded-none"
+          className="-mx-8 -mt-8 mb-0 flex items-start justify-between gap-4 px-8 py-6 text-white print:mx-0 print:mt-0 print:rounded-none sm:-mx-10 sm:px-10"
           style={{ backgroundColor: HEADER_COLOR }}
         >
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg bg-white p-1">
+            <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-lg bg-white p-1.5">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={company?.logo_url || '/images/pyrocel-logo.png'}
@@ -156,57 +204,72 @@ export function QuoteDocument({
             </div>
             <div>
               <p className="text-xl font-extrabold uppercase leading-tight tracking-wide">{companyName}</p>
-              {company?.address && <p className="text-xs text-white/80">{company.address}</p>}
-              <p className="text-xs text-white/80">
+              {company?.address && <p className="text-xs text-white/70">{company.address}</p>}
+              <p className="text-xs text-white/70">
                 {[company?.phone, company?.email].filter(Boolean).join(' · ')}
               </p>
             </div>
           </div>
           <div className="text-right">
-            <p className="text-sm font-semibold uppercase tracking-wide">Quotation</p>
-            <p className="text-xs text-white/80">{quote.reference ?? quote.quote_number ?? 'Draft'}</p>
-            {quote.revision > 0 && <p className="text-xs text-white/80">Revision {quote.revision}</p>}
-            <p className="mt-1 text-xs text-white/80">{quoteTypeLabel(quote.quote_type)}</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-white/90">Quotation</p>
+            <p className="font-mono text-lg font-bold leading-tight">
+              {quote.reference ?? quote.quote_number ?? 'Draft'}
+            </p>
+            {quote.revision > 0 && <p className="text-xs text-white/70">Revision {quote.revision}</p>}
           </div>
         </header>
 
-        {/* Meta row */}
-        <section className="mb-8 grid gap-6 sm:grid-cols-2">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Prepared for
+        {/* Document title band */}
+        <section className="-mx-8 mb-8 border-b bg-muted/40 px-8 py-6 print:mx-0 sm:-mx-10 sm:px-10">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
+            {quoteTypeLabel(quote.quote_type)} — Technical Specification &amp; Quotation
+          </p>
+          <h1 className="mt-1 text-2xl font-bold leading-tight text-balance sm:text-3xl">
+            {quote.title}
+          </h1>
+          {quote.summary && (
+            <p className="mt-3 max-w-3xl whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
+              {quote.summary}
             </p>
-            <p className="mt-1 font-semibold">{recipientName}</p>
+          )}
+        </section>
+
+        {/* Meta grid: prepared-for / project details */}
+        <section className="mb-10 grid gap-px overflow-hidden rounded-md border bg-border sm:grid-cols-2">
+          <div className="bg-card p-4">
+            <FieldLabel>Prepared for</FieldLabel>
+            <p className="font-semibold">{recipientName}</p>
             {recipientContact && <p className="text-sm">{recipientContact}</p>}
             {recipientAddress && <p className="text-sm text-muted-foreground">{recipientAddress}</p>}
             <p className="text-sm text-muted-foreground">
               {[recipientEmail, recipientPhone].filter(Boolean).join(' · ')}
             </p>
             {quote.site?.name && (
-              <p className="mt-1 text-sm">
+              <p className="mt-2 text-sm">
                 <span className="text-muted-foreground">Site:</span> {quote.site.name}
               </p>
             )}
           </div>
-          <div className="sm:text-right">
-            <dl className="space-y-1 text-sm">
-              <div className="flex justify-between sm:justify-end sm:gap-4">
-                <dt className="text-muted-foreground">Date</dt>
+          <div className="bg-card p-4">
+            <FieldLabel>Document details</FieldLabel>
+            <dl className="space-y-1.5 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Date issued</dt>
                 <dd className="font-medium">{formatDateUK(quote.created_at)}</dd>
               </div>
               {quote.preparer?.full_name && (
-                <div className="flex justify-between sm:justify-end sm:gap-4">
+                <div className="flex justify-between gap-4">
                   <dt className="text-muted-foreground">Prepared by</dt>
                   <dd className="font-medium">{quote.preparer.full_name}</dd>
                 </div>
               )}
               {quote.valid_until && (
-                <div className="flex justify-between sm:justify-end sm:gap-4">
+                <div className="flex justify-between gap-4">
                   <dt className="text-muted-foreground">Valid until</dt>
                   <dd className="font-medium">{formatDateUK(quote.valid_until)}</dd>
                 </div>
               )}
-              <div className="flex justify-between sm:justify-end sm:gap-4">
+              <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Status</dt>
                 <dd className="font-medium">{QUOTE_STATUS_META[quote.status].label}</dd>
               </div>
@@ -214,19 +277,11 @@ export function QuoteDocument({
           </div>
         </section>
 
-        <h1 className="mb-2 text-2xl font-bold text-balance">{quote.title}</h1>
-        {quote.summary && (
-          <p className="mb-8 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
-            {quote.summary}
-          </p>
-        )}
-
-        {/* Systems + specification + line items */}
-        <div className="space-y-8">
-          {systems
-            .slice()
-            .sort((a, b) => a.position - b.position)
-            .map((system) => {
+        {/* Systems + specification + line items. Sections are numbered like a
+            formal technical specification. */}
+        <div className="space-y-10">
+          {sortedSystems
+            .map((system, systemIndex) => {
               const systemLines = lines
                 .filter((l) => l.system_id === system.id)
                 .sort((a, b) => a.position - b.position)
@@ -242,24 +297,20 @@ export function QuoteDocument({
                   !isHiddenConditionalKey(key, omittedKeys) && !isOmittedValue(value),
               )
               return (
-                <div key={system.id} className="break-inside-avoid">
-                  <div className="mb-2 flex items-baseline justify-between gap-2 border-b pb-1">
-                    <h2 className="font-semibold">
-                      {system.system_name}
-                      {system.system_code ? (
-                        <span className="ml-2 font-mono text-xs text-muted-foreground">
-                          {system.system_code}
-                        </span>
-                      ) : null}
-                    </h2>
-                    <span className="text-xs text-muted-foreground">{workTypeLabel(system.work_type)}</span>
-                  </div>
+                <section key={system.id} className="break-inside-avoid">
+                  <SectionHeading
+                    number={systemIndex + 1}
+                    title={
+                      system.system_code
+                        ? `${system.system_name}  ·  ${system.system_code}`
+                        : system.system_name
+                    }
+                    meta={workTypeLabel(system.work_type)}
+                  />
 
                   {system.specification && (
-                    <div className="mb-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Specification
-                      </p>
+                    <div className="mb-4">
+                      <FieldLabel>Specification</FieldLabel>
                       <p className="whitespace-pre-line text-sm leading-relaxed">{system.specification}</p>
                     </div>
                   )}
@@ -271,7 +322,8 @@ export function QuoteDocument({
                       system.drawing_reference ||
                       system.designed_by ||
                       system.survey_carried_out) && (
-                    <div className="mb-3 rounded-md bg-muted/40 p-3 text-sm">
+                    <div className="mb-4 rounded-md border-l-2 border-primary/40 bg-muted/40 p-3 text-sm">
+                      <FieldLabel>Design &amp; survey</FieldLabel>
                       {system.design_overview && (
                         <p className="mb-2 whitespace-pre-line leading-relaxed">{system.design_overview}</p>
                       )}
@@ -294,7 +346,7 @@ export function QuoteDocument({
                           <dt className="text-muted-foreground">Survey:</dt>
                           <dd className="font-medium">
                             {system.survey_carried_out
-                              ? `Yes${system.survey_by ? ` — ${system.survey_by}` : ''}${
+                              ? `Yes${system.survey_by ? ` �� ${system.survey_by}` : ''}${
                                   system.survey_date ? ` (${formatDateUK(system.survey_date)})` : ''
                                 }`
                               : 'Not carried out'}
@@ -327,9 +379,7 @@ export function QuoteDocument({
                           const columns = Object.keys(rows[0])
                           return (
                             <div key={key} className="mb-3">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                                {humanizeKey(key)}
-                              </p>
+                              <FieldLabel>{humanizeKey(key)}</FieldLabel>
                               <div className="overflow-x-auto">
                                 <table className="w-full text-sm">
                                   <thead>
@@ -377,24 +427,22 @@ export function QuoteDocument({
                           ] as const
                         ).map((group) =>
                           group.rows.length === 0 ? null : (
-                            <div key={group.heading ?? 'products'} className="mt-3 first:mt-0">
+                            <div key={group.heading ?? 'products'} className="mt-4 first:mt-0">
                               {group.heading && (
-                                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                                  {group.heading}
-                                </div>
+                                <FieldLabel>{group.heading}</FieldLabel>
                               )}
                               <div className="overflow-x-auto">
                                 <table className="w-full text-sm">
                                   <thead>
-                                    <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-                                      <th className="py-1 font-medium">Description</th>
-                                      <th className="py-1 pl-3 text-right font-medium whitespace-nowrap">
+                                    <tr className="border-b-2 border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                                      <th className="py-1.5 font-semibold">Description</th>
+                                      <th className="py-1.5 pl-3 text-right font-semibold whitespace-nowrap">
                                         Qty
                                       </th>
-                                      <th className="py-1 pl-3 text-right font-medium whitespace-nowrap">
+                                      <th className="py-1.5 pl-3 text-right font-semibold whitespace-nowrap">
                                         Unit price
                                       </th>
-                                      <th className="py-1 pl-3 text-right font-medium whitespace-nowrap">
+                                      <th className="py-1.5 pl-3 text-right font-semibold whitespace-nowrap">
                                         Total
                                       </th>
                                     </tr>
@@ -426,35 +474,35 @@ export function QuoteDocument({
                             </div>
                           ),
                         )}
-                      <div className="mt-1 text-right text-sm text-muted-foreground">
-                        Total:{' '}
-                        <span className="font-medium text-foreground tabular-nums">
+                      <div className="mt-2 flex items-center justify-end gap-3 border-t pt-2 text-sm">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Section total
+                        </span>
+                        <span className="font-semibold text-foreground tabular-nums">
                           {formatPence(systemTotal, quote.currency)}
                         </span>
                       </div>
                     </>
                   )}
-                </div>
+                </section>
               )
             })}
         </div>
 
         {/* Client requirements compliance matrix */}
         {showRequirements && (
-          <div className="mt-8 break-inside-avoid border-t pt-6">
-            <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide">
-              Compliance with your requirements
-            </h3>
+          <section className="mt-10 break-inside-avoid">
+            <SectionHeading number={requirementsSectionNo} title="Compliance with your requirements" />
             <p className="mb-3 text-xs text-muted-foreground">
               How this quotation addresses each requirement from your enquiry.
             </p>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="py-1 font-medium">Requirement</th>
-                    <th className="py-1 pl-3 font-medium">Our response</th>
-                    <th className="py-1 pl-3 font-medium whitespace-nowrap">Status</th>
+                  <tr className="border-b-2 border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                    <th className="py-1.5 font-semibold">Requirement</th>
+                    <th className="py-1.5 pl-3 font-semibold">Our response</th>
+                    <th className="py-1.5 pl-3 font-semibold whitespace-nowrap">Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -483,15 +531,13 @@ export function QuoteDocument({
                 </tbody>
               </table>
             </div>
-          </div>
+          </section>
         )}
 
         {/* Equipment specification (opt-in) */}
         {equipmentSpecSections.length > 0 && (
-          <div className="mt-8 break-inside-avoid border-t pt-6">
-            <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide">
-              Equipment specification
-            </h3>
+          <section className="mt-10 break-inside-avoid">
+            <SectionHeading number={equipmentSectionNo} title="Equipment specification" />
             <p className="mb-3 text-xs text-muted-foreground">
               Official part numbers and specifications for the equipment supplied.
             </p>
@@ -504,10 +550,10 @@ export function QuoteDocument({
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-                          <th className="w-32 py-1 font-medium">Part number</th>
-                          <th className="py-1 font-medium">Specification</th>
-                          <th className="w-20 py-1 text-right font-medium">Qty</th>
+                        <tr className="border-b-2 border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                          <th className="w-32 py-1.5 font-semibold">Part number</th>
+                          <th className="py-1.5 font-semibold">Specification</th>
+                          <th className="w-20 py-1.5 text-right font-semibold">Qty</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -539,37 +585,41 @@ export function QuoteDocument({
                 </section>
               ))}
             </div>
-          </div>
+          </section>
         )}
 
         {/* Totals */}
-        <div className="mt-8 flex justify-end break-inside-avoid">
-          <div className="w-full max-w-xs space-y-1 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Subtotal</span>
-              <span className="tabular-nums">{formatPence(quote.subtotal_pence, quote.currency)}</span>
-            </div>
-            {quote.discount_pence > 0 && (
+        <div className="mt-10 flex justify-end break-inside-avoid">
+          <div className="w-full max-w-xs text-sm">
+            <div className="space-y-1.5 rounded-md border bg-muted/30 p-4">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Discount applied</span>
-                <span className="tabular-nums">-{formatPence(quote.discount_pence, quote.currency)}</span>
+                <span className="text-muted-foreground">Subtotal</span>
+                <span className="tabular-nums">{formatPence(quote.subtotal_pence, quote.currency)}</span>
               </div>
-            )}
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">VAT ({quote.vat_rate}%)</span>
-              <span className="tabular-nums">{formatPence(quote.vat_pence, quote.currency)}</span>
-            </div>
-            <div className="mt-1 flex justify-between border-t pt-2 text-base font-bold">
-              <span>Total</span>
-              <span className="tabular-nums">{formatPence(quote.total_pence, quote.currency)}</span>
+              {quote.discount_pence > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Discount applied</span>
+                  <span className="tabular-nums">-{formatPence(quote.discount_pence, quote.currency)}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">VAT ({quote.vat_rate}%)</span>
+                <span className="tabular-nums">{formatPence(quote.vat_pence, quote.currency)}</span>
+              </div>
+              <div className="-mx-4 -mb-4 mt-2 flex items-center justify-between rounded-b-md bg-foreground px-4 py-3 text-background">
+                <span className="text-xs font-semibold uppercase tracking-[0.12em]">Total due</span>
+                <span className="text-lg font-bold tabular-nums">
+                  {formatPence(quote.total_pence, quote.currency)}
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Terms */}
         {quote.terms && (
-          <div className="mt-8 break-inside-avoid border-t pt-4">
-            <h3 className="mb-1 text-sm font-semibold">Terms &amp; Conditions</h3>
+          <div className="mt-10 break-inside-avoid border-t pt-4">
+            <FieldLabel>Terms &amp; Conditions</FieldLabel>
             <p className="whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
               {quote.terms}
             </p>

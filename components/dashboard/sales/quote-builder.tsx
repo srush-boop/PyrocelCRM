@@ -40,6 +40,7 @@ import { Plus, Trash2, BookOpen, Save, TrendingUp, Calculator, Wrench, Check, Ch
 import { toast } from 'sonner'
 import { PpmCalculatorDialog, type PpmDraft } from '@/components/dashboard/sales/ppm-calculator-dialog'
 import { QuoteSectionRenderer } from '@/components/dashboard/sales/quote-section-renderer'
+import { AiSpecBuilderDialog } from '@/components/dashboard/sales/ai-spec-builder-dialog'
 import {
   QuoteRequestImporter,
   type ImportApplyPayload,
@@ -291,6 +292,15 @@ function ppmToDraft(p: QuoteSystemPpm | null): PpmDraft | null {
   }
 }
 
+// A system reference guide, condensed for AI grounding in the spec builder.
+export type SystemReferenceLite = {
+  id: string
+  name: string
+  description: string | null
+  system_type_id: string | null
+  extracted_text: string | null
+}
+
 interface QuoteBuilderProps {
   clients: Client[]
   sites: Site[]
@@ -302,6 +312,9 @@ interface QuoteBuilderProps {
   defaultHourlyCostPence: number
   defaultMarginPercent: number
   specTemplates: SystemSpecTemplate[]
+  // Admin-curated reference documents assigned to a system, used as extra AI
+  // grounding for the spec builder.
+  systemReferences?: SystemReferenceLite[]
   workTypeFields: WorkTypeField[]
   systemWorkTypeMargins: SystemWorkTypeMargin[]
   workTypeSettings: WorkTypeSetting[]
@@ -342,6 +355,7 @@ export function QuoteBuilder({
   defaultHourlyCostPence,
   defaultMarginPercent,
   specTemplates,
+  systemReferences = [],
   workTypeFields,
   systemWorkTypeMargins,
   workTypeSettings,
@@ -1043,11 +1057,13 @@ export function QuoteBuilder({
           assetTypes={assetTypes}
           defaultHourlyCostPence={defaultHourlyCostPence}
                   specTemplates={specTemplates}
+                  systemReferences={systemReferences}
                   workTypeFields={workTypeFields}
                   systemWorkTypeMargins={systemWorkTypeMargins}
                   workTypeSettings={workTypeSettings}
                   designCategories={designCategories}
                   bankValues={bankValues}
+                  requirementSource={requirementSource}
                   onUpdate={(patch) => updateSystem(system.key, patch)}
                   onRemove={() => removeSystem(system.key)}
                   onAddLine={() => addLine(system.key)}
@@ -1241,11 +1257,14 @@ interface SystemCardProps {
   assetTypes: AssetType[]
   defaultHourlyCostPence: number
   specTemplates: SystemSpecTemplate[]
+  systemReferences: SystemReferenceLite[]
   workTypeFields: WorkTypeField[]
   systemWorkTypeMargins: SystemWorkTypeMargin[]
   workTypeSettings: WorkTypeSetting[]
   designCategories: QuoteDesignCategory[]
   bankValues: QuoteBankValue[]
+  // The client's own brief for this quote (used to ground the AI spec builder).
+  requirementSource: RequirementSourceInfo | null
   onUpdate: (patch: Partial<EditSystem>) => void
   onRemove: () => void
   onAddLine: () => void
@@ -1267,11 +1286,13 @@ function SystemCard({
   assetTypes,
   defaultHourlyCostPence,
   specTemplates,
+  systemReferences,
   workTypeFields,
   systemWorkTypeMargins,
   workTypeSettings,
   designCategories,
   bankValues,
+  requirementSource,
   onUpdate,
   onRemove,
   onAddLine,
@@ -1296,6 +1317,28 @@ function SystemCard({
   // keeping page navigation and this popover fast and light.
   const [catalogueMatches, setCatalogueMatches] = useState<QuoteCatalogueItem[]>([])
   const [catalogueLoading, setCatalogueLoading] = useState(false)
+
+  // Whether the configured sections include an editable specification field
+  // (via a spec_template element). When none is configured we render a fallback
+  // specification textarea so AI-built spec text is always visible.
+  const [hasConfiguredSections, setHasConfiguredSections] = useState(false)
+
+  // When a new part line is added (blank line or from the catalogue) we focus
+  // its quantity box so the user can type the amount straight away. Services
+  // default to qty 1, so we only auto-focus non-service lines.
+  const qtyInputRefs = useRef<Map<string, HTMLInputElement>>(new Map())
+  const prevLineKeysRef = useRef<Set<string>>(new Set(system.lines.map((l) => l.key)))
+  useEffect(() => {
+    const prev = prevLineKeysRef.current
+    const added = system.lines.filter((l) => !prev.has(l.key) && !l.is_service)
+    // Focus the most recently added part line's quantity field.
+    const target = added.at(-1)
+    if (target) {
+      // Wait a frame so the input is mounted before focusing it.
+      requestAnimationFrame(() => qtyInputRefs.current.get(target.key)?.focus())
+    }
+    prevLineKeysRef.current = new Set(system.lines.map((l) => l.key))
+  }, [system.lines])
 
   useEffect(() => {
     if (!catalogueOpen) return
@@ -1423,6 +1466,47 @@ function SystemCard({
   }
 
   const systemType = systemTypes.find((s) => s.id === system.system_type_id)
+
+  // Fire detection & alarm systems always have the built-in BAFE SP203
+  // knowledge base as a fallback. Detect by system type name/code.
+  const isFireAlarm =
+    /fire/i.test(systemType?.name ?? '') || /^(FA|FD|FDA)/i.test(systemType?.code ?? '')
+
+  // Admin-curated reference guides assigned to this system type. Each is
+  // formatted as "[description]\n[extracted text]" for AI grounding.
+  const matchingReferences = useMemo(
+    () =>
+      system.system_type_id
+        ? systemReferences.filter(
+            (r) => r.system_type_id === system.system_type_id && r.extracted_text,
+          )
+        : [],
+    [systemReferences, system.system_type_id],
+  )
+  const referenceKnowledge = useMemo(
+    () =>
+      matchingReferences
+        .map((r) => {
+          const header = [r.name, r.description?.trim()].filter(Boolean).join(' — ')
+          return `Reference: ${header}\n${r.extracted_text?.trim() ?? ''}`
+        })
+        .join('\n\n---\n\n'),
+    [matchingReferences],
+  )
+
+  // The AI specification builder is available whenever there is an uploaded
+  // sample-spec knowledge base for this system type + work type, an admin
+  // reference guide for the system, OR it is a fire alarm system (built-in KB).
+  const templateKnowledge = matchingTemplate?.source_text ?? matchingTemplate?.specification ?? ''
+  // Combine the discipline template with any admin reference guides. The AI
+  // helper clamps this to MAX_KB_CHARS, so we never blow the token budget.
+  const specKnowledgeBase = [templateKnowledge, referenceKnowledge].filter(Boolean).join('\n\n===\n\n')
+  const canBuildWithAi = Boolean(specKnowledgeBase) || isFireAlarm
+
+  // The client's own brief for this quote, condensed for AI grounding.
+  const clientContext = [requirementSource?.summary?.trim(), requirementSource?.raw_text?.trim()]
+    .filter(Boolean)
+    .join('\n\n')
 
   return (
     <Card className={systemType ? 'border-l-2' : undefined} style={systemType ? { borderLeftColor: getSystemHex(systemType.color) } : undefined}>
@@ -1652,6 +1736,70 @@ function SystemCard({
           </div>
         )}
 
+        {/* ---- AI specification builder ----
+             Asks the relevant questions (grounded in the discipline's uploaded
+             sample spec, or the built-in BAFE SP203 KB for fire alarm) with
+             suggested answers biased toward the client's brief, then compiles
+             them into the system's specification text. */}
+        {canBuildWithAi && !readOnly && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2.5">
+            <div className="grid gap-0.5">
+              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-primary">
+                <Sparkles className="h-3.5 w-3.5" />
+                Build the specification with AI
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Answer a few guided questions — suggested answers included — and AI drafts the
+                specification for you
+                {matchingTemplate?.source_file_name
+                  ? `, grounded in ${matchingTemplate.source_file_name}`
+                  : ''}
+                {matchingReferences.length > 0
+                  ? `${matchingTemplate?.source_file_name ? ' and' : ', grounded in'} ${matchingReferences.length} system reference${matchingReferences.length === 1 ? '' : 's'}`
+                  : ''}
+                {clientContext ? ' and the client brief' : ''}.
+              </p>
+            </div>
+            <AiSpecBuilderDialog
+              systemTypeName={systemType?.name ?? 'System'}
+              workTypeLabel={
+                WORK_TYPES.find((w) => w.code === system.work_type)?.label ?? system.work_type
+              }
+              workTypeCode={system.work_type}
+              existingAnswers={system.conditional_values}
+              existingSpecification={system.specification}
+              knowledgeBaseText={specKnowledgeBase || undefined}
+              clientContext={clientContext || undefined}
+              templateName={
+                specKnowledgeBase
+                  ? matchingTemplate?.source_file_name ??
+                    (matchingReferences.length > 0
+                      ? `${systemType?.name ?? 'System'} reference guides`
+                      : `${systemType?.name ?? 'System'} specification template`)
+                  : undefined
+              }
+              hasClientBrief={Boolean(clientContext)}
+              onGenerated={(specification) => onUpdate({ specification })}
+              disabled={disabled}
+            />
+          </div>
+        )}
+
+        {/* Fallback specification editor when the AI builder is available but no
+            configured spec_template section exists, so the built spec is visible. */}
+        {canBuildWithAi && !hasConfiguredSections && (
+          <div className="grid gap-1.5">
+            <Label>Specification</Label>
+            <Textarea
+              value={system.specification}
+              onChange={(e) => onUpdate({ specification: e.target.value })}
+              rows={6}
+              placeholder="Build with AI above, or type the specification here."
+              disabled={disabled}
+            />
+          </div>
+        )}
+
         {/* ---- Configured sections (system type x work type) ----
              Includes spec_template and asset_type elements, which replace the
              old hardcoded "Description of Works / Specification" step. */}
@@ -1661,6 +1809,7 @@ function SystemCard({
           values={system.conditional_values}
           onChange={setConditional}
           disabled={disabled}
+          onLoaded={setHasConfiguredSections}
           assetTypes={systemAssetTypes}
           specification={system.specification}
           onSpecChange={(value) => onUpdate({ specification: value })}
@@ -1810,6 +1959,10 @@ function SystemCard({
                     onResolve={(item) => onApplyCatalogueToLine(line.key, item)}
                   />
                   <Input
+                    ref={(el) => {
+                      if (el) qtyInputRefs.current.set(line.key, el)
+                      else qtyInputRefs.current.delete(line.key)
+                    }}
                     inputMode="decimal"
                     value={line.quantity}
                     onChange={(e) => onUpdateLine(line.key, { quantity: e.target.value })}
@@ -1942,7 +2095,13 @@ function SystemCard({
                       Add from catalogue
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent align="start" className="w-80 p-2">
+                  <PopoverContent
+                    align="start"
+                    className="w-80 p-2"
+                    // Don't yank focus back to the trigger on close; we focus the
+                    // new line's quantity box instead so the user can type at once.
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                  >
                     <Input
                       autoFocus
                       value={catalogueSearch}

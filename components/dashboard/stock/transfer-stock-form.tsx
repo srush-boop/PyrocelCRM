@@ -364,6 +364,8 @@ export function TransferStockForm({
               <Button type="submit" disabled={submitting} className="gap-2">
                 {mode === 'transfer' ? (
                   <ArrowRightLeft className="h-4 w-4" />
+                ) : mode === 'receive' ? (
+                  <PackagePlus className="h-4 w-4" />
                 ) : (
                   <Wrench className="h-4 w-4" />
                 )}
@@ -371,7 +373,9 @@ export function TransferStockForm({
                   ? 'Recording...'
                   : mode === 'transfer'
                     ? 'Transfer stock'
-                    : 'Book out to job'}
+                    : mode === 'receive'
+                      ? 'Receive stock'
+                      : 'Book out to job'}
               </Button>
             </div>
           </form>

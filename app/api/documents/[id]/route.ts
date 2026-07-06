@@ -26,7 +26,12 @@ export async function PATCH(
     .select('owner_type')
     .eq('id', id)
     .single()
-  const allowed = existing?.owner_type === 'site_engineer' ? auth.canManageEngineer : auth.canManage
+  const allowed =
+    existing?.owner_type === 'site_engineer'
+      ? auth.canManageEngineer
+      : existing?.owner_type === 'system_reference'
+        ? auth.profile?.role === 'admin'
+        : auth.canManage
   if (!allowed) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -57,7 +62,12 @@ export async function DELETE(
     .eq('id', id)
     .single()
 
-  const allowed = doc?.owner_type === 'site_engineer' ? auth.canManageEngineer : auth.canManage
+  const allowed =
+    doc?.owner_type === 'site_engineer'
+      ? auth.canManageEngineer
+      : doc?.owner_type === 'system_reference'
+        ? auth.profile?.role === 'admin'
+        : auth.canManage
   if (!allowed) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

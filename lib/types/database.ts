@@ -595,7 +595,14 @@ export interface Site {
 
 // Document store: folders + files attached to a client, site, a site's service,
 // or a site's shared engineer folder (engineer-contributable downloads/drawings).
-export type DocumentOwnerType = 'client' | 'site' | 'site_service' | 'site_engineer'
+// 'system_reference' is a global store of AI reference guides assigned to a
+// system type (see SYSTEM_REFERENCE_OWNER_ID).
+export type DocumentOwnerType =
+  | 'client'
+  | 'site'
+  | 'site_service'
+  | 'site_engineer'
+  | 'system_reference'
 
 // A communal internal note left by staff (engineers/office/admin) against a site.
 export interface SiteInternalNote {
@@ -640,6 +647,10 @@ export interface DocumentFile {
   size_bytes: number | null
   uploaded_by: string | null
   created_at: string
+  // System reference fields (only populated for owner_type = 'system_reference').
+  description?: string | null
+  system_type_id?: string | null
+  extracted_text?: string | null
 }
 
 export interface TaskAttachment {

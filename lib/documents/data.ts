@@ -10,6 +10,19 @@ export type OwnerDocuments = {
   files: DocumentFile[]
 }
 
+export { SYSTEM_REFERENCE_OWNER_ID } from '@/lib/documents/utils'
+
+// Fetch all system reference documents (AI grounding guides), newest first.
+export async function getSystemReferences(): Promise<DocumentFile[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('documents')
+    .select('*')
+    .eq('owner_type', 'system_reference')
+    .order('created_at', { ascending: false })
+  return (data ?? []) as DocumentFile[]
+}
+
 // Fetch every folder + file for a given owner (client / site / site_service).
 // Folder navigation is then handled client-side by parent_id.
 export async function getOwnerDocuments(

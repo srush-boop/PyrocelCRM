@@ -292,6 +292,15 @@ function ppmToDraft(p: QuoteSystemPpm | null): PpmDraft | null {
   }
 }
 
+// A system reference guide, condensed for AI grounding in the spec builder.
+export type SystemReferenceLite = {
+  id: string
+  name: string
+  description: string | null
+  system_type_id: string | null
+  extracted_text: string | null
+}
+
 interface QuoteBuilderProps {
   clients: Client[]
   sites: Site[]
@@ -303,6 +312,9 @@ interface QuoteBuilderProps {
   defaultHourlyCostPence: number
   defaultMarginPercent: number
   specTemplates: SystemSpecTemplate[]
+  // Admin-curated reference documents assigned to a system, used as extra AI
+  // grounding for the spec builder.
+  systemReferences?: SystemReferenceLite[]
   workTypeFields: WorkTypeField[]
   systemWorkTypeMargins: SystemWorkTypeMargin[]
   workTypeSettings: WorkTypeSetting[]
@@ -343,6 +355,7 @@ export function QuoteBuilder({
   defaultHourlyCostPence,
   defaultMarginPercent,
   specTemplates,
+  systemReferences = [],
   workTypeFields,
   systemWorkTypeMargins,
   workTypeSettings,
@@ -1044,6 +1057,7 @@ export function QuoteBuilder({
           assetTypes={assetTypes}
           defaultHourlyCostPence={defaultHourlyCostPence}
                   specTemplates={specTemplates}
+                  systemReferences={systemReferences}
                   workTypeFields={workTypeFields}
                   systemWorkTypeMargins={systemWorkTypeMargins}
                   workTypeSettings={workTypeSettings}
@@ -1243,6 +1257,7 @@ interface SystemCardProps {
   assetTypes: AssetType[]
   defaultHourlyCostPence: number
   specTemplates: SystemSpecTemplate[]
+  systemReferences: SystemReferenceLite[]
   workTypeFields: WorkTypeField[]
   systemWorkTypeMargins: SystemWorkTypeMargin[]
   workTypeSettings: WorkTypeSetting[]
@@ -1271,6 +1286,7 @@ function SystemCard({
   assetTypes,
   defaultHourlyCostPence,
   specTemplates,
+  systemReferences,
   workTypeFields,
   systemWorkTypeMargins,
   workTypeSettings,
@@ -1456,11 +1472,35 @@ function SystemCard({
   const isFireAlarm =
     /fire/i.test(systemType?.name ?? '') || /^(FA|FD|FDA)/i.test(systemType?.code ?? '')
 
+  // Admin-curated reference guides assigned to this system type. Each is
+  // formatted as "[description]\n[extracted text]" for AI grounding.
+  const matchingReferences = useMemo(
+    () =>
+      system.system_type_id
+        ? systemReferences.filter(
+            (r) => r.system_type_id === system.system_type_id && r.extracted_text,
+          )
+        : [],
+    [systemReferences, system.system_type_id],
+  )
+  const referenceKnowledge = useMemo(
+    () =>
+      matchingReferences
+        .map((r) => {
+          const header = [r.name, r.description?.trim()].filter(Boolean).join(' — ')
+          return `Reference: ${header}\n${r.extracted_text?.trim() ?? ''}`
+        })
+        .join('\n\n---\n\n'),
+    [matchingReferences],
+  )
+
   // The AI specification builder is available whenever there is an uploaded
-  // sample-spec knowledge base for this system type + work type, OR it is a
-  // fire alarm system (built-in KB). This generalises the feature to every
-  // discipline that has a template in the vault.
-  const specKnowledgeBase = matchingTemplate?.source_text ?? matchingTemplate?.specification ?? ''
+  // sample-spec knowledge base for this system type + work type, an admin
+  // reference guide for the system, OR it is a fire alarm system (built-in KB).
+  const templateKnowledge = matchingTemplate?.source_text ?? matchingTemplate?.specification ?? ''
+  // Combine the discipline template with any admin reference guides. The AI
+  // helper clamps this to MAX_KB_CHARS, so we never blow the token budget.
+  const specKnowledgeBase = [templateKnowledge, referenceKnowledge].filter(Boolean).join('\n\n===\n\n')
   const canBuildWithAi = Boolean(specKnowledgeBase) || isFireAlarm
 
   // The client's own brief for this quote, condensed for AI grounding.
@@ -1714,6 +1754,9 @@ function SystemCard({
                 {matchingTemplate?.source_file_name
                   ? `, grounded in ${matchingTemplate.source_file_name}`
                   : ''}
+                {matchingReferences.length > 0
+                  ? `${matchingTemplate?.source_file_name ? ' and' : ', grounded in'} ${matchingReferences.length} system reference${matchingReferences.length === 1 ? '' : 's'}`
+                  : ''}
                 {clientContext ? ' and the client brief' : ''}.
               </p>
             </div>
@@ -1730,7 +1773,9 @@ function SystemCard({
               templateName={
                 specKnowledgeBase
                   ? matchingTemplate?.source_file_name ??
-                    `${systemType?.name ?? 'System'} specification template`
+                    (matchingReferences.length > 0
+                      ? `${systemType?.name ?? 'System'} reference guides`
+                      : `${systemType?.name ?? 'System'} specification template`)
                   : undefined
               }
               hasClientBrief={Boolean(clientContext)}

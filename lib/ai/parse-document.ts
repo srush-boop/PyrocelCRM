@@ -1,5 +1,6 @@
 import 'server-only'
 import mammoth from 'mammoth'
+import { generateText } from 'ai'
 
 // The maximum raw text we pass to the model. Specs are usually well under this;
 // this guards against pathological inputs blowing up token usage.
@@ -74,6 +75,60 @@ export async function parseDocumentFile(file: File): Promise<ParseResult> {
 
 function clamp(text: string): string {
   return text.length > MAX_TEXT_CHARS ? text.slice(0, MAX_TEXT_CHARS) : text
+}
+
+// Model used to transcribe PDFs into plain text for AI grounding. Reads PDFs
+// directly as a file part (handles tables, scans, multi-column layouts).
+const EXTRACT_MODEL = 'openai/gpt-5.4-mini'
+
+export interface ExtractResult {
+  ok: boolean
+  text?: string
+  error?: string
+}
+
+/**
+ * Extract readable plain text from an uploaded reference document, for storage
+ * and later use as AI grounding. Unlike parseDocumentFile (which hands PDFs to
+ * the caller as raw bytes), this always resolves to text:
+ * - .docx / .txt / .md / .csv -> decoded/extracted text
+ * - .pdf -> transcribed to text via a multimodal model
+ * Returns ok:false (non-fatal) when nothing could be extracted.
+ */
+export async function extractDocumentText(file: File): Promise<ExtractResult> {
+  const parsed = await parseDocumentFile(file)
+  if (!parsed.ok || !parsed.doc) {
+    return { ok: false, error: parsed.error ?? 'Could not read the file.' }
+  }
+
+  if (parsed.doc.kind === 'text') {
+    return { ok: true, text: parsed.doc.text }
+  }
+
+  // PDF: transcribe via multimodal model.
+  try {
+    const { text } = await generateText({
+      model: EXTRACT_MODEL,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: 'Transcribe this document into clean, readable plain text. Preserve headings, lists and table content as text. Do not summarise, comment, or add anything that is not in the document. Output only the transcription.',
+            },
+            { type: 'file', data: parsed.doc.data, mediaType: parsed.doc.mediaType },
+          ],
+        },
+      ],
+    })
+    const trimmed = text.trim()
+    if (!trimmed) return { ok: false, error: 'No text could be extracted from the PDF.' }
+    return { ok: true, text: clamp(trimmed) }
+  } catch (err) {
+    console.error('[v0] extractDocumentText (pdf) failed:', err)
+    return { ok: false, error: 'Could not extract text from the PDF.' }
+  }
 }
 
 export { MAX_TEXT_CHARS }

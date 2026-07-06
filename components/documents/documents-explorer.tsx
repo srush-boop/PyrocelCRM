@@ -2,12 +2,16 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Building, Building2, Wrench, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Building, Building2, Wrench, BookOpen, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DocumentBrowser } from '@/components/documents/document-browser'
+import {
+  SystemReferencesManager,
+  type SystemTypeLite,
+} from '@/components/documents/system-references-manager'
 import type {
   Client,
   DocumentFile,
@@ -35,19 +39,25 @@ interface DocumentsExplorerProps {
       }
     | null
   canManage: boolean
+  systemTypes: SystemTypeLite[]
+  systemReferences: DocumentFile[]
+  canManageReferences: boolean
 }
 
-// Only these owner types are browsable in the top-level documents explorer.
+// Only these owner types are browsable via the owner-picker list.
 // (site_engineer is surfaced on the site's "Engineer Info" tab, not here.)
 type BrowsableOwnerType = 'client' | 'site' | 'site_service'
+// Tabs also include a flat, system-assigned reference library.
+type ExplorerTab = BrowsableOwnerType | 'reference'
 
 const TAB_META: Record<
-  BrowsableOwnerType,
+  ExplorerTab,
   { label: string; icon: typeof Building }
 > = {
   client: { label: 'Clients', icon: Building },
   site: { label: 'Sites', icon: Building2 },
   site_service: { label: 'Services', icon: Wrench },
+  reference: { label: 'System References', icon: BookOpen },
 }
 
 export function DocumentsExplorer({
@@ -56,9 +66,12 @@ export function DocumentsExplorer({
   siteServices,
   selected,
   canManage,
+  systemTypes,
+  systemReferences,
+  canManageReferences,
 }: DocumentsExplorerProps) {
   const router = useRouter()
-  const [tab, setTab] = useState<BrowsableOwnerType>(
+  const [tab, setTab] = useState<ExplorerTab>(
     (selected?.ownerType as BrowsableOwnerType) ?? 'client',
   )
   const [query, setQuery] = useState('')
@@ -76,6 +89,7 @@ export function DocumentsExplorer({
     if (tab === 'site') {
       return sites.map((s) => ({ id: s.id, label: s.name, sub: 'Site' }))
     }
+    if (tab === 'reference') return []
     return siteServices.map((ss) => ({
       id: ss.id,
       label: ss.service_type?.name ?? 'Service',
@@ -138,9 +152,9 @@ export function DocumentsExplorer({
 
   return (
     <div className="space-y-4">
-      <Tabs value={tab} onValueChange={(v) => setTab(v as BrowsableOwnerType)}>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as ExplorerTab)}>
         <TabsList>
-          {(Object.keys(TAB_META) as BrowsableOwnerType[]).map((key) => {
+          {(Object.keys(TAB_META) as ExplorerTab[]).map((key) => {
             const Icon = TAB_META[key].icon
             return (
               <TabsTrigger key={key} value={key}>
@@ -152,43 +166,53 @@ export function DocumentsExplorer({
         </TabsList>
       </Tabs>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder={`Search ${TAB_META[tab].label.toLowerCase()}...`}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="pl-9"
+      {tab === 'reference' ? (
+        <SystemReferencesManager
+          systemTypes={systemTypes}
+          references={systemReferences}
+          canManage={canManageReferences}
         />
-      </div>
-
-      {filtered.length === 0 ? (
-        <Card className="p-10 text-center text-sm text-muted-foreground">
-          No {TAB_META[tab].label.toLowerCase()} found.
-        </Card>
       ) : (
-        <Card className="divide-y">
-          {filtered.map((item) => {
-            const Icon = TAB_META[tab].icon
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => selectOwner(item.id)}
-                className="flex w-full cursor-pointer items-center gap-3 p-3 text-left transition-colors hover:bg-muted/50"
-              >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <Icon className="h-4 w-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{item.label}</p>
-                  <p className="truncate text-sm text-muted-foreground">{item.sub}</p>
-                </div>
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-              </button>
-            )
-          })}
-        </Card>
+        <>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder={`Search ${TAB_META[tab].label.toLowerCase()}...`}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+
+          {filtered.length === 0 ? (
+            <Card className="p-10 text-center text-sm text-muted-foreground">
+              No {TAB_META[tab].label.toLowerCase()} found.
+            </Card>
+          ) : (
+            <Card className="divide-y">
+              {filtered.map((item) => {
+                const Icon = TAB_META[tab].icon
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => selectOwner(item.id)}
+                    className="flex w-full cursor-pointer items-center gap-3 p-3 text-left transition-colors hover:bg-muted/50"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{item.label}</p>
+                      <p className="truncate text-sm text-muted-foreground">{item.sub}</p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </button>
+                )
+              })}
+            </Card>
+          )}
+        </>
       )}
     </div>
   )

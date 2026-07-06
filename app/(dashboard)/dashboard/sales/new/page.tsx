@@ -68,6 +68,7 @@ export default async function NewQuotePage({
     { data: designCategories },
     { data: bankValues },
     { data: companyInfo },
+    { data: systemReferences },
   ] = await Promise.all([
     supabase.from('clients').select('id, name').order('name'),
     supabase.from('sites').select('id, name, client_id').order('name'),
@@ -88,6 +89,11 @@ export default async function NewQuotePage({
     supabase.from('quote_design_categories').select('*').eq('active', true).order('name'),
     supabase.from('quote_bank_values').select('*'),
     supabase.from('company_info').select('default_margin_percent').limit(1).maybeSingle(),
+    supabase
+      .from('documents')
+      .select('id, name, description, system_type_id, extracted_text')
+      .eq('owner_type', 'system_reference')
+      .not('extracted_text', 'is', null),
   ])
 
   // When opened from a site (e.g. the site's Quotes tab), preselect that site

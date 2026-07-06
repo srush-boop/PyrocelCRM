@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { getOwnerDocuments } from '@/lib/documents/data'
+import { getOwnerDocuments, getSystemReferences } from '@/lib/documents/data'
 import { DocumentsExplorer } from '@/components/documents/documents-explorer'
+import type { SystemTypeLite } from '@/components/documents/system-references-manager'
 import type {
   Client,
   DocumentOwnerType,
@@ -34,17 +35,32 @@ export default async function DocumentsPage({ searchParams }: PageProps) {
     redirect('/dashboard')
   }
   const canManage = role === 'admin' || role === 'office'
+  const canManageReferences = role === 'admin'
 
-  // Picker data: clients, sites, and each site's services (with names).
-  const [{ data: clients }, { data: sites }, { data: siteServices }] =
-    await Promise.all([
-      supabase.from('clients').select('id, name').order('name'),
-      supabase.from('sites').select('id, name, client_id').order('name'),
-      supabase
-        .from('site_services')
-        .select('id, site_id, service_type:service_types(name)')
-        .order('created_at'),
-    ])
+  // Picker data: clients, sites, and each site's services (with names), plus the
+  // active system types and the system reference library for the AI guide tab.
+  const [
+    { data: clients },
+    { data: sites },
+    { data: siteServices },
+    { data: systemTypeRows },
+    systemReferences,
+  ] = await Promise.all([
+    supabase.from('clients').select('id, name').order('name'),
+    supabase.from('sites').select('id, name, client_id').order('name'),
+    supabase
+      .from('site_services')
+      .select('id, site_id, service_type:service_types(name)')
+      .order('created_at'),
+    supabase
+      .from('system_types')
+      .select('id, name, code')
+      .eq('active', true)
+      .order('position'),
+    getSystemReferences(),
+  ])
+
+  const systemTypes = (systemTypeRows ?? []) as SystemTypeLite[]
 
   const { ownerType: rawType, ownerId } = await searchParams
   const ownerType = (OWNER_TYPES.includes(rawType as DocumentOwnerType)
@@ -84,6 +100,9 @@ export default async function DocumentsPage({ searchParams }: PageProps) {
         siteServices={normalizedServices}
         selected={selected}
         canManage={canManage}
+        systemTypes={systemTypes}
+        systemReferences={systemReferences}
+        canManageReferences={canManageReferences}
       />
     </div>
   )

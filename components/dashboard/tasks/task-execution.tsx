@@ -81,6 +81,8 @@ interface TaskExecutionProps {
   clientLinks?: ClientLink[]
   engineers?: Profile[]
   panels?: SystemPanel[]
+  /** Shared "Before you attend" panel, rendered beneath the site/service header. */
+  preAttendance?: ReactNode
 }
 
 // Builds the initial checklist results for a template. When the task's system
@@ -176,7 +178,8 @@ export function TaskExecution({
   profile,
   clientLinks = [],
   engineers = [],
-  panels = []
+  panels = [],
+  preAttendance,
 }: TaskExecutionProps) {
   const [status, setStatus] = useState(task.status)
   // Local snapshot of the assigned engineer so the summary reflects quick
@@ -509,6 +512,8 @@ export function TaskExecution({
       )}
     >
       <TaskHeader task={task} status={status} />
+
+      {preAttendance}
 
       {/* Call Summary — only the details the header doesn't already show
           (system, service, address and dates all live in the header). */}

@@ -56,7 +56,10 @@ import {
   User,
   FileText,
   Wrench,
+  CalendarClock,
+  Navigation,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
 import type { Profile, TaskWithDetails, Site, Route, Area } from '@/lib/types/database'
@@ -67,6 +70,24 @@ import { SiteFlagBadges } from '@/components/dashboard/site-info/site-flag-badge
 import { resolveSiteFlags } from '@/lib/site-flags'
 
 type ViewMode = 'grid' | 'list' | 'route' | 'area'
+type SortKey = 'date' | 'postcode' | 'nearby'
+
+// Great-circle distance in miles between two coordinates (client-safe, so the
+// "nearby" sort can run without hitting the server).
+function haversineMiles(
+  a: { latitude: number; longitude: number },
+  b: { latitude: number; longitude: number },
+): number {
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const R = 3958.8 // Earth radius in miles
+  const dLat = toRad(b.latitude - a.latitude)
+  const dLng = toRad(b.longitude - a.longitude)
+  const lat1 = toRad(a.latitude)
+  const lat2 = toRad(b.latitude)
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(h))
+}
 
 interface ScheduleViewProps {
   tasks: TaskWithDetails[]
@@ -87,7 +108,12 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   const [search, setSearch] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [activeTab, setActiveTab] = useState('upcoming')
-  const [sortBy, setSortBy] = useState<'date' | 'postcode'>('date')
+  const [sortBy, setSortBy] = useState<SortKey>('date')
+  // Engineer's live location, captured on demand for the "nearby" sort.
+  const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | null>(null)
+  const [locating, setLocating] = useState(false)
+  // Quick filter: only show calls that must be booked but aren't booked yet.
+  const [needsBookingOnly, setNeedsBookingOnly] = useState(false)
   const [selectedEngineer, setSelectedEngineer] = useState<string>('all')
   const [selectedSystem, setSelectedSystem] = useState<string>('all')
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined)
@@ -183,7 +209,52 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     router.refresh()
   }
 
-  const hasActiveFilters = search || selectedEngineer !== 'all' || selectedSystem !== 'all' || dateFrom || dateTo
+  // Capture the engineer's current location (used by the "nearby" sort). Cached
+  // for a minute so repeated sorts don't re-prompt.
+  const requestLocation = () => {
+    if (!('geolocation' in navigator)) {
+      toast.error('Location is not supported on this device')
+      return
+    }
+    setLocating(true)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocating(false)
+        setUserCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude })
+      },
+      (err) => {
+        setLocating(false)
+        toast.error(
+          err.code === err.PERMISSION_DENIED
+            ? 'Location permission denied. Enable it to sort by nearby.'
+            : 'Could not get your location. Please try again.',
+        )
+        // Fall back to date order so the list isn't left empty-feeling.
+        setSortBy('date')
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    )
+  }
+
+  const handleSortChange = (value: SortKey) => {
+    setSortBy(value)
+    if (value === 'nearby' && !userCoords) requestLocation()
+  }
+
+  // A call "needs booking" when the site/service requires an advance booking but
+  // no slot has been booked yet, and the call is still actionable.
+  const taskNeedsBooking = (task: TaskWithDetails) => {
+    if (task.booked_start_time) return false
+    if (task.status === 'completed' || task.status === 'cancelled') return false
+    return resolveSiteFlags(task.site_service?.site, task.site_service, {
+      remedialOpen: task.is_remedial,
+    }).booking_required
+  }
+
+  const needsBookingCount = tasks.filter(taskNeedsBooking).length
+
+  const hasActiveFilters =
+    search || selectedEngineer !== 'all' || selectedSystem !== 'all' || dateFrom || dateTo || needsBookingOnly
 
   const clearFilters = () => {
     setSearch('')
@@ -191,6 +262,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     setSelectedSystem('all')
     setDateFrom(undefined)
     setDateTo(undefined)
+    setNeedsBookingOnly(false)
   }
 
   const filteredTasks = tasks.filter((task) => {
@@ -213,13 +285,38 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     const matchesDateFrom = !dateFrom || taskDate >= dateFrom
     const matchesDateTo = !dateTo || taskDate <= dateTo
 
-    return matchesSearch && matchesEngineer && matchesSystem && matchesDateFrom && matchesDateTo
+    // Needs-booking quick filter
+    const matchesNeedsBooking = !needsBookingOnly || taskNeedsBooking(task)
+
+    return (
+      matchesSearch &&
+      matchesEngineer &&
+      matchesSystem &&
+      matchesDateFrom &&
+      matchesDateTo &&
+      matchesNeedsBooking
+    )
   })
 
   // Sort the filtered tasks by the chosen key. This flows through to the
   // upcoming/completed/overdue lists. The route/area grouped views apply their
   // own ordering (route position / site name) on top of this.
   const sortedTasks = [...filteredTasks].sort((a, b) => {
+    if (sortBy === 'nearby' && userCoords) {
+      const sa = a.site_service?.site
+      const sb = b.site_service?.site
+      const da =
+        sa?.latitude != null && sa?.longitude != null
+          ? haversineMiles(userCoords, { latitude: sa.latitude, longitude: sa.longitude })
+          : Infinity
+      const db =
+        sb?.latitude != null && sb?.longitude != null
+          ? haversineMiles(userCoords, { latitude: sb.latitude, longitude: sb.longitude })
+          : Infinity
+      // Sites without coordinates sink to the bottom, then tie-break by date.
+      if (da !== db) return da - db
+      return new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime()
+    }
     if (sortBy === 'postcode') {
       const pa = a.site_service?.site?.postcode?.trim().toUpperCase() ?? ''
       const pb = b.site_service?.site?.postcode?.trim().toUpperCase() ?? ''
@@ -701,6 +798,25 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
           />
         </div>
 
+        {(needsBookingCount > 0 || needsBookingOnly) && (
+          <Button
+            type="button"
+            variant={needsBookingOnly ? 'default' : 'outline'}
+            onClick={() => setNeedsBookingOnly((v) => !v)}
+            aria-pressed={needsBookingOnly}
+            className="gap-2"
+          >
+            <CalendarClock className="h-4 w-4" />
+            Needs booking
+            <Badge
+              variant={needsBookingOnly ? 'secondary' : 'outline'}
+              className="ml-0.5 px-1.5"
+            >
+              {needsBookingCount}
+            </Badge>
+          </Button>
+        )}
+
         {isAdminOrOffice && engineers.length > 0 && (
           <Select value={selectedEngineer} onValueChange={setSelectedEngineer}>
             <SelectTrigger className="w-[180px]">
@@ -797,14 +913,24 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
         )}
 
         <div className="ml-auto flex items-center gap-3">
-          <Select value={sortBy} onValueChange={(v) => setSortBy(v as 'date' | 'postcode')}>
+          <Select value={sortBy} onValueChange={(v) => handleSortChange(v as SortKey)}>
             <SelectTrigger className="w-[160px]">
-              <ArrowUpDown className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+              {locating ? (
+                <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+              ) : (
+                <ArrowUpDown className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+              )}
               <SelectValue placeholder="Sort by" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="date">Due date</SelectItem>
               <SelectItem value="postcode">Postcode</SelectItem>
+              <SelectItem value="nearby">
+                <span className="flex items-center gap-2">
+                  <Navigation className="h-3.5 w-3.5" />
+                  Nearby
+                </span>
+              </SelectItem>
             </SelectContent>
           </Select>
           {viewToggle}

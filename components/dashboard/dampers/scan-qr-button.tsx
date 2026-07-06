@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { QrCode, Loader2, AlertCircle } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface ScanQrButtonProps {
   variant?: 'default' | 'outline' | 'secondary' | 'ghost'
@@ -118,9 +119,11 @@ export function ScanQrButton({
         size={size}
         className={className}
         onClick={() => setOpen(true)}
+        aria-label={label}
+        title={label}
       >
-        <QrCode className="mr-2 h-4 w-4" />
-        {label}
+        <QrCode className={cn('h-4 w-4', size !== 'icon' && 'mr-2')} />
+        {size !== 'icon' && label}
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>

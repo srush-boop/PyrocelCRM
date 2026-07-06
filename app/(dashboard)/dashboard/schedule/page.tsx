@@ -96,35 +96,40 @@ export default async function SchedulePage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Calls</h1>
-          <p className="text-muted-foreground">
-            {isAdminOrOffice ? 'Manage and book service calls' : 'View your calls'}
-          </p>
+      <div className="space-y-4">
+        {/* Title row: the circular Scan QR sits level with the "Calls" heading. */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Calls</h1>
+            <p className="text-muted-foreground">
+              {isAdminOrOffice ? 'Manage and book service calls' : 'View your calls'}
+            </p>
+          </div>
+          <ScanQrButton
+            variant="outline"
+            size="icon"
+            className="h-11 w-11 shrink-0 rounded-full"
+          />
         </div>
-        <div className="flex flex-wrap items-center gap-2 [&>*]:flex-1 sm:[&>*]:flex-none">
-          {isAdminOrOffice && (
+
+        {/* Admin/office actions get their own tidy row below the title. */}
+        {isAdminOrOffice && (
+          <div className="flex flex-wrap items-center gap-2 [&>*]:flex-1 sm:[&>*]:flex-none">
             <BranchFilter branches={scope.branches} activeBranchId={scope.activeBranchId} />
-          )}
-          <ScanQrButton />
-          {isAdminOrOffice && (
             <Button asChild variant="outline">
               <Link href="/dashboard/schedule/planning">
                 <CalendarClock className="h-4 w-4" />
                 Planning
               </Link>
             </Button>
-          )}
-          {isAdminOrOffice && <GenerateCallsButton />}
-          {isAdminOrOffice && (
-            <CreateTaskDialog 
+            <GenerateCallsButton />
+            <CreateTaskDialog
               siteServices={siteServices}
               engineers={engineers}
               clients={clients}
             />
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       <ScheduleView 

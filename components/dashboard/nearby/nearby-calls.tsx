@@ -31,6 +31,8 @@ import {
   ArrowLeftRight,
   CheckCircle2,
   Building2,
+  Package,
+  Utensils,
 } from 'lucide-react'
 import { findNearbyCalls, requestTransfer, cancelTransfer, type NearbyCall } from '@/app/(dashboard)/dashboard/nearby/actions'
 import type { ServiceType } from '@/lib/types/database'
@@ -127,6 +129,16 @@ export function NearbyCalls({ serviceTypes }: { serviceTypes: ServiceType[] }) {
     })
   }
 
+  // Open Google Maps to explore places around the engineer. Uses their captured
+  // location when available (so results centre on them), otherwise lets Maps use
+  // the device location via a plain query.
+  function openMapsSearch(query: string) {
+    const url = coords
+      ? `https://www.google.com/maps/search/${encodeURIComponent(query)}/@${coords.latitude},${coords.longitude},14z`
+      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
   return (
     <div className="space-y-6">
       <Card>
@@ -200,6 +212,36 @@ export function NearbyCalls({ serviceTypes }: { serviceTypes: ServiceType[] }) {
               </Button>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <MapPin className="h-5 w-5" />
+            Nearby places
+          </CardTitle>
+          <CardDescription>
+            Out on the road? Open maps to top up stock or grab a bite.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 sm:flex-row">
+          <Button
+            variant="outline"
+            className="flex-1 gap-2"
+            onClick={() => openMapsSearch('fire safety equipment supplier')}
+          >
+            <Package className="h-4 w-4" />
+            Find stock nearby
+          </Button>
+          <Button
+            variant="outline"
+            className="flex-1 gap-2"
+            onClick={() => openMapsSearch('places to eat')}
+          >
+            <Utensils className="h-4 w-4" />
+            Find food nearby
+          </Button>
         </CardContent>
       </Card>
 

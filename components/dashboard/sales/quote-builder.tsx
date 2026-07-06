@@ -1297,6 +1297,23 @@ function SystemCard({
   const [catalogueMatches, setCatalogueMatches] = useState<QuoteCatalogueItem[]>([])
   const [catalogueLoading, setCatalogueLoading] = useState(false)
 
+  // When a new part line is added (blank line or from the catalogue) we focus
+  // its quantity box so the user can type the amount straight away. Services
+  // default to qty 1, so we only auto-focus non-service lines.
+  const qtyInputRefs = useRef<Map<string, HTMLInputElement>>(new Map())
+  const prevLineKeysRef = useRef<Set<string>>(new Set(system.lines.map((l) => l.key)))
+  useEffect(() => {
+    const prev = prevLineKeysRef.current
+    const added = system.lines.filter((l) => !prev.has(l.key) && !l.is_service)
+    // Focus the most recently added part line's quantity field.
+    const target = added.at(-1)
+    if (target) {
+      // Wait a frame so the input is mounted before focusing it.
+      requestAnimationFrame(() => qtyInputRefs.current.get(target.key)?.focus())
+    }
+    prevLineKeysRef.current = new Set(system.lines.map((l) => l.key))
+  }, [system.lines])
+
   useEffect(() => {
     if (!catalogueOpen) return
     let cancelled = false
@@ -1810,6 +1827,10 @@ function SystemCard({
                     onResolve={(item) => onApplyCatalogueToLine(line.key, item)}
                   />
                   <Input
+                    ref={(el) => {
+                      if (el) qtyInputRefs.current.set(line.key, el)
+                      else qtyInputRefs.current.delete(line.key)
+                    }}
                     inputMode="decimal"
                     value={line.quantity}
                     onChange={(e) => onUpdateLine(line.key, { quantity: e.target.value })}
@@ -1942,7 +1963,13 @@ function SystemCard({
                       Add from catalogue
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent align="start" className="w-80 p-2">
+                  <PopoverContent
+                    align="start"
+                    className="w-80 p-2"
+                    // Don't yank focus back to the trigger on close; we focus the
+                    // new line's quantity box instead so the user can type at once.
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                  >
                     <Input
                       autoFocus
                       value={catalogueSearch}

@@ -81,6 +81,7 @@ export default async function QuoteDetailPage({
     { data: requirements },
     { data: requirementSources },
     { data: quoteMessages },
+    { data: systemReferences },
   ] = await Promise.all([
     supabase.from('quote_systems').select('*').eq('quote_id', id).order('position'),
     supabase.from('quote_line_items').select('*').eq('quote_id', id).order('position'),
@@ -131,6 +132,11 @@ export default async function QuoteDetailPage({
       .select('*')
       .eq('quote_id', id)
       .order('created_at', { ascending: true }),
+    supabase
+      .from('documents')
+      .select('id, name, description, system_type_id, extracted_text')
+      .eq('owner_type', 'system_reference')
+      .not('extracted_text', 'is', null),
   ])
 
   const defaultHourlyCostPence = (ppmEngineerCost as { hourly_cost_pence: number } | null)?.hourly_cost_pence ?? 0
@@ -215,6 +221,7 @@ export default async function QuoteDetailPage({
         defaultHourlyCostPence={defaultHourlyCostPence}
         defaultMarginPercent={defaultMarginPercent}
         specTemplates={(specTemplates ?? []) as SystemSpecTemplate[]}
+        systemReferences={systemReferences ?? []}
         workTypeFields={(workTypeFields ?? []) as WorkTypeField[]}
         systemWorkTypeMargins={(systemWorkTypeMargins ?? []) as SystemWorkTypeMargin[]}
         workTypeSettings={(workTypeSettings ?? []) as WorkTypeSetting[]}

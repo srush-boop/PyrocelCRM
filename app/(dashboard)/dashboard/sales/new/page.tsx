@@ -207,6 +207,7 @@ export default async function NewQuotePage({
         defaultHourlyCostPence={defaultHourlyCostPence}
         defaultMarginPercent={defaultMarginPercent}
         specTemplates={(specTemplates ?? []) as SystemSpecTemplate[]}
+        systemReferences={systemReferences ?? []}
         workTypeFields={(workTypeFields ?? []) as WorkTypeField[]}
         systemWorkTypeMargins={(systemWorkTypeMargins ?? []) as SystemWorkTypeMargin[]}
         workTypeSettings={(workTypeSettings ?? []) as WorkTypeSetting[]}

@@ -3,9 +3,79 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { loadQuoteCatalogue } from '@/lib/sales/equipment-spec'
 import { createRemedialCallsForQuote } from '@/lib/remedial'
-import type { QuoteLineItem } from '@/lib/types/database'
+import type { QuoteLineItem, QuoteMessage } from '@/lib/types/database'
 
 type Result = { ok: boolean; error?: string }
+
+const MAX_QUERY_LENGTH = 4000
+
+// Fetch the client<->staff query thread for a quote by its public token. The
+// token is the authorisation, so we resolve the quote id from it server-side.
+export async function getPublicQuoteMessages(token: string): Promise<QuoteMessage[]> {
+  const trimmed = token?.trim()
+  if (!trimmed) return []
+
+  const supabase = createAdminClient()
+  const { data: quote } = await supabase
+    .from('quotes')
+    .select('id')
+    .eq('share_token', trimmed)
+    .maybeSingle()
+  if (!quote) return []
+
+  const { data: messages } = await supabase
+    .from('quote_messages')
+    .select('*')
+    .eq('quote_id', quote.id)
+    .order('created_at', { ascending: true })
+
+  return (messages ?? []) as QuoteMessage[]
+}
+
+// Post a client query against a quote via the public secret-link flow (no
+// login). Returns the refreshed thread so the caller can render it immediately.
+export async function postQuoteQuery(args: {
+  token: string
+  name?: string
+  body: string
+}): Promise<Result & { messages?: QuoteMessage[] }> {
+  const token = args.token?.trim()
+  if (!token) return { ok: false, error: 'Invalid quote link.' }
+
+  const body = args.body?.trim()
+  if (!body) return { ok: false, error: 'Please enter your question.' }
+  if (body.length > MAX_QUERY_LENGTH) {
+    return { ok: false, error: 'Your message is too long. Please shorten it.' }
+  }
+
+  const supabase = createAdminClient()
+  const { data: quote, error } = await supabase
+    .from('quotes')
+    .select('id')
+    .eq('share_token', token)
+    .maybeSingle()
+  if (error || !quote) return { ok: false, error: 'Quote not found.' }
+
+  const { error: insertError } = await supabase.from('quote_messages').insert({
+    quote_id: quote.id,
+    author_type: 'client',
+    author_name: args.name?.trim() || null,
+    body,
+  })
+
+  if (insertError) {
+    console.log('[v0] postQuoteQuery insert error:', insertError.message)
+    return { ok: false, error: 'Could not send your question. Please try again.' }
+  }
+
+  const { data: messages } = await supabase
+    .from('quote_messages')
+    .select('*')
+    .eq('quote_id', quote.id)
+    .order('created_at', { ascending: true })
+
+  return { ok: true, messages: (messages ?? []) as QuoteMessage[] }
+}
 
 // Respond to a quote via the public secret-link flow (no login). The token is
 // the authorisation: anyone holding it may approve or decline the quote.
@@ -99,13 +169,23 @@ export async function getPublicQuote(token: string) {
     .maybeSingle()
   if (!quote) return null
 
-  const [{ data: systems }, { data: lines }, { data: company }, { data: requirements }] =
-    await Promise.all([
-      supabase.from('quote_systems').select('*').eq('quote_id', quote.id).order('position'),
-      supabase.from('quote_line_items').select('*').eq('quote_id', quote.id).order('position'),
-      supabase.from('company_info').select('*').limit(1).maybeSingle(),
-      supabase.from('quote_requirements').select('*').eq('quote_id', quote.id).order('position'),
-    ])
+  const [
+    { data: systems },
+    { data: lines },
+    { data: company },
+    { data: requirements },
+    { data: messages },
+  ] = await Promise.all([
+    supabase.from('quote_systems').select('*').eq('quote_id', quote.id).order('position'),
+    supabase.from('quote_line_items').select('*').eq('quote_id', quote.id).order('position'),
+    supabase.from('company_info').select('*').limit(1).maybeSingle(),
+    supabase.from('quote_requirements').select('*').eq('quote_id', quote.id).order('position'),
+    supabase
+      .from('quote_messages')
+      .select('*')
+      .eq('quote_id', quote.id)
+      .order('created_at', { ascending: true }),
+  ])
 
   const lineRows = (lines ?? []) as QuoteLineItem[]
   const catalogue = (quote as { show_equipment_spec?: boolean }).show_equipment_spec
@@ -119,5 +199,6 @@ export async function getPublicQuote(token: string) {
     company: company ?? null,
     requirements: requirements ?? [],
     catalogue,
+    messages: (messages ?? []) as QuoteMessage[],
   }
 }

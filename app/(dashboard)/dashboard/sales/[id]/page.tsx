@@ -78,6 +78,7 @@ export default async function QuoteDetailPage({
     { data: department },
     { data: requirements },
     { data: requirementSources },
+    { data: quoteMessages },
   ] = await Promise.all([
     supabase.from('quote_systems').select('*').eq('quote_id', id).order('position'),
     supabase.from('quote_line_items').select('*').eq('quote_id', id).order('position'),

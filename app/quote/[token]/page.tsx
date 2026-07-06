@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { QuoteDocument } from '@/components/dashboard/sales/quote-document'
 import { PublicQuoteApproval } from '@/components/portal/public-quote-approval'
+import { PublicQuoteQueries } from '@/components/portal/public-quote-queries'
 import { getPublicQuote } from './actions'
 import type {
   Quote,
@@ -8,6 +9,7 @@ import type {
   QuoteLineItem,
   CompanyInfo,
   QuoteRequirement,
+  QuoteMessage,
 } from '@/lib/types/database'
 import type { SpecCatalogueItem } from '@/lib/sales/equipment-spec'
 
@@ -31,6 +33,7 @@ export default async function PublicQuotePage({
   const company = data.company as CompanyInfo | null
   const requirements = data.requirements as QuoteRequirement[]
   const catalogue = data.catalogue as SpecCatalogueItem[]
+  const messages = data.messages as QuoteMessage[]
 
   return (
     <main className="min-h-screen bg-muted/40 py-8">
@@ -45,6 +48,9 @@ export default async function PublicQuotePage({
         />
         <div className="mt-6 print:hidden">
           <PublicQuoteApproval quote={quote} token={token} />
+        </div>
+        <div className="mt-6 print:hidden">
+          <PublicQuoteQueries token={token} initialMessages={messages} />
         </div>
       </div>
     </main>

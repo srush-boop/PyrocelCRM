@@ -31,9 +31,9 @@ import {
   ArrowLeftRight,
   CheckCircle2,
   Building2,
-  Package,
   Utensils,
 } from 'lucide-react'
+import { PartLocator } from '@/components/dashboard/stock/part-locator'
 import { findNearbyCalls, requestTransfer, cancelTransfer, type NearbyCall } from '@/app/(dashboard)/dashboard/nearby/actions'
 import type { ServiceType } from '@/lib/types/database'
 
@@ -215,28 +215,24 @@ export function NearbyCalls({ serviceTypes }: { serviceTypes: ServiceType[] }) {
         </CardContent>
       </Card>
 
+      {/* Find stock nearby — an exact replica of the Stock view's "Find a Part"
+          search, so engineers can locate a part across all stock locations. */}
+      <PartLocator />
+
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-lg">
-            <MapPin className="h-5 w-5" />
-            Nearby places
+            <Utensils className="h-5 w-5 text-muted-foreground" />
+            Find food nearby
           </CardTitle>
           <CardDescription>
-            Out on the road? Open maps to top up stock or grab a bite.
+            Out on the road? Open maps to find somewhere to grab a bite.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3 sm:flex-row">
+        <CardContent>
           <Button
             variant="outline"
-            className="flex-1 gap-2"
-            onClick={() => openMapsSearch('fire safety equipment supplier')}
-          >
-            <Package className="h-4 w-4" />
-            Find stock nearby
-          </Button>
-          <Button
-            variant="outline"
-            className="flex-1 gap-2"
+            className="w-full gap-2 sm:w-auto"
             onClick={() => openMapsSearch('places to eat')}
           >
             <Utensils className="h-4 w-4" />

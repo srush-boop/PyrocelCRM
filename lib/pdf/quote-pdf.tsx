@@ -42,8 +42,12 @@ const styles = StyleSheet.create({
   headerSub: { fontSize: 8, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
   headerRight: { textAlign: 'right' },
   headerLabel: { fontSize: 9, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', letterSpacing: 1 },
-  metaRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24, gap: 24 },
+  metaRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24 },
   metaCol: { flex: 1 },
+  // Right-hand meta pairs (Date / Prepared by / Status). `gap` is unreliable in
+  // @react-pdf, so spacing between label and value is set with an explicit margin.
+  metaPair: { flexDirection: 'row', marginBottom: 1 },
+  metaKey: { color: MUTED, marginRight: 12 },
   sectionLabel: { fontSize: 7, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', letterSpacing: 1, color: MUTED, marginBottom: 3 },
   bold: { fontFamily: 'Helvetica-Bold' },
   muted: { color: MUTED },
@@ -164,7 +168,7 @@ function QuotePdfDocument({
 
         {/* Meta */}
         <View style={styles.metaRow}>
-          <View style={styles.metaCol}>
+          <View style={[styles.metaCol, { paddingRight: 24 }]}>
             <Text style={styles.sectionLabel}>Prepared for</Text>
             <Text style={styles.bold}>{recipientName}</Text>
             {recipientContact ? <Text>{recipientContact}</Text> : null}
@@ -180,24 +184,24 @@ function QuotePdfDocument({
             ) : null}
           </View>
           <View style={[styles.metaCol, { alignItems: 'flex-end' }]}>
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <Text style={styles.muted}>Date</Text>
+            <View style={styles.metaPair}>
+              <Text style={styles.metaKey}>Date</Text>
               <Text style={styles.bold}>{formatDateUK(quote.created_at)}</Text>
             </View>
             {quote.preparer?.full_name ? (
-              <View style={{ flexDirection: 'row', gap: 12 }}>
-                <Text style={styles.muted}>Prepared by</Text>
+              <View style={styles.metaPair}>
+                <Text style={styles.metaKey}>Prepared by</Text>
                 <Text style={styles.bold}>{quote.preparer.full_name}</Text>
               </View>
             ) : null}
             {quote.valid_until ? (
-              <View style={{ flexDirection: 'row', gap: 12 }}>
-                <Text style={styles.muted}>Valid until</Text>
+              <View style={styles.metaPair}>
+                <Text style={styles.metaKey}>Valid until</Text>
                 <Text style={styles.bold}>{formatDateUK(quote.valid_until)}</Text>
               </View>
             ) : null}
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <Text style={styles.muted}>Status</Text>
+            <View style={styles.metaPair}>
+              <Text style={styles.metaKey}>Status</Text>
               <Text style={styles.bold}>{QUOTE_STATUS_META[quote.status].label}</Text>
             </View>
           </View>

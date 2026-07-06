@@ -95,13 +95,13 @@ export default async function SchedulePage({
   }
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-4">
+    <div className="space-y-4">
+      <div className="space-y-3">
         {/* Title row: the circular Scan QR sits level with the "Calls" heading. */}
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Calls</h1>
-            <p className="text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               {isAdminOrOffice ? 'Manage and book service calls' : 'View your calls'}
             </p>
           </div>

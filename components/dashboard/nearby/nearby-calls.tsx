@@ -31,7 +31,9 @@ import {
   ArrowLeftRight,
   CheckCircle2,
   Building2,
+  Utensils,
 } from 'lucide-react'
+import { PartLocator } from '@/components/dashboard/stock/part-locator'
 import { findNearbyCalls, requestTransfer, cancelTransfer, type NearbyCall } from '@/app/(dashboard)/dashboard/nearby/actions'
 import type { ServiceType } from '@/lib/types/database'
 
@@ -127,6 +129,16 @@ export function NearbyCalls({ serviceTypes }: { serviceTypes: ServiceType[] }) {
     })
   }
 
+  // Open Google Maps to explore places around the engineer. Uses their captured
+  // location when available (so results centre on them), otherwise lets Maps use
+  // the device location via a plain query.
+  function openMapsSearch(query: string) {
+    const url = coords
+      ? `https://www.google.com/maps/search/${encodeURIComponent(query)}/@${coords.latitude},${coords.longitude},14z`
+      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
   return (
     <div className="space-y-6">
       <Card>
@@ -200,6 +212,32 @@ export function NearbyCalls({ serviceTypes }: { serviceTypes: ServiceType[] }) {
               </Button>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Find stock nearby — an exact replica of the Stock view's "Find a Part"
+          search, so engineers can locate a part across all stock locations. */}
+      <PartLocator />
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Utensils className="h-5 w-5 text-muted-foreground" />
+            Find food nearby
+          </CardTitle>
+          <CardDescription>
+            Out on the road? Open maps to find somewhere to grab a bite.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            variant="outline"
+            className="w-full gap-2 sm:w-auto"
+            onClick={() => openMapsSearch('places to eat')}
+          >
+            <Utensils className="h-4 w-4" />
+            Find food nearby
+          </Button>
         </CardContent>
       </Card>
 

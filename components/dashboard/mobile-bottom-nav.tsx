@@ -19,7 +19,7 @@ type BottomNavItem = {
 }
 
 const engineerItems: BottomNavItem[] = [
-  { menuKey: 'calls', title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
+  { menuKey: 'calls', title: 'Calls', href: '/dashboard/schedule', icon: Calendar },
   { menuKey: 'calls', title: 'Nearby', href: '/dashboard/nearby', icon: Navigation },
   { menuKey: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   { menuKey: 'stock', title: 'Stock', href: '/dashboard/stock', icon: Boxes },

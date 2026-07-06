@@ -1,7 +1,7 @@
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
@@ -26,16 +26,30 @@ interface DashboardHeaderProps {
 export function DashboardHeader({ profile }: DashboardHeaderProps) {
   const router = useRouter()
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const supabase = createClient()
 
   // The dashboard root is the top-level page, so it has nowhere to go "back" to.
   const showBack = pathname !== '/dashboard'
 
   const handleBack = () => {
-    // Navigate up one path segment (e.g. /dashboard/defects -> /dashboard).
-    // This is deterministic and always works, unlike router.back(), which does
-    // nothing when there's no in-app history (direct link / fresh load / sidebar
-    // navigation) and can land on an unexpected page otherwise.
+    // 1. Prefer an explicit origin passed by the linking page (?from=). Detail
+    //    screens such as a task open from the schedule/calendar and carry their
+    //    origin here, so "Back" is deterministic. This also avoids landing on
+    //    non-existent parent routes: e.g. tasks live only at
+    //    /dashboard/tasks/[id] — there is no /dashboard/tasks list page, so the
+    //    parent-segment heuristic below would navigate to a dead route.
+    const from = searchParams.get('from')
+    if (from && from.startsWith('/') && !from.startsWith('//')) {
+      router.push(from)
+      return
+    }
+
+    // 2. Fall back to navigating up one path segment (e.g. /dashboard/defects ->
+    //    /dashboard). This is deterministic and always works, unlike
+    //    router.back(), which does nothing when there's no in-app history
+    //    (direct link / fresh load / sidebar navigation) and can land on an
+    //    unexpected page otherwise.
     const segments = pathname.split('/').filter(Boolean)
     const parent = segments.length > 1 ? `/${segments.slice(0, -1).join('/')}` : '/dashboard'
     router.push(parent)

@@ -196,15 +196,15 @@ export function CreateTaskDialog({ siteServices, engineers, clients }: CreateTas
       <DialogTrigger asChild>
         <Button>
           <Plus className="mr-2 h-4 w-4" />
-          Schedule Task
+          Book Call
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-lg">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Schedule New Task</DialogTitle>
+            <DialogTitle>Book New Call</DialogTitle>
             <DialogDescription>
-              Create a new service task for a site
+              Create a new service call for a site
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -407,7 +407,7 @@ export function CreateTaskDialog({ siteServices, engineers, clients }: CreateTas
                   Creating...
                 </>
               ) : (
-                'Schedule Task'
+                'Book Call'
               )}
             </Button>
           </DialogFooter>

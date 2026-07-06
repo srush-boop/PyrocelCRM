@@ -80,15 +80,15 @@ const sitesNavItem: NavItem = {
   icon: Building2,
 }
 
-// Calls is a clickable group: clicking it opens the calls list (Schedule) and
-// expands its children (Schedule, Transfers, Reports, Defects).
+// Calls is a clickable group: clicking it opens the calls list (All Calls) and
+// expands its children (All Calls, Transfers, Reports, Defects).
 const adminCallsNavItem: NavItem = {
   key: 'calls',
   title: 'Calls',
   href: '/dashboard/schedule',
   icon: Calendar,
   children: [
-    { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
+    { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
     { title: 'Reports', href: '/dashboard/reports', icon: FileText },
     { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
@@ -101,7 +101,7 @@ const officeCallsNavItem: NavItem = {
   href: '/dashboard/schedule',
   icon: Calendar,
   children: [
-    { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
+    { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
     { title: 'Reports', href: '/dashboard/reports', icon: FileText },
     { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
@@ -114,7 +114,7 @@ const engineerCallsNavItem: NavItem = {
   href: '/dashboard/schedule',
   icon: Calendar,
   children: [
-    { title: 'Schedule', href: '/dashboard/schedule', icon: Calendar },
+    { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
     { title: 'Nearby Calls', href: '/dashboard/nearby', icon: Navigation },
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
   ],

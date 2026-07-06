@@ -100,7 +100,7 @@ export default async function SchedulePage({
         <div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Calls</h1>
           <p className="text-muted-foreground">
-            {isAdminOrOffice ? 'Manage and schedule service tasks' : 'View your scheduled tasks'}
+            {isAdminOrOffice ? 'Manage and book service calls' : 'View your calls'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 [&>*]:flex-1 sm:[&>*]:flex-none">

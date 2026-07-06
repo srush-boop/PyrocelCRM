@@ -283,6 +283,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     const isOverdue = taskDate < today && task.status === 'pending'
     const system = task.site_service?.service_type?.system_type
     const sysColors = getSystemColors(system?.color)
+    const bookedSlot = formatBookedSlot(task.booked_start_time, task.booked_end_time)
 
     return (
       <Card
@@ -317,16 +318,21 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
             <p className="text-muted-foreground">
               {task.site_service?.site?.address}
             </p>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-1 text-muted-foreground">
                 <Calendar className="h-4 w-4" />
                 {formatDateUK(task.scheduled_date)}
               </div>
-              {formatBookedSlot(task.booked_start_time, task.booked_end_time) && (
-                <div className="flex items-center gap-1 text-muted-foreground">
-                  <Clock className="h-4 w-4" />
-                  {formatBookedSlot(task.booked_start_time, task.booked_end_time)}
-                </div>
+              {bookedSlot ? (
+                <Badge className="gap-1 border-transparent bg-emerald-600 text-white hover:bg-emerald-600/90">
+                  <Clock className="h-3 w-3" />
+                  Booked · {bookedSlot}
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="gap-1 text-muted-foreground">
+                  <Clock className="h-3 w-3" />
+                  Not booked
+                </Badge>
               )}
               {isOverdue && (
                 <Badge variant="destructive" className="text-xs">
@@ -376,7 +382,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
               </Button>
               <Button asChild className="flex-1" size="sm">
                 <Link href={`/dashboard/tasks/${task.id}?from=/dashboard/schedule`}>
-                  {task.status === 'pending' ? 'Start Task' : 'Continue Task'}
+                  {task.status === 'pending' ? 'Start Call' : 'Continue Call'}
                 </Link>
               </Button>
             </div>
@@ -404,6 +410,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     const selected = selectedIds.has(task.id)
     const system = task.site_service?.service_type?.system_type
     const sysColors = getSystemColors(system?.color)
+    const bookedSlot = formatBookedSlot(task.booked_start_time, task.booked_end_time)
 
     return (
       <div
@@ -419,7 +426,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
             <Checkbox
               checked={selected}
               onCheckedChange={() => toggleOne(task.id)}
-              aria-label={`Select task at ${task.site_service?.site?.name}`}
+              aria-label={`Select call at ${task.site_service?.site?.name}`}
             />
           </div>
         )}
@@ -455,11 +462,15 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                 Overdue
               </Badge>
             )}
+            {bookedSlot && (
+              <Badge className="hidden gap-1 border-transparent bg-emerald-600 text-[10px] text-white hover:bg-emerald-600/90 sm:inline-flex">
+                <Clock className="h-3 w-3" />
+                Booked
+              </Badge>
+            )}
             <span className="hidden text-xs text-muted-foreground md:inline">
               {formatDateUK(task.scheduled_date)}
-              {formatBookedSlot(task.booked_start_time, task.booked_end_time)
-                ? ` · ${formatBookedSlot(task.booked_start_time, task.booked_end_time)}`
-                : ''}
+              {bookedSlot ? ` · ${bookedSlot}` : ''}
             </span>
             <Badge variant={config.variant} className="hidden text-[10px] sm:inline-flex">
               {config.label}
@@ -494,7 +505,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
               >
                 <Wrench className="h-4 w-4" />
                 <span className="hidden sm:inline">
-                  {task.status === 'pending' ? 'Start Task' : 'Continue'}
+                  {task.status === 'pending' ? 'Start Call' : 'Continue'}
                 </span>
               </Button>
             )}
@@ -581,7 +592,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                 <Checkbox
                   checked={allSelected}
                   onCheckedChange={(checked) => toggleMany(ids, checked === true)}
-                  aria-label="Select all tasks"
+                  aria-label="Select all calls"
                 />
                 Select all
               </label>
@@ -614,7 +625,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                   <Checkbox
                     checked={allGroupSelected}
                     onCheckedChange={(checked) => toggleMany(groupIds, checked === true)}
-                    aria-label={`Select all tasks on ${group.name}`}
+                    aria-label={`Select all calls on ${group.name}`}
                   />
                 )}
                 <GroupIcon className="h-4 w-4 text-muted-foreground" />
@@ -683,7 +694,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search tasks..."
+            placeholder="Search calls..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -805,7 +816,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
           <CardHeader className="pb-2">
             <CardTitle className="text-destructive flex items-center gap-2">
               <Clock className="h-5 w-5" />
-              Overdue Tasks ({overdueTasks.length})
+              Overdue Calls ({overdueTasks.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -833,12 +844,12 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
             viewMode === 'grid'
               ? upcomingTasks.filter((t) => !overdueTasks.includes(t))
               : upcomingTasks,
-            'No upcoming tasks',
+            'No upcoming calls',
           )}
         </TabsContent>
 
         <TabsContent value="completed" className="mt-4">
-          {renderTasks(completedTasks, 'No completed tasks')}
+          {renderTasks(completedTasks, 'No completed calls')}
         </TabsContent>
       </Tabs>
 
@@ -918,16 +929,21 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                 </DialogHeader>
 
                 <div className="space-y-4 text-sm">
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
                     <div className="flex items-center gap-1.5 text-muted-foreground">
                       <Calendar className="h-4 w-4" />
                       {formatDateUK(viewTask.scheduled_date)}
                     </div>
-                    {slot && (
-                      <div className="flex items-center gap-1.5 text-muted-foreground">
-                        <Clock className="h-4 w-4" />
-                        {slot}
-                      </div>
+                    {slot ? (
+                      <Badge className="gap-1 border-transparent bg-emerald-600 text-white hover:bg-emerald-600/90">
+                        <Clock className="h-3 w-3" />
+                        Booked · {slot}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="gap-1 text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        Not booked
+                      </Badge>
                     )}
                   </div>
 

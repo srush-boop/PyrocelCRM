@@ -512,7 +512,7 @@ export function SiteServicesManager({
                             ? 'Site is dead — scheduling disabled'
                             : ss.active === false
                               ? 'Service is inactive — scheduling disabled'
-                              : 'Schedule Task'
+                              : 'Book Call'
                         }
                       >
                         <Clock className="h-4 w-4" />
@@ -678,9 +678,9 @@ export function SiteServicesManager({
       <Dialog open={!!scheduleServiceId} onOpenChange={() => setScheduleServiceId(null)}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Schedule Service Task</DialogTitle>
+            <DialogTitle>Book Service Call</DialogTitle>
             <DialogDescription>
-              Schedule a task for {siteServices.find(ss => ss.id === scheduleServiceId)?.service_type?.name}
+              Book a call for {siteServices.find(ss => ss.id === scheduleServiceId)?.service_type?.name}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
@@ -741,7 +741,7 @@ export function SiteServicesManager({
               ) : (
                 <>
                   <Clock className="mr-2 h-4 w-4" />
-                  Schedule Task
+                  Book Call
                 </>
               )}
             </Button>

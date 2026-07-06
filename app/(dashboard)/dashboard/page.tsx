@@ -245,7 +245,7 @@ export default async function DashboardPage() {
           <Button asChild>
             <Link href="/dashboard/schedule">
               <Calendar className="mr-2 h-4 w-4" />
-              Schedule
+              Calls
             </Link>
           </Button>
         </div>
@@ -385,9 +385,9 @@ export default async function DashboardPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Calendar className="h-5 w-5" />
-              Upcoming Tasks
+              Upcoming Calls
             </CardTitle>
-            <CardDescription>Scheduled for the coming days</CardDescription>
+            <CardDescription>Booked for the coming days</CardDescription>
           </CardHeader>
           <CardContent>
             {upcomingTasks && upcomingTasks.length > 0 ? (
@@ -420,9 +420,9 @@ export default async function DashboardPage() {
             ) : (
               <div className="flex flex-col items-center justify-center py-8 text-center">
                 <ClipboardCheck className="mb-3 h-10 w-10 text-muted-foreground/40" />
-                <p className="text-sm text-muted-foreground">No upcoming tasks</p>
+                <p className="text-sm text-muted-foreground">No upcoming calls</p>
                 <Button asChild className="mt-4">
-                  <Link href="/dashboard/schedule">Schedule Tasks</Link>
+                  <Link href="/dashboard/schedule">View Calls</Link>
                 </Button>
               </div>
             )}

@@ -36,9 +36,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
-  MapPin,
-  Calendar,
-  Building2,
   Play,
   Save,
   Send,
@@ -49,13 +46,13 @@ import {
   Plus,
   CheckCircle2,
 } from 'lucide-react'
-import { formatDateUK, formatTimeUK } from '@/lib/utils'
 import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
 import { emptyPhotoCategories, generateUrn } from '@/lib/dampers'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import { DamperInspectionCard, type InspectionState } from './damper-inspection-card'
 import { SizeCombobox } from './size-combobox'
 import { ScanQrButton } from './scan-qr-button'
+import type { ReactNode } from 'react'
 import type { Profile, TaskWithDetails, Damper, DamperType, DamperInspection, DamperResult } from '@/lib/types/database'
 
 interface DamperTaskExecutionProps {
@@ -63,6 +60,8 @@ interface DamperTaskExecutionProps {
   profile: Profile
   dampers: Damper[]
   existingInspections: DamperInspection[]
+  /** Shared "Before you attend" panel, rendered beneath the site/service header. */
+  preAttendance?: ReactNode
 }
 
 function blankState(): InspectionState {
@@ -135,6 +134,7 @@ export function DamperTaskExecution({
   profile,
   dampers: initialDampers,
   existingInspections,
+  preAttendance,
 }: DamperTaskExecutionProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
@@ -431,30 +431,7 @@ export function DamperTaskExecution({
         <ScanQrButton onScan={handleScanToDamper} />
       </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Building2 className="h-5 w-5" />
-            Site Details
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-start gap-2 text-sm">
-            <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <span>{site?.address}</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Calendar className="h-4 w-4" />
-            Scheduled: {formatDateUK(task.scheduled_date)}
-          </div>
-          {task.started_at && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Calendar className="h-4 w-4" />
-              Commenced: {formatDateUK(task.started_at)} at {formatTimeUK(task.started_at)}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {preAttendance}
 
       {status === 'pending' && canEdit && (
         <Button onClick={handleStart} size="lg" className="w-full">

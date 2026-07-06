@@ -36,9 +36,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
-  MapPin,
-  Calendar,
-  Building2,
   Play,
   Save,
   Send,
@@ -49,13 +46,13 @@ import {
   Plus,
   CheckCircle2,
 } from 'lucide-react'
-import { formatDateUK, formatTimeUK } from '@/lib/utils'
 import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
 import { emptyPhotoCategories, generateUrn, EXTINGUISHER_TYPE_LABELS } from '@/lib/extinguishers'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import { ExtinguisherInspectionCard, type InspectionState } from './extinguisher-inspection-card'
 import { ScanQrButton } from './scan-qr-button'
 import { TaskAttachments } from '@/components/dashboard/tasks/task-attachments'
+import type { ReactNode } from 'react'
 import type {
   Profile,
   TaskWithDetails,
@@ -70,6 +67,8 @@ interface ExtinguisherTaskExecutionProps {
   profile: Profile
   extinguishers: Extinguisher[]
   existingInspections: ExtinguisherInspection[]
+  /** Shared "Before you attend" panel, rendered beneath the site/service header. */
+  preAttendance?: ReactNode
 }
 
 function blankState(): InspectionState {
@@ -149,6 +148,7 @@ export function ExtinguisherTaskExecution({
   profile,
   extinguishers: initialExtinguishers,
   existingInspections,
+  preAttendance,
 }: ExtinguisherTaskExecutionProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
@@ -448,30 +448,7 @@ export function ExtinguisherTaskExecution({
         <ScanQrButton onScan={handleScanToExtinguisher} />
       </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Building2 className="h-5 w-5" />
-            Site Details
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-start gap-2 text-sm">
-            <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <span>{site?.address}</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Calendar className="h-4 w-4" />
-            Scheduled: {formatDateUK(task.scheduled_date)}
-          </div>
-          {task.started_at && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Calendar className="h-4 w-4" />
-              Commenced: {formatDateUK(task.started_at)} at {formatTimeUK(task.started_at)}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {preAttendance}
 
       {status === 'pending' && canEdit && (
         <Button onClick={handleStart} size="lg" className="w-full">

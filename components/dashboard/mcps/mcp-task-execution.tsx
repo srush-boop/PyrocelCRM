@@ -30,9 +30,6 @@ import {
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
-  MapPin,
-  Calendar,
-  Building2,
   Play,
   Save,
   Send,
@@ -46,12 +43,13 @@ import {
   Ban,
   ExternalLink,
 } from 'lucide-react'
-import { formatDateUK, formatTimeUK } from '@/lib/utils'
+import { formatDateUK } from '@/lib/utils'
 import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import { generateMcpUrn, TEST_KEY_TYPES, MCP_CHECKLIST } from '@/lib/mcps'
 import { McpInspectionCard, type McpInspectionState, type CheckValue } from './mcp-inspection-card'
 import { TaskAttachments } from '@/components/dashboard/tasks/task-attachments'
+import type { ReactNode } from 'react'
 import type { Profile, TaskWithDetails, Mcp, McpInspection } from '@/lib/types/database'
 
 interface McpTaskExecutionProps {
@@ -65,6 +63,8 @@ interface McpTaskExecutionProps {
   lastTestedDate?: string | null
   /** Nimbus monitoring portal URL for this fire alarm system, if configured. */
   nimbusUrl?: string | null
+  /** Shared "Before you attend" panel, rendered beneath the site/service header. */
+  preAttendance?: ReactNode
 }
 
 function blankState(): McpInspectionState {
@@ -99,6 +99,7 @@ export function McpTaskExecution({
   lastTestedMcpId,
   lastTestedDate,
   nimbusUrl,
+  preAttendance,
 }: McpTaskExecutionProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
@@ -471,29 +472,11 @@ export function McpTaskExecution({
     <div className="mx-auto max-w-3xl space-y-6 pb-72 md:pb-6">
       <TaskHeader task={task} status={status} />
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Building2 className="h-5 w-5" />
-            Site Details
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-start gap-2 text-sm">
-            <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <span>{site?.address}</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Calendar className="h-4 w-4" />
-            Scheduled: {formatDateUK(task.scheduled_date)}
-          </div>
-          {task.started_at && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Calendar className="h-4 w-4" />
-              Commenced: {formatDateUK(task.started_at)} at {formatTimeUK(task.started_at)}
-            </div>
-          )}
-          {nimbusUrl && (
+      {preAttendance}
+
+      {nimbusUrl && (
+        <Card>
+          <CardContent className="pt-6">
             <a
               href={nimbusUrl}
               target="_blank"
@@ -503,9 +486,9 @@ export function McpTaskExecution({
               <ExternalLink className="h-4 w-4 shrink-0" />
               Open Nimbus monitoring portal
             </a>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {mcpList.length > 0 && nextMcp && (
         <Card className="border-primary/40 bg-primary/5">

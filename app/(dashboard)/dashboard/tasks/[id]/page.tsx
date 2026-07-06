@@ -128,16 +128,8 @@ export default async function TaskPage({ params }: PageProps) {
     )
   }
 
-  // Wraps a service-specific execution flow with the shared pre-attendance panel.
-  const withPanel = (node: ReactNode) => (
-    <div className="space-y-6">
-      {preAttendancePanel && (
-        <div className="mx-auto max-w-3xl">{preAttendancePanel}</div>
-      )}
-      {node}
-    </div>
-  )
-
+  // The shared pre-attendance panel is passed into each execution flow so it can
+  // render directly beneath the site/service header (rather than above it).
   // Damper inspection tasks use a dedicated per-asset flow
   if (isDamperService(task.site_service?.service_type?.name)) {
     const siteId = task.site_service?.site?.id ?? task.site_service?.site_id
@@ -146,13 +138,14 @@ export default async function TaskPage({ params }: PageProps) {
       supabase.from('damper_inspections').select('*').eq('task_id', id),
     ])
 
-    return withPanel(
+    return (
       <DamperTaskExecution
         task={task as TaskWithDetails}
         profile={profile as Profile}
         dampers={(dampersData || []) as Damper[]}
         existingInspections={(inspectionsData || []) as DamperInspection[]}
-      />,
+        preAttendance={preAttendancePanel}
+      />
     )
   }
 
@@ -164,13 +157,14 @@ export default async function TaskPage({ params }: PageProps) {
       supabase.from('extinguisher_inspections').select('*').eq('task_id', id),
     ])
 
-    return withPanel(
+    return (
       <ExtinguisherTaskExecution
         task={task as TaskWithDetails}
         profile={profile as Profile}
         extinguishers={(extinguishersData || []) as Extinguisher[]}
         existingInspections={(inspectionsData || []) as ExtinguisherInspection[]}
-      />,
+        preAttendance={preAttendancePanel}
+      />
     )
   }
 
@@ -226,7 +220,7 @@ export default async function TaskPage({ params }: PageProps) {
       lastTestedDate = priorInspection?.inspection_date ?? null
     }
 
-    return withPanel(
+    return (
       <McpTaskExecution
         task={task as TaskWithDetails}
         profile={profile as Profile}
@@ -235,7 +229,8 @@ export default async function TaskPage({ params }: PageProps) {
         lastTestedMcpId={lastTestedMcpId}
         lastTestedDate={lastTestedDate}
         nimbusUrl={nimbusUrl}
-      />,
+        preAttendance={preAttendancePanel}
+      />
     )
   }
 
@@ -251,13 +246,14 @@ export default async function TaskPage({ params }: PageProps) {
       supabase.from('emergency_light_inspections').select('*').eq('task_id', id),
     ])
 
-    return withPanel(
+    return (
       <EmergencyLightTaskExecution
         task={task as TaskWithDetails}
         profile={profile as Profile}
         lights={(lightsData || []) as EmergencyLight[]}
         existingInspections={(inspectionsData || []) as EmergencyLightInspection[]}
-      />,
+        preAttendance={preAttendancePanel}
+      />
     )
   }
 
@@ -385,7 +381,7 @@ export default async function TaskPage({ params }: PageProps) {
     engineers = (engineersData || []) as Profile[]
   }
 
-  return withPanel(
+  return (
     <TaskExecution
       task={task as TaskWithDetails}
       checklistTemplate={checklistTemplate as ChecklistTemplate | null}
@@ -394,6 +390,7 @@ export default async function TaskPage({ params }: PageProps) {
       clientLinks={clientLinks}
       engineers={engineers}
       panels={panels}
-    />,
+      preAttendance={preAttendancePanel}
+    />
   )
 }

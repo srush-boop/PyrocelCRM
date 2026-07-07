@@ -431,7 +431,7 @@ export function QuoteBuilder({
   const [validUntil, setValidUntil] = useState(quote?.valid_until ?? '')
   const [showLineItems, setShowLineItems] = useState(quote?.show_line_items ?? true)
   const [showEquipmentSpec, setShowEquipmentSpec] = useState(quote?.show_equipment_spec ?? false)
-  const [showDesignOverview, setShowDesignOverview] = useState(quote?.show_design_overview ?? true)
+
   // Append the modernised maintenance service agreement to the quote document.
   // Defaults on so it's auto-included on maintenance quotes (payload gates it on
   // the quote actually being a maintenance quote — see buildPayload).
@@ -818,7 +818,9 @@ export function QuoteBuilder({
       discount_pence: poundsToPence(discount),
       show_line_items: showLineItems,
       show_equipment_spec: showEquipmentSpec,
-      show_design_overview: showDesignOverview,
+      // Design overview / survey section has been removed from the quote
+      // document, so it is never included.
+      show_design_overview: false,
       // Only meaningful for maintenance quotes; force off otherwise.
       show_maintenance_agreement: isMaintenanceQuote && showMaintenanceAgreement,
       valid_until: validUntil || null,
@@ -894,7 +896,6 @@ export function QuoteBuilder({
     validUntil,
     showLineItems,
     showEquipmentSpec,
-    showDesignOverview,
     systems,
   ])
 
@@ -1401,24 +1402,6 @@ export function QuoteBuilder({
                 id="q-show-lines"
                 checked={showLineItems}
                 onCheckedChange={setShowLineItems}
-                disabled={disabled}
-              />
-            </div>
-            <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
-              <div className="grid gap-0.5">
-                <Label htmlFor="q-show-design" className="cursor-pointer">
-                  Include design overview
-                </Label>
-                <span className="text-xs text-muted-foreground">
-                  {showDesignOverview
-                    ? 'Each system’s design overview, designer, drawing reference and survey details are shown.'
-                    : 'Design and survey details are hidden from the quote document.'}
-                </span>
-              </div>
-              <Switch
-                id="q-show-design"
-                checked={showDesignOverview}
-                onCheckedChange={setShowDesignOverview}
                 disabled={disabled}
               />
             </div>

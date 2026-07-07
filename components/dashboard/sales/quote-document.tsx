@@ -402,47 +402,6 @@ export function QuoteDocument({
                     </div>
                   )}
 
-                  {/* Design & survey */}
-                  {quote.show_design_overview &&
-                    (system.design_overview ||
-                      system.design_category_id ||
-                      system.drawing_reference ||
-                      system.designed_by ||
-                      system.survey_carried_out) && (
-                    <div className="mb-4 rounded-md border-l-2 border-primary/40 bg-muted/40 p-3 text-sm">
-                      <FieldLabel>Design &amp; survey</FieldLabel>
-                      {system.design_overview && (
-                        <p className="mb-2 whitespace-pre-line leading-relaxed">{system.design_overview}</p>
-                      )}
-                      <dl className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
-                        {system.designed_by && (
-                          <div className="flex gap-2">
-                            <dt className="text-muted-foreground">Designed by:</dt>
-                            <dd className="font-medium">
-                              {designedByLabel(system.designed_by, system.designed_by_name)}
-                            </dd>
-                          </div>
-                        )}
-                        {system.drawing_reference && (
-                          <div className="flex gap-2">
-                            <dt className="text-muted-foreground">Drawing ref:</dt>
-                            <dd className="font-medium">{system.drawing_reference}</dd>
-                          </div>
-                        )}
-                        <div className="flex gap-2">
-                          <dt className="text-muted-foreground">Survey:</dt>
-                          <dd className="font-medium">
-                            {system.survey_carried_out
-                              ? `Yes${system.survey_by ? ` �� ${system.survey_by}` : ''}${
-                                  system.survey_date ? ` (${formatDateUK(system.survey_date)})` : ''
-                                }`
-                              : 'Not carried out'}
-                          </dd>
-                        </div>
-                      </dl>
-                    </div>
-                  )}
-
                   {/* Conditional / configured values. Scalars render as a
                       definition list; table answers render as their own table. */}
                   {(() => {

@@ -114,7 +114,7 @@ function AssetGrid({
   disabled?: boolean
 }) {
   return (
-    <div className="grid gap-x-6 gap-y-0 sm:grid-cols-2">
+    <div className="grid gap-x-6 gap-y-0 sm:grid-cols-2 xl:grid-cols-3">
       {Object.entries(labels).map(([key, label]) => (
         <CountRow
           key={key}
@@ -259,7 +259,7 @@ export function MaintenanceCalculatorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-3xl gap-0 overflow-hidden p-0">
+      <DialogContent className="flex h-[92vh] max-h-[92vh] w-[96vw] max-w-5xl flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="border-b p-4">
           <DialogTitle className="flex items-center gap-2">
             <Calculator className="h-5 w-5 text-primary" />
@@ -271,7 +271,8 @@ export function MaintenanceCalculatorDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="fire" className="flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+        <Tabs defaultValue="fire" className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="border-b px-4 pt-3">
             <ScrollArea className="w-full whitespace-nowrap">
               <TabsList className="inline-flex w-max">
@@ -286,7 +287,7 @@ export function MaintenanceCalculatorDialog({
             </ScrollArea>
           </div>
 
-          <ScrollArea className="max-h-[52vh] flex-1">
+          <ScrollArea className="min-h-0 flex-1">
             <div className="p-4">
               {/* FIRE & LIGHTS */}
               <TabsContent value="fire" className="mt-0 space-y-4">
@@ -511,6 +512,41 @@ export function MaintenanceCalculatorDialog({
             </div>
           </ScrollArea>
         </Tabs>
+
+          {/* Persistent live-pricing summary — always visible while editing any tab */}
+          <aside className="hidden w-72 shrink-0 flex-col border-l bg-muted/30 lg:flex">
+            <div className="border-b px-4 py-3">
+              <p className="text-sm font-semibold">Live pricing</p>
+              <p className="text-xs text-muted-foreground">Updates as you enter assets</p>
+            </div>
+            <ScrollArea className="min-h-0 flex-1">
+              <div className="space-y-2 p-4">
+                {hasLines ? (
+                  overview.lines.map((l, i) => (
+                    <div key={`${l.description}-${i}`} className="flex items-baseline justify-between gap-2 text-xs">
+                      <span className="min-w-0 text-muted-foreground">
+                        {l.description}
+                        {l.coverType ? ` · ${l.coverType}` : ''}
+                        {l.visits ? ` · ${l.visits} visits` : ''}
+                      </span>
+                      <span className="shrink-0 font-medium tabular-nums text-foreground">{GBP.format(l.sell)}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    No priced services yet. Enter assets in any tab to build the price.
+                  </p>
+                )}
+              </div>
+            </ScrollArea>
+            <div className="border-t px-4 py-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold">Total / yr</span>
+                <span className="text-lg font-bold tabular-nums">{GBP.format(overview.totalSale)}</span>
+              </div>
+            </div>
+          </aside>
+        </div>
 
         <DialogFooter className="flex-row items-center justify-between border-t p-4 sm:justify-between">
           <span className="text-sm text-muted-foreground">

@@ -1233,6 +1233,66 @@ export interface QuoteWithDetails extends Quote {
   line_items: QuoteLineItem[]
 }
 
+// ---------------------------------------------------------------------------
+// Jobs — the operational record of a won (accepted) quote being delivered.
+// ---------------------------------------------------------------------------
+
+// Built-in delivery pipeline stage. Fixed set for now (see lib/jobs/stages.ts).
+export type JobStage =
+  | 'contract_review'
+  | 'ordering'
+  | 'in_progress'
+  | 'commissioning'
+  | 'handover'
+  | 'complete'
+
+export type JobStatus = 'open' | 'on_hold' | 'complete' | 'cancelled'
+
+export interface Job {
+  id: string
+  job_number: string | null
+  // Source won quote (nullable so jobs can outlive a deleted quote / be manual).
+  quote_id: string | null
+  client_id: string | null
+  site_id: string | null
+  branch_id: string | null
+  title: string | null
+  stage: JobStage
+  status: JobStatus
+  // Project manager / owner.
+  owner_id: string | null
+  department_id: string | null
+  // Financial snapshot captured at conversion (pence). Margin = value - cost.
+  quoted_total_pence: number
+  quoted_cost_pence: number
+  quoted_subtotal_pence: number
+  quoted_vat_pence: number
+  // Customer purchase-order reference (copied from the quote).
+  po_number: string | null
+  notes: string | null
+  contract_reviewed_at: string | null
+  contract_reviewed_by: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  // Optional joined relations.
+  client?: Client | null
+  site?: Site | null
+  branch?: Branch | null
+  owner?: { id: string; full_name: string | null } | null
+  quote?: Quote | null
+}
+
+export interface JobStatusHistory {
+  id: string
+  job_id: string
+  from_stage: string | null
+  to_stage: string | null
+  note: string | null
+  changed_by: string | null
+  changed_at: string
+}
+
 // One line of the client-request compliance matrix: a requirement extracted
 // from the client's brief and how our quote responds to it.
 export type QuoteRequirementStatus = 'included' | 'partial' | 'excluded' | 'query'

@@ -8,6 +8,7 @@ import { sendEmail } from '@/lib/email/send-email'
 import { renderQuotePdfBuffer } from '@/lib/pdf/quote-pdf'
 import { loadQuoteCatalogue } from '@/lib/sales/equipment-spec'
 import { createRemedialCallsForQuote } from '@/lib/remedial'
+import { createJobForAcceptedQuote } from '@/lib/jobs/convert'
 import type { CalculatorSnapshot } from '@/lib/calculator-snapshot'
 import type {
   QuoteStatus,
@@ -875,10 +876,14 @@ export async function setQuoteStatus(
 
   // When a remedial quote is accepted, raise the remedial call(s) automatically
   // so the works are scheduled and the site/service pre-attendance alert fires.
+  // Non-remedial quotes instead spawn a delivery Job (idempotent; skips remedial
+  // internally). Neither path is allowed to block the status change.
   if (status === 'accepted') {
     await createRemedialCallsForQuote(supabase, id)
+    await createJobForAcceptedQuote(supabase, id)
     revalidatePath('/dashboard/schedule')
     revalidatePath('/dashboard/defects')
+    revalidatePath('/dashboard/jobs')
   }
 
   revalidatePath('/dashboard/sales')

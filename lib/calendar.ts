@@ -261,7 +261,13 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
   // - routes: by the assigned engineer's branch
   // - entries: scoped per attendee below (company-wide entries always show)
   if (activeBranchId) {
-    tasks = tasks.filter((t) => t.site_service?.site?.branch_id === activeBranchId)
+    // Keep tasks whose site matches the active branch. Tasks whose site has no
+    // branch assigned are treated as unscoped and remain visible in every
+    // branch view, so completed jobs at unbranched sites are never hidden.
+    tasks = tasks.filter((t) => {
+      const branch = t.site_service?.site?.branch_id
+      return !branch || branch === activeBranchId
+    })
     routeRows = routeRows.filter((r) => r.assigned_engineer?.branch_id === activeBranchId)
   }
   const scopedEntries = entries

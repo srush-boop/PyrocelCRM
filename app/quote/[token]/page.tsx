@@ -1,7 +1,6 @@
 import { notFound } from 'next/navigation'
-import { QuoteDocument } from '@/components/dashboard/sales/quote-document'
+import { PublicQuoteInteractive } from '@/components/portal/public-quote-interactive'
 import { PublicQuoteApproval } from '@/components/portal/public-quote-approval'
-import { PublicQuoteOptions } from '@/components/portal/public-quote-options'
 import { PublicQuoteQueries } from '@/components/portal/public-quote-queries'
 import { getPublicQuote } from './actions'
 import type {
@@ -39,17 +38,15 @@ export default async function PublicQuotePage({
   return (
     <main className="min-h-screen bg-muted/40 py-8">
       <div className="mx-auto max-w-4xl px-4">
-        <QuoteDocument
+        <PublicQuoteInteractive
           quote={quote}
           systems={systems}
           lines={lines}
           company={company}
           requirements={requirements}
           catalogue={catalogue}
+          token={token}
         />
-        <div className="mt-6 print:hidden">
-          <PublicQuoteOptions quote={quote} systems={systems} lines={lines} token={token} />
-        </div>
         <div className="mt-6 print:hidden">
           <PublicQuoteApproval quote={quote} token={token} />
         </div>

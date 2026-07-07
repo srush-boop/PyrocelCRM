@@ -754,10 +754,16 @@ export function QuoteBuilder({
         // Prefer the service overview as the line detail; fall back to the
         // cover/visits summary so the line always carries context.
         const detail = [l.overview, meta].filter(Boolean).join('\n')
+        // Fold the cover level into the description so options in the same
+        // group (e.g. Standard vs Comprehensive fire cover) read as distinct
+        // lines on the quote rather than repeating the same title.
+        const description = l.coverType
+          ? `${l.description} (${l.coverType} Cover)`
+          : l.description
         return {
           key: uid(),
           productCode: '',
-          description: l.description,
+          description,
           detail: detail || meta || '',
           service_type_id: null,
           is_service: true,

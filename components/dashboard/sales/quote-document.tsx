@@ -1,15 +1,32 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Printer } from 'lucide-react'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  ArrowLeft,
+  Printer,
+  Flame,
+  Cctv,
+  KeyRound,
+  ShieldAlert,
+  Lightbulb,
+  Fan,
+  RadioTower,
+  Clock,
+  Wrench,
+  PlugZap,
+  Check,
+  Plus,
+} from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import {
   formatPence,
   quoteTypeLabel,
   workTypeLabel,
   designedByLabel,
+  computeQuoteTotals,
   QUOTE_STATUS_META,
 } from '@/lib/sales'
 import type {
@@ -43,6 +60,28 @@ interface QuoteDocumentProps {
   // equipment specification when the quote opts in via show_equipment_spec.
   catalogue?: SpecCatalogueItem[]
   backHref?: string
+  // Interactive optional-extras selection (public shared quote only). When
+  // `onToggleOption` is provided, the optional-extras rows become real
+  // checkboxes and the totals recompute live from `optionSelection` instead of
+  // the persisted `client_selected` flags.
+  optionSelection?: Set<string>
+  onToggleOption?: (line: QuoteLineItem) => void
+}
+
+// Map a service line to a representative icon by keyword so the document reads
+// visually rather than as a wall of text. Falls back to a wrench (maintenance).
+function serviceIcon(text: string): ComponentType<{ className?: string }> {
+  const t = text.toLowerCase()
+  if (t.includes('fire')) return Flame
+  if (t.includes('cctv') || t.includes('camera') || t.includes('television')) return Cctv
+  if (t.includes('access') || t.includes('door') || t.includes('entry')) return KeyRound
+  if (t.includes('intruder') || t.includes('burglar') || t.includes('security')) return ShieldAlert
+  if (t.includes('emergency') || t.includes('light') || t.includes('luminaire')) return Lightbulb
+  if (t.includes('damper') || t.includes('smoke') || t.includes('ventilation')) return Fan
+  if (t.includes('monitor') || t.includes('signall') || t.includes('arc')) return RadioTower
+  if (t.includes('out of hours') || t.includes('call-out') || t.includes('call out')) return Clock
+  if (t.includes('induction') || t.includes('afils') || t.includes('electrical')) return PlugZap
+  return Wrench
 }
 
 const HEADER_COLOR = '#0f172a'
@@ -79,9 +118,11 @@ function SectionHeading({
 }
 
 // A small labelled sub-heading used inside sections (e.g. "Specification").
-function FieldLabel({ children }: { children: ReactNode }) {
+function FieldLabel({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+    <p
+      className={`mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground ${className ?? ''}`}
+    >
       {children}
     </p>
   )
@@ -136,7 +177,30 @@ export function QuoteDocument({
   requirements = [],
   catalogue = [],
   backHref,
+  optionSelection,
+  onToggleOption,
 }: QuoteDocumentProps) {
+  // Interactive mode: the client can tick/untick optional extras right in the
+  // document and see totals move. Otherwise we render the persisted selection.
+  const interactive = typeof onToggleOption === 'function'
+  const isOptionSelected = (line: QuoteLineItem) =>
+    interactive ? Boolean(optionSelection?.has(line.id)) : line.client_selected === true
+
+  // Recompute headline totals live from the current selection when interactive
+  // so the client immediately sees the effect of their choices.
+  const liveTotals = computeQuoteTotals(
+    lines.map((l) => ({
+      quantity: l.quantity,
+      unit_price_pence: l.unit_price_pence,
+      is_optional: l.is_optional,
+      client_selected: l.is_optional ? isOptionSelected(l) : null,
+    })),
+    { vatRate: quote.vat_rate ?? 0, discountPence: quote.discount_pence ?? 0 },
+  )
+  const shownSubtotal = interactive ? liveTotals.subtotalPence : quote.subtotal_pence
+  const shownVat = interactive ? liveTotals.vatPence : quote.vat_pence
+  const shownTotal = interactive ? liveTotals.totalPence : quote.total_pence
+
   const showRequirements = quote.show_requirements_matrix && requirements.length > 0
   const equipmentSpecSections = quote.show_equipment_spec
     ? buildEquipmentSpecSections(systems, lines, catalogue)
@@ -309,7 +373,7 @@ export function QuoteDocument({
               const serviceLines = coreLines.filter((l) => l.is_service)
               const optionalLines = systemLines.filter((l) => l.is_optional)
               const systemTotal = systemLines.reduce(
-                (sum, l) => sum + (l.is_optional && l.client_selected !== true ? 0 : l.line_total_pence),
+                (sum, l) => sum + (l.is_optional && !isOptionSelected(l) ? 0 : l.line_total_pence),
                 0,
               )
               // Keys belonging to sections the user marked "not required", plus
@@ -471,23 +535,30 @@ export function QuoteDocument({
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {group.rows.map((line) => (
+                                    {group.rows.map((line) => {
+                                      const LineIcon = serviceIcon(`${line.description} ${line.detail ?? ''}`)
+                                      return (
                                       <tr
                                         key={line.id}
                                         className="border-b border-dashed last:border-0"
                                       >
                                         <td className="py-2 pr-3 align-top">
-                                          <div className="font-medium">{line.description}</div>
-                                          {line.detail && (
-                                            <div className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
-                                              {line.detail}
+                                          <div className="flex items-start gap-2">
+                                            <LineIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                                            <div className="min-w-0">
+                                              <div className="font-medium">{line.description}</div>
+                                              {line.detail && (
+                                                <div className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
+                                                  {line.detail}
+                                                </div>
+                                              )}
+                                              {line.standard && (
+                                                <div className="mt-0.5 text-xs text-muted-foreground">
+                                                  <span className="font-medium">Standard:</span> {line.standard}
+                                                </div>
+                                              )}
                                             </div>
-                                          )}
-                                          {line.standard && (
-                                            <div className="mt-0.5 text-xs text-muted-foreground">
-                                              <span className="font-medium">Standard:</span> {line.standard}
-                                            </div>
-                                          )}
+                                          </div>
                                         </td>
                                         <td className="py-2 pl-3 text-right align-top tabular-nums whitespace-nowrap">
                                           {line.quantity}
@@ -500,7 +571,8 @@ export function QuoteDocument({
                                           {formatPence(line.line_total_pence, quote.currency)}
                                         </td>
                                       </tr>
-                                    ))}
+                                      )
+                                    })}
                                   </tbody>
                                 </table>
                               </div>
@@ -508,77 +580,99 @@ export function QuoteDocument({
                           ),
                         )}
 
-                      {/* Client-selectable options. Each row carries a tick box
-                          reflecting the client's saved choice; the interactive
-                          selection is handled separately on the shared quote. */}
+                      {/* Client-selectable options. In interactive mode these are
+                          real checkboxes that update the totals live; otherwise
+                          they show the client's saved selection. */}
                       {quote.show_line_items && optionalLines.length > 0 && (
-                        <div className="mt-4">
-                          <FieldLabel>Optional extras</FieldLabel>
-                          <p className="mb-2 text-xs text-muted-foreground text-pretty">
-                            Tick the options you would like included. Ticked options are added to
-                            the section total above.
+                        <div className="mt-5 rounded-lg border border-dashed bg-muted/20 p-4 print:break-inside-avoid">
+                          <div className="mb-3 flex items-center gap-2">
+                            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary">
+                              <Plus className="h-3.5 w-3.5" />
+                            </span>
+                            <FieldLabel className="mb-0">Optional extras</FieldLabel>
+                          </div>
+                          <p className="mb-3 text-xs text-muted-foreground text-pretty">
+                            {interactive
+                              ? 'Tick any options you would like to include — the section and quote totals update instantly.'
+                              : 'Options marked as selected are included in the section total above.'}
                           </p>
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="border-b-2 border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                                  <th className="w-8 py-1.5 font-semibold" />
-                                  <th className="py-1.5 font-semibold">Option</th>
-                                  <th className="py-1.5 pl-3 text-right font-semibold whitespace-nowrap">
-                                    Qty
-                                  </th>
-                                  <th className="py-1.5 pl-3 text-right font-semibold whitespace-nowrap">
-                                    Price
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {optionalLines.map((line) => (
-                                  <tr key={line.id} className="border-b border-dashed last:border-0">
-                                    <td className="py-2 align-top">
-                                      <span
-                                        aria-hidden
-                                        className={`inline-flex h-4 w-4 items-center justify-center rounded border ${
-                                          line.client_selected === true
-                                            ? 'border-primary bg-primary text-primary-foreground'
-                                            : 'border-muted-foreground/40'
-                                        }`}
-                                      >
-                                        {line.client_selected === true ? '✓' : ''}
+                          <div className="space-y-2">
+                            {optionalLines.map((line) => {
+                              const selected = isOptionSelected(line)
+                              const Icon = serviceIcon(`${line.description} ${line.detail ?? ''}`)
+                              const body = (
+                                <>
+                                  {interactive ? (
+                                    <Checkbox
+                                      checked={selected}
+                                      onCheckedChange={() => onToggleOption?.(line)}
+                                      className="mt-0.5 shrink-0 print:hidden"
+                                      aria-label={`Include ${line.description}`}
+                                    />
+                                  ) : (
+                                    <span
+                                      aria-hidden
+                                      className={`mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                                        selected
+                                          ? 'border-primary bg-primary text-primary-foreground'
+                                          : 'border-muted-foreground/40'
+                                      }`}
+                                    >
+                                      {selected ? <Check className="h-3 w-3" /> : null}
+                                    </span>
+                                  )}
+                                  <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-baseline justify-between gap-3">
+                                      <span className="font-medium">{line.description}</span>
+                                      <span className="shrink-0 text-sm font-semibold tabular-nums">
+                                        {formatPence(line.line_total_pence, quote.currency)}
+                                        {line.unit ? (
+                                          <span className="font-normal text-muted-foreground">
+                                            {' '}
+                                            / {line.unit}
+                                          </span>
+                                        ) : null}
                                       </span>
-                                      <span className="sr-only">
-                                        {line.client_selected === true ? 'Selected' : 'Not selected'}
-                                      </span>
-                                    </td>
-                                    <td className="py-2 pr-3 align-top">
-                                      <div className="font-medium">{line.description}</div>
-                                      {line.detail && (
-                                        <div className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
-                                          {line.detail}
-                                        </div>
-                                      )}
+                                    </div>
+                                    {line.detail && (
+                                      <div className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
+                                        {line.detail}
+                                      </div>
+                                    )}
+                                    <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                                       {line.standard && (
-                                        <div className="mt-0.5 text-xs text-muted-foreground">
+                                        <span>
                                           <span className="font-medium">Standard:</span> {line.standard}
-                                        </div>
+                                        </span>
                                       )}
-                                      {line.option_group && (
-                                        <div className="mt-0.5 text-xs text-muted-foreground">
-                                          Choose one from: {line.option_group}
-                                        </div>
-                                      )}
-                                    </td>
-                                    <td className="py-2 pl-3 text-right align-top tabular-nums whitespace-nowrap">
-                                      {line.quantity}
-                                      {line.unit ? ` ${line.unit}` : ''}
-                                    </td>
-                                    <td className="py-2 pl-3 text-right align-top font-medium tabular-nums whitespace-nowrap">
-                                      {formatPence(line.line_total_pence, quote.currency)}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                                      {line.option_group && <span>Choose one from: {line.option_group}</span>}
+                                    </div>
+                                  </div>
+                                </>
+                              )
+                              return interactive ? (
+                                <label
+                                  key={line.id}
+                                  className={`flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors ${
+                                    selected
+                                      ? 'border-primary/60 bg-primary/5'
+                                      : 'border-border bg-card hover:bg-muted/40'
+                                  }`}
+                                >
+                                  {body}
+                                </label>
+                              ) : (
+                                <div
+                                  key={line.id}
+                                  className={`flex items-start gap-3 rounded-md border p-3 ${
+                                    selected ? 'border-primary/60 bg-primary/5' : 'border-border bg-card'
+                                  }`}
+                                >
+                                  {body}
+                                </div>
+                              )
+                            })}
                           </div>
                         </div>
                       )}
@@ -703,7 +797,7 @@ export function QuoteDocument({
             <div className="space-y-1.5 rounded-md border bg-muted/30 p-4">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Subtotal</span>
-                <span className="tabular-nums">{formatPence(quote.subtotal_pence, quote.currency)}</span>
+                <span className="tabular-nums">{formatPence(shownSubtotal, quote.currency)}</span>
               </div>
               {quote.discount_pence > 0 && (
                 <div className="flex justify-between">
@@ -713,12 +807,12 @@ export function QuoteDocument({
               )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">VAT ({quote.vat_rate}%)</span>
-                <span className="tabular-nums">{formatPence(quote.vat_pence, quote.currency)}</span>
+                <span className="tabular-nums">{formatPence(shownVat, quote.currency)}</span>
               </div>
               <div className="-mx-4 -mb-4 mt-2 flex items-center justify-between rounded-b-md bg-foreground px-4 py-3 text-background">
                 <span className="text-xs font-semibold uppercase tracking-[0.12em]">Total due</span>
                 <span className="text-lg font-bold tabular-nums">
-                  {formatPence(quote.total_pence, quote.currency)}
+                  {formatPence(shownTotal, quote.currency)}
                 </span>
               </div>
             </div>

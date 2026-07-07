@@ -136,6 +136,14 @@ function QuotePdfDocument({
   catalogue?: SpecCatalogueItem[]
 }) {
   const companyName = company?.name || 'Pyrocel Ltd'
+  // The issuing branch selects which address/contact details render in the
+  // header under the company name; fall back to the company's own details.
+  const headerAddress = quote.branch?.address || company?.address
+  const headerPhone = quote.branch?.phone || company?.phone
+  const headerEmail = quote.branch?.email || company?.email
+  // The document title is simply the site name (falling back to the stored
+  // quote title when the quote has no linked site).
+  const documentTitle = quote.site?.name || quote.title
   const equipmentSpecSections = quote.show_equipment_spec
     ? buildEquipmentSpecSections(systems, lines, catalogue)
     : []
@@ -147,15 +155,15 @@ function QuotePdfDocument({
   const sortedSystems = systems.slice().sort((a, b) => a.position - b.position)
 
   return (
-    <Document title={quote.title || 'Quotation'}>
+    <Document title={documentTitle || 'Quotation'}>
       <Page size="A4" style={styles.page}>
         {/* Header */}
         <View style={styles.header} fixed>
           <View>
             <Text style={styles.companyName}>{companyName}</Text>
-            {company?.address ? <Text style={styles.headerSub}>{company.address}</Text> : null}
+            {headerAddress ? <Text style={styles.headerSub}>{headerAddress}</Text> : null}
             <Text style={styles.headerSub}>
-              {[company?.phone, company?.email].filter(Boolean).join('  -  ')}
+              {[headerPhone, headerEmail].filter(Boolean).join('  -  ')}
             </Text>
           </View>
           <View style={styles.headerRight}>
@@ -207,7 +215,7 @@ function QuotePdfDocument({
           </View>
         </View>
 
-        <Text style={styles.title}>{quote.title}</Text>
+        <Text style={styles.title}>{documentTitle}</Text>
         {quote.summary ? <Text style={styles.summary}>{quote.summary}</Text> : null}
 
         {/* Systems */}

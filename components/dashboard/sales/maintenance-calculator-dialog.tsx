@@ -259,7 +259,7 @@ export function MaintenanceCalculatorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[92vh] max-h-[92vh] w-[96vw] max-w-5xl flex-col gap-0 overflow-hidden p-0">
+      <DialogContent className="flex h-[92vh] max-h-[92vh] w-[96vw] max-w-5xl! flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl!">
         <DialogHeader className="border-b p-4">
           <DialogTitle className="flex items-center gap-2">
             <Calculator className="h-5 w-5 text-primary" />

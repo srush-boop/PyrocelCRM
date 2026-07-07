@@ -111,10 +111,11 @@ export async function markContractReviewed(id: string): Promise<{ ok: boolean; e
     return { ok: false, error: 'Could not record the contract review.' }
   }
 
+  // Milestone marker (not a stage transition), so from/to stage are left null.
   await supabase.from('job_status_history').insert({
     job_id: id,
-    from_stage: 'contract_review',
-    to_stage: 'contract_review',
+    from_stage: null,
+    to_stage: null,
     note: 'Contract review completed.',
     changed_by: user.id,
   })

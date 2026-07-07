@@ -59,7 +59,7 @@ interface SiteSystemsManagerProps {
   siteServices: ServiceWithType[]
   systemTypes: SystemType[]
   availableServiceTypes: ServiceType[]
-  siteStatus?: 'live' | 'dead'
+  siteStatus?: 'live' | 'dead' | 'new'
   panelFieldDefs?: PanelFieldDef[]
   panels?: SystemPanel[]
   // Active sub-contractors, for the per-system default assignment.
@@ -81,7 +81,9 @@ export function SiteSystemsManager({
   const pathname = usePathname()
   const supabase = createClient()
 
-  const isDead = siteStatus === 'dead'
+  // Off-contract sites (Dead, or New/auto-created from a won prospect quote) do
+  // not auto-schedule visits when services are added.
+  const isDead = siteStatus !== 'live'
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<SiteSystem | null>(null)

@@ -402,7 +402,9 @@ export interface Site {
   property_type_id: string | null
   // Default sub-contractor for sub-contracted services at this site.
   default_subcontractor_id: string | null
-  status: 'live' | 'dead'
+  // 'new' = auto-created from an accepted prospect quote; treated as off-contract
+  // for scheduling (like 'dead') until formally onboarded.
+  status: 'live' | 'dead' | 'new'
   notes: string | null
   // Pre-attendance flags engineers/office can set at site level. Individual
   // site_services may override these (see SiteService); null override = inherit.

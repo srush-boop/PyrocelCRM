@@ -64,7 +64,7 @@ interface SiteServicesManagerProps {
   areas?: Area[]
   subcontractors?: Subcontractor[]
   tasks?: Task[]
-  siteStatus?: 'live' | 'dead'
+  siteStatus?: 'live' | 'dead' | 'new'
   // Cascade defaults: a service with no explicit sub-contractor inherits its
   // system's default, then the site's default.
   siteDefaultSubcontractorId?: string | null
@@ -124,7 +124,10 @@ export function SiteServicesManager({
   const pathname = usePathname()
   const supabase = createClient()
 
-  const isDead = siteStatus === 'dead'
+  // Off-contract sites (Dead, or New/auto-created from a won prospect quote) do
+  // not auto-generate scheduled tasks until formally set Live.
+  const isDead = siteStatus !== 'live'
+  const isNewSite = siteStatus === 'new'
 
   // Sub-contractor cascade for the service currently being edited.
   const editingService = editingId ? siteServices.find((s) => s.id === editingId) : undefined
@@ -393,7 +396,9 @@ export function SiteServicesManager({
         <CardContent className="space-y-4">
           {isDead && (
             <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">
-              This site is marked Dead. No new tasks will be generated until it is set back to Live.
+              {isNewSite
+                ? 'This site is New (created from a won quote) and off-contract. No tasks will be generated until it is set Live.'
+                : 'This site is marked Dead. No new tasks will be generated until it is set back to Live.'}
             </p>
           )}
           {siteServices.length === 0 ? (

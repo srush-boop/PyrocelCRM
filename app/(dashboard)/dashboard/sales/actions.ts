@@ -8,6 +8,7 @@ import { sendEmail } from '@/lib/email/send-email'
 import { renderQuotePdfBuffer } from '@/lib/pdf/quote-pdf'
 import { loadQuoteCatalogue } from '@/lib/sales/equipment-spec'
 import { createRemedialCallsForQuote } from '@/lib/remedial'
+import type { CalculatorSnapshot } from '@/lib/calculator-snapshot'
 import type {
   QuoteStatus,
   QuoteCatalogueItem,
@@ -42,7 +43,7 @@ export interface QuoteLineInput {
   // Serialised calculator inputs + result behind this line (installation /
   // maintenance), enabling the calculation to be re-opened later. NULL for
   // hand-entered lines.
-  calculator_snapshot?: Record<string, unknown> | null
+  calculator_snapshot?: CalculatorSnapshot | Record<string, unknown> | null
 }
 
 export interface QuotePpmInput {

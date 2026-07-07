@@ -460,6 +460,17 @@ export function QuoteBuilder({
 
   // ----- Header state -----
   const [title, setTitle] = useState(quote?.title ?? initialTitle ?? '')
+  // Tracks whether the user has manually edited the title. Until they do, the
+  // title auto-follows the selected site name. Seed as "dirty" for existing
+  // quotes / seeded titles so we never overwrite an established title.
+  const titleDirty = useRef<boolean>(Boolean(quote?.title || initialTitle))
+  // "Maintenance quote only" mode: hides the client-request and systems sections
+  // and focuses the builder on the itemised routine-maintenance flow. Seeded on
+  // for existing quotes whose only system is routine maintenance (SVC).
+  const [maintenanceOnly, setMaintenanceOnly] = useState<boolean>(() => {
+    const svc = initialSystems?.filter((s) => s.work_type === 'SVC') ?? []
+    return svc.length > 0 && svc.length === (initialSystems?.length ?? 0)
+  })
   const [targetMode, setTargetMode] = useState<'client' | 'prospect'>(
     quote?.prospect_name && !quote?.client_id ? 'prospect' : 'client',
   )
@@ -593,6 +604,15 @@ export function QuoteBuilder({
     () => (clientId ? sites.filter((s) => s.client_id === clientId) : []),
     [sites, clientId],
   )
+
+  // Auto-fill the quote title from the selected site's name until the user
+  // edits the title themselves (tracked via titleDirty).
+  useEffect(() => {
+    if (titleDirty.current) return
+    if (targetMode !== 'client' || !siteId) return
+    const site = sitesForClient.find((s) => s.id === siteId)
+    if (site?.name) setTitle(site.name)
+  }, [siteId, targetMode, sitesForClient])
 
   // ----- Live totals -----
   const totals = useMemo(() => {
@@ -809,6 +829,16 @@ export function QuoteBuilder({
     )
     return { lineCount: sys.lines.length, total }
   }, [systems])
+
+  // Non-maintenance systems the installation calculator can add its service line
+  // to. Falls back to a placeholder label for unnamed systems.
+  const installSystemOptions = useMemo(
+    () =>
+      systems
+        .filter((s) => quoteTypeFromWorkType(s.work_type) !== 'service_contract')
+        .map((s, i) => ({ key: s.key, label: s.system_name || `System ${i + 1}` })),
+    [systems],
+  )
 
   // Replace an existing line's price + snapshot in place (used when a saved
   // calculation is re-opened, adjusted and re-applied).
@@ -1178,11 +1208,35 @@ export function QuoteBuilder({
             <Input
               id="q-title"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+                titleDirty.current = true
+                setTitle(e.target.value)
+              }}
               placeholder="e.g. Fire alarm upgrade — Block A"
               disabled={disabled}
             />
           </div>
+
+          {/* Maintenance-only mode toggle */}
+          {!readOnly && (
+            <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+              <div className="grid gap-0.5">
+                <Label htmlFor="q-maint-only" className="cursor-pointer">
+                  Maintenance quote only
+                </Label>
+                <span className="text-xs text-muted-foreground text-pretty">
+                  Hides the client request and systems sections and focuses this quote on the
+                  routine-maintenance pricing calculator.
+                </span>
+              </div>
+              <Switch
+                id="q-maint-only"
+                checked={maintenanceOnly}
+                onCheckedChange={setMaintenanceOnly}
+                disabled={disabled}
+              />
+            </div>
+          )}
 
           {/* Issuing branch */}
           {branches.length > 0 && (
@@ -1358,21 +1412,17 @@ export function QuoteBuilder({
         </CardContent>
       </Card>
 
-      {/* ---------- Routine maintenance pricing ---------- */}
-      {/*
-        Always visible so the calculator is a first-class entry point. Opening it
-        and pressing "Add to quote" auto-creates the Routine Maintenance system —
-        no need to pre-select a work type in the systems section below.
-      */}
+      {/* ---------- Routine maintenance pricing (maintenance-only mode) ----------
+        Only shown when "Maintenance quote only" is enabled. Opening the
+        calculator here (no target system) drives the isolated itemised flow
+        that auto-creates the Routine Maintenance system. */}
+      {maintenanceOnly && (
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div>
             <CardTitle className="flex items-center gap-2">
               <Calculator className="h-4 w-4 text-muted-foreground" />
               Routine maintenance pricing
-              <span className="rounded-full border px-2 py-0.5 text-xs font-normal text-muted-foreground">
-                Optional
-              </span>
             </CardTitle>
             <p className="mt-1 text-sm text-muted-foreground text-pretty">
               {maintenanceSummary
@@ -1384,7 +1434,13 @@ export function QuoteBuilder({
             <Button
               type="button"
               variant={maintenanceSummary ? 'outline' : 'default'}
-              onClick={() => setMaintCalcOpen(true)}
+              onClick={() => {
+                setMaintAddTarget(null)
+                setMaintInitialFire(null)
+                setMaintViewTarget(null)
+                setMaintViewSnapshot(null)
+                setMaintCalcOpen(true)
+              }}
               disabled={isPending}
             >
               <Calculator className="mr-2 h-4 w-4" />
@@ -1434,25 +1490,44 @@ export function QuoteBuilder({
           </CardContent>
         )}
       </Card>
+      )}
 
       <MaintenanceCalculatorDialog
         open={maintCalcOpen}
-        onOpenChange={setMaintCalcOpen}
+        onOpenChange={(o) => {
+          setMaintCalcOpen(o)
+          if (!o) {
+            setMaintAddTarget(null)
+            setMaintInitialFire(null)
+            setMaintViewTarget(null)
+            setMaintViewSnapshot(null)
+          }
+        }}
         savedRates={savedMaintenanceRates}
         disabled={disabled}
+        initialFireAssets={maintInitialFire}
+        viewSnapshot={maintViewSnapshot}
         onApply={applyMaintenance}
       />
 
       <InstallationCalculatorDialog
         open={installCalcOpen}
-        onOpenChange={setInstallCalcOpen}
+        onOpenChange={(o) => {
+          setInstallCalcOpen(o)
+          if (!o) {
+            setInstallViewTarget(null)
+            setInstallViewSnapshot(null)
+          }
+        }}
         savedRates={savedInstallationRates}
         disabled={disabled}
+        systems={installSystemOptions}
+        viewSnapshot={installViewSnapshot}
         onApply={applyInstallation}
       />
 
       {/* ---------- Client request / requirements matrix ---------- */}
-      {!readOnly && (
+      {!readOnly && !maintenanceOnly && (
         <Card>
           <CardHeader className="flex flex-row items-start justify-between gap-4">
             <div>
@@ -1514,8 +1589,16 @@ export function QuoteBuilder({
         </Card>
       )}
 
-      {/* ---------- Systems ---------- */}
-      {systems.map((system) =>
+      {/* ---------- Systems ----------
+        In maintenance-only mode only the Routine Maintenance (service_contract)
+        systems are shown; otherwise the full multi-system builder is rendered. */}
+      {systems
+        .filter((system) =>
+          maintenanceOnly
+            ? quoteTypeFromWorkType(system.work_type) === 'service_contract'
+            : true,
+        )
+        .map((system) =>
         quoteTypeFromWorkType(system.work_type) === 'service_contract' ? (
           // Maintenance systems are built by the calculator, so they get a
           // dedicated tidy view (priced lines + client options) instead of the
@@ -1530,7 +1613,14 @@ export function QuoteBuilder({
             onRemove={() => removeSystem(system.key)}
             onUpdateLine={(lineKey, patch) => updateLine(system.key, lineKey, patch)}
             onRemoveLine={(lineKey) => removeLine(system.key, lineKey)}
-            onOpenCalculator={() => setMaintCalcOpen(true)}
+            onViewLineCalculation={(line) => viewLineCalculation(system.key, line)}
+            onOpenCalculator={() => {
+              setMaintAddTarget(null)
+              setMaintInitialFire(null)
+              setMaintViewTarget(null)
+              setMaintViewSnapshot(null)
+              setMaintCalcOpen(true)
+            }}
           />
         ) : (
         <SystemCard
@@ -1563,11 +1653,13 @@ export function QuoteBuilder({
                   onUpdateLine={(lineKey, patch) => updateLine(system.key, lineKey, patch)}
           onRemoveLine={(lineKey) => removeLine(system.key, lineKey)}
           onApplyPpm={(draft) => applyPpm(system.key, draft)}
+          onOpenMaintenance={() => openMaintenanceForSystem(system.key)}
+          onViewLineCalculation={(line) => viewLineCalculation(system.key, line)}
         />
         ),
       )}
 
-      {!readOnly && (
+      {!readOnly && !maintenanceOnly && (
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={addSystem} disabled={isPending}>
             <Plus className="mr-2 h-4 w-4" />
@@ -1742,6 +1834,7 @@ export function QuoteBuilder({
     onUpdateLine: (lineKey: string, patch: Partial<EditLine>) => void
     onRemoveLine: (lineKey: string) => void
     onOpenCalculator: () => void
+    onViewLineCalculation: (line: EditLine) => void
   }
 
   function MaintenanceSystemCard({
@@ -1754,6 +1847,7 @@ export function QuoteBuilder({
     onUpdateLine,
     onRemoveLine,
     onOpenCalculator,
+    onViewLineCalculation,
   }: MaintenanceSystemCardProps) {
     const disabled = readOnly || isPending
     const [open, setOpen] = useState(true)
@@ -1864,6 +1958,19 @@ export function QuoteBuilder({
                             />
                           </div>
                         </div>
+                        {line.calculatorSnapshot && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 shrink-0 text-muted-foreground"
+                            onClick={() => onViewLineCalculation(line)}
+                            disabled={isPending}
+                            title="View calculation"
+                          >
+                            <Calculator className="h-4 w-4" />
+                            <span className="sr-only">View calculation</span>
+                          </Button>
+                        )}
                         {!readOnly && (
                           <Button
                             variant="ghost"
@@ -1986,6 +2093,11 @@ export function QuoteBuilder({
   onUpdateLine: (lineKey: string, patch: Partial<EditLine>) => void
   onRemoveLine: (lineKey: string) => void
   onApplyPpm: (draft: PpmDraft) => void
+  // Open the maintenance calculator targeting this system (adds a single
+  // Routine Maintenance service line at the calculated annual total).
+  onOpenMaintenance: () => void
+  // Re-open the calculator that produced a line's price (if it has a snapshot).
+  onViewLineCalculation: (line: EditLine) => void
 }
 
 function SystemCard({
@@ -2014,13 +2126,14 @@ function SystemCard({
   onUpdateLine,
   onRemoveLine,
   onApplyPpm,
+  onOpenMaintenance,
+  onViewLineCalculation,
 }: SystemCardProps) {
   const disabled = readOnly || isPending
   const [ppmOpen, setPpmOpen] = useState(false)
-  // Each system section is collapsible. Configured systems start collapsed to
-  // keep long multi-system quotes scannable; a brand-new (untyped) system
-  // auto-expands so the user is guided straight into setup.
-  const [open, setOpen] = useState(!system.system_type_id)
+  // Each system section is collapsible and starts collapsed to keep long
+  // multi-system quotes scannable (header/summary stays visible).
+  const [open, setOpen] = useState(false)
   const [catalogueOpen, setCatalogueOpen] = useState(false)
   const [catalogueSearch, setCatalogueSearch] = useState('')
 
@@ -2309,7 +2422,9 @@ function SystemCard({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {WORK_TYPES.map((w) => (
+                    {/* SVC (Routine Maintenance) is created via the maintenance
+                        calculator, not picked here — keep it out of the list. */}
+                    {WORK_TYPES.filter((w) => w.code !== 'SVC').map((w) => (
                       <SelectItem key={w.code} value={w.code}>
                         {w.label} ({w.code})
                       </SelectItem>
@@ -2748,6 +2863,21 @@ function SystemCard({
                   className="w-full"
                   disabled={disabled}
                 />
+                {line.calculatorSnapshot && (
+                  <div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs text-muted-foreground"
+                      onClick={() => onViewLineCalculation(line)}
+                      disabled={isPending}
+                    >
+                      <Calculator className="mr-1.5 h-3.5 w-3.5" />
+                      View calculation
+                    </Button>
+                  </div>
+                )}
               </div>
               </Fragment>
             )
@@ -2760,6 +2890,16 @@ function SystemCard({
                 <Button variant="outline" size="sm" onClick={onAddLine} disabled={isPending}>
                   <Plus className="mr-2 h-4 w-4" />
                   Add line
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onOpenMaintenance}
+                  disabled={isPending}
+                  title="Price routine maintenance for this system and add it as an annual service line"
+                >
+                  <Calculator className="mr-2 h-4 w-4" />
+                  Maintenance price
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

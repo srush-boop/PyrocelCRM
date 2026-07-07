@@ -8,8 +8,8 @@
  * system.
  */
 
-import { useMemo, useState } from 'react'
-import { Calculator, Plus, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Calculator, Plus, Trash2, Eye } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -49,6 +49,11 @@ import {
   type FireVisits,
   type SubcontractInput,
 } from '@/lib/maintenance-calculator'
+import {
+  CALCULATOR_SNAPSHOT_VERSION,
+  type MaintenanceSnapshot,
+  type MaintenanceSnapshotInputs,
+} from '@/lib/calculator-snapshot'
 
 type CountMap = Record<string, number>
 
@@ -57,6 +62,8 @@ const GBP = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' 
 export interface MaintenanceCalcResult {
   lines: MaintenanceLine[]
   totalSale: number
+  /** Serialisable inputs + result for later viewing. */
+  snapshot: MaintenanceSnapshot
 }
 
 interface MaintenanceCalculatorDialogProps {
@@ -65,6 +72,10 @@ interface MaintenanceCalculatorDialogProps {
   /** Saved rate overrides from company settings (null = built-in defaults). */
   savedRates?: Partial<MaintenanceRates> | null
   disabled?: boolean
+  /** Fire-asset counts to seed on open (best-effort from a system's lines). */
+  initialFireAssets?: CountMap | null
+  /** When set, opens read/adjust of an existing calculation and its line. */
+  viewSnapshot?: MaintenanceSnapshot | null
   onApply: (result: MaintenanceCalcResult) => void
 }
 
@@ -135,9 +146,13 @@ export function MaintenanceCalculatorDialog({
   onOpenChange,
   savedRates,
   disabled,
+  initialFireAssets = null,
+  viewSnapshot = null,
   onApply,
 }: MaintenanceCalculatorDialogProps) {
   const rates = useMemo(() => resolveMaintenanceRates(savedRates), [savedRates])
+
+  const isViewing = !!viewSnapshot
 
   // ----- Fire & emergency lighting -----
   const [fireAssets, setFireAssets] = useState<CountMap>(emptyCounts)
@@ -189,6 +204,45 @@ export function MaintenanceCalculatorDialog({
   // ----- Overview discounts -----
   const [directDiscount, setDirectDiscount] = useState(0) // percent 0..maxDiscount*100
   const [monitoringDiscount, setMonitoringDiscount] = useState(0) // percent 0..100
+
+  // On open, hydrate the whole form from a saved snapshot (view/adjust), or seed
+  // just the fire-asset counts inferred from a system's lines. Keyed on `open`.
+  useEffect(() => {
+    if (!open) return
+    if (viewSnapshot) {
+      const i = viewSnapshot.inputs
+      setFireAssets({ ...i.fireAssets })
+      setFireVisits(i.fireVisits as FireVisits)
+      setWeeklyFireTesting(i.weeklyFireTesting)
+      setIncludeComprehensive(i.includeComprehensive)
+      setCentralBatteryUnits(i.centralBatteryUnits)
+      setLuminaires(i.luminaires)
+      setMonthlyElTesting(i.monthlyElTesting)
+      setIntruderAssets({ ...i.intruderAssets })
+      setIntruderVisits(i.intruderVisits)
+      setIntruderPlatinum(i.intruderPlatinum)
+      setCctvAssets({ ...i.cctvAssets })
+      setCctvVisits(i.cctvVisits)
+      setCctvBanksmanHours(i.cctvBanksmanHours)
+      setCctvAccessOption(i.cctvAccessOption)
+      setCctvAccessManualCost(i.cctvAccessManualCost)
+      setAccessAssets({ ...i.accessAssets })
+      setAccessVisits(i.accessVisits)
+      setMechanicalDampers(i.mechanicalDampers)
+      setAutomaticDampers(i.automaticDampers)
+      setDamperVisits(i.damperVisits)
+      setDamperAccessCost(i.damperAccessCost)
+      setFireMonitoring({ ...i.fireMonitoring })
+      setIntruderMonitoring({ ...i.intruderMonitoring })
+      setCctvMonitoringCost(i.cctvMonitoringCost)
+      setSubcontract(i.subcontract.map((s) => ({ ...s })))
+      setDirectDiscount(i.directDiscount)
+      setMonitoringDiscount(i.monitoringDiscount)
+    } else if (initialFireAssets && Object.keys(initialFireAssets).length > 0) {
+      setFireAssets({ ...initialFireAssets })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, viewSnapshot])
 
   // Resolve the selected CCTV access-equipment cost from the option list.
   const cctvAccessCost = useMemo(() => {
@@ -270,9 +324,47 @@ export function MaintenanceCalculatorDialog({
   const maxDiscountPct = Math.round(rates.maxDiscount * 100)
   const hasLines = overview.lines.length > 0
 
+  function snapshotInputs(): MaintenanceSnapshotInputs {
+    return {
+      fireAssets,
+      fireVisits,
+      weeklyFireTesting,
+      includeComprehensive,
+      centralBatteryUnits,
+      luminaires,
+      monthlyElTesting,
+      intruderAssets,
+      intruderVisits,
+      intruderPlatinum,
+      cctvAssets,
+      cctvVisits,
+      cctvBanksmanHours,
+      cctvAccessOption,
+      cctvAccessManualCost,
+      accessAssets,
+      accessVisits,
+      mechanicalDampers,
+      automaticDampers,
+      damperVisits,
+      damperAccessCost,
+      fireMonitoring,
+      intruderMonitoring,
+      cctvMonitoringCost,
+      subcontract,
+      directDiscount,
+      monitoringDiscount,
+    }
+  }
+
   function handleApply() {
     if (!hasLines) return
-    onApply({ lines: overview.lines, totalSale: overview.totalSale })
+    const snapshot: MaintenanceSnapshot = {
+      kind: 'maintenance',
+      version: CALCULATOR_SNAPSHOT_VERSION,
+      inputs: snapshotInputs(),
+      result: { total: overview.totalSale },
+    }
+    onApply({ lines: overview.lines, totalSale: overview.totalSale, snapshot })
     onOpenChange(false)
   }
 
@@ -289,6 +381,16 @@ export function MaintenanceCalculatorDialog({
             added to the quote as priced maintenance lines.
           </DialogDescription>
         </DialogHeader>
+
+        {isViewing ? (
+          <div className="flex items-center gap-2 border-b bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+            <Eye className="h-4 w-4 shrink-0" />
+            <span className="text-pretty">
+              Viewing the saved calculation for this line. Adjust any value and re-apply to
+              update the line&apos;s price.
+            </span>
+          </div>
+        ) : null}
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
         <Tabs defaultValue="fire" className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -682,7 +784,7 @@ export function MaintenanceCalculatorDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button onClick={handleApply} disabled={disabled || !hasLines}>
               <Plus className="mr-2 h-4 w-4" />
-              Add to quote
+              {isViewing ? 'Update line' : 'Add to quote'}
             </Button>
           </div>
         </DialogFooter>

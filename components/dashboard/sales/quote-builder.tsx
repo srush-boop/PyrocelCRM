@@ -36,7 +36,7 @@ import {
 } from '@/components/ui/command'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
-import { Plus, Trash2, BookOpen, Save, TrendingUp, Calculator, Wrench, Check, ChevronsUpDown, ChevronDown, Sparkles, Building2 } from 'lucide-react'
+import { Plus, Trash2, BookOpen, Save, TrendingUp, Calculator, Wrench, Check, ChevronsUpDown, ChevronDown, Sparkles, Building2, HardHat } from 'lucide-react'
 import { toast } from 'sonner'
 import { PpmCalculatorDialog, type PpmDraft } from '@/components/dashboard/sales/ppm-calculator-dialog'
 import {
@@ -44,6 +44,19 @@ import {
   type MaintenanceCalcResult,
 } from '@/components/dashboard/sales/maintenance-calculator-dialog'
 import type { MaintenanceRates } from '@/lib/maintenance-calculator'
+import {
+  InstallationCalculatorDialog,
+  type InstallationCalcResult,
+} from '@/components/dashboard/sales/installation-calculator-dialog'
+import {
+  type InstallationRates,
+} from '@/lib/installation-calculator'
+import {
+  parseCalculatorSnapshot,
+  type CalculatorSnapshot,
+  type InstallationSnapshot,
+  type MaintenanceSnapshot,
+} from '@/lib/calculator-snapshot'
 import { QuoteSectionRenderer } from '@/components/dashboard/sales/quote-section-renderer'
 import { AiSpecBuilderDialog } from '@/components/dashboard/sales/ai-spec-builder-dialog'
 import {
@@ -117,6 +130,9 @@ interface EditLine {
   is_optional: boolean
   option_group: string | null
   standard: string | null
+  // Serialised inputs + result of the calculator that produced this line (if
+  // any), so the calculation can be re-opened and viewed/adjusted later.
+  calculatorSnapshot?: CalculatorSnapshot | null
 }
 
 interface EditSystem {
@@ -175,6 +191,41 @@ function blankLine(): EditLine {
     option_group: null,
     standard: null,
   }
+}
+
+// Best-effort mapping of a system's product lines to fire maintenance asset
+// counts, used to pre-fill the maintenance calculator. Keyword patterns are
+// tested in order and the first match wins to avoid double-counting a line.
+const FIRE_ASSET_KEYWORDS: { key: string; patterns: RegExp[] }[] = [
+  { key: 'repeater', patterns: [/repeater/i] },
+  { key: 'controlPanel', patterns: [/control panel/i, /\bpanel\b/i, /\bcie\b/i] },
+  { key: 'psu', patterns: [/\bpsu\b/i, /power supply/i] },
+  { key: 'manualCallPoint', patterns: [/call ?point/i, /\bmcp\b/i, /break ?glass/i] },
+  { key: 'beam', patterns: [/beam/i] },
+  { key: 'heatDetector', patterns: [/heat detect/i, /\bheat\b/i] },
+  { key: 'smokeDetector', patterns: [/smoke/i, /optical/i, /multi ?sensor/i] },
+  { key: 'sounder', patterns: [/sounder/i, /\bsav\b/i, /\bvad\b/i, /beacon/i, /\bbell\b/i, /strobe/i] },
+  { key: 'mainsInterface', patterns: [/interface/i, /input.?output/i, /\bi\/o\b/i] },
+  { key: 'network', patterns: [/network/i] },
+  { key: 'remoteSignalling', patterns: [/signalling/i, /dualcom/i, /redcare/i, /\bgsm\b/i] },
+]
+
+function inferFireAssetsFromLines(lines: EditLine[]): Record<string, number> {
+  const counts: Record<string, number> = {}
+  for (const line of lines) {
+    if (line.is_service) continue
+    const hay = `${line.description} ${line.productCode}`.trim()
+    if (!hay) continue
+    const qty = Math.max(0, Math.round(Number.parseFloat(line.quantity) || 0))
+    if (qty <= 0) continue
+    for (const { key, patterns } of FIRE_ASSET_KEYWORDS) {
+      if (patterns.some((p) => p.test(hay))) {
+        counts[key] = (counts[key] ?? 0) + qty
+        break
+      }
+    }
+  }
+  return counts
 }
 
 // Product-code box for a line item. The catalogue is too large to ship to the
@@ -325,6 +376,8 @@ interface QuoteBuilderProps {
   defaultBranchId?: string | null
   // Saved maintenance rate overrides from company settings (null = defaults).
   savedMaintenanceRates?: Partial<MaintenanceRates> | null
+  // Saved installation rate overrides from company settings (null = defaults).
+  savedInstallationRates?: Partial<InstallationRates> | null
   systemTypes: SystemType[]
   serviceTypes: ServiceType[]
   // Global, configurable non-product services (Installation, Decommission, etc.).
@@ -372,6 +425,7 @@ export function QuoteBuilder({
   branches = [],
   defaultBranchId = null,
   savedMaintenanceRates = null,
+  savedInstallationRates = null,
   systemTypes,
   serviceTypes,
   quoteServices,
@@ -406,6 +460,17 @@ export function QuoteBuilder({
 
   // ----- Header state -----
   const [title, setTitle] = useState(quote?.title ?? initialTitle ?? '')
+  // Tracks whether the user has manually edited the title. Until they do, the
+  // title auto-follows the selected site name. Seed as "dirty" for existing
+  // quotes / seeded titles so we never overwrite an established title.
+  const titleDirty = useRef<boolean>(Boolean(quote?.title || initialTitle))
+  // "Maintenance quote only" mode: hides the client-request and systems sections
+  // and focuses the builder on the itemised routine-maintenance flow. Seeded on
+  // for existing quotes whose only system is routine maintenance (SVC).
+  const [maintenanceOnly, setMaintenanceOnly] = useState<boolean>(() => {
+    const svc = initialSystems?.filter((s) => s.work_type === 'SVC') ?? []
+    return svc.length > 0 && svc.length === (initialSystems?.length ?? 0)
+  })
   const [targetMode, setTargetMode] = useState<'client' | 'prospect'>(
     quote?.prospect_name && !quote?.client_id ? 'prospect' : 'client',
   )
@@ -440,6 +505,20 @@ export function QuoteBuilder({
   )
   // Routine-maintenance pricing calculator dialog.
   const [maintCalcOpen, setMaintCalcOpen] = useState(false)
+  // System the maintenance service line should be added to (per-system button);
+  // null in the isolated maintenance-only flow.
+  const [maintAddTarget, setMaintAddTarget] = useState<string | null>(null)
+  // Fire-asset counts inferred from a system's lines, to seed the calculator.
+  const [maintInitialFire, setMaintInitialFire] = useState<Record<string, number> | null>(null)
+  // Existing line being re-viewed/adjusted via its saved snapshot.
+  const [maintViewTarget, setMaintViewTarget] = useState<{ systemKey: string; lineKey: string } | null>(null)
+  const [maintViewSnapshot, setMaintViewSnapshot] = useState<MaintenanceSnapshot | null>(null)
+
+  // Installation pricing calculator dialog.
+  const [installCalcOpen, setInstallCalcOpen] = useState(false)
+  // Existing line being re-viewed/adjusted via its saved snapshot.
+  const [installViewTarget, setInstallViewTarget] = useState<{ systemKey: string; lineKey: string } | null>(null)
+  const [installViewSnapshot, setInstallViewSnapshot] = useState<InstallationSnapshot | null>(null)
 
   // ----- Client-request requirements matrix state -----
   const [requirements, setRequirements] = useState<DraftRequirement[]>(
@@ -493,6 +572,7 @@ export function QuoteBuilder({
             is_optional: l.is_optional ?? false,
             option_group: l.option_group ?? null,
             standard: l.standard ?? null,
+            calculatorSnapshot: parseCalculatorSnapshot(l.calculator_snapshot),
           })),
           ppm: ppmToDraft((initialPpm ?? []).find((p) => p.quote_system_id === s.id) ?? null),
         }))
@@ -524,6 +604,15 @@ export function QuoteBuilder({
     () => (clientId ? sites.filter((s) => s.client_id === clientId) : []),
     [sites, clientId],
   )
+
+  // Auto-fill the quote title from the selected site's name until the user
+  // edits the title themselves (tracked via titleDirty).
+  useEffect(() => {
+    if (titleDirty.current) return
+    if (targetMode !== 'client' || !siteId) return
+    const site = sitesForClient.find((s) => s.id === siteId)
+    if (site?.name) setTitle(site.name)
+  }, [siteId, targetMode, sitesForClient])
 
   // ----- Live totals -----
   const totals = useMemo(() => {
@@ -741,22 +830,95 @@ export function QuoteBuilder({
     return { lineCount: sys.lines.length, total }
   }, [systems])
 
-  // Inject the calculator's priced services into the quote. The results are
-  // sell-priced (post-discount), so each line is stored at cost = sell with 0%
-  // margin to reproduce the calculator total exactly. Replaces the existing
-  // "Routine Maintenance" system if one is already present, else appends it.
+  // Non-maintenance systems the installation calculator can add its service line
+  // to. Falls back to a placeholder label for unnamed systems.
+  const installSystemOptions = useMemo(
+    () =>
+      systems
+        .filter((s) => quoteTypeFromWorkType(s.work_type) !== 'service_contract')
+        .map((s, i) => ({ key: s.key, label: s.system_name || `System ${i + 1}` })),
+    [systems],
+  )
+
+  // Replace an existing line's price + snapshot in place (used when a saved
+  // calculation is re-opened, adjusted and re-applied).
+  const updateLinePriceFromCalc = useCallback(
+    (systemKey: string, lineKey: string, total: number, snapshot: CalculatorSnapshot) => {
+      setSystems((prev) =>
+        prev.map((s) =>
+          s.key === systemKey
+            ? {
+                ...s,
+                lines: s.lines.map((l) =>
+                  l.key === lineKey
+                    ? { ...l, quantity: '1', unitCost: total.toFixed(2), calculatorSnapshot: snapshot }
+                    : l,
+                ),
+              }
+            : s,
+        ),
+      )
+    },
+    [],
+  )
+
+  // Apply the maintenance calculator. Three paths:
+  //  - view/adjust: update the originating line's price + snapshot in place.
+  //  - per-system: add ONE "Routine Maintenance" service line (annual total) to
+  //    the chosen system.
+  //  - maintenance-only isolated flow: build the itemised Routine Maintenance
+  //    system (Standard/Comprehensive options etc.), snapshot on the first line.
+  // Sell-priced results are stored at cost = sell with 0% margin so the quote
+  // total reproduces the calculator total exactly.
   const applyMaintenance = useCallback(
     (result: MaintenanceCalcResult) => {
-      const lines: EditLine[] = result.lines.map((l) => {
+      if (maintViewTarget) {
+        updateLinePriceFromCalc(
+          maintViewTarget.systemKey,
+          maintViewTarget.lineKey,
+          result.totalSale,
+          result.snapshot,
+        )
+        setMaintViewTarget(null)
+        setMaintViewSnapshot(null)
+        toast.success('Maintenance price updated')
+        return
+      }
+
+      if (maintAddTarget) {
+        const target = maintAddTarget
+        const line: EditLine = {
+          key: uid(),
+          productCode: '',
+          description: 'Routine Maintenance',
+          detail: '',
+          service_type_id: null,
+          is_service: true,
+          catalogue_item_id: null,
+          quantity: '1',
+          unit: 'year',
+          unitCost: result.totalSale.toFixed(2),
+          margin: '0',
+          is_optional: false,
+          option_group: null,
+          standard: null,
+          calculatorSnapshot: result.snapshot,
+        }
+        setSystems((prev) =>
+          prev.map((s) => (s.key === target ? { ...s, lines: [...s.lines, line] } : s)),
+        )
+        setMaintAddTarget(null)
+        setMaintInitialFire(null)
+        toast.success('Maintenance added as a service line')
+        return
+      }
+
+      // Maintenance-only isolated flow: itemised Routine Maintenance system.
+      const lines: EditLine[] = result.lines.map((l, i) => {
         const meta = [l.coverType, l.visits ? `${l.visits} visits/yr` : null]
           .filter(Boolean)
           .join(' · ')
-        // Prefer the service overview as the line detail; fall back to the
-        // cover/visits summary so the line always carries context.
         const detail = [l.overview, meta].filter(Boolean).join('\n')
-        // Fold the cover level into the description so options in the same
-        // group (e.g. Standard vs Comprehensive fire cover) read as distinct
-        // lines on the quote rather than repeating the same title.
         const description = l.coverType
           ? `${l.description} (${l.coverType} Cover)`
           : l.description
@@ -775,6 +937,9 @@ export function QuoteBuilder({
           is_optional: Boolean(l.optional),
           option_group: l.optionGroup ?? null,
           standard: l.standard ?? null,
+          // Attach the snapshot to the first line so the calculation can be
+          // re-opened from the system's line list.
+          calculatorSnapshot: i === 0 ? result.snapshot : null,
         }
       })
 
@@ -792,6 +957,89 @@ export function QuoteBuilder({
         ]
       })
       toast.success('Maintenance pricing added to the quote')
+    },
+    [maintViewTarget, maintAddTarget, updateLinePriceFromCalc],
+  )
+
+  // Apply the installation calculator. In view/adjust mode the originating line
+  // is updated in place; otherwise a single "Installation" service line, priced
+  // at the calculated total, is added to the chosen target system. Stored at
+  // cost = sell with 0% margin so the quote reproduces the calculator total.
+  const applyInstallation = useCallback(
+    (result: InstallationCalcResult) => {
+      if (installViewTarget) {
+        updateLinePriceFromCalc(
+          installViewTarget.systemKey,
+          installViewTarget.lineKey,
+          result.total,
+          result.snapshot,
+        )
+        setInstallViewTarget(null)
+        setInstallViewSnapshot(null)
+        toast.success('Installation price updated')
+        return
+      }
+
+      const target = result.targetSystemKey
+      if (!target) {
+        toast.error('Choose a system to add the installation to')
+        return
+      }
+      const line: EditLine = {
+        key: uid(),
+        productCode: '',
+        description: 'Installation',
+        detail: '',
+        service_type_id: null,
+        is_service: true,
+        catalogue_item_id: null,
+        quantity: '1',
+        unit: '',
+        unitCost: result.total.toFixed(2),
+        margin: '0',
+        is_optional: false,
+        option_group: null,
+        standard: null,
+        calculatorSnapshot: result.snapshot,
+      }
+      setSystems((prev) =>
+        prev.map((s) => (s.key === target ? { ...s, lines: [...s.lines, line] } : s)),
+      )
+      toast.success('Installation added as a service line')
+    },
+    [installViewTarget, updateLinePriceFromCalc],
+  )
+
+  // Open the maintenance calculator for a specific system, pre-filling fire
+  // asset counts inferred from that system's product lines.
+  const openMaintenanceForSystem = useCallback((systemKey: string) => {
+    setSystems((prev) => {
+      const sys = prev.find((s) => s.key === systemKey)
+      setMaintInitialFire(sys ? inferFireAssetsFromLines(sys.lines) : null)
+      return prev
+    })
+    setMaintAddTarget(systemKey)
+    setMaintViewTarget(null)
+    setMaintViewSnapshot(null)
+    setMaintCalcOpen(true)
+  }, [])
+
+  // Re-open a saved calculation for a line so it can be viewed / adjusted.
+  const viewLineCalculation = useCallback(
+    (systemKey: string, line: EditLine) => {
+      const snap = parseCalculatorSnapshot(line.calculatorSnapshot)
+      if (!snap) return
+      if (snap.kind === 'installation') {
+        setInstallViewTarget({ systemKey, lineKey: line.key })
+        setInstallViewSnapshot(snap)
+        setInstallCalcOpen(true)
+      } else {
+        setMaintViewTarget({ systemKey, lineKey: line.key })
+        setMaintViewSnapshot(snap)
+        setMaintAddTarget(null)
+        setMaintInitialFire(null)
+        setMaintCalcOpen(true)
+      }
     },
     [],
   )
@@ -857,6 +1105,7 @@ export function QuoteBuilder({
             is_optional: l.is_optional,
             option_group: l.option_group,
             standard: l.standard,
+            calculator_snapshot: l.calculatorSnapshot ?? null,
           })),
       })),
       show_requirements_matrix: showRequirementsMatrix,
@@ -959,11 +1208,35 @@ export function QuoteBuilder({
             <Input
               id="q-title"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+                titleDirty.current = true
+                setTitle(e.target.value)
+              }}
               placeholder="e.g. Fire alarm upgrade — Block A"
               disabled={disabled}
             />
           </div>
+
+          {/* Maintenance-only mode toggle */}
+          {!readOnly && (
+            <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+              <div className="grid gap-0.5">
+                <Label htmlFor="q-maint-only" className="cursor-pointer">
+                  Maintenance quote only
+                </Label>
+                <span className="text-xs text-muted-foreground text-pretty">
+                  Hides the client request and systems sections and focuses this quote on the
+                  routine-maintenance pricing calculator.
+                </span>
+              </div>
+              <Switch
+                id="q-maint-only"
+                checked={maintenanceOnly}
+                onCheckedChange={setMaintenanceOnly}
+                disabled={disabled}
+              />
+            </div>
+          )}
 
           {/* Issuing branch */}
           {branches.length > 0 && (
@@ -1139,21 +1412,17 @@ export function QuoteBuilder({
         </CardContent>
       </Card>
 
-      {/* ---------- Routine maintenance pricing ---------- */}
-      {/*
-        Always visible so the calculator is a first-class entry point. Opening it
-        and pressing "Add to quote" auto-creates the Routine Maintenance system —
-        no need to pre-select a work type in the systems section below.
-      */}
+      {/* ---------- Routine maintenance pricing (maintenance-only mode) ----------
+        Only shown when "Maintenance quote only" is enabled. Opening the
+        calculator here (no target system) drives the isolated itemised flow
+        that auto-creates the Routine Maintenance system. */}
+      {maintenanceOnly && (
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div>
             <CardTitle className="flex items-center gap-2">
               <Calculator className="h-4 w-4 text-muted-foreground" />
               Routine maintenance pricing
-              <span className="rounded-full border px-2 py-0.5 text-xs font-normal text-muted-foreground">
-                Optional
-              </span>
             </CardTitle>
             <p className="mt-1 text-sm text-muted-foreground text-pretty">
               {maintenanceSummary
@@ -1165,7 +1434,13 @@ export function QuoteBuilder({
             <Button
               type="button"
               variant={maintenanceSummary ? 'outline' : 'default'}
-              onClick={() => setMaintCalcOpen(true)}
+              onClick={() => {
+                setMaintAddTarget(null)
+                setMaintInitialFire(null)
+                setMaintViewTarget(null)
+                setMaintViewSnapshot(null)
+                setMaintCalcOpen(true)
+              }}
               disabled={isPending}
             >
               <Calculator className="mr-2 h-4 w-4" />
@@ -1215,17 +1490,44 @@ export function QuoteBuilder({
           </CardContent>
         )}
       </Card>
+      )}
 
       <MaintenanceCalculatorDialog
         open={maintCalcOpen}
-        onOpenChange={setMaintCalcOpen}
+        onOpenChange={(o) => {
+          setMaintCalcOpen(o)
+          if (!o) {
+            setMaintAddTarget(null)
+            setMaintInitialFire(null)
+            setMaintViewTarget(null)
+            setMaintViewSnapshot(null)
+          }
+        }}
         savedRates={savedMaintenanceRates}
         disabled={disabled}
+        initialFireAssets={maintInitialFire}
+        viewSnapshot={maintViewSnapshot}
         onApply={applyMaintenance}
       />
 
+      <InstallationCalculatorDialog
+        open={installCalcOpen}
+        onOpenChange={(o) => {
+          setInstallCalcOpen(o)
+          if (!o) {
+            setInstallViewTarget(null)
+            setInstallViewSnapshot(null)
+          }
+        }}
+        savedRates={savedInstallationRates}
+        disabled={disabled}
+        systems={installSystemOptions}
+        viewSnapshot={installViewSnapshot}
+        onApply={applyInstallation}
+      />
+
       {/* ---------- Client request / requirements matrix ---------- */}
-      {!readOnly && (
+      {!readOnly && !maintenanceOnly && (
         <Card>
           <CardHeader className="flex flex-row items-start justify-between gap-4">
             <div>
@@ -1287,8 +1589,16 @@ export function QuoteBuilder({
         </Card>
       )}
 
-      {/* ---------- Systems ---------- */}
-      {systems.map((system) =>
+      {/* ---------- Systems ----------
+        In maintenance-only mode only the Routine Maintenance (service_contract)
+        systems are shown; otherwise the full multi-system builder is rendered. */}
+      {systems
+        .filter((system) =>
+          maintenanceOnly
+            ? quoteTypeFromWorkType(system.work_type) === 'service_contract'
+            : true,
+        )
+        .map((system) =>
         quoteTypeFromWorkType(system.work_type) === 'service_contract' ? (
           // Maintenance systems are built by the calculator, so they get a
           // dedicated tidy view (priced lines + client options) instead of the
@@ -1303,7 +1613,14 @@ export function QuoteBuilder({
             onRemove={() => removeSystem(system.key)}
             onUpdateLine={(lineKey, patch) => updateLine(system.key, lineKey, patch)}
             onRemoveLine={(lineKey) => removeLine(system.key, lineKey)}
-            onOpenCalculator={() => setMaintCalcOpen(true)}
+            onViewLineCalculation={(line) => viewLineCalculation(system.key, line)}
+            onOpenCalculator={() => {
+              setMaintAddTarget(null)
+              setMaintInitialFire(null)
+              setMaintViewTarget(null)
+              setMaintViewSnapshot(null)
+              setMaintCalcOpen(true)
+            }}
           />
         ) : (
         <SystemCard
@@ -1336,15 +1653,27 @@ export function QuoteBuilder({
                   onUpdateLine={(lineKey, patch) => updateLine(system.key, lineKey, patch)}
           onRemoveLine={(lineKey) => removeLine(system.key, lineKey)}
           onApplyPpm={(draft) => applyPpm(system.key, draft)}
+          onOpenMaintenance={() => openMaintenanceForSystem(system.key)}
+          onViewLineCalculation={(line) => viewLineCalculation(system.key, line)}
         />
         ),
       )}
 
-      {!readOnly && (
-        <Button variant="outline" onClick={addSystem} disabled={isPending}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add system
-        </Button>
+      {!readOnly && !maintenanceOnly && (
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={addSystem} disabled={isPending}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add system
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setInstallCalcOpen(true)}
+            disabled={isPending}
+          >
+            <HardHat className="mr-2 h-4 w-4" />
+            Installation calculator
+          </Button>
+        </div>
       )}
 
       {/* ---------- Totals + terms ---------- */}
@@ -1505,6 +1834,7 @@ export function QuoteBuilder({
     onUpdateLine: (lineKey: string, patch: Partial<EditLine>) => void
     onRemoveLine: (lineKey: string) => void
     onOpenCalculator: () => void
+    onViewLineCalculation: (line: EditLine) => void
   }
 
   function MaintenanceSystemCard({
@@ -1517,6 +1847,7 @@ export function QuoteBuilder({
     onUpdateLine,
     onRemoveLine,
     onOpenCalculator,
+    onViewLineCalculation,
   }: MaintenanceSystemCardProps) {
     const disabled = readOnly || isPending
     const [open, setOpen] = useState(true)
@@ -1627,6 +1958,19 @@ export function QuoteBuilder({
                             />
                           </div>
                         </div>
+                        {line.calculatorSnapshot && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 shrink-0 text-muted-foreground"
+                            onClick={() => onViewLineCalculation(line)}
+                            disabled={isPending}
+                            title="View calculation"
+                          >
+                            <Calculator className="h-4 w-4" />
+                            <span className="sr-only">View calculation</span>
+                          </Button>
+                        )}
                         {!readOnly && (
                           <Button
                             variant="ghost"
@@ -1749,6 +2093,11 @@ export function QuoteBuilder({
   onUpdateLine: (lineKey: string, patch: Partial<EditLine>) => void
   onRemoveLine: (lineKey: string) => void
   onApplyPpm: (draft: PpmDraft) => void
+  // Open the maintenance calculator targeting this system (adds a single
+  // Routine Maintenance service line at the calculated annual total).
+  onOpenMaintenance: () => void
+  // Re-open the calculator that produced a line's price (if it has a snapshot).
+  onViewLineCalculation: (line: EditLine) => void
 }
 
 function SystemCard({
@@ -1777,13 +2126,14 @@ function SystemCard({
   onUpdateLine,
   onRemoveLine,
   onApplyPpm,
+  onOpenMaintenance,
+  onViewLineCalculation,
 }: SystemCardProps) {
   const disabled = readOnly || isPending
   const [ppmOpen, setPpmOpen] = useState(false)
-  // Each system section is collapsible. Configured systems start collapsed to
-  // keep long multi-system quotes scannable; a brand-new (untyped) system
-  // auto-expands so the user is guided straight into setup.
-  const [open, setOpen] = useState(!system.system_type_id)
+  // Each system section is collapsible and starts collapsed to keep long
+  // multi-system quotes scannable (header/summary stays visible).
+  const [open, setOpen] = useState(false)
   const [catalogueOpen, setCatalogueOpen] = useState(false)
   const [catalogueSearch, setCatalogueSearch] = useState('')
 
@@ -2072,7 +2422,9 @@ function SystemCard({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {WORK_TYPES.map((w) => (
+                    {/* SVC (Routine Maintenance) is created via the maintenance
+                        calculator, not picked here — keep it out of the list. */}
+                    {WORK_TYPES.filter((w) => w.code !== 'SVC').map((w) => (
                       <SelectItem key={w.code} value={w.code}>
                         {w.label} ({w.code})
                       </SelectItem>
@@ -2511,6 +2863,21 @@ function SystemCard({
                   className="w-full"
                   disabled={disabled}
                 />
+                {line.calculatorSnapshot && (
+                  <div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs text-muted-foreground"
+                      onClick={() => onViewLineCalculation(line)}
+                      disabled={isPending}
+                    >
+                      <Calculator className="mr-1.5 h-3.5 w-3.5" />
+                      View calculation
+                    </Button>
+                  </div>
+                )}
               </div>
               </Fragment>
             )
@@ -2523,6 +2890,16 @@ function SystemCard({
                 <Button variant="outline" size="sm" onClick={onAddLine} disabled={isPending}>
                   <Plus className="mr-2 h-4 w-4" />
                   Add line
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onOpenMaintenance}
+                  disabled={isPending}
+                  title="Price routine maintenance for this system and add it as an annual service line"
+                >
+                  <Calculator className="mr-2 h-4 w-4" />
+                  Maintenance price
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

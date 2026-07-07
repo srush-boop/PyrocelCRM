@@ -31,6 +31,7 @@ import type {
   Branch,
 } from '@/lib/types/database'
 import type { MaintenanceRates } from '@/lib/maintenance-calculator'
+import type { InstallationRates } from '@/lib/installation-calculator'
 
 export default async function QuoteDetailPage({
   params,
@@ -117,7 +118,7 @@ export default async function QuoteDetailPage({
       .order('revision'),
     supabase
       .from('company_info')
-      .select('default_margin_percent, maintenance_rates')
+      .select('default_margin_percent, maintenance_rates, installation_rates')
       .limit(1)
       .maybeSingle(),
     (profile as Profile).department_id
@@ -227,6 +228,10 @@ export default async function QuoteDetailPage({
         savedMaintenanceRates={
           ((companyInfo as { maintenance_rates: Partial<MaintenanceRates> | null } | null)
             ?.maintenance_rates) ?? null
+        }
+        savedInstallationRates={
+          ((companyInfo as { installation_rates: Partial<InstallationRates> | null } | null)
+            ?.installation_rates) ?? null
         }
         systemTypes={(systemTypes ?? []) as SystemType[]}
         serviceTypes={(serviceTypes ?? []) as ServiceType[]}

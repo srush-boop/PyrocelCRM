@@ -8,6 +8,7 @@ import { sendEmail } from '@/lib/email/send-email'
 import { renderQuotePdfBuffer } from '@/lib/pdf/quote-pdf'
 import { loadQuoteCatalogue } from '@/lib/sales/equipment-spec'
 import { createRemedialCallsForQuote } from '@/lib/remedial'
+import type { CalculatorSnapshot } from '@/lib/calculator-snapshot'
 import type {
   QuoteStatus,
   QuoteCatalogueItem,
@@ -39,6 +40,10 @@ export interface QuoteLineInput {
   is_optional?: boolean
   option_group?: string | null
   standard?: string | null
+  // Serialised calculator inputs + result behind this line (installation /
+  // maintenance), enabling the calculation to be re-opened later. NULL for
+  // hand-entered lines.
+  calculator_snapshot?: CalculatorSnapshot | Record<string, unknown> | null
 }
 
 export interface QuotePpmInput {
@@ -186,6 +191,7 @@ function buildLineRows(
         is_optional: l.is_optional ?? false,
         option_group: l.option_group?.trim() || null,
         standard: l.standard?.trim() || null,
+        calculator_snapshot: l.calculator_snapshot ?? null,
         position: idx,
       }
     })
@@ -1119,6 +1125,7 @@ async function copySystems(
         margin_percent: l.margin_percent ?? null,
         unit_price_pence: l.unit_price_pence,
         line_total_pence: l.line_total_pence,
+        calculator_snapshot: l.calculator_snapshot ?? null,
         position: l.position,
       }))
     if (systemLines.length > 0) {

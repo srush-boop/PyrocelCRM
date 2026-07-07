@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home, Wrench } from 'lucide-react'
+import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home, Wrench, HardHat } from 'lucide-react'
 import type { User as AuthUser } from '@supabase/supabase-js'
 import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType } from '@/lib/types/database'
 import { CompanySettings } from './company-settings'
@@ -16,6 +16,7 @@ import { DepartmentsSettings } from './departments-settings'
 import { RolesSettings } from './roles-settings'
 import { PropertyTypesSettings } from './property-types-settings'
 import { MaintenanceSettings } from './maintenance-settings'
+import { InstallationSettings } from './installation-settings'
 import { SignatureManager } from './signature-manager'
 
 interface SettingsContentProps {
@@ -138,6 +139,12 @@ export function SettingsContent({ user, profile, company, branches, departments,
           <TabsTrigger value="maintenance" className="gap-2">
             <Wrench className="h-4 w-4" />
             Maintenance
+          </TabsTrigger>
+        )}
+        {isAdmin && (
+          <TabsTrigger value="installation" className="gap-2">
+            <HardHat className="h-4 w-4" />
+            Installation
           </TabsTrigger>
         )}
       </TabsList>
@@ -314,6 +321,12 @@ export function SettingsContent({ user, profile, company, branches, departments,
       {isAdmin && (
         <TabsContent value="maintenance" className="space-y-4">
           <MaintenanceSettings company={company} />
+        </TabsContent>
+      )}
+
+      {isAdmin && (
+        <TabsContent value="installation" className="space-y-4">
+          <InstallationSettings company={company} />
         </TabsContent>
       )}
 

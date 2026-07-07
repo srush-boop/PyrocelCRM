@@ -774,7 +774,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
           type="button"
           variant={viewMode === mode ? 'secondary' : 'ghost'}
           size="sm"
-          className="h-8 gap-1.5 px-2.5"
+          className="h-8 gap-1.5 px-2 sm:px-2.5"
           onClick={() => setViewMode(mode)}
           aria-pressed={viewMode === mode}
         >
@@ -786,9 +786,10 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   )
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
+    <div className="space-y-3">
+      {/* Row 1: search + quick filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[180px] sm:max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search calls..."
@@ -804,7 +805,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
             variant={needsBookingOnly ? 'default' : 'outline'}
             onClick={() => setNeedsBookingOnly((v) => !v)}
             aria-pressed={needsBookingOnly}
-            className="gap-2"
+            className="gap-2 shrink-0"
           >
             <CalendarClock className="h-4 w-4" />
             Needs booking
@@ -828,25 +829,6 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
               {engineers.map((eng) => (
                 <SelectItem key={eng.id} value={eng.id}>
                   {eng.full_name || eng.email}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-
-        {systemOptions.length > 0 && (
-          <Select value={selectedSystem} onValueChange={setSelectedSystem}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="System" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Systems</SelectItem>
-              {systemOptions.map((sys) => (
-                <SelectItem key={sys.id} value={sys.id}>
-                  <span className="flex items-center gap-2">
-                    <SystemIcon system={sys} className="h-3.5 w-3.5" />
-                    {sys.name}
-                  </span>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -906,15 +888,37 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
         )}
 
         {hasActiveFilters && (
-          <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-2">
+          <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-2 shrink-0">
             <X className="h-4 w-4" />
             Clear
           </Button>
         )}
+      </div>
 
-        <div className="ml-auto flex items-center gap-3">
+      {/* Row 2: system filter, sort and view toggle — kept on a single line */}
+      <div className="flex items-center gap-2">
+        {systemOptions.length > 0 && (
+          <Select value={selectedSystem} onValueChange={setSelectedSystem}>
+            <SelectTrigger className="min-w-0 flex-1 sm:flex-none sm:w-[180px]">
+              <SelectValue placeholder="System" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Systems</SelectItem>
+              {systemOptions.map((sys) => (
+                <SelectItem key={sys.id} value={sys.id}>
+                  <span className="flex items-center gap-2">
+                    <SystemIcon system={sys} className="h-3.5 w-3.5" />
+                    {sys.name}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           <Select value={sortBy} onValueChange={(v) => handleSortChange(v as SortKey)}>
-            <SelectTrigger className="w-[160px]">
+            <SelectTrigger className="w-[120px] sm:w-[150px]">
               {locating ? (
                 <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
               ) : (

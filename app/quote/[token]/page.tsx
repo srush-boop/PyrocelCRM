@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { QuoteDocument } from '@/components/dashboard/sales/quote-document'
 import { PublicQuoteApproval } from '@/components/portal/public-quote-approval'
+import { PublicQuoteOptions } from '@/components/portal/public-quote-options'
 import { PublicQuoteQueries } from '@/components/portal/public-quote-queries'
 import { getPublicQuote } from './actions'
 import type {
@@ -46,6 +47,9 @@ export default async function PublicQuotePage({
           requirements={requirements}
           catalogue={catalogue}
         />
+        <div className="mt-6 print:hidden">
+          <PublicQuoteOptions quote={quote} systems={systems} lines={lines} token={token} />
+        </div>
         <div className="mt-6 print:hidden">
           <PublicQuoteApproval quote={quote} token={token} />
         </div>

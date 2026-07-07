@@ -4,12 +4,13 @@
  * Installation pricing calculator — a UI over the Excel port in
  * `lib/installation-calculator.ts`. Engineers enter device counts, cable runs,
  * containment and sundries; the dialog live-prices them in the selected mode
- * (Erect Only / Supply Only / Supply & Erect) and, on apply, injects the priced
- * lines into the quote as an "Installation" system.
+ * (Erect Only / Supply Only / Supply & Erect) and, on apply, adds a single
+ * "Installation" service line (priced at the total) to the chosen system. The
+ * full inputs are stored as a snapshot so the calculation can be re-opened.
  */
 
-import { useMemo, useState } from 'react'
-import { HardHat, Plus, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { HardHat, Plus, Trash2, Eye } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -44,13 +45,27 @@ import {
   type CableEntry,
   type PricingMode,
 } from '@/lib/installation-calculator'
+import {
+  CALCULATOR_SNAPSHOT_VERSION,
+  type InstallationSnapshot,
+} from '@/lib/calculator-snapshot'
 
 const GBP = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' })
+
+/** A quote system the calculated line can be added to. */
+export interface InstallSystemOption {
+  key: string
+  label: string
+}
 
 export interface InstallationCalcResult {
   lines: InstallationLine[]
   mode: PricingMode
   total: number
+  /** System the single service line should be added to. */
+  targetSystemKey: string
+  /** Serialisable inputs + result for later viewing. */
+  snapshot: InstallationSnapshot
 }
 
 interface InstallationCalculatorDialogProps {
@@ -59,6 +74,10 @@ interface InstallationCalculatorDialogProps {
   /** Saved rate overrides from company settings (null = built-in defaults). */
   savedRates?: Partial<InstallationRates> | null
   disabled?: boolean
+  /** Systems the resulting line can be attached to (hidden in view mode). */
+  systems?: InstallSystemOption[]
+  /** When set, opens read/adjust of an existing calculation and its line. */
+  viewSnapshot?: InstallationSnapshot | null
   onApply: (result: InstallationCalcResult) => void
 }
 
@@ -116,6 +135,8 @@ export function InstallationCalculatorDialog({
   onOpenChange,
   savedRates,
   disabled,
+  systems = [],
+  viewSnapshot = null,
   onApply,
 }: InstallationCalculatorDialogProps) {
   const rates = useMemo(() => resolveInstallationRates(savedRates), [savedRates])
@@ -125,8 +146,39 @@ export function InstallationCalculatorDialog({
   const [containment, setContainment] = useState<CountMap>({})
   const [sundries, setSundries] = useState<CountMap>({})
   const [cableRows, setCableRows] = useState<CableRow[]>([])
+  const [targetSystemKey, setTargetSystemKey] = useState('')
+
+  const isViewing = !!viewSnapshot
 
   const defaultTrayPct = String(Math.round(rates.defaultTrayFraction * 100))
+
+  // On open, hydrate from a saved snapshot (view/adjust) or default the target
+  // system to the first available. Keyed on `open` so re-opening re-seeds.
+  useEffect(() => {
+    if (!open) return
+    if (viewSnapshot) {
+      const { input, mode: snapMode } = viewSnapshot.inputs
+      setMode(snapMode)
+      setDevices({ ...input.devices })
+      setContainment({ ...input.containment })
+      setSundries({ ...input.sundries })
+      setCableRows(
+        input.cables.map((c) => ({
+          key: newRowId(),
+          cableKey: c.cableKey,
+          useManual: c.metres != null,
+          metres: c.metres != null ? String(c.metres) : '',
+          deviceCount: c.deviceCount != null ? String(c.deviceCount) : '',
+          trayPct:
+            c.trayFraction != null
+              ? String(Math.round(c.trayFraction * 100))
+              : defaultTrayPct,
+        })),
+      )
+    }
+    setTargetSystemKey((prev) => prev || systems[0]?.key || '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, viewSnapshot])
 
   const addCableRow = () =>
     setCableRows((prev) => [
@@ -168,10 +220,21 @@ export function InstallationCalculatorDialog({
 
   const hasLines = result.lines.length > 0
   const total = totalForMode(result, mode)
+  // In view mode the line already has a home; otherwise a target is required.
+  const canApply = hasLines && (isViewing || !!targetSystemKey)
 
   function handleApply() {
-    if (!hasLines) return
-    onApply({ lines: result.lines, mode, total })
+    if (!canApply) return
+    const snapshot: InstallationSnapshot = {
+      kind: 'installation',
+      version: CALCULATOR_SNAPSHOT_VERSION,
+      inputs: {
+        input: { devices, cables: cableEntries, containment, sundries },
+        mode,
+      },
+      result: { total, mode },
+    }
+    onApply({ lines: result.lines, mode, total, targetSystemKey, snapshot })
     onOpenChange(false)
   }
 
@@ -189,7 +252,17 @@ export function InstallationCalculatorDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Pricing mode selector */}
+        {isViewing ? (
+          <div className="flex items-center gap-2 border-b bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+            <Eye className="h-4 w-4 shrink-0" />
+            <span className="text-pretty">
+              Viewing the saved calculation for this line. Adjust any value and re-apply to
+              update the line&apos;s price.
+            </span>
+          </div>
+        ) : null}
+
+        {/* Pricing mode + target system */}
         <div className="flex flex-wrap items-center gap-3 border-b px-4 py-3">
           <Label className="text-sm">Pricing mode</Label>
           <Select value={mode} onValueChange={(v) => setMode(v as PricingMode)} disabled={disabled}>
@@ -211,6 +284,28 @@ export function InstallationCalculatorDialog({
                 ? 'Materials only (nett + mark-up).'
                 : 'Labour + materials.'}
           </span>
+
+          {!isViewing && systems.length > 0 ? (
+            <div className="ml-auto flex items-center gap-2">
+              <Label className="text-sm">Add to</Label>
+              <Select
+                value={targetSystemKey}
+                onValueChange={setTargetSystemKey}
+                disabled={disabled}
+              >
+                <SelectTrigger className="h-9 w-56">
+                  <SelectValue placeholder="Select system" />
+                </SelectTrigger>
+                <SelectContent>
+                  {systems.map((s) => (
+                    <SelectItem key={s.key} value={s.key}>
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
         </div>
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -493,9 +588,9 @@ export function InstallationCalculatorDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button onClick={handleApply} disabled={disabled || !hasLines}>
+            <Button onClick={handleApply} disabled={disabled || !canApply}>
               <Plus className="mr-2 h-4 w-4" />
-              Add to quote
+              {isViewing ? 'Update line' : 'Add to quote'}
             </Button>
           </div>
         </DialogFooter>

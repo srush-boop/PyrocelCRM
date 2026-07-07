@@ -49,10 +49,14 @@ import {
   type InstallationCalcResult,
 } from '@/components/dashboard/sales/installation-calculator-dialog'
 import {
-  PRICING_MODE_LABELS,
-  lineValueForMode,
   type InstallationRates,
 } from '@/lib/installation-calculator'
+import {
+  parseCalculatorSnapshot,
+  type CalculatorSnapshot,
+  type InstallationSnapshot,
+  type MaintenanceSnapshot,
+} from '@/lib/calculator-snapshot'
 import { QuoteSectionRenderer } from '@/components/dashboard/sales/quote-section-renderer'
 import { AiSpecBuilderDialog } from '@/components/dashboard/sales/ai-spec-builder-dialog'
 import {
@@ -126,6 +130,9 @@ interface EditLine {
   is_optional: boolean
   option_group: string | null
   standard: string | null
+  // Serialised inputs + result of the calculator that produced this line (if
+  // any), so the calculation can be re-opened and viewed/adjusted later.
+  calculatorSnapshot?: CalculatorSnapshot | null
 }
 
 interface EditSystem {
@@ -184,6 +191,41 @@ function blankLine(): EditLine {
     option_group: null,
     standard: null,
   }
+}
+
+// Best-effort mapping of a system's product lines to fire maintenance asset
+// counts, used to pre-fill the maintenance calculator. Keyword patterns are
+// tested in order and the first match wins to avoid double-counting a line.
+const FIRE_ASSET_KEYWORDS: { key: string; patterns: RegExp[] }[] = [
+  { key: 'repeater', patterns: [/repeater/i] },
+  { key: 'controlPanel', patterns: [/control panel/i, /\bpanel\b/i, /\bcie\b/i] },
+  { key: 'psu', patterns: [/\bpsu\b/i, /power supply/i] },
+  { key: 'manualCallPoint', patterns: [/call ?point/i, /\bmcp\b/i, /break ?glass/i] },
+  { key: 'beam', patterns: [/beam/i] },
+  { key: 'heatDetector', patterns: [/heat detect/i, /\bheat\b/i] },
+  { key: 'smokeDetector', patterns: [/smoke/i, /optical/i, /multi ?sensor/i] },
+  { key: 'sounder', patterns: [/sounder/i, /\bsav\b/i, /\bvad\b/i, /beacon/i, /\bbell\b/i, /strobe/i] },
+  { key: 'mainsInterface', patterns: [/interface/i, /input.?output/i, /\bi\/o\b/i] },
+  { key: 'network', patterns: [/network/i] },
+  { key: 'remoteSignalling', patterns: [/signalling/i, /dualcom/i, /redcare/i, /\bgsm\b/i] },
+]
+
+function inferFireAssetsFromLines(lines: EditLine[]): Record<string, number> {
+  const counts: Record<string, number> = {}
+  for (const line of lines) {
+    if (line.is_service) continue
+    const hay = `${line.description} ${line.productCode}`.trim()
+    if (!hay) continue
+    const qty = Math.max(0, Math.round(Number.parseFloat(line.quantity) || 0))
+    if (qty <= 0) continue
+    for (const { key, patterns } of FIRE_ASSET_KEYWORDS) {
+      if (patterns.some((p) => p.test(hay))) {
+        counts[key] = (counts[key] ?? 0) + qty
+        break
+      }
+    }
+  }
+  return counts
 }
 
 // Product-code box for a line item. The catalogue is too large to ship to the
@@ -452,8 +494,20 @@ export function QuoteBuilder({
   )
   // Routine-maintenance pricing calculator dialog.
   const [maintCalcOpen, setMaintCalcOpen] = useState(false)
+  // System the maintenance service line should be added to (per-system button);
+  // null in the isolated maintenance-only flow.
+  const [maintAddTarget, setMaintAddTarget] = useState<string | null>(null)
+  // Fire-asset counts inferred from a system's lines, to seed the calculator.
+  const [maintInitialFire, setMaintInitialFire] = useState<Record<string, number> | null>(null)
+  // Existing line being re-viewed/adjusted via its saved snapshot.
+  const [maintViewTarget, setMaintViewTarget] = useState<{ systemKey: string; lineKey: string } | null>(null)
+  const [maintViewSnapshot, setMaintViewSnapshot] = useState<MaintenanceSnapshot | null>(null)
+
   // Installation pricing calculator dialog.
   const [installCalcOpen, setInstallCalcOpen] = useState(false)
+  // Existing line being re-viewed/adjusted via its saved snapshot.
+  const [installViewTarget, setInstallViewTarget] = useState<{ systemKey: string; lineKey: string } | null>(null)
+  const [installViewSnapshot, setInstallViewSnapshot] = useState<InstallationSnapshot | null>(null)
 
   // ----- Client-request requirements matrix state -----
   const [requirements, setRequirements] = useState<DraftRequirement[]>(
@@ -507,6 +561,7 @@ export function QuoteBuilder({
             is_optional: l.is_optional ?? false,
             option_group: l.option_group ?? null,
             standard: l.standard ?? null,
+            calculatorSnapshot: parseCalculatorSnapshot(l.calculator_snapshot),
           })),
           ppm: ppmToDraft((initialPpm ?? []).find((p) => p.quote_system_id === s.id) ?? null),
         }))
@@ -755,22 +810,85 @@ export function QuoteBuilder({
     return { lineCount: sys.lines.length, total }
   }, [systems])
 
-  // Inject the calculator's priced services into the quote. The results are
-  // sell-priced (post-discount), so each line is stored at cost = sell with 0%
-  // margin to reproduce the calculator total exactly. Replaces the existing
-  // "Routine Maintenance" system if one is already present, else appends it.
+  // Replace an existing line's price + snapshot in place (used when a saved
+  // calculation is re-opened, adjusted and re-applied).
+  const updateLinePriceFromCalc = useCallback(
+    (systemKey: string, lineKey: string, total: number, snapshot: CalculatorSnapshot) => {
+      setSystems((prev) =>
+        prev.map((s) =>
+          s.key === systemKey
+            ? {
+                ...s,
+                lines: s.lines.map((l) =>
+                  l.key === lineKey
+                    ? { ...l, quantity: '1', unitCost: total.toFixed(2), calculatorSnapshot: snapshot }
+                    : l,
+                ),
+              }
+            : s,
+        ),
+      )
+    },
+    [],
+  )
+
+  // Apply the maintenance calculator. Three paths:
+  //  - view/adjust: update the originating line's price + snapshot in place.
+  //  - per-system: add ONE "Routine Maintenance" service line (annual total) to
+  //    the chosen system.
+  //  - maintenance-only isolated flow: build the itemised Routine Maintenance
+  //    system (Standard/Comprehensive options etc.), snapshot on the first line.
+  // Sell-priced results are stored at cost = sell with 0% margin so the quote
+  // total reproduces the calculator total exactly.
   const applyMaintenance = useCallback(
     (result: MaintenanceCalcResult) => {
-      const lines: EditLine[] = result.lines.map((l) => {
+      if (maintViewTarget) {
+        updateLinePriceFromCalc(
+          maintViewTarget.systemKey,
+          maintViewTarget.lineKey,
+          result.totalSale,
+          result.snapshot,
+        )
+        setMaintViewTarget(null)
+        setMaintViewSnapshot(null)
+        toast.success('Maintenance price updated')
+        return
+      }
+
+      if (maintAddTarget) {
+        const target = maintAddTarget
+        const line: EditLine = {
+          key: uid(),
+          productCode: '',
+          description: 'Routine Maintenance',
+          detail: '',
+          service_type_id: null,
+          is_service: true,
+          catalogue_item_id: null,
+          quantity: '1',
+          unit: 'year',
+          unitCost: result.totalSale.toFixed(2),
+          margin: '0',
+          is_optional: false,
+          option_group: null,
+          standard: null,
+          calculatorSnapshot: result.snapshot,
+        }
+        setSystems((prev) =>
+          prev.map((s) => (s.key === target ? { ...s, lines: [...s.lines, line] } : s)),
+        )
+        setMaintAddTarget(null)
+        setMaintInitialFire(null)
+        toast.success('Maintenance added as a service line')
+        return
+      }
+
+      // Maintenance-only isolated flow: itemised Routine Maintenance system.
+      const lines: EditLine[] = result.lines.map((l, i) => {
         const meta = [l.coverType, l.visits ? `${l.visits} visits/yr` : null]
           .filter(Boolean)
           .join(' · ')
-        // Prefer the service overview as the line detail; fall back to the
-        // cover/visits summary so the line always carries context.
         const detail = [l.overview, meta].filter(Boolean).join('\n')
-        // Fold the cover level into the description so options in the same
-        // group (e.g. Standard vs Comprehensive fire cover) read as distinct
-        // lines on the quote rather than repeating the same title.
         const description = l.coverType
           ? `${l.description} (${l.coverType} Cover)`
           : l.description
@@ -789,6 +907,9 @@ export function QuoteBuilder({
           is_optional: Boolean(l.optional),
           option_group: l.optionGroup ?? null,
           standard: l.standard ?? null,
+          // Attach the snapshot to the first line so the calculation can be
+          // re-opened from the system's line list.
+          calculatorSnapshot: i === 0 ? result.snapshot : null,
         }
       })
 
@@ -807,52 +928,88 @@ export function QuoteBuilder({
       })
       toast.success('Maintenance pricing added to the quote')
     },
-    [],
+    [maintViewTarget, maintAddTarget, updateLinePriceFromCalc],
   )
 
-  // Inject the installation calculator's priced lines into the quote. Each line
-  // is stored at cost = sell with 0% margin so the quote total reproduces the
-  // calculator total exactly (the mark-up is already baked into the rates).
-  // Replaces the existing "Installation" system if present, else appends it.
+  // Apply the installation calculator. In view/adjust mode the originating line
+  // is updated in place; otherwise a single "Installation" service line, priced
+  // at the calculated total, is added to the chosen target system. Stored at
+  // cost = sell with 0% margin so the quote reproduces the calculator total.
   const applyInstallation = useCallback(
     (result: InstallationCalcResult) => {
-      const lines: EditLine[] = result.lines.map((l) => {
-        const value = lineValueForMode(l, result.mode)
-        return {
-          key: uid(),
-          productCode: '',
-          description: l.description,
-          detail: '',
-          service_type_id: null,
-          is_service: false,
-          catalogue_item_id: null,
-          quantity: String(l.quantity),
-          unit: l.unit,
-          // Store the per-unit value so quantity × unitCost reproduces the
-          // line total; guard against divide-by-zero.
-          unitCost: (l.quantity ? value / l.quantity : value).toFixed(2),
-          margin: '0',
-          is_optional: false,
-          option_group: null,
-          standard: null,
-        }
-      })
+      if (installViewTarget) {
+        updateLinePriceFromCalc(
+          installViewTarget.systemKey,
+          installViewTarget.lineKey,
+          result.total,
+          result.snapshot,
+        )
+        setInstallViewTarget(null)
+        setInstallViewSnapshot(null)
+        toast.success('Installation price updated')
+        return
+      }
 
-      const systemName = `Installation (${PRICING_MODE_LABELS[result.mode]})`
-      setSystems((prev) => {
-        const idx = prev.findIndex((s) => s.system_name.startsWith('Installation'))
-        if (idx >= 0) {
-          const next = prev.slice()
-          next[idx] = { ...next[idx], system_name: systemName, work_type: 'SI', lines }
-          return next
-        }
-        const base = blankSystem(prev.length + 1, 0)
-        return [
-          ...prev,
-          { ...base, system_name: systemName, work_type: 'SI', margin: '0', lines },
-        ]
-      })
-      toast.success('Installation pricing added to the quote')
+      const target = result.targetSystemKey
+      if (!target) {
+        toast.error('Choose a system to add the installation to')
+        return
+      }
+      const line: EditLine = {
+        key: uid(),
+        productCode: '',
+        description: 'Installation',
+        detail: '',
+        service_type_id: null,
+        is_service: true,
+        catalogue_item_id: null,
+        quantity: '1',
+        unit: '',
+        unitCost: result.total.toFixed(2),
+        margin: '0',
+        is_optional: false,
+        option_group: null,
+        standard: null,
+        calculatorSnapshot: result.snapshot,
+      }
+      setSystems((prev) =>
+        prev.map((s) => (s.key === target ? { ...s, lines: [...s.lines, line] } : s)),
+      )
+      toast.success('Installation added as a service line')
+    },
+    [installViewTarget, updateLinePriceFromCalc],
+  )
+
+  // Open the maintenance calculator for a specific system, pre-filling fire
+  // asset counts inferred from that system's product lines.
+  const openMaintenanceForSystem = useCallback((systemKey: string) => {
+    setSystems((prev) => {
+      const sys = prev.find((s) => s.key === systemKey)
+      setMaintInitialFire(sys ? inferFireAssetsFromLines(sys.lines) : null)
+      return prev
+    })
+    setMaintAddTarget(systemKey)
+    setMaintViewTarget(null)
+    setMaintViewSnapshot(null)
+    setMaintCalcOpen(true)
+  }, [])
+
+  // Re-open a saved calculation for a line so it can be viewed / adjusted.
+  const viewLineCalculation = useCallback(
+    (systemKey: string, line: EditLine) => {
+      const snap = parseCalculatorSnapshot(line.calculatorSnapshot)
+      if (!snap) return
+      if (snap.kind === 'installation') {
+        setInstallViewTarget({ systemKey, lineKey: line.key })
+        setInstallViewSnapshot(snap)
+        setInstallCalcOpen(true)
+      } else {
+        setMaintViewTarget({ systemKey, lineKey: line.key })
+        setMaintViewSnapshot(snap)
+        setMaintAddTarget(null)
+        setMaintInitialFire(null)
+        setMaintCalcOpen(true)
+      }
     },
     [],
   )
@@ -918,6 +1075,7 @@ export function QuoteBuilder({
             is_optional: l.is_optional,
             option_group: l.option_group,
             standard: l.standard,
+            calculator_snapshot: l.calculatorSnapshot ?? null,
           })),
       })),
       show_requirements_matrix: showRequirementsMatrix,

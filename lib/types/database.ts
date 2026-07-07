@@ -1122,6 +1122,10 @@ export interface QuoteLineItem {
   option_group: string | null
   standard: string | null
   client_selected: boolean | null
+  // Serialised inputs + result of the calculator (installation / maintenance)
+  // that produced this line, enabling it to be re-opened and viewed later.
+  // NULL for hand-entered lines. Typed as CalculatorSnapshot.
+  calculator_snapshot: Record<string, unknown> | null
   created_at: string
 }
 

@@ -486,11 +486,14 @@ export function QuoteBuilder({
               service_type_id: l.service_type_id,
               is_service: l.is_service ?? false,
               catalogue_item_id: l.catalogue_item_id,
-              quantity: String(l.quantity),
-              unit: l.unit ?? '',
-              unitCost: penceToPounds(l.unit_cost_pence),
-              margin: l.margin_percent === null || l.margin_percent === undefined ? '' : String(l.margin_percent),
-            })),
+            quantity: String(l.quantity),
+            unit: l.unit ?? '',
+            unitCost: penceToPounds(l.unit_cost_pence),
+            margin: l.margin_percent === null || l.margin_percent === undefined ? '' : String(l.margin_percent),
+            is_optional: l.is_optional ?? false,
+            option_group: l.option_group ?? null,
+            standard: l.standard ?? null,
+          })),
           ppm: ppmToDraft((initialPpm ?? []).find((p) => p.quote_system_id === s.id) ?? null),
         }))
     }
@@ -528,6 +531,10 @@ export function QuoteBuilder({
       s.lines.map((l) => ({
         quantity: Number.parseFloat(l.quantity) || 0,
         unit_price_pence: lineSellPence(l, s),
+        // Optional lines are excluded from the builder's core total (the client
+        // selects them on the quote). client_selected stays null here.
+        is_optional: l.is_optional,
+        client_selected: null,
       })),
     )
     return computeQuoteTotals(lines, {
@@ -638,6 +645,9 @@ export function QuoteBuilder({
           // applied inside the dialog), so store it as cost at 0% margin.
           unitCost: penceToPounds(draft.computed_price_pence),
           margin: '0',
+          is_optional: false,
+          option_group: null,
+          standard: null,
         }
         // Drop a previously-applied PPM line (same description) before re-adding.
         const otherLines = s.lines.filter(
@@ -666,6 +676,9 @@ export function QuoteBuilder({
       // (which is auto-filled from the set-margins table) so it pulls through.
       unitCost: penceToPounds(item.unit_cost_pence),
       margin: '',
+      is_optional: false,
+      option_group: null,
+      standard: null,
     })
   }
 
@@ -703,6 +716,9 @@ export function QuoteBuilder({
       unitCost:
         service.default_price_pence !== null ? penceToPounds(service.default_price_pence) : '0.00',
       margin: '0',
+      is_optional: false,
+      option_group: null,
+      standard: null,
     })
   }
 
@@ -830,6 +846,9 @@ export function QuoteBuilder({
             unit: l.unit || null,
             unit_cost_pence: poundsToPence(l.unitCost),
             margin_percent: l.margin.trim() === '' ? null : Number.parseFloat(l.margin) || 0,
+            is_optional: l.is_optional,
+            option_group: l.option_group,
+            standard: l.standard,
           })),
       })),
       show_requirements_matrix: showRequirementsMatrix,
@@ -1262,7 +1281,24 @@ export function QuoteBuilder({
       )}
 
       {/* ---------- Systems ---------- */}
-      {systems.map((system) => (
+      {systems.map((system) =>
+        quoteTypeFromWorkType(system.work_type) === 'service_contract' ? (
+          // Maintenance systems are built by the calculator, so they get a
+          // dedicated tidy view (priced lines + client options) instead of the
+          // generic system-details / catalogue builder.
+          <MaintenanceSystemCard
+            key={system.key}
+            system={system}
+            canRemove={systems.length > 1}
+            readOnly={readOnly}
+            isPending={isPending}
+            onUpdate={(patch) => updateSystem(system.key, patch)}
+            onRemove={() => removeSystem(system.key)}
+            onUpdateLine={(lineKey, patch) => updateLine(system.key, lineKey, patch)}
+            onRemoveLine={(lineKey) => removeLine(system.key, lineKey)}
+            onOpenCalculator={() => setMaintCalcOpen(true)}
+          />
+        ) : (
         <SystemCard
           key={system.key}
           system={system}
@@ -1294,7 +1330,8 @@ export function QuoteBuilder({
           onRemoveLine={(lineKey) => removeLine(system.key, lineKey)}
           onApplyPpm={(draft) => applyPpm(system.key, draft)}
         />
-      ))}
+        ),
+      )}
 
       {!readOnly && (
         <Button variant="outline" onClick={addSystem} disabled={isPending}>
@@ -1461,10 +1498,241 @@ export function QuoteBuilder({
   )
 }
 
-// =====================================================================
-// System card
-// =====================================================================
-interface SystemCardProps {
+  // =====================================================================
+  // Maintenance system card
+  // ---------------------------------------------------------------------
+  // Maintenance (service_contract) systems are priced by the calculator, so
+  // they don't need the generic system-type / catalogue builder. This tidy
+  // card just lists the priced lines, lets staff tweak the annual price and
+  // flag client-selectable options (with a shared option group + standard).
+  // =====================================================================
+  interface MaintenanceSystemCardProps {
+    system: EditSystem
+    canRemove: boolean
+    readOnly: boolean
+    isPending: boolean
+    onUpdate: (patch: Partial<EditSystem>) => void
+    onRemove: () => void
+    onUpdateLine: (lineKey: string, patch: Partial<EditLine>) => void
+    onRemoveLine: (lineKey: string) => void
+    onOpenCalculator: () => void
+  }
+
+  function MaintenanceSystemCard({
+    system,
+    canRemove,
+    readOnly,
+    isPending,
+    onUpdate,
+    onRemove,
+    onUpdateLine,
+    onRemoveLine,
+    onOpenCalculator,
+  }: MaintenanceSystemCardProps) {
+    const disabled = readOnly || isPending
+    const [open, setOpen] = useState(true)
+    const priced = system.lines.filter((l) => l.description.trim())
+    // Annual value excludes optional lines (the client picks those on the quote).
+    const annualPence = priced
+      .filter((l) => !l.is_optional)
+      .reduce((sum, l) => sum + Math.round((Number.parseFloat(l.quantity) || 0) * lineSellPence(l, system)), 0)
+
+    return (
+      <Card className="border-l-2" style={{ borderLeftColor: getSystemHex('slate') }}>
+        <Collapsible open={open} onOpenChange={setOpen}>
+          <div className="flex items-center gap-2 px-6 py-4">
+            <CollapsibleTrigger asChild>
+              <button type="button" aria-expanded={open} className="flex flex-1 items-center gap-3 text-left">
+                <ChevronDown
+                  className={cn(
+                    'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
+                    open && 'rotate-180',
+                  )}
+                />
+                <Wrench className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="truncate font-medium">
+                  {system.system_name?.trim() || 'Routine Maintenance'}
+                </span>
+                <Badge variant="secondary" className="shrink-0">
+                  SVC
+                </Badge>
+                <span className="ml-auto shrink-0 text-sm font-medium tabular-nums">
+                  {formatPence(annualPence)}
+                  {' / yr'}
+                </span>
+              </button>
+            </CollapsibleTrigger>
+            {!readOnly && canRemove && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 text-muted-foreground"
+                onClick={onRemove}
+                disabled={isPending}
+              >
+                <Trash2 className="h-4 w-4" />
+                <span className="sr-only">Remove system</span>
+              </Button>
+            )}
+          </div>
+
+          <CollapsibleContent>
+            <CardContent className="space-y-4">
+              <div className="grid gap-1.5">
+                <Label htmlFor={`maint-name-${system.key}`}>System name</Label>
+                <Input
+                  id={`maint-name-${system.key}`}
+                  value={system.system_name}
+                  onChange={(e) => onUpdate({ system_name: e.target.value })}
+                  disabled={disabled}
+                  placeholder="Routine Maintenance"
+                />
+              </div>
+
+              {priced.length === 0 ? (
+                <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed p-6 text-center">
+                  <p className="text-sm text-muted-foreground text-pretty">
+                    No maintenance lines yet. Use the maintenance calculator to price
+                    the visits and generate the lines.
+                  </p>
+                  {!readOnly && (
+                    <Button variant="outline" size="sm" onClick={onOpenCalculator} disabled={isPending}>
+                      <Calculator className="mr-2 h-4 w-4" />
+                      Open maintenance calculator
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {priced.map((line) => (
+                    <div key={line.key} className="rounded-lg border p-3">
+                      <div className="flex items-start gap-3">
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <p className="font-medium text-sm text-pretty">{line.description}</p>
+                          {line.detail && (
+                            <p className="text-xs text-muted-foreground text-pretty">{line.detail}</p>
+                          )}
+                          {line.standard && (
+                            <Badge variant="outline" className="text-xs font-normal">
+                              {line.standard}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="grid w-32 shrink-0 gap-1">
+                          <Label htmlFor={`maint-price-${line.key}`} className="text-xs text-muted-foreground">
+                            Annual price
+                          </Label>
+                          <div className="relative">
+                            <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                              £
+                            </span>
+                            <Input
+                              id={`maint-price-${line.key}`}
+                              value={line.unitCost}
+                              onChange={(e) =>
+                                onUpdateLine(line.key, { unitCost: e.target.value, margin: '0' })
+                              }
+                              disabled={disabled}
+                              inputMode="decimal"
+                              className="pl-5 text-right tabular-nums"
+                            />
+                          </div>
+                        </div>
+                        {!readOnly && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 shrink-0 text-muted-foreground"
+                            onClick={() => onRemoveLine(line.key)}
+                            disabled={isPending}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Remove line</span>
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Client-selectable option controls */}
+                      <div className="mt-3 border-t pt-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="grid gap-0.5">
+                            <Label htmlFor={`maint-opt-${line.key}`} className="cursor-pointer text-sm">
+                              Client-selectable option
+                            </Label>
+                            <span className="text-xs text-muted-foreground text-pretty">
+                              Excluded from the core price until the client ticks it on the quote.
+                            </span>
+                          </div>
+                          <Switch
+                            id={`maint-opt-${line.key}`}
+                            checked={line.is_optional}
+                            onCheckedChange={(checked) =>
+                              onUpdateLine(line.key, {
+                                is_optional: checked,
+                                option_group: checked ? line.option_group : null,
+                              })
+                            }
+                            disabled={disabled}
+                          />
+                        </div>
+                        {line.is_optional && (
+                          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                            <div className="grid gap-1.5">
+                              <Label htmlFor={`maint-group-${line.key}`} className="text-xs text-muted-foreground">
+                                Option group (optional)
+                              </Label>
+                              <Input
+                                id={`maint-group-${line.key}`}
+                                value={line.option_group ?? ''}
+                                onChange={(e) =>
+                                  onUpdateLine(line.key, { option_group: e.target.value || null })
+                                }
+                                disabled={disabled}
+                                placeholder="e.g. Cover level"
+                              />
+                              <span className="text-xs text-muted-foreground">
+                                Options in the same group are mutually exclusive.
+                              </span>
+                            </div>
+                            <div className="grid gap-1.5">
+                              <Label htmlFor={`maint-std-${line.key}`} className="text-xs text-muted-foreground">
+                                Relevant standard (optional)
+                              </Label>
+                              <Input
+                                id={`maint-std-${line.key}`}
+                                value={line.standard ?? ''}
+                                onChange={(e) =>
+                                  onUpdateLine(line.key, { standard: e.target.value || null })
+                                }
+                                disabled={disabled}
+                                placeholder="e.g. BS 5839-1"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                  {!readOnly && (
+                    <Button variant="outline" size="sm" onClick={onOpenCalculator} disabled={isPending}>
+                      <Calculator className="mr-2 h-4 w-4" />
+                      Recalculate maintenance
+                    </Button>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </CollapsibleContent>
+        </Collapsible>
+      </Card>
+    )
+  }
+
+  // =====================================================================
+  // System card
+  // =====================================================================
+  interface SystemCardProps {
   system: EditSystem
   canRemove: boolean
   readOnly: boolean

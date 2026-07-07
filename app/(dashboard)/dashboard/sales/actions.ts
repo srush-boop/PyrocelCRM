@@ -35,6 +35,10 @@ export interface QuoteLineInput {
   // Cost + margin are authoritative; the sell price is recomputed server-side.
   unit_cost_pence: number
   margin_percent: number | null
+  // Client-selectable option support (maintenance quotes).
+  is_optional?: boolean
+  option_group?: string | null
+  standard?: string | null
 }
 
 export interface QuotePpmInput {
@@ -179,10 +183,15 @@ function buildLineRows(
         margin_percent: l.margin_percent ?? null,
         unit_price_pence: unitSell,
         line_total_pence: Math.round(qty * unitSell),
+        is_optional: l.is_optional ?? false,
+        option_group: l.option_group?.trim() || null,
+        standard: l.standard?.trim() || null,
         position: idx,
       }
     })
-  const subtotal = rows.reduce((sum, r) => sum + r.line_total_pence, 0)
+  // Optional (client-selectable) lines don't count toward the system subtotal
+  // until the client selects them on the shared quote.
+  const subtotal = rows.reduce((sum, r) => sum + (r.is_optional ? 0 : r.line_total_pence), 0)
   return { rows, subtotal }
 }
 
@@ -341,6 +350,10 @@ export async function saveQuote(
         Math.round(l.unit_cost_pence) || 0,
         resolveLineMargin(l.margin_percent ?? null, systemMargin),
       ),
+      // Optional lines are excluded from the saved header total until a client
+      // selects them; client_selected is only set via the shared-quote flow.
+      is_optional: l.is_optional ?? false,
+      client_selected: null,
     }))
   })
   const totals = computeQuoteTotals(allLines, {

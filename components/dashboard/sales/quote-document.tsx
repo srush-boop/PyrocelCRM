@@ -302,9 +302,16 @@ export function QuoteDocument({
                 .filter((l) => l.system_id === system.id)
                 .sort((a, b) => a.position - b.position)
               // Products and non-product services are shown as separate groups.
-              const productLines = systemLines.filter((l) => !l.is_service)
-              const serviceLines = systemLines.filter((l) => l.is_service)
-              const systemTotal = systemLines.reduce((sum, l) => sum + l.line_total_pence, 0)
+              // Client-selectable options are pulled into their own group and
+              // only count toward the total once the client has selected them.
+              const coreLines = systemLines.filter((l) => !l.is_optional)
+              const productLines = coreLines.filter((l) => !l.is_service)
+              const serviceLines = coreLines.filter((l) => l.is_service)
+              const optionalLines = systemLines.filter((l) => l.is_optional)
+              const systemTotal = systemLines.reduce(
+                (sum, l) => sum + (l.is_optional && l.client_selected !== true ? 0 : l.line_total_pence),
+                0,
+              )
               // Keys belonging to sections the user marked "not required", plus
               // the reserved bookkeeping keys, are excluded from the quote.
               const omittedKeys = new Set(getOmittedElementKeys(system.conditional_values))
@@ -471,6 +478,16 @@ export function QuoteDocument({
                                       >
                                         <td className="py-2 pr-3 align-top">
                                           <div className="font-medium">{line.description}</div>
+                                          {line.detail && (
+                                            <div className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
+                                              {line.detail}
+                                            </div>
+                                          )}
+                                          {line.standard && (
+                                            <div className="mt-0.5 text-xs text-muted-foreground">
+                                              <span className="font-medium">Standard:</span> {line.standard}
+                                            </div>
+                                          )}
                                         </td>
                                         <td className="py-2 pl-3 text-right align-top tabular-nums whitespace-nowrap">
                                           {line.quantity}
@@ -490,6 +507,82 @@ export function QuoteDocument({
                             </div>
                           ),
                         )}
+
+                      {/* Client-selectable options. Each row carries a tick box
+                          reflecting the client's saved choice; the interactive
+                          selection is handled separately on the shared quote. */}
+                      {quote.show_line_items && optionalLines.length > 0 && (
+                        <div className="mt-4">
+                          <FieldLabel>Optional extras</FieldLabel>
+                          <p className="mb-2 text-xs text-muted-foreground text-pretty">
+                            Tick the options you would like included. Ticked options are added to
+                            the section total above.
+                          </p>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b-2 border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                                  <th className="w-8 py-1.5 font-semibold" />
+                                  <th className="py-1.5 font-semibold">Option</th>
+                                  <th className="py-1.5 pl-3 text-right font-semibold whitespace-nowrap">
+                                    Qty
+                                  </th>
+                                  <th className="py-1.5 pl-3 text-right font-semibold whitespace-nowrap">
+                                    Price
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {optionalLines.map((line) => (
+                                  <tr key={line.id} className="border-b border-dashed last:border-0">
+                                    <td className="py-2 align-top">
+                                      <span
+                                        aria-hidden
+                                        className={`inline-flex h-4 w-4 items-center justify-center rounded border ${
+                                          line.client_selected === true
+                                            ? 'border-primary bg-primary text-primary-foreground'
+                                            : 'border-muted-foreground/40'
+                                        }`}
+                                      >
+                                        {line.client_selected === true ? '✓' : ''}
+                                      </span>
+                                      <span className="sr-only">
+                                        {line.client_selected === true ? 'Selected' : 'Not selected'}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 pr-3 align-top">
+                                      <div className="font-medium">{line.description}</div>
+                                      {line.detail && (
+                                        <div className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
+                                          {line.detail}
+                                        </div>
+                                      )}
+                                      {line.standard && (
+                                        <div className="mt-0.5 text-xs text-muted-foreground">
+                                          <span className="font-medium">Standard:</span> {line.standard}
+                                        </div>
+                                      )}
+                                      {line.option_group && (
+                                        <div className="mt-0.5 text-xs text-muted-foreground">
+                                          Choose one from: {line.option_group}
+                                        </div>
+                                      )}
+                                    </td>
+                                    <td className="py-2 pl-3 text-right align-top tabular-nums whitespace-nowrap">
+                                      {line.quantity}
+                                      {line.unit ? ` ${line.unit}` : ''}
+                                    </td>
+                                    <td className="py-2 pl-3 text-right align-top font-medium tabular-nums whitespace-nowrap">
+                                      {formatPence(line.line_total_pence, quote.currency)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
                       <div className="mt-2 flex items-center justify-end gap-3 border-t pt-2 text-sm">
                         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                           Section total

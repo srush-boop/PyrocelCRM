@@ -230,14 +230,26 @@ export function lineTotalPence(line: LineForTotal): number {
   return Math.round((line.quantity || 0) * (line.unit_price_pence || 0))
 }
 
+// A client-selectable optional line only counts toward the total once the
+// client has explicitly selected it (client_selected === true). Non-optional
+// lines always count.
+export function lineCountsTowardTotal(
+  line: Pick<QuoteLineItem, 'is_optional' | 'client_selected'>,
+): boolean {
+  if (!line.is_optional) return true
+  return line.client_selected === true
+}
+
 // Compute subtotal/VAT/total from line items. Discount is applied to the
 // subtotal before VAT. Single source of truth for both client preview and
-// server persistence.
+// server persistence. Optional lines are excluded until the client selects them.
 export function computeQuoteTotals(
-  lines: Array<Pick<QuoteLineItem, 'quantity' | 'unit_price_pence'>>,
+  lines: Array<Pick<QuoteLineItem, 'quantity' | 'unit_price_pence' | 'is_optional' | 'client_selected'>>,
   opts: { vatRate: number; discountPence: number },
 ): QuoteTotals {
-  const gross = lines.reduce((sum, l) => sum + lineTotalPence(l), 0)
+  const gross = lines
+    .filter((l) => lineCountsTowardTotal(l))
+    .reduce((sum, l) => sum + lineTotalPence(l), 0)
   const discount = Math.min(Math.max(opts.discountPence || 0, 0), gross)
   const subtotalPence = gross - discount
   const vatPence = Math.round(subtotalPence * ((opts.vatRate || 0) / 100))

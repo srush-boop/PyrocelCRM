@@ -431,10 +431,7 @@ export function QuoteBuilder({
   const [validUntil, setValidUntil] = useState(quote?.valid_until ?? '')
   const [showLineItems, setShowLineItems] = useState(quote?.show_line_items ?? true)
   const [showEquipmentSpec, setShowEquipmentSpec] = useState(quote?.show_equipment_spec ?? false)
-  // Design overview is always included on the quote document; the toggle was
-  // removed from the builder UI, so we keep the persisted value (defaulting to
-  // true) without an editable setter.
-  const showDesignOverview = quote?.show_design_overview ?? true
+
   // Append the modernised maintenance service agreement to the quote document.
   // Defaults on so it's auto-included on maintenance quotes (payload gates it on
   // the quote actually being a maintenance quote — see buildPayload).
@@ -821,7 +818,9 @@ export function QuoteBuilder({
       discount_pence: poundsToPence(discount),
       show_line_items: showLineItems,
       show_equipment_spec: showEquipmentSpec,
-      show_design_overview: showDesignOverview,
+      // Design overview / survey section has been removed from the quote
+      // document, so it is never included.
+      show_design_overview: false,
       // Only meaningful for maintenance quotes; force off otherwise.
       show_maintenance_agreement: isMaintenanceQuote && showMaintenanceAgreement,
       valid_until: validUntil || null,
@@ -897,7 +896,6 @@ export function QuoteBuilder({
     validUntil,
     showLineItems,
     showEquipmentSpec,
-    showDesignOverview,
     systems,
   ])
 

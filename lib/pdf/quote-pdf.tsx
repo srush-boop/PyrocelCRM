@@ -250,42 +250,6 @@ function QuotePdfDocument({
                 </View>
               ) : null}
 
-              {quote.show_design_overview &&
-              (system.design_overview ||
-                system.drawing_reference ||
-                system.designed_by ||
-                system.survey_carried_out) ? (
-                <View style={styles.designBlock}>
-                  {system.design_overview ? (
-                    <Text style={[styles.spec, { marginBottom: 4 }]}>{system.design_overview}</Text>
-                  ) : null}
-                  {system.designed_by ? (
-                    <Text style={{ marginBottom: 1 }}>
-                      <Text style={styles.muted}>Designed by: </Text>
-                      <Text style={styles.bold}>
-                        {designedByLabel(system.designed_by, system.designed_by_name)}
-                      </Text>
-                    </Text>
-                  ) : null}
-                  {system.drawing_reference ? (
-                    <Text style={{ marginBottom: 1 }}>
-                      <Text style={styles.muted}>Drawing ref: </Text>
-                      <Text style={styles.bold}>{system.drawing_reference}</Text>
-                    </Text>
-                  ) : null}
-                  <Text style={{ marginBottom: 1 }}>
-                    <Text style={styles.muted}>Survey: </Text>
-                    <Text style={styles.bold}>
-                      {system.survey_carried_out
-                        ? `Yes${system.survey_by ? ` — ${system.survey_by}` : ''}${
-                            system.survey_date ? ` (${formatDateUK(system.survey_date)})` : ''
-                          }`
-                        : 'Not carried out'}
-                    </Text>
-                  </Text>
-                </View>
-              ) : null}
-
               {scalars.length > 0 ? (
                 <View style={styles.block}>
                   {scalars.map(([key, value]) => (

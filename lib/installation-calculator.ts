@@ -12,8 +12,10 @@
  * Verified constants / worked values from the source file:
  *   - Labour sell rate £43/hr (Sheet 2 C-rate); labour cost £36.07/hr is shown
  *     for margin only. FIRE PANELS: 1 × 4h × £43 = £172.
- *   - SOFTSKIN 2C 1.5mm, 1500 m @ 0.08 h/m: labour 120h × £43 = £5,160;
- *     material 1500 × £1.17 = £1,755; supply & erect = £6,915.
+ *   - AEI Firetec Enhanced 2C 1.5mm, 1500 m @ 0.08 h/m (fixed to fabric):
+ *     labour 120h × £43 = £5,160; material 1500 × £1.18 = £1,770;
+ *     supply & erect = £6,930. (Fixed-to-tray labour is 0.04 h/m.)
+ *   - Cable metres auto-calc = deviceCount × m/point, rounded up to 100 m.
  *
  * All functions are pure so results are deterministic and can be unit-checked
  * against the spreadsheet.

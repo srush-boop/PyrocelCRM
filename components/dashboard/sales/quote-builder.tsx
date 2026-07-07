@@ -36,7 +36,7 @@ import {
 } from '@/components/ui/command'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
-import { Plus, Trash2, BookOpen, Save, TrendingUp, Calculator, Wrench, Check, ChevronsUpDown, ChevronDown, Sparkles, Building2 } from 'lucide-react'
+import { Plus, Trash2, BookOpen, Save, TrendingUp, Calculator, Wrench, Check, ChevronsUpDown, ChevronDown, Sparkles, Building2, HardHat } from 'lucide-react'
 import { toast } from 'sonner'
 import { PpmCalculatorDialog, type PpmDraft } from '@/components/dashboard/sales/ppm-calculator-dialog'
 import {
@@ -810,6 +810,53 @@ export function QuoteBuilder({
     [],
   )
 
+  // Inject the installation calculator's priced lines into the quote. Each line
+  // is stored at cost = sell with 0% margin so the quote total reproduces the
+  // calculator total exactly (the mark-up is already baked into the rates).
+  // Replaces the existing "Installation" system if present, else appends it.
+  const applyInstallation = useCallback(
+    (result: InstallationCalcResult) => {
+      const lines: EditLine[] = result.lines.map((l) => {
+        const value = lineValueForMode(l, result.mode)
+        return {
+          key: uid(),
+          productCode: '',
+          description: l.description,
+          detail: '',
+          service_type_id: null,
+          is_service: false,
+          catalogue_item_id: null,
+          quantity: String(l.quantity),
+          unit: l.unit,
+          // Store the per-unit value so quantity × unitCost reproduces the
+          // line total; guard against divide-by-zero.
+          unitCost: (l.quantity ? value / l.quantity : value).toFixed(2),
+          margin: '0',
+          is_optional: false,
+          option_group: null,
+          standard: null,
+        }
+      })
+
+      const systemName = `Installation (${PRICING_MODE_LABELS[result.mode]})`
+      setSystems((prev) => {
+        const idx = prev.findIndex((s) => s.system_name.startsWith('Installation'))
+        if (idx >= 0) {
+          const next = prev.slice()
+          next[idx] = { ...next[idx], system_name: systemName, work_type: 'SI', lines }
+          return next
+        }
+        const base = blankSystem(prev.length + 1, 0)
+        return [
+          ...prev,
+          { ...base, system_name: systemName, work_type: 'SI', margin: '0', lines },
+        ]
+      })
+      toast.success('Installation pricing added to the quote')
+    },
+    [],
+  )
+
   const buildPayload = useCallback((): QuoteInput => {
     return {
       id: quote?.id,
@@ -1238,6 +1285,14 @@ export function QuoteBuilder({
         onApply={applyMaintenance}
       />
 
+      <InstallationCalculatorDialog
+        open={installCalcOpen}
+        onOpenChange={setInstallCalcOpen}
+        savedRates={savedInstallationRates}
+        disabled={disabled}
+        onApply={applyInstallation}
+      />
+
       {/* ---------- Client request / requirements matrix ---------- */}
       {!readOnly && (
         <Card>
@@ -1355,10 +1410,20 @@ export function QuoteBuilder({
       )}
 
       {!readOnly && (
-        <Button variant="outline" onClick={addSystem} disabled={isPending}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add system
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={addSystem} disabled={isPending}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add system
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setInstallCalcOpen(true)}
+            disabled={isPending}
+          >
+            <HardHat className="mr-2 h-4 w-4" />
+            Installation calculator
+          </Button>
+        </div>
       )}
 
       {/* ---------- Totals + terms ---------- */}

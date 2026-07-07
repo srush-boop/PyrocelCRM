@@ -25,6 +25,7 @@ import type {
   Branch,
 } from '@/lib/types/database'
 import type { MaintenanceRates } from '@/lib/maintenance-calculator'
+import type { InstallationRates } from '@/lib/installation-calculator'
 
 export const metadata = { title: 'New Quote | Pyrocel' }
 
@@ -93,7 +94,7 @@ export default async function NewQuotePage({
     supabase.from('quote_bank_values').select('*'),
     supabase
       .from('company_info')
-      .select('default_margin_percent, maintenance_rates')
+      .select('default_margin_percent, maintenance_rates, installation_rates')
       .limit(1)
       .maybeSingle(),
     supabase
@@ -206,6 +207,10 @@ export default async function NewQuotePage({
         savedMaintenanceRates={
           ((companyInfo as { maintenance_rates: Partial<MaintenanceRates> | null } | null)
             ?.maintenance_rates) ?? null
+        }
+        savedInstallationRates={
+          ((companyInfo as { installation_rates: Partial<InstallationRates> | null } | null)
+            ?.installation_rates) ?? null
         }
         initialClientId={defectPrefill?.clientId ?? initialSite?.client_id ?? undefined}
         initialSiteId={defectPrefill?.siteId ?? initialSite?.id ?? undefined}

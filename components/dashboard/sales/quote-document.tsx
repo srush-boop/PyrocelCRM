@@ -214,6 +214,14 @@ export function QuoteDocument({
   const requirementsSectionNo = showRequirements ? ++nextSection : 0
   const equipmentSectionNo = equipmentSpecSections.length > 0 ? ++nextSection : 0
   const companyName = company?.name || 'Pyrocel Ltd'
+  // The issuing branch selects which address/contact details appear in the
+  // masthead under the company name; fall back to the company's own details.
+  const headerAddress = quote.branch?.address || company?.address
+  const headerPhone = quote.branch?.phone || company?.phone
+  const headerEmail = quote.branch?.email || company?.email
+  // The document title is simply the site name (falling back to the stored
+  // quote title when the quote has no linked site).
+  const documentTitle = quote.site?.name || quote.title
   const recipientName = quote.client?.name || quote.prospect_name || 'Prospective client'
   const recipientContact = quote.client?.contact_name || quote.prospect_contact
   const recipientEmail = quote.client?.contact_email || quote.prospect_email
@@ -270,9 +278,9 @@ export function QuoteDocument({
             </div>
             <div>
               <p className="text-xl font-extrabold uppercase leading-tight tracking-wide">{companyName}</p>
-              {company?.address && <p className="text-xs text-white/70">{company.address}</p>}
+              {headerAddress && <p className="text-xs text-white/70 whitespace-pre-line">{headerAddress}</p>}
               <p className="text-xs text-white/70">
-                {[company?.phone, company?.email].filter(Boolean).join(' · ')}
+                {[headerPhone, headerEmail].filter(Boolean).join(' · ')}
               </p>
             </div>
           </div>
@@ -291,7 +299,7 @@ export function QuoteDocument({
             {quoteTypeLabel(quote.quote_type)} — Technical Specification &amp; Quotation
           </p>
           <h1 className="mt-1 text-2xl font-bold leading-tight text-balance sm:text-3xl">
-            {quote.title}
+            {documentTitle}
           </h1>
           {quote.summary && (
             <p className="mt-3 max-w-3xl whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
@@ -342,20 +350,6 @@ export function QuoteDocument({
             </dl>
           </div>
         </section>
-
-        {/* Issuing branch */}
-        {quote.branch && (
-          <section className="mb-10 rounded-md border bg-muted/30 p-4">
-            <FieldLabel>Issued by</FieldLabel>
-            <p className="font-semibold">{quote.branch.name}</p>
-            {quote.branch.address && (
-              <p className="text-sm text-muted-foreground whitespace-pre-line">{quote.branch.address}</p>
-            )}
-            <p className="text-sm text-muted-foreground">
-              {[quote.branch.phone, quote.branch.email].filter(Boolean).join(' · ')}
-            </p>
-          </section>
-        )}
 
         {/* Systems + specification + line items. Sections are numbered like a
             formal technical specification. */}

@@ -143,6 +143,8 @@ export function MaintenanceCalculatorDialog({
   const [fireAssets, setFireAssets] = useState<CountMap>(emptyCounts)
   const [fireVisits, setFireVisits] = useState<FireVisits>(2)
   const [weeklyFireTesting, setWeeklyFireTesting] = useState(false)
+  // Off by default: only offer Comprehensive fire cover when explicitly enabled.
+  const [includeComprehensive, setIncludeComprehensive] = useState(false)
   const [centralBatteryUnits, setCentralBatteryUnits] = useState(0)
   const [luminaires, setLuminaires] = useState(0)
   const [monthlyElTesting, setMonthlyElTesting] = useState(false)
@@ -201,10 +203,11 @@ export function MaintenanceCalculatorDialog({
       {
         fire: {
           assets: fireAssets as Partial<Record<keyof typeof FIRE_MAJOR_MINUTES, number>>,
-          // Cover is offered as a client-selectable option (Standard vs
-          // Comprehensive), so the calculator emits both; this default is unused
-          // for line selection.
+          // When Comprehensive is enabled, cover is offered as a client-selectable
+          // option (Standard vs Comprehensive); otherwise only Standard is quoted.
+          // This `cover` default is unused for line selection either way.
           cover: 'standard',
+          includeComprehensive,
           visits: fireVisits,
           weeklyFireTestingVisits: weeklyFireTesting ? 52 : 0,
           centralBatteryUnits,
@@ -256,7 +259,7 @@ export function MaintenanceCalculatorDialog({
       rates,
     )
   }, [
-    fireAssets, fireVisits, weeklyFireTesting, centralBatteryUnits, luminaires,
+    fireAssets, fireVisits, weeklyFireTesting, includeComprehensive, centralBatteryUnits, luminaires,
     monthlyElTesting, intruderAssets, intruderVisits, intruderPlatinum,
     cctvAssets, cctvVisits, cctvAccessCost, cctvBanksmanHours, accessAssets,
     accessVisits, mechanicalDampers, automaticDampers, damperVisits,
@@ -320,12 +323,24 @@ export function MaintenanceCalculatorDialog({
                     </Select>
                   </div>
                 </div>
-                <p className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-                  Both <span className="font-medium text-foreground">Standard</span> and{' '}
-                  <span className="font-medium text-foreground">Comprehensive</span> (+
-                  {Math.round(rates.compUplift * 100)}%) fire cover are added as client-selectable
-                  options so the client can choose their preferred level on the quote.
-                </p>
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="grid gap-0.5 pr-3">
+                    <Label htmlFor="include-comp" className="cursor-pointer text-sm">
+                      Offer Comprehensive cover (+{Math.round(rates.compUplift * 100)}%)
+                    </Label>
+                    <span className="text-xs text-muted-foreground text-pretty">
+                      {includeComprehensive
+                        ? 'Standard and Comprehensive cover are added as client-selectable options on the quote.'
+                        : 'Only Standard cover is quoted. Turn on to also offer Comprehensive as a client-selectable upgrade.'}
+                    </span>
+                  </div>
+                  <Switch
+                    id="include-comp"
+                    checked={includeComprehensive}
+                    onCheckedChange={setIncludeComprehensive}
+                    disabled={disabled}
+                  />
+                </div>
                 <Separator />
                 <div>
                   <p className="mb-1 text-sm font-medium">Fire alarm assets</p>

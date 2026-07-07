@@ -201,6 +201,12 @@ export interface FireLightsInput {
   assets: Partial<Record<keyof typeof FIRE_MAJOR_MINUTES, number>>
   cover: FireCover
   visits: FireVisits
+  /**
+   * When true, the calculator also offers Comprehensive fire cover as a
+   * client-selectable upgrade alongside Standard. Defaults to false, in which
+   * case only Standard cover is quoted as the core (non-optional) line.
+   */
+  includeComprehensive?: boolean
   /** Enter 52 if weekly fire testing is required, else 0. FIRE!U14 */
   weeklyFireTestingVisits: number
   // Emergency lighting (same sheet)
@@ -744,20 +750,28 @@ export function calcOverview(
     const visits = input.fire.visits
     const stdPrice = visits === 4 ? f.standardFour : f.standardTwo
     const compPrice = visits === 4 ? f.comprehensiveFour : f.comprehensiveTwo
-    // Offer Standard and Comprehensive cover as mutually-exclusive options so
-    // the client selects the level they want.
-    pushDirect('Annual Fire Alarm Maintenance', stdPrice, 'fire', {
-      coverType: 'Standard',
-      visits,
-      optional: true,
-      optionGroup: 'fire-cover',
-    })
-    pushDirect('Annual Fire Alarm Maintenance', compPrice, 'fire', {
-      coverType: 'Comprehensive',
-      visits,
-      optional: true,
-      optionGroup: 'fire-cover',
-    })
+    if (input.fire.includeComprehensive) {
+      // Offer Standard and Comprehensive cover as mutually-exclusive options so
+      // the client selects the level they want.
+      pushDirect('Annual Fire Alarm Maintenance', stdPrice, 'fire', {
+        coverType: 'Standard',
+        visits,
+        optional: true,
+        optionGroup: 'fire-cover',
+      })
+      pushDirect('Annual Fire Alarm Maintenance', compPrice, 'fire', {
+        coverType: 'Comprehensive',
+        visits,
+        optional: true,
+        optionGroup: 'fire-cover',
+      })
+    } else {
+      // Standard cover only: quote it as the core (non-optional) line.
+      pushDirect('Annual Fire Alarm Maintenance', stdPrice, 'fire', {
+        coverType: 'Standard',
+        visits,
+      })
+    }
     pushOutOfHours('Fire Alarm Maintenance', stdPrice)
     pushDirect('Fire Alarm Weekly Testing', f.weeklyFireTesting, 'fireWeekly', {
       visits: input.fire.weeklyFireTestingVisits,

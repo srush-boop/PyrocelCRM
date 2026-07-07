@@ -100,6 +100,8 @@ export interface QuoteInput {
   id?: string
   title: string
   quote_type: string
+  // Issuing branch (defaults to the preparer's branch, changeable by office/admin).
+  branch_id?: string | null
   client_id?: string | null
   site_id?: string | null
   prospect_name?: string | null
@@ -115,6 +117,8 @@ export interface QuoteInput {
   show_line_items?: boolean
   show_equipment_spec?: boolean
   show_design_overview?: boolean
+  // Append the modernised maintenance service agreement to the quote document.
+  show_maintenance_agreement?: boolean
   valid_until?: string | null
   systems: QuoteSystemInput[]
   // Client-request import: the compliance matrix and its source document.
@@ -347,6 +351,7 @@ export async function saveQuote(
   const header = {
     title: input.title.trim(),
     quote_type: input.quote_type,
+    branch_id: input.branch_id || null,
     client_id: input.client_id || null,
     site_id: input.site_id || null,
     prospect_name: input.prospect_name?.trim() || null,
@@ -365,6 +370,7 @@ export async function saveQuote(
     show_line_items: input.show_line_items ?? true,
     show_equipment_spec: input.show_equipment_spec ?? false,
     show_design_overview: input.show_design_overview ?? true,
+    show_maintenance_agreement: input.show_maintenance_agreement ?? false,
     valid_until: input.valid_until || null,
     show_requirements_matrix: input.show_requirements_matrix ?? false,
   }

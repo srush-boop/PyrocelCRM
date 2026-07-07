@@ -729,3 +729,83 @@ export function calcOverview(
   const totalSale = round2(lines.reduce((acc, l) => acc + l.sell, 0)) // E32
   return { lines, totalSale }
 }
+
+// ---------------------------------------------------------------------------
+// Settings resolution + UI metadata
+// ---------------------------------------------------------------------------
+
+/**
+ * Merge a partial rates object saved in company settings over the built-in
+ * defaults. Unknown/absent keys fall back to DEFAULT_MAINTENANCE_RATES so the
+ * engine always has a complete, valid rate set.
+ */
+export function resolveMaintenanceRates(
+  saved: Partial<MaintenanceRates> | null | undefined,
+): MaintenanceRates {
+  if (!saved || typeof saved !== 'object') return DEFAULT_MAINTENANCE_RATES
+  return {
+    ...DEFAULT_MAINTENANCE_RATES,
+    ...saved,
+    // Arrays: use the saved list only if it's a non-empty array.
+    monitoringParts:
+      Array.isArray(saved.monitoringParts) && saved.monitoringParts.length > 0
+        ? saved.monitoringParts
+        : DEFAULT_MAINTENANCE_RATES.monitoringParts,
+    accessEquipmentOptions:
+      Array.isArray(saved.accessEquipmentOptions) && saved.accessEquipmentOptions.length > 0
+        ? saved.accessEquipmentOptions
+        : DEFAULT_MAINTENANCE_RATES.accessEquipmentOptions,
+  }
+}
+
+// Human-readable labels for each asset input, used by the calculator dialog.
+export const FIRE_ASSET_LABELS: Record<keyof typeof FIRE_MAJOR_MINUTES, string> = {
+  controlPanel: 'Control panel',
+  repeater: 'Repeater panel',
+  psu: 'Power supply unit',
+  manualCallPoint: 'Manual call point',
+  smokeDetector: 'Smoke detector',
+  heatDetector: 'Heat detector',
+  beam: 'Beam detector',
+  mainsInterface: 'Mains interface',
+  sounder: 'Sounder',
+  network: 'Network card',
+  remoteSignalling: 'Remote signalling',
+}
+
+export const INTRUDER_ASSET_LABELS: Record<keyof typeof INTRUDER_HOURS, string> = {
+  controlPanel: 'Control panel',
+  remoteKeypad: 'Remote keypad',
+  psu: 'Power supply unit',
+  pirDualTec: 'PIR / dual-tec',
+  doorContact: 'Door contact',
+  vibrationUnit: 'Vibration unit',
+  rollerShutterContact: 'Roller-shutter contact',
+  personalAttackButton: 'Personal attack button',
+  bgu: 'Bell / BGU',
+  beam: 'Beam',
+  audioMicrophone: 'Audio microphone',
+  sounder: 'Sounder',
+  audioVerification: 'Audio verification',
+  remoteSignalling: 'Remote signalling',
+}
+
+export const CCTV_ASSET_LABELS: Record<keyof typeof CCTV_HOURS, string> = {
+  monitor: 'Monitor',
+  remoteKeypad: 'Remote keypad',
+  remotePcTerminal: 'Remote PC terminal',
+  dvrNvr: 'DVR / NVR',
+  internalFixed: 'Internal fixed camera',
+  internalPtz: 'Internal PTZ camera',
+  externalFixed: 'External fixed camera',
+  externalPtz: 'External PTZ camera',
+  redwallDetector: 'Redwall detector',
+  infraredLamp: 'Infrared lamp',
+  cameraTower: 'Camera tower',
+}
+
+export const ACCESS_ASSET_LABELS: Record<keyof typeof ACCESS_HOURS, string> = {
+  server: 'Server / head-end',
+  controlledDoor: 'Controlled door',
+  intercomDoorStation: 'Intercom door station',
+}

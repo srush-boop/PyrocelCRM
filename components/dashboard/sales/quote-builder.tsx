@@ -36,9 +36,14 @@ import {
 } from '@/components/ui/command'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
-import { Plus, Trash2, BookOpen, Save, TrendingUp, Calculator, Wrench, Check, ChevronsUpDown, ChevronDown, Sparkles } from 'lucide-react'
+import { Plus, Trash2, BookOpen, Save, TrendingUp, Calculator, Wrench, Check, ChevronsUpDown, ChevronDown, Sparkles, Building2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { PpmCalculatorDialog, type PpmDraft } from '@/components/dashboard/sales/ppm-calculator-dialog'
+import {
+  MaintenanceCalculatorDialog,
+  type MaintenanceCalcResult,
+} from '@/components/dashboard/sales/maintenance-calculator-dialog'
+import type { MaintenanceRates } from '@/lib/maintenance-calculator'
 import { QuoteSectionRenderer } from '@/components/dashboard/sales/quote-section-renderer'
 import { AiSpecBuilderDialog } from '@/components/dashboard/sales/ai-spec-builder-dialog'
 import {
@@ -79,6 +84,7 @@ import type {
   AssetType,
   QuoteSystemPpm,
   Site,
+  Branch,
 } from '@/lib/types/database'
 import {
   saveQuote,
@@ -304,6 +310,12 @@ export type SystemReferenceLite = {
 interface QuoteBuilderProps {
   clients: Client[]
   sites: Site[]
+  // Branches the preparer can issue this quote under (admin/office can switch).
+  branches?: Branch[]
+  // The preparer's own branch, used as the default for brand-new quotes.
+  defaultBranchId?: string | null
+  // Saved maintenance rate overrides from company settings (null = defaults).
+  savedMaintenanceRates?: Partial<MaintenanceRates> | null
   systemTypes: SystemType[]
   serviceTypes: ServiceType[]
   // Global, configurable non-product services (Installation, Decommission, etc.).
@@ -348,6 +360,9 @@ interface QuoteBuilderProps {
 export function QuoteBuilder({
   clients,
   sites,
+  branches = [],
+  defaultBranchId = null,
+  savedMaintenanceRates = null,
   systemTypes,
   serviceTypes,
   quoteServices,
@@ -385,6 +400,8 @@ export function QuoteBuilder({
   const [targetMode, setTargetMode] = useState<'client' | 'prospect'>(
     quote?.prospect_name && !quote?.client_id ? 'prospect' : 'client',
   )
+  // Issuing branch: existing quote's branch, else the preparer's own branch.
+  const [branchId, setBranchId] = useState(quote?.branch_id ?? defaultBranchId ?? '')
   const [clientId, setClientId] = useState(quote?.client_id ?? initialClientId ?? '')
   const [siteId, setSiteId] = useState(quote?.site_id ?? initialSiteId ?? '')
   const [clientPickerOpen, setClientPickerOpen] = useState(false)
@@ -406,6 +423,14 @@ export function QuoteBuilder({
   const [showLineItems, setShowLineItems] = useState(quote?.show_line_items ?? true)
   const [showEquipmentSpec, setShowEquipmentSpec] = useState(quote?.show_equipment_spec ?? false)
   const [showDesignOverview, setShowDesignOverview] = useState(quote?.show_design_overview ?? true)
+  // Append the modernised maintenance service agreement to the quote document.
+  // Defaults on so it's auto-included on maintenance quotes (payload gates it on
+  // the quote actually being a maintenance quote — see buildPayload).
+  const [showMaintenanceAgreement, setShowMaintenanceAgreement] = useState(
+    quote?.show_maintenance_agreement ?? true,
+  )
+  // Routine-maintenance pricing calculator dialog.
+  const [maintCalcOpen, setMaintCalcOpen] = useState(false)
 
   // ----- Client-request requirements matrix state -----
   const [requirements, setRequirements] = useState<DraftRequirement[]>(
@@ -672,6 +697,56 @@ export function QuoteBuilder({
     })
   }
 
+  // A maintenance quote if any system uses the Routine Maintenance (SVC) work
+  // type. Drives the maintenance calculator + service-agreement surfaces.
+  const isMaintenanceQuote = useMemo(
+    () => systems.some((s) => quoteTypeFromWorkType(s.work_type) === 'service_contract'),
+    [systems],
+  )
+
+  // Inject the calculator's priced services into the quote. The results are
+  // sell-priced (post-discount), so each line is stored at cost = sell with 0%
+  // margin to reproduce the calculator total exactly. Replaces the existing
+  // "Routine Maintenance" system if one is already present, else appends it.
+  const applyMaintenance = useCallback(
+    (result: MaintenanceCalcResult) => {
+      const lines: EditLine[] = result.lines.map((l) => {
+        const meta = [l.coverType, l.visits ? `${l.visits} visits/yr` : null]
+          .filter(Boolean)
+          .join(' · ')
+        return {
+          key: uid(),
+          productCode: '',
+          description: l.description,
+          detail: meta || '',
+          service_type_id: null,
+          is_service: true,
+          catalogue_item_id: null,
+          quantity: '1',
+          unit: 'year',
+          unitCost: l.sell.toFixed(2),
+          margin: '0',
+        }
+      })
+
+      setSystems((prev) => {
+        const idx = prev.findIndex((s) => s.system_name === 'Routine Maintenance')
+        if (idx >= 0) {
+          const next = prev.slice()
+          next[idx] = { ...next[idx], work_type: 'SVC', lines }
+          return next
+        }
+        const base = blankSystem(prev.length + 1, 0)
+        return [
+          ...prev,
+          { ...base, system_name: 'Routine Maintenance', work_type: 'SVC', margin: '0', lines },
+        ]
+      })
+      toast.success('Maintenance pricing added to the quote')
+    },
+    [],
+  )
+
   const buildPayload = useCallback((): QuoteInput => {
     return {
       id: quote?.id,
@@ -679,6 +754,7 @@ export function QuoteBuilder({
       // Quote type is no longer a header field — derive it from the first
       // system's work type so the persisted value stays meaningful.
       quote_type: quoteTypeFromWorkType(systems[0]?.work_type),
+      branch_id: branchId || null,
       client_id: targetMode === 'client' ? clientId || null : null,
       site_id: targetMode === 'client' ? siteId || null : null,
       prospect_name: targetMode === 'prospect' ? prospectName || null : null,
@@ -694,6 +770,8 @@ export function QuoteBuilder({
       show_line_items: showLineItems,
       show_equipment_spec: showEquipmentSpec,
       show_design_overview: showDesignOverview,
+      // Only meaningful for maintenance quotes; force off otherwise.
+      show_maintenance_agreement: isMaintenanceQuote && showMaintenanceAgreement,
       valid_until: validUntil || null,
       systems: systems.map((s) => ({
         system_type_id: s.system_type_id,
@@ -745,6 +823,9 @@ export function QuoteBuilder({
     requirements,
     requirementSource,
     showRequirementsMatrix,
+    branchId,
+    isMaintenanceQuote,
+    showMaintenanceAgreement,
     targetMode,
     clientId,
     siteId,
@@ -830,6 +911,31 @@ export function QuoteBuilder({
               disabled={disabled}
             />
           </div>
+
+          {/* Issuing branch */}
+          {branches.length > 0 && (
+            <div className="grid gap-1.5">
+              <Label htmlFor="q-branch" className="flex items-center gap-1.5">
+                <Building2 className="h-4 w-4 text-muted-foreground" />
+                Issuing branch
+              </Label>
+              <Select value={branchId} onValueChange={setBranchId} disabled={disabled}>
+                <SelectTrigger id="q-branch" className="sm:w-72">
+                  <SelectValue placeholder="Select branch" />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-xs text-muted-foreground">
+                The branch responsible for this quote — its details appear on the quote document.
+              </span>
+            </div>
+          )}
 
           {/* Target: client vs prospect */}
           <div className="grid gap-1.5">
@@ -979,6 +1085,58 @@ export function QuoteBuilder({
 
         </CardContent>
       </Card>
+
+      {/* ---------- Routine maintenance pricing ---------- */}
+      {isMaintenanceQuote && (
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between gap-4">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Calculator className="h-4 w-4 text-muted-foreground" />
+                Routine maintenance pricing
+              </CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground text-pretty">
+                Price each discipline from the on-site asset counts. The calculator
+                adds itemised annual maintenance lines to this quote.
+              </p>
+            </div>
+            {!readOnly && (
+              <Button type="button" variant="outline" onClick={() => setMaintCalcOpen(true)} disabled={isPending}>
+                <Calculator className="mr-2 h-4 w-4" />
+                Open calculator
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+              <div className="grid gap-0.5">
+                <Label htmlFor="q-show-agreement" className="cursor-pointer">
+                  Include maintenance service agreement
+                </Label>
+                <span className="text-xs text-muted-foreground">
+                  {showMaintenanceAgreement
+                    ? 'The modernised service-agreement pages (cover letter, cover summary and FAQs) are appended to the quote document and PDF.'
+                    : 'No service agreement is appended to the quote document.'}
+                </span>
+              </div>
+              <Switch
+                id="q-show-agreement"
+                checked={showMaintenanceAgreement}
+                onCheckedChange={setShowMaintenanceAgreement}
+                disabled={disabled}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <MaintenanceCalculatorDialog
+        open={maintCalcOpen}
+        onOpenChange={setMaintCalcOpen}
+        savedRates={savedMaintenanceRates}
+        disabled={disabled}
+        onApply={applyMaintenance}
+      />
 
       {/* ---------- Client request / requirements matrix ---------- */}
       {!readOnly && (

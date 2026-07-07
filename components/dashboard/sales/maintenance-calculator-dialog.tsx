@@ -9,7 +9,7 @@
  */
 
 import { useMemo, useState } from 'react'
-import { Calculator, Plus } from 'lucide-react'
+import { Calculator, Plus, Trash2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -46,8 +46,8 @@ import {
   ACCESS_HOURS,
   type MaintenanceRates,
   type MaintenanceLine,
-  type FireCover,
   type FireVisits,
+  type SubcontractInput,
 } from '@/lib/maintenance-calculator'
 
 type CountMap = Record<string, number>
@@ -141,7 +141,6 @@ export function MaintenanceCalculatorDialog({
 
   // ----- Fire & emergency lighting -----
   const [fireAssets, setFireAssets] = useState<CountMap>(emptyCounts)
-  const [fireCover, setFireCover] = useState<FireCover>('standard')
   const [fireVisits, setFireVisits] = useState<FireVisits>(2)
   const [weeklyFireTesting, setWeeklyFireTesting] = useState(false)
   const [centralBatteryUnits, setCentralBatteryUnits] = useState(0)
@@ -152,12 +151,10 @@ export function MaintenanceCalculatorDialog({
   const [intruderAssets, setIntruderAssets] = useState<CountMap>(emptyCounts)
   const [intruderVisits, setIntruderVisits] = useState(2)
   const [intruderPlatinum, setIntruderPlatinum] = useState(false)
-  const [intruderOoh, setIntruderOoh] = useState(false)
 
   // ----- CCTV -----
   const [cctvAssets, setCctvAssets] = useState<CountMap>(emptyCounts)
   const [cctvVisits, setCctvVisits] = useState(1)
-  const [cctvOoh, setCctvOoh] = useState(false)
   const [cctvBanksmanHours, setCctvBanksmanHours] = useState(0)
   const [cctvAccessOption, setCctvAccessOption] = useState('0')
   const [cctvAccessManualCost, setCctvAccessManualCost] = useState(0)
@@ -165,19 +162,27 @@ export function MaintenanceCalculatorDialog({
   // ----- Access control -----
   const [accessAssets, setAccessAssets] = useState<CountMap>(emptyCounts)
   const [accessVisits, setAccessVisits] = useState(1)
-  const [accessOoh, setAccessOoh] = useState(false)
 
   // ----- Dampers -----
   const [mechanicalDampers, setMechanicalDampers] = useState(0)
   const [automaticDampers, setAutomaticDampers] = useState(0)
   const [damperVisits, setDamperVisits] = useState(1)
-  const [damperOoh, setDamperOoh] = useState(false)
   const [damperAccessCost, setDamperAccessCost] = useState(0)
 
   // ----- Monitoring -----
   const [fireMonitoring, setFireMonitoring] = useState<CountMap>(emptyCounts)
   const [intruderMonitoring, setIntruderMonitoring] = useState<CountMap>(emptyCounts)
   const [cctvMonitoringCost, setCctvMonitoringCost] = useState(0)
+
+  // ----- Sub-contracted services (editable: description, cost, margin %) -----
+  interface SubRow { description: string; cost: number; marginPct: number }
+  const [subcontract, setSubcontract] = useState<SubRow[]>([])
+  const updateSub = (idx: number, patch: Partial<SubRow>) =>
+    setSubcontract((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)))
+  const addSub = () =>
+    setSubcontract((prev) => [...prev, { description: '', cost: 0, marginPct: 50 }])
+  const removeSub = (idx: number) =>
+    setSubcontract((prev) => prev.filter((_, i) => i !== idx))
 
   // ----- Overview discounts -----
   const [directDiscount, setDirectDiscount] = useState(0) // percent 0..maxDiscount*100
@@ -196,7 +201,10 @@ export function MaintenanceCalculatorDialog({
       {
         fire: {
           assets: fireAssets as Partial<Record<keyof typeof FIRE_MAJOR_MINUTES, number>>,
-          cover: fireCover,
+          // Cover is offered as a client-selectable option (Standard vs
+          // Comprehensive), so the calculator emits both; this default is unused
+          // for line selection.
+          cover: 'standard',
           visits: fireVisits,
           weeklyFireTestingVisits: weeklyFireTesting ? 52 : 0,
           centralBatteryUnits,
@@ -207,25 +215,26 @@ export function MaintenanceCalculatorDialog({
           assets: intruderAssets as Partial<Record<keyof typeof INTRUDER_HOURS, number>>,
           visits: intruderVisits,
           platinum: intruderPlatinum,
-          outOfHours: intruderOoh,
+          // Out-of-hours cover is emitted as an optional add-on line instead.
+          outOfHours: false,
         },
         cctv: {
           assets: cctvAssets as Partial<Record<keyof typeof CCTV_HOURS, number>>,
           visits: cctvVisits,
-          outOfHours: cctvOoh,
+          outOfHours: false,
           accessEquipmentCost: cctvAccessCost,
           banksmanHours: cctvBanksmanHours,
         },
         access: {
           assets: accessAssets as Partial<Record<keyof typeof ACCESS_HOURS, number>>,
           visits: accessVisits,
-          outOfHours: accessOoh,
+          outOfHours: false,
         },
         dampers: {
           mechanicalDampers,
           automaticDampers,
           visits: damperVisits,
-          outOfHours: damperOoh,
+          outOfHours: false,
           accessEquipmentCost: damperAccessCost,
         },
         monitoring: {
@@ -234,18 +243,25 @@ export function MaintenanceCalculatorDialog({
           cctvCost: cctvMonitoringCost,
           cctvMargin: 0.5,
         },
+        subcontract: subcontract
+          .filter((s) => (Number(s.cost) || 0) > 0)
+          .map<SubcontractInput>((s) => ({
+            description: s.description,
+            cost: s.cost,
+            margin: (Number(s.marginPct) || 0) / 100,
+          })),
         directDiscount: directDiscount / 100,
         monitoringDiscount: monitoringDiscount / 100,
       },
       rates,
     )
   }, [
-    fireAssets, fireCover, fireVisits, weeklyFireTesting, centralBatteryUnits, luminaires,
-    monthlyElTesting, intruderAssets, intruderVisits, intruderPlatinum, intruderOoh,
-    cctvAssets, cctvVisits, cctvOoh, cctvAccessCost, cctvBanksmanHours, accessAssets,
-    accessVisits, accessOoh, mechanicalDampers, automaticDampers, damperVisits, damperOoh,
+    fireAssets, fireVisits, weeklyFireTesting, centralBatteryUnits, luminaires,
+    monthlyElTesting, intruderAssets, intruderVisits, intruderPlatinum,
+    cctvAssets, cctvVisits, cctvAccessCost, cctvBanksmanHours, accessAssets,
+    accessVisits, mechanicalDampers, automaticDampers, damperVisits,
     damperAccessCost, fireMonitoring, intruderMonitoring, cctvMonitoringCost,
-    directDiscount, monitoringDiscount, rates,
+    subcontract, directDiscount, monitoringDiscount, rates,
   ])
 
   const maxDiscountPct = Math.round(rates.maxDiscount * 100)
@@ -282,6 +298,7 @@ export function MaintenanceCalculatorDialog({
                 <TabsTrigger value="access">Access</TabsTrigger>
                 <TabsTrigger value="dampers">Dampers</TabsTrigger>
                 <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
+                <TabsTrigger value="subcontract">Sub-contract</TabsTrigger>
                 <TabsTrigger value="overview">Overview</TabsTrigger>
               </TabsList>
             </ScrollArea>
@@ -291,17 +308,7 @@ export function MaintenanceCalculatorDialog({
             <div className="p-4">
               {/* FIRE & LIGHTS */}
               <TabsContent value="fire" className="mt-0 space-y-4">
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="grid gap-1.5">
-                    <Label>Cover level</Label>
-                    <Select value={fireCover} onValueChange={(v) => setFireCover(v as FireCover)} disabled={disabled}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="standard">Standard</SelectItem>
-                        <SelectItem value="comprehensive">Comprehensive (+{Math.round(rates.compUplift * 100)}%)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div className="grid gap-1.5">
                     <Label>Service visits / year</Label>
                     <Select value={String(fireVisits)} onValueChange={(v) => setFireVisits(Number(v) as FireVisits)} disabled={disabled}>
@@ -313,6 +320,12 @@ export function MaintenanceCalculatorDialog({
                     </Select>
                   </div>
                 </div>
+                <p className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                  Both <span className="font-medium text-foreground">Standard</span> and{' '}
+                  <span className="font-medium text-foreground">Comprehensive</span> (+
+                  {Math.round(rates.compUplift * 100)}%) fire cover are added as client-selectable
+                  options so the client can choose their preferred level on the quote.
+                </p>
                 <Separator />
                 <div>
                   <p className="mb-1 text-sm font-medium">Fire alarm assets</p>
@@ -345,11 +358,10 @@ export function MaintenanceCalculatorDialog({
                     <Label htmlFor="intruder-plat" className="cursor-pointer text-sm">Platinum (+50%)</Label>
                     <Switch id="intruder-plat" checked={intruderPlatinum} onCheckedChange={setIntruderPlatinum} disabled={disabled} />
                   </div>
-                  <div className="flex items-end justify-between rounded-lg border p-3">
-                    <Label htmlFor="intruder-ooh" className="cursor-pointer text-sm">Out of hours (+50%)</Label>
-                    <Switch id="intruder-ooh" checked={intruderOoh} onCheckedChange={setIntruderOoh} disabled={disabled} />
-                  </div>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Out-of-hours cover is added automatically as an optional add-on the client can select.
+                </p>
                 <Separator />
                 <AssetGrid labels={INTRUDER_ASSET_LABELS} counts={intruderAssets} setCounts={setIntruderAssets} disabled={disabled} />
               </TabsContent>
@@ -360,10 +372,6 @@ export function MaintenanceCalculatorDialog({
                   <div className="grid gap-1.5">
                     <Label>Visits / year</Label>
                     <Input type="number" min={1} className="h-9" value={cctvVisits || ''} onChange={(e) => setCctvVisits(Math.max(1, Number.parseInt(e.target.value, 10) || 1))} disabled={disabled} />
-                  </div>
-                  <div className="flex items-end justify-between rounded-lg border p-3">
-                    <Label htmlFor="cctv-ooh" className="cursor-pointer text-sm">Out of hours (+50%)</Label>
-                    <Switch id="cctv-ooh" checked={cctvOoh} onCheckedChange={setCctvOoh} disabled={disabled} />
                   </div>
                   <div className="grid gap-1.5">
                     <Label>Banksman hours</Label>
@@ -387,6 +395,9 @@ export function MaintenanceCalculatorDialog({
                     </div>
                   )}
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Out-of-hours cover is added automatically as an optional add-on the client can select.
+                </p>
                 <Separator />
                 <AssetGrid labels={CCTV_ASSET_LABELS} counts={cctvAssets} setCounts={setCctvAssets} disabled={disabled} />
               </TabsContent>
@@ -398,11 +409,10 @@ export function MaintenanceCalculatorDialog({
                     <Label>Visits / year</Label>
                     <Input type="number" min={1} className="h-9" value={accessVisits || ''} onChange={(e) => setAccessVisits(Math.max(1, Number.parseInt(e.target.value, 10) || 1))} disabled={disabled} />
                   </div>
-                  <div className="flex items-end justify-between rounded-lg border p-3">
-                    <Label htmlFor="access-ooh" className="cursor-pointer text-sm">Out of hours (+50%)</Label>
-                    <Switch id="access-ooh" checked={accessOoh} onCheckedChange={setAccessOoh} disabled={disabled} />
-                  </div>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Out-of-hours cover is added automatically as an optional add-on the client can select.
+                </p>
                 <Separator />
                 <AssetGrid labels={ACCESS_ASSET_LABELS} counts={accessAssets} setCounts={setAccessAssets} disabled={disabled} />
               </TabsContent>
@@ -414,11 +424,10 @@ export function MaintenanceCalculatorDialog({
                     <Label>Visits / year</Label>
                     <Input type="number" min={1} className="h-9" value={damperVisits || ''} onChange={(e) => setDamperVisits(Math.max(1, Number.parseInt(e.target.value, 10) || 1))} disabled={disabled} />
                   </div>
-                  <div className="flex items-end justify-between rounded-lg border p-3">
-                    <Label htmlFor="damper-ooh" className="cursor-pointer text-sm">Out of hours (+50%)</Label>
-                    <Switch id="damper-ooh" checked={damperOoh} onCheckedChange={setDamperOoh} disabled={disabled} />
-                  </div>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Out-of-hours cover is added automatically as an optional add-on the client can select.
+                </p>
                 <Separator />
                 <CountRow label="Mechanical dampers" value={mechanicalDampers} onChange={setMechanicalDampers} disabled={disabled} />
                 <CountRow label="Automatic dampers" value={automaticDampers} onChange={setAutomaticDampers} disabled={disabled} />
@@ -462,6 +471,89 @@ export function MaintenanceCalculatorDialog({
                 </div>
               </TabsContent>
 
+              {/* SUB-CONTRACT */}
+              <TabsContent value="subcontract" className="mt-0 space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Add specialist works delivered through a sub-contractor. Enter your cost and the
+                  margin you want to make; the sell price is calculated as cost / (1 − margin).
+                </p>
+                {subcontract.length === 0 ? (
+                  <p className="rounded-md border border-dashed py-6 text-center text-sm text-muted-foreground">
+                    No sub-contracted services yet.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {subcontract.map((row, i) => {
+                      const cost = Number(row.cost) || 0
+                      const margin = Math.min(Math.max((Number(row.marginPct) || 0) / 100, 0), 0.95)
+                      const sell = cost > 0 ? cost / (1 - margin) : 0
+                      return (
+                        <div key={i} className="rounded-lg border p-3">
+                          <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto_auto]">
+                            <div className="grid gap-1.5">
+                              <Label className="text-xs">Description</Label>
+                              <Input
+                                className="h-9"
+                                placeholder="e.g. Lightning protection test"
+                                value={row.description}
+                                onChange={(e) => updateSub(i, { description: e.target.value })}
+                                disabled={disabled}
+                              />
+                            </div>
+                            <div className="grid gap-1.5">
+                              <Label className="text-xs">Cost (£)</Label>
+                              <Input
+                                type="number"
+                                min={0}
+                                className="h-9 w-28 text-right tabular-nums"
+                                value={row.cost || ''}
+                                placeholder="0.00"
+                                onChange={(e) => updateSub(i, { cost: Math.max(0, Number.parseFloat(e.target.value) || 0) })}
+                                disabled={disabled}
+                              />
+                            </div>
+                            <div className="grid gap-1.5">
+                              <Label className="text-xs">Margin (%)</Label>
+                              <Input
+                                type="number"
+                                min={0}
+                                max={95}
+                                className="h-9 w-24 text-right tabular-nums"
+                                value={row.marginPct || ''}
+                                placeholder="50"
+                                onChange={(e) => updateSub(i, { marginPct: Math.min(95, Math.max(0, Number.parseFloat(e.target.value) || 0)) })}
+                                disabled={disabled}
+                              />
+                            </div>
+                            <div className="flex items-end">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                                onClick={() => removeSub(i)}
+                                disabled={disabled}
+                                aria-label="Remove sub-contracted service"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            Sell price: <span className="font-medium text-foreground tabular-nums">{GBP.format(sell)}</span>
+                            {cost > 0 ? <> · profit {GBP.format(sell - cost)}</> : null}
+                          </p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                <Button type="button" variant="outline" size="sm" onClick={addSub} disabled={disabled}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add sub-contracted service
+                </Button>
+              </TabsContent>
+
               {/* OVERVIEW */}
               <TabsContent value="overview" className="mt-0 space-y-4">
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -493,15 +585,26 @@ export function MaintenanceCalculatorDialog({
                           {l.description}
                           {l.coverType ? <span className="text-muted-foreground"> · {l.coverType}</span> : null}
                           {l.visits ? <span className="text-muted-foreground"> · {l.visits} visits</span> : null}
+                          {l.optional ? (
+                            <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                              Optional
+                            </span>
+                          ) : null}
                         </span>
                         <span className="shrink-0 font-medium tabular-nums">{GBP.format(l.sell)}</span>
                       </div>
                     ))}
                     <Separator className="my-2" />
                     <div className="flex items-center justify-between text-base font-bold">
-                      <span>Total annual price</span>
+                      <span>Core annual price</span>
                       <span className="tabular-nums">{GBP.format(overview.totalSale)}</span>
                     </div>
+                    {overview.lines.some((l) => l.optional) ? (
+                      <p className="text-xs text-muted-foreground">
+                        Optional cover choices and out-of-hours add-ons are excluded from the core price
+                        — the client selects the ones they want on the quote.
+                      </p>
+                    ) : null}
                   </div>
                 ) : (
                   <p className="py-6 text-center text-sm text-muted-foreground">
@@ -528,6 +631,7 @@ export function MaintenanceCalculatorDialog({
                         {l.description}
                         {l.coverType ? ` · ${l.coverType}` : ''}
                         {l.visits ? ` · ${l.visits} visits` : ''}
+                        {l.optional ? ' · optional' : ''}
                       </span>
                       <span className="shrink-0 font-medium tabular-nums text-foreground">{GBP.format(l.sell)}</span>
                     </div>
@@ -541,7 +645,7 @@ export function MaintenanceCalculatorDialog({
             </ScrollArea>
             <div className="border-t px-4 py-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold">Total / yr</span>
+                <span className="text-sm font-semibold">Core / yr</span>
                 <span className="text-lg font-bold tabular-nums">{GBP.format(overview.totalSale)}</span>
               </div>
             </div>

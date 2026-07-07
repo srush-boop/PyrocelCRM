@@ -1110,6 +1110,14 @@ export interface QuoteLineItem {
   unit_price_pence: number
   line_total_pence: number
   position: number
+  // Client-selectable option support. is_optional lines are excluded from the
+  // core total until chosen; lines sharing a non-null option_group are mutually
+  // exclusive. standard names the relevant industry standard (e.g. BS 5839-1).
+  // client_selected records the client's electronic choice (null = undecided).
+  is_optional: boolean
+  option_group: string | null
+  standard: string | null
+  client_selected: boolean | null
   created_at: string
 }
 

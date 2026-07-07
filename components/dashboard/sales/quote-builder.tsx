@@ -111,6 +111,12 @@ interface EditLine {
   unit: string
   unitCost: string // pounds (cost)
   margin: string // gross margin %, empty string = inherit system margin
+  // Client-selectable option support (used by maintenance quotes). Optional
+  // lines are excluded from the core total; lines sharing an option_group are
+  // mutually exclusive. standard names the relevant industry standard.
+  is_optional: boolean
+  option_group: string | null
+  standard: string | null
 }
 
 interface EditSystem {
@@ -165,6 +171,9 @@ function blankLine(): EditLine {
     unit: '',
     unitCost: '0.00',
     margin: '', // inherit system margin
+    is_optional: false,
+    option_group: null,
+    standard: null,
   }
 }
 
@@ -726,11 +735,14 @@ export function QuoteBuilder({
         const meta = [l.coverType, l.visits ? `${l.visits} visits/yr` : null]
           .filter(Boolean)
           .join(' · ')
+        // Prefer the service overview as the line detail; fall back to the
+        // cover/visits summary so the line always carries context.
+        const detail = [l.overview, meta].filter(Boolean).join('\n')
         return {
           key: uid(),
           productCode: '',
           description: l.description,
-          detail: meta || '',
+          detail: detail || meta || '',
           service_type_id: null,
           is_service: true,
           catalogue_item_id: null,
@@ -738,6 +750,9 @@ export function QuoteBuilder({
           unit: 'year',
           unitCost: l.sell.toFixed(2),
           margin: '0',
+          is_optional: Boolean(l.optional),
+          option_group: l.optionGroup ?? null,
+          standard: l.standard ?? null,
         }
       })
 

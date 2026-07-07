@@ -592,11 +592,80 @@ export interface MaintenanceLine {
   /** Sell price after discount / mark-up. OVERVIEW column E. */
   sell: number
   category: MaintenanceLineCategory
+  /** Relevant industry standard, e.g. "BS 5839-1". */
+  standard?: string
+  /** One-line description of the service provided (rendered on the quote). */
+  overview?: string
+  /** Client-selectable option (excluded from the core total until chosen). */
+  optional?: boolean
+  /** Optional lines sharing a group are mutually exclusive (client picks one). */
+  optionGroup?: string
 }
 
 export interface SubcontractInput {
   description: string
   cost: number
+  /** Gross margin fraction 0..1; sell = cost / (1 - margin). Defaults to 0.5. */
+  margin?: number
+}
+
+// Relevant standard + short service overview per maintenance service, rendered
+// beneath each line on the quote document.
+export interface ServiceMeta {
+  standard: string
+  overview: string
+}
+
+export const MAINTENANCE_SERVICE_META: Record<string, ServiceMeta> = {
+  fire: {
+    standard: 'BS 5839-1',
+    overview:
+      'Routine inspection, testing and servicing of the fire detection and alarm system to keep it fully operational and compliant.',
+  },
+  fireWeekly: {
+    standard: 'BS 5839-1',
+    overview: 'Attended weekly fire alarm testing on your behalf where in-house testing is not practical.',
+  },
+  el: {
+    standard: 'BS 5266-1',
+    overview:
+      'Annual full-duration test and inspection of the emergency lighting system to confirm safe illumination on mains failure.',
+  },
+  elMonthly: {
+    standard: 'BS 5266-1',
+    overview: 'Monthly short-duration functional testing of the emergency lighting luminaires.',
+  },
+  intruder: {
+    standard: 'BS EN 50131 / PD 6662',
+    overview:
+      'Preventative maintenance of the intruder alarm system including detectors, control equipment and signalling.',
+  },
+  cctv: {
+    standard: 'BS EN 62676',
+    overview:
+      'Inspection and servicing of the CCTV system — cameras, recording and transmission — to maintain image quality and uptime.',
+  },
+  access: {
+    standard: 'BS EN 60839',
+    overview:
+      'Servicing of the access control system including door hardware, controllers and credentials management.',
+  },
+  dampers: {
+    standard: 'BS 9999 / BS EN 15650',
+    overview: 'Drop-testing, inspection and servicing of fire and smoke dampers to verify correct operation.',
+  },
+  monitoring: {
+    standard: 'BS 8591 / BS EN 50136',
+    overview: 'Alarm receiving centre monitoring and signalling of activations to the appropriate responders.',
+  },
+  outOfHours: {
+    standard: '',
+    overview: 'Optional uplift for maintenance visits carried out outside standard working hours.',
+  },
+  subcontract: {
+    standard: '',
+    overview: 'Specialist works delivered through an approved sub-contractor and managed on your behalf.',
+  },
 }
 
 export interface OverviewInput {
@@ -633,37 +702,71 @@ export function calcOverview(
   const directDiscount = clampDirectDiscount(input.directDiscount, rates)
   const monitoringDiscount = Math.min(Math.max(Number(input.monitoringDiscount) || 0, 0), 1)
 
+  const applyDiscount = (price: number) => round2(price - price * directDiscount)
+
   const pushDirect = (
     description: string,
     price: number,
-    extra: { coverType?: string; visits?: number | string } = {},
+    serviceKey: keyof typeof MAINTENANCE_SERVICE_META,
+    extra: { coverType?: string; visits?: number | string; optional?: boolean; optionGroup?: string } = {},
   ) => {
     if (price <= 0) return
+    const meta = MAINTENANCE_SERVICE_META[serviceKey]
     lines.push({
       description,
       price: round2(price),
-      sell: round2(price - price * directDiscount),
+      sell: applyDiscount(price),
       category: 'direct',
+      standard: meta?.standard || undefined,
+      overview: meta?.overview || undefined,
       ...extra,
+    })
+  }
+
+  // Push an optional out-of-hours add-on for a service (client opt-in). The
+  // uplift is 50% of the standard base price.
+  const pushOutOfHours = (label: string, base: number) => {
+    if (base <= 0) return
+    const meta = MAINTENANCE_SERVICE_META.outOfHours
+    lines.push({
+      description: `${label} — Out of Hours Cover`,
+      price: round2(base * 0.5),
+      sell: applyDiscount(base * 0.5),
+      category: 'direct',
+      overview: meta.overview,
+      optional: true,
     })
   }
 
   // Fire & lights (OVERVIEW rows 5-11)
   if (input.fire) {
     const f = calcFireLights(input.fire, rates)
-    const coverLabel = input.fire.cover === 'comprehensive' ? 'Comprehensive' : 'Standard'
-    pushDirect('Annual Fire Alarm Maintenance', f.selectedFirePrice, {
-      coverType: coverLabel,
-      visits: input.fire.visits,
+    const visits = input.fire.visits
+    const stdPrice = visits === 4 ? f.standardFour : f.standardTwo
+    const compPrice = visits === 4 ? f.comprehensiveFour : f.comprehensiveTwo
+    // Offer Standard and Comprehensive cover as mutually-exclusive options so
+    // the client selects the level they want.
+    pushDirect('Annual Fire Alarm Maintenance', stdPrice, 'fire', {
+      coverType: 'Standard',
+      visits,
+      optional: true,
+      optionGroup: 'fire-cover',
     })
-    pushDirect('Fire Alarm Weekly Testing', f.weeklyFireTesting, {
+    pushDirect('Annual Fire Alarm Maintenance', compPrice, 'fire', {
+      coverType: 'Comprehensive',
+      visits,
+      optional: true,
+      optionGroup: 'fire-cover',
+    })
+    pushOutOfHours('Fire Alarm Maintenance', stdPrice)
+    pushDirect('Fire Alarm Weekly Testing', f.weeklyFireTesting, 'fireWeekly', {
       visits: input.fire.weeklyFireTestingVisits,
     })
-    pushDirect('Annual Emergency Lighting Maintenance', f.elStandard, {
+    pushDirect('Annual Emergency Lighting Maintenance', f.elStandard, 'el', {
       coverType: 'Standard',
       visits: 1,
     })
-    pushDirect('Monthly Emergency Lighting Testing', f.monthlyElTesting, {
+    pushDirect('Monthly Emergency Lighting Testing', f.monthlyElTesting, 'elMonthly', {
       visits: input.fire.monthlyElTestingVisits,
     })
   }
@@ -671,35 +774,44 @@ export function calcOverview(
   // Intruder (OVERVIEW row 12)
   if (input.intruder) {
     const r = calcIntruder(input.intruder, rates)
-    pushDirect('Annual Intruder Alarm Maintenance', r.total, {
+    pushDirect('Annual Intruder Alarm Maintenance', r.total - r.outOfHoursUplift, 'intruder', {
       coverType: input.intruder.platinum ? 'Platinum' : 'Standard',
       visits: input.intruder.visits || 2,
     })
+    pushOutOfHours('Intruder Alarm Maintenance', r.base)
   }
 
   // CCTV (OVERVIEW row 13)
   if (input.cctv) {
     const r = calcCctv(input.cctv, rates)
-    pushDirect('Annual CCTV Maintenance', r.total, { visits: input.cctv.visits || 1 })
+    pushDirect('Annual CCTV Maintenance', r.total - r.outOfHoursUplift, 'cctv', {
+      visits: input.cctv.visits || 1,
+    })
+    pushOutOfHours('CCTV Maintenance', r.base)
   }
 
   // Access (OVERVIEW row 14)
   if (input.access) {
     const r = calcAccess(input.access, rates)
-    pushDirect('Annual Access Control Maintenance', r.total, {
+    pushDirect('Annual Access Control Maintenance', r.total - r.outOfHoursUplift, 'access', {
       visits: input.access.visits || 1,
     })
+    pushOutOfHours('Access Control Maintenance', r.base)
   }
 
   // Dampers (OVERVIEW row 15)
   if (input.dampers) {
     const r = calcDampers(input.dampers, rates)
-    pushDirect('Annual Damper Maintenance', r.total, { visits: input.dampers.visits || 1 })
+    pushDirect('Annual Damper Maintenance', r.total - r.outOfHoursUplift, 'dampers', {
+      visits: input.dampers.visits || 1,
+    })
+    pushOutOfHours('Damper Maintenance', r.base)
   }
 
   // Monitoring (OVERVIEW rows 18-20)
   if (input.monitoring) {
     const m = calcMonitoring(input.monitoring, rates)
+    const meta = MAINTENANCE_SERVICE_META.monitoring
     const pushMonitoring = (description: string, price: number) => {
       if (price <= 0) return
       lines.push({
@@ -707,6 +819,8 @@ export function calcOverview(
         price: round2(price),
         sell: round2(price - price * monitoringDiscount),
         category: 'monitoring',
+        standard: meta.standard,
+        overview: meta.overview,
       })
     }
     pushMonitoring('Annual Fire Alarm Monitoring', m.fireSell)
@@ -714,19 +828,24 @@ export function calcOverview(
     pushMonitoring('Annual CCTV Monitoring', m.cctvSell)
   }
 
-  // Sub-contracted services (OVERVIEW rows 23-29): sell = cost + cost*markup.
+  // Sub-contracted services (OVERVIEW rows 23-29): sell = cost / (1 - margin).
   for (const sc of input.subcontract ?? []) {
     const cost = Number(sc.cost) || 0
     if (cost <= 0) continue
+    const margin = Math.min(Math.max(Number(sc.margin ?? rates.subcontractMarkup) || 0, 0), 0.95)
     lines.push({
       description: sc.description || 'Sub-Contracted Service',
       price: round2(cost),
-      sell: round2(cost + cost * rates.subcontractMarkup),
+      sell: round2(cost / (1 - margin)),
       category: 'subcontract',
+      overview: MAINTENANCE_SERVICE_META.subcontract.overview,
     })
   }
 
-  const totalSale = round2(lines.reduce((acc, l) => acc + l.sell, 0)) // E32
+  // Core total excludes client-selectable optional lines (add-ons/choices).
+  const totalSale = round2(
+    lines.filter((l) => !l.optional).reduce((acc, l) => acc + l.sell, 0),
+  ) // E32
   return { lines, totalSale }
 }
 

@@ -215,9 +215,14 @@ function QuotePdfDocument({
           const systemLines = lines
             .filter((l) => l.system_id === system.id)
             .sort((a, b) => a.position - b.position)
-          const productLines = systemLines.filter((l) => !l.is_service)
-          const serviceLines = systemLines.filter((l) => l.is_service)
-          const systemTotal = systemLines.reduce((sum, l) => sum + l.line_total_pence, 0)
+          const coreLines = systemLines.filter((l) => !l.is_optional)
+          const productLines = coreLines.filter((l) => !l.is_service)
+          const serviceLines = coreLines.filter((l) => l.is_service)
+          const optionalLines = systemLines.filter((l) => l.is_optional)
+          const systemTotal = systemLines.reduce(
+            (sum, l) => sum + (l.is_optional && l.client_selected !== true ? 0 : l.line_total_pence),
+            0,
+          )
           const conditional = Object.entries(system.conditional_values ?? {}).filter(
             ([, value]) => !isOmittedValue(value as string | number | boolean),
           ) as [string, string | number | boolean][]
@@ -336,6 +341,14 @@ function QuotePdfDocument({
                               <View key={line.id} style={styles.tRow}>
                                 <View style={styles.cDesc}>
                                   <Text style={styles.bold}>{line.description}</Text>
+                                  {line.detail ? (
+                                    <Text style={[styles.muted, { fontSize: 8 }]}>{line.detail}</Text>
+                                  ) : null}
+                                  {line.standard ? (
+                                    <Text style={[styles.muted, { fontSize: 8 }]}>
+                                      Standard: {line.standard}
+                                    </Text>
+                                  ) : null}
                                 </View>
                                 <Text style={styles.cQty}>
                                   {line.quantity}
@@ -353,6 +366,47 @@ function QuotePdfDocument({
                         ),
                       )
                     : null}
+                  {quote.show_line_items && optionalLines.length > 0 ? (
+                    <View>
+                      <Text style={styles.groupLabel}>Optional extras</Text>
+                      <View style={styles.tHead}>
+                        <Text style={[styles.th, styles.cDesc]}>Option</Text>
+                        <Text style={[styles.th, styles.cQty]}>Qty</Text>
+                        <Text style={[styles.th, styles.cUnit]}>Price</Text>
+                        <Text style={[styles.th, styles.cTotal]}>Selected</Text>
+                      </View>
+                      {optionalLines.map((line) => (
+                        <View key={line.id} style={styles.tRow}>
+                          <View style={styles.cDesc}>
+                            <Text style={styles.bold}>{line.description}</Text>
+                            {line.detail ? (
+                              <Text style={[styles.muted, { fontSize: 8 }]}>{line.detail}</Text>
+                            ) : null}
+                            {line.standard ? (
+                              <Text style={[styles.muted, { fontSize: 8 }]}>
+                                Standard: {line.standard}
+                              </Text>
+                            ) : null}
+                            {line.option_group ? (
+                              <Text style={[styles.muted, { fontSize: 8 }]}>
+                                Choose one from: {line.option_group}
+                              </Text>
+                            ) : null}
+                          </View>
+                          <Text style={styles.cQty}>
+                            {line.quantity}
+                            {line.unit ? ` ${line.unit}` : ''}
+                          </Text>
+                          <Text style={styles.cUnit}>
+                            {formatPence(line.line_total_pence, quote.currency)}
+                          </Text>
+                          <Text style={[styles.cTotal, styles.bold]}>
+                            {line.client_selected === true ? 'Yes' : '—'}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
                   <Text style={styles.systemTotal}>
                     Total:{' '}
                     <Text style={[styles.bold, { color: '#0f172a' }]}>

@@ -3,6 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { loadQuoteCatalogue } from '@/lib/sales/equipment-spec'
 import { createRemedialCallsForQuote } from '@/lib/remedial'
+import { computeQuoteTotals } from '@/lib/sales'
 import type { QuoteLineItem, QuoteMessage } from '@/lib/types/database'
 
 type Result = { ok: boolean; error?: string }
@@ -159,12 +160,103 @@ export async function respondToPublicQuote(args: {
   return { ok: true }
 }
 
+// Save the client's optional-line selections via the public secret-link flow
+// (no login). The token authorises the change. Selections are constrained to
+// the quote's optional lines, option groups are mutually exclusive, and the
+// quote header totals are recomputed so the client sees the up-to-date price.
+export async function updatePublicQuoteOptions(args: {
+  token: string
+  // The full set of optional line ids the client wants selected.
+  selectedLineIds: string[]
+}): Promise<Result & { totalPence?: number }> {
+  const token = args.token?.trim()
+  if (!token) return { ok: false, error: 'Invalid quote link.' }
+
+  const supabase = createAdminClient()
+
+  const { data: quote, error } = await supabase
+    .from('quotes')
+    .select('id, status, vat_rate, discount_pence')
+    .eq('share_token', token)
+    .maybeSingle()
+  if (error || !quote) return { ok: false, error: 'Quote not found.' }
+
+  if (quote.status === 'accepted' || quote.status === 'rejected') {
+    return { ok: false, error: 'This quote has already been responded to and can no longer be changed.' }
+  }
+
+  const { data: lineRows } = await supabase
+    .from('quote_line_items')
+    .select('*')
+    .eq('quote_id', quote.id)
+    .order('position')
+  const lines = (lineRows ?? []) as QuoteLineItem[]
+
+  const optionalLines = lines.filter((l) => l.is_optional)
+  const optionalIds = new Set(optionalLines.map((l) => l.id))
+  const wanted = new Set(args.selectedLineIds.filter((id) => optionalIds.has(id)))
+
+  // Enforce mutual exclusivity within an option group: keep only the first
+  // requested selection per group, drop the rest.
+  const usedGroups = new Set<string>()
+  for (const line of optionalLines) {
+    if (!wanted.has(line.id)) continue
+    const group = line.option_group?.trim()
+    if (!group) continue
+    if (usedGroups.has(group)) {
+      wanted.delete(line.id)
+    } else {
+      usedGroups.add(group)
+    }
+  }
+
+  // Persist the selection state on each optional line.
+  for (const line of optionalLines) {
+    const selected = wanted.has(line.id)
+    if (line.client_selected === selected) continue
+    const { error: upErr } = await supabase
+      .from('quote_line_items')
+      .update({ client_selected: selected })
+      .eq('id', line.id)
+    if (upErr) {
+      console.log('[v0] updatePublicQuoteOptions line update error:', upErr.message)
+      return { ok: false, error: 'Could not save your selection. Please try again.' }
+    }
+  }
+
+  // Recompute the header totals with the new selection state applied.
+  const totals = computeQuoteTotals(
+    lines.map((l) => ({
+      quantity: l.quantity,
+      unit_price_pence: l.unit_price_pence,
+      is_optional: l.is_optional,
+      client_selected: l.is_optional ? wanted.has(l.id) : null,
+    })),
+    { vatRate: quote.vat_rate ?? 0, discountPence: quote.discount_pence ?? 0 },
+  )
+
+  const { error: totErr } = await supabase
+    .from('quotes')
+    .update({
+      subtotal_pence: totals.subtotalPence,
+      vat_pence: totals.vatPence,
+      total_pence: totals.totalPence,
+    })
+    .eq('id', quote.id)
+  if (totErr) {
+    console.log('[v0] updatePublicQuoteOptions totals update error:', totErr.message)
+    return { ok: false, error: 'Could not update the quote total. Please try again.' }
+  }
+
+  return { ok: true, totalPence: totals.totalPence }
+}
+
 // Fetch a quote + its systems/lines/company by public token (server-only).
 export async function getPublicQuote(token: string) {
   const supabase = createAdminClient()
   const { data: quote } = await supabase
     .from('quotes')
-    .select('*, client:clients(*), site:sites(*), preparer:profiles!quotes_created_by_fkey(id, full_name)')
+    .select('*, client:clients(*), site:sites(*), branch:branches(*), preparer:profiles!quotes_created_by_fkey(id, full_name)')
     .eq('share_token', token)
     .maybeSingle()
   if (!quote) return null

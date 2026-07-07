@@ -920,6 +920,12 @@ export interface CompanyInfo {
   logo_url: string | null
   // Default gross margin % pre-filled on new quote systems/lines.
   default_margin_percent: number
+  // Editable maintenance pricing rate tables (seeded from the Excel calculator).
+  // NULL = use the built-in DEFAULT_MAINTENANCE_RATES. Typed as MaintenanceRates.
+  maintenance_rates: Record<string, unknown> | null
+  // Editable maintenance service-agreement copy (cover letter, cover sections,
+  // FAQs, accreditations). NULL = use the built-in modernised defaults.
+  maintenance_agreement: Record<string, unknown> | null
   created_at?: string
   updated_at?: string
   }
@@ -1104,6 +1110,14 @@ export interface QuoteLineItem {
   unit_price_pence: number
   line_total_pence: number
   position: number
+  // Client-selectable option support. is_optional lines are excluded from the
+  // core total until chosen; lines sharing a non-null option_group are mutually
+  // exclusive. standard names the relevant industry standard (e.g. BS 5839-1).
+  // client_selected records the client's electronic choice (null = undecided).
+  is_optional: boolean
+  option_group: string | null
+  standard: string | null
+  client_selected: boolean | null
   created_at: string
 }
 
@@ -1152,6 +1166,9 @@ export interface Quote {
   status: QuoteStatus
   client_id: string | null
   site_id: string | null
+  // Branch issuing the quote (defaults from the preparer's profile). Its
+  // contact details render on the quote document.
+  branch_id: string | null
   prospect_name: string | null
   prospect_contact: string | null
   prospect_email: string | null
@@ -1175,6 +1192,9 @@ export interface Quote {
   // When true, the quote document/PDF appends a full equipment specification
   // (catalogue part numbers + standard descriptions + spec detail).
   show_equipment_spec: boolean
+  // When true (default), the maintenance quote document/PDF appends the service
+  // agreement pages (cover letter, cover summary, FAQ, accreditations).
+  show_maintenance_agreement: boolean
   // When true (default), the quote document/PDF shows each system's design
   // overview + design/survey details. Hidden when false.
   show_design_overview: boolean
@@ -1194,6 +1214,8 @@ export interface Quote {
   updated_at: string
   client?: Client | null
   site?: Site | null
+  // The issuing branch (joined from branches via branch_id).
+  branch?: Branch | null
   // The staff member who prepared the quote (joined from profiles via created_by).
   preparer?: { id: string; full_name: string | null } | null
 }

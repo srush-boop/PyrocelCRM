@@ -239,7 +239,7 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
         `id, entry_type_id, user_id, title, start_at, end_at, all_day, is_public, notes, approval_status,
            start_portion, end_portion, start_hours, end_hours,
            entry_type:calendar_entry_types(*),
-           user:profiles(id, full_name, email, branch_id),
+           user:profiles!calendar_entries_user_id_fkey(id, full_name, email, branch_id),
            attendees:calendar_entry_attendees(user:profiles(id, full_name, email, branch_id))`,
       )
       .order('start_at', { ascending: true }),

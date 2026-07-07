@@ -704,6 +704,18 @@ export function QuoteBuilder({
     [systems],
   )
 
+  // Summary of the routine-maintenance pricing already added to the quote (if
+  // any). Powers the "priced" state on the maintenance pricing card.
+  const maintenanceSummary = useMemo(() => {
+    const sys = systems.find((s) => quoteTypeFromWorkType(s.work_type) === 'service_contract')
+    if (!sys) return null
+    const total = sys.lines.reduce(
+      (acc, l) => acc + (Number(l.quantity) || 0) * (Number(l.unitCost) || 0),
+      0,
+    )
+    return { lineCount: sys.lines.length, total }
+  }, [systems])
+
   // Inject the calculator's priced services into the quote. The results are
   // sell-priced (post-discount), so each line is stored at cost = sell with 0%
   // margin to reproduce the calculator total exactly. Replaces the existing
@@ -1087,27 +1099,60 @@ export function QuoteBuilder({
       </Card>
 
       {/* ---------- Routine maintenance pricing ---------- */}
-      {isMaintenanceQuote && (
-        <Card>
-          <CardHeader className="flex flex-row items-start justify-between gap-4">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Calculator className="h-4 w-4 text-muted-foreground" />
-                Routine maintenance pricing
-              </CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground text-pretty">
-                Price each discipline from the on-site asset counts. The calculator
-                adds itemised annual maintenance lines to this quote.
-              </p>
-            </div>
-            {!readOnly && (
-              <Button type="button" variant="outline" onClick={() => setMaintCalcOpen(true)} disabled={isPending}>
-                <Calculator className="mr-2 h-4 w-4" />
-                Open calculator
-              </Button>
+      {/*
+        Always visible so the calculator is a first-class entry point. Opening it
+        and pressing "Add to quote" auto-creates the Routine Maintenance system —
+        no need to pre-select a work type in the systems section below.
+      */}
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-4">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Calculator className="h-4 w-4 text-muted-foreground" />
+              Routine maintenance pricing
+              <span className="rounded-full border px-2 py-0.5 text-xs font-normal text-muted-foreground">
+                Optional
+              </span>
+            </CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground text-pretty">
+              {maintenanceSummary
+                ? 'Recalculate to update the annual maintenance lines on this quote.'
+                : 'Add a maintenance service to this quote. Enter the on-site asset counts and the calculator prices each discipline and adds itemised annual lines automatically.'}
+            </p>
+          </div>
+          {!readOnly && (
+            <Button
+              type="button"
+              variant={maintenanceSummary ? 'outline' : 'default'}
+              onClick={() => setMaintCalcOpen(true)}
+              disabled={isPending}
+            >
+              <Calculator className="mr-2 h-4 w-4" />
+              {maintenanceSummary ? 'Recalculate' : 'Add maintenance pricing'}
+            </Button>
+          )}
+        </CardHeader>
+        {isMaintenanceQuote && (
+          <CardContent className="space-y-3">
+            {/* Priced state summary */}
+            {maintenanceSummary && (
+              <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/40 p-3 text-sm">
+                <span className="flex items-center gap-2 font-medium">
+                  <Wrench className="h-4 w-4 text-muted-foreground" />
+                  {maintenanceSummary.lineCount} maintenance{' '}
+                  {maintenanceSummary.lineCount === 1 ? 'line' : 'lines'} priced
+                </span>
+                <span className="font-semibold tabular-nums">
+                  {maintenanceSummary.total.toLocaleString('en-GB', {
+                    style: 'currency',
+                    currency: 'GBP',
+                  })}
+                  {' / yr'}
+                </span>
+              </div>
             )}
-          </CardHeader>
-          <CardContent>
+
+            {/* Service agreement toggle */}
             <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
               <div className="grid gap-0.5">
                 <Label htmlFor="q-show-agreement" className="cursor-pointer">
@@ -1127,8 +1172,8 @@ export function QuoteBuilder({
               />
             </div>
           </CardContent>
-        </Card>
-      )}
+        )}
+      </Card>
 
       <MaintenanceCalculatorDialog
         open={maintCalcOpen}

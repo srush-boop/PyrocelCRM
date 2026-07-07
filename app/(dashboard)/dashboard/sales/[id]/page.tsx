@@ -28,7 +28,9 @@ import type {
   QuoteSystemPpm,
   Site,
   QuoteMessage,
+  Branch,
 } from '@/lib/types/database'
+import type { MaintenanceRates } from '@/lib/maintenance-calculator'
 
 export default async function QuoteDetailPage({
   params,
@@ -82,6 +84,7 @@ export default async function QuoteDetailPage({
     { data: requirementSources },
     { data: quoteMessages },
     { data: systemReferences },
+    { data: branches },
   ] = await Promise.all([
     supabase.from('quote_systems').select('*').eq('quote_id', id).order('position'),
     supabase.from('quote_line_items').select('*').eq('quote_id', id).order('position'),
@@ -112,7 +115,11 @@ export default async function QuoteDetailPage({
       .select('id, quote_number, reference, revision, variant_label, is_master, status, total_pence, master_quote_id')
       .or(`id.eq.${masterId},master_quote_id.eq.${masterId}`)
       .order('revision'),
-    supabase.from('company_info').select('default_margin_percent').limit(1).maybeSingle(),
+    supabase
+      .from('company_info')
+      .select('default_margin_percent, maintenance_rates')
+      .limit(1)
+      .maybeSingle(),
     (profile as Profile).department_id
       ? supabase
           .from('departments')
@@ -137,6 +144,7 @@ export default async function QuoteDetailPage({
       .select('id, name, description, system_type_id, extracted_text')
       .eq('owner_type', 'system_reference')
       .not('extracted_text', 'is', null),
+    supabase.from('branches').select('*').order('name'),
   ])
 
   const defaultHourlyCostPence = (ppmEngineerCost as { hourly_cost_pence: number } | null)?.hourly_cost_pence ?? 0
@@ -214,6 +222,12 @@ export default async function QuoteDetailPage({
       <QuoteBuilder
         clients={(clients ?? []) as Client[]}
         sites={(sites ?? []) as Site[]}
+        branches={(branches ?? []) as Branch[]}
+        defaultBranchId={(profile as Profile).branch_id ?? null}
+        savedMaintenanceRates={
+          ((companyInfo as { maintenance_rates: Partial<MaintenanceRates> | null } | null)
+            ?.maintenance_rates) ?? null
+        }
         systemTypes={(systemTypes ?? []) as SystemType[]}
         serviceTypes={(serviceTypes ?? []) as ServiceType[]}
         quoteServices={(quoteServices ?? []) as QuoteService[]}

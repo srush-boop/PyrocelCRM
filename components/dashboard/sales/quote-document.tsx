@@ -28,6 +28,8 @@ import {
   buildEquipmentSpecSections,
   type SpecCatalogueItem,
 } from '@/lib/sales/equipment-spec'
+import { MaintenanceAgreementDocument } from '@/components/dashboard/sales/maintenance-agreement-document'
+import { resolveMaintenanceAgreement, type MaintenanceAgreementCopy } from '@/lib/maintenance'
 
 interface QuoteDocumentProps {
   quote: Quote
@@ -276,6 +278,20 @@ export function QuoteDocument({
             </dl>
           </div>
         </section>
+
+        {/* Issuing branch */}
+        {quote.branch && (
+          <section className="mb-10 rounded-md border bg-muted/30 p-4">
+            <FieldLabel>Issued by</FieldLabel>
+            <p className="font-semibold">{quote.branch.name}</p>
+            {quote.branch.address && (
+              <p className="text-sm text-muted-foreground whitespace-pre-line">{quote.branch.address}</p>
+            )}
+            <p className="text-sm text-muted-foreground">
+              {[quote.branch.phone, quote.branch.email].filter(Boolean).join(' · ')}
+            </p>
+          </section>
+        )}
 
         {/* Systems + specification + line items. Sections are numbered like a
             formal technical specification. */}
@@ -624,6 +640,20 @@ export function QuoteDocument({
               {quote.terms}
             </p>
           </div>
+        )}
+
+        {/* Maintenance service agreement (opt-in for maintenance quotes) */}
+        {quote.show_maintenance_agreement && (
+          <MaintenanceAgreementDocument
+            copy={resolveMaintenanceAgreement(
+              (company?.maintenance_agreement ?? null) as Partial<MaintenanceAgreementCopy> | null,
+            )}
+            companyName={companyName}
+            siteName={quote.site?.name ?? null}
+            recipientName={recipientName}
+            preparerName={quote.preparer?.full_name ?? null}
+            branch={quote.branch ?? null}
+          />
         )}
 
         {/* Footer */}

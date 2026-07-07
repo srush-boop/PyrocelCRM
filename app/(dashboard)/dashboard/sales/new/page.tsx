@@ -22,7 +22,9 @@ import type {
   QuoteService,
   AssetType,
   Site,
+  Branch,
 } from '@/lib/types/database'
+import type { MaintenanceRates } from '@/lib/maintenance-calculator'
 
 export const metadata = { title: 'New Quote | Pyrocel' }
 
@@ -69,6 +71,7 @@ export default async function NewQuotePage({
     { data: bankValues },
     { data: companyInfo },
     { data: systemReferences },
+    { data: branches },
   ] = await Promise.all([
     supabase.from('clients').select('id, name').order('name'),
     supabase.from('sites').select('id, name, client_id').order('name'),
@@ -88,12 +91,17 @@ export default async function NewQuotePage({
     supabase.from('work_type_settings').select('*'),
     supabase.from('quote_design_categories').select('*').eq('active', true).order('name'),
     supabase.from('quote_bank_values').select('*'),
-    supabase.from('company_info').select('default_margin_percent').limit(1).maybeSingle(),
+    supabase
+      .from('company_info')
+      .select('default_margin_percent, maintenance_rates')
+      .limit(1)
+      .maybeSingle(),
     supabase
       .from('documents')
       .select('id, name, description, system_type_id, extracted_text')
       .eq('owner_type', 'system_reference')
       .not('extracted_text', 'is', null),
+    supabase.from('branches').select('*').order('name'),
   ])
 
   // When opened from a site (e.g. the site's Quotes tab), preselect that site
@@ -193,6 +201,12 @@ export default async function NewQuotePage({
       <QuoteBuilder
         clients={(clients ?? []) as Client[]}
         sites={(sites ?? []) as Site[]}
+        branches={(branches ?? []) as Branch[]}
+        defaultBranchId={(profile as Profile).branch_id ?? null}
+        savedMaintenanceRates={
+          ((companyInfo as { maintenance_rates: Partial<MaintenanceRates> | null } | null)
+            ?.maintenance_rates) ?? null
+        }
         initialClientId={defectPrefill?.clientId ?? initialSite?.client_id ?? undefined}
         initialSiteId={defectPrefill?.siteId ?? initialSite?.id ?? undefined}
         initialTitle={defectPrefill?.title}

@@ -32,7 +32,7 @@ export default async function QuotePrintPage({
 
   const { data: quote } = await supabase
     .from('quotes')
-    .select('*, client:clients(*), site:sites(*), preparer:profiles!quotes_created_by_fkey(id, full_name)')
+    .select('*, client:clients(*), site:sites(*), branch:branches(*), preparer:profiles!quotes_created_by_fkey(id, full_name)')
     .eq('id', id)
     .single()
   if (!quote) notFound()

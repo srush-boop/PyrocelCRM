@@ -923,6 +923,10 @@ export interface CompanyInfo {
   // Editable maintenance pricing rate tables (seeded from the Excel calculator).
   // NULL = use the built-in DEFAULT_MAINTENANCE_RATES. Typed as MaintenanceRates.
   maintenance_rates: Record<string, unknown> | null
+  // Editable installation pricing rate tables (seeded from the Projects
+  // Installation Workbook). NULL = use the built-in DEFAULT_INSTALLATION_RATES.
+  // Typed as InstallationRates.
+  installation_rates: Record<string, unknown> | null
   // Editable maintenance service-agreement copy (cover letter, cover sections,
   // FAQs, accreditations). NULL = use the built-in modernised defaults.
   maintenance_agreement: Record<string, unknown> | null

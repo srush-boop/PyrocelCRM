@@ -44,6 +44,15 @@ import {
   type MaintenanceCalcResult,
 } from '@/components/dashboard/sales/maintenance-calculator-dialog'
 import type { MaintenanceRates } from '@/lib/maintenance-calculator'
+import {
+  InstallationCalculatorDialog,
+  type InstallationCalcResult,
+} from '@/components/dashboard/sales/installation-calculator-dialog'
+import {
+  PRICING_MODE_LABELS,
+  lineValueForMode,
+  type InstallationRates,
+} from '@/lib/installation-calculator'
 import { QuoteSectionRenderer } from '@/components/dashboard/sales/quote-section-renderer'
 import { AiSpecBuilderDialog } from '@/components/dashboard/sales/ai-spec-builder-dialog'
 import {
@@ -325,6 +334,8 @@ interface QuoteBuilderProps {
   defaultBranchId?: string | null
   // Saved maintenance rate overrides from company settings (null = defaults).
   savedMaintenanceRates?: Partial<MaintenanceRates> | null
+  // Saved installation rate overrides from company settings (null = defaults).
+  savedInstallationRates?: Partial<InstallationRates> | null
   systemTypes: SystemType[]
   serviceTypes: ServiceType[]
   // Global, configurable non-product services (Installation, Decommission, etc.).
@@ -372,6 +383,7 @@ export function QuoteBuilder({
   branches = [],
   defaultBranchId = null,
   savedMaintenanceRates = null,
+  savedInstallationRates = null,
   systemTypes,
   serviceTypes,
   quoteServices,
@@ -440,6 +452,8 @@ export function QuoteBuilder({
   )
   // Routine-maintenance pricing calculator dialog.
   const [maintCalcOpen, setMaintCalcOpen] = useState(false)
+  // Installation pricing calculator dialog.
+  const [installCalcOpen, setInstallCalcOpen] = useState(false)
 
   // ----- Client-request requirements matrix state -----
   const [requirements, setRequirements] = useState<DraftRequirement[]>(

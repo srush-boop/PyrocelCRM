@@ -36,8 +36,9 @@ import {
 } from '@/components/ui/command'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
-import { Plus, Trash2, BookOpen, Save, TrendingUp, Calculator, Wrench, Check, ChevronsUpDown, ChevronDown, Sparkles, Building2, HardHat } from 'lucide-react'
+import { Plus, Trash2, BookOpen, Save, TrendingUp, Calculator, Wrench, Check, ChevronsUpDown, ChevronDown, Sparkles, Building2, HardHat, Send, Eye, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
+import { SendQuoteDialog } from '@/components/dashboard/sales/send-quote-dialog'
 import { PpmCalculatorDialog, type PpmDraft } from '@/components/dashboard/sales/ppm-calculator-dialog'
 import {
   MaintenanceCalculatorDialog,
@@ -358,6 +359,39 @@ function ppmToDraft(p: QuoteSystemPpm | null): PpmDraft | null {
   }
 }
 
+// Map a maintenance calculator result into editable quote lines: one line per
+// priced service (Routine Maintenance, Weekly fire testing, EL testing,
+// monitoring, sub-contract, etc.), each annotated with its cover type and the
+// number of visits per year. The originating calculation snapshot is attached
+// to the first line so it can be re-opened and adjusted later. Sell-priced at
+// 0% margin (cost = sell) so the quote total reproduces the calculator exactly.
+function maintenanceResultToLines(result: MaintenanceCalcResult): EditLine[] {
+  return result.lines.map((l, i) => {
+    const meta = [l.coverType, l.visits ? `${l.visits} visits/yr` : null]
+      .filter(Boolean)
+      .join(' · ')
+    const detail = [l.overview, meta].filter(Boolean).join('\n')
+    const description = l.coverType ? `${l.description} (${l.coverType} Cover)` : l.description
+    return {
+      key: uid(),
+      productCode: '',
+      description,
+      detail: detail || meta || '',
+      service_type_id: null,
+      is_service: true,
+      catalogue_item_id: null,
+      quantity: '1',
+      unit: 'year',
+      unitCost: l.sell.toFixed(2),
+      margin: '0',
+      is_optional: Boolean(l.optional),
+      option_group: l.optionGroup ?? null,
+      standard: l.standard ?? null,
+      calculatorSnapshot: i === 0 ? result.snapshot : null,
+    }
+  })
+}
+
 // A system reference guide, condensed for AI grounding in the spec builder.
 export type SystemReferenceLite = {
   id: string
@@ -632,6 +666,31 @@ export function QuoteBuilder({
     })
   }, [systems, vatRate, discount])
 
+  // ----- Zero-margin guard -----
+  // Flag any costed product line whose effective margin resolves to 0% (or less)
+  // — i.e. it would be sold at (or below) cost. Calculator-priced service lines
+  // are excluded: their profit is embedded in the price and they intentionally
+  // carry a 0% line margin (cost = sell). Shown as an always-on warning so a
+  // preparer never sends a quote with an unpriced-for-profit item by mistake.
+  const zeroMarginLines = useMemo(() => {
+    const flagged: { system: string; line: string }[] = []
+    systems.forEach((s, i) => {
+      const sysName = s.system_name || `System ${i + 1}`
+      for (const l of s.lines) {
+        if (l.is_service) continue
+        const cost = Number.parseFloat(l.unitCost) || 0
+        if (cost <= 0) continue
+        if (effectiveMargin(l, s) <= 0) {
+          flagged.push({
+            system: sysName,
+            line: l.description.trim() || l.productCode.trim() || 'Unnamed item',
+          })
+        }
+      }
+    })
+    return flagged
+  }, [systems])
+
   // ----- Mutators -----
   function updateSystem(key: string, patch: Partial<EditSystem>) {
     setSystems((prev) => prev.map((s) => (s.key === key ? { ...s, ...patch } : s)))
@@ -887,61 +946,24 @@ export function QuoteBuilder({
 
       if (maintAddTarget) {
         const target = maintAddTarget
-        const line: EditLine = {
-          key: uid(),
-          productCode: '',
-          description: 'Routine Maintenance',
-          detail: '',
-          service_type_id: null,
-          is_service: true,
-          catalogue_item_id: null,
-          quantity: '1',
-          unit: 'year',
-          unitCost: result.totalSale.toFixed(2),
-          margin: '0',
-          is_optional: false,
-          option_group: null,
-          standard: null,
-          calculatorSnapshot: result.snapshot,
-        }
+        // Add one line per priced service (maintenance visits, weekly testing,
+        // EL testing, monitoring, etc.), each annotated with its visits/year.
+        const newLines = maintenanceResultToLines(result)
         setSystems((prev) =>
-          prev.map((s) => (s.key === target ? { ...s, lines: [...s.lines, line] } : s)),
+          prev.map((s) => (s.key === target ? { ...s, lines: [...s.lines, ...newLines] } : s)),
         )
         setMaintAddTarget(null)
         setMaintInitialFire(null)
-        toast.success('Maintenance added as a service line')
+        toast.success(
+          newLines.length === 1
+            ? 'Maintenance added as a service line'
+            : `Maintenance added as ${newLines.length} service lines`,
+        )
         return
       }
 
       // Maintenance-only isolated flow: itemised Routine Maintenance system.
-      const lines: EditLine[] = result.lines.map((l, i) => {
-        const meta = [l.coverType, l.visits ? `${l.visits} visits/yr` : null]
-          .filter(Boolean)
-          .join(' · ')
-        const detail = [l.overview, meta].filter(Boolean).join('\n')
-        const description = l.coverType
-          ? `${l.description} (${l.coverType} Cover)`
-          : l.description
-        return {
-          key: uid(),
-          productCode: '',
-          description,
-          detail: detail || meta || '',
-          service_type_id: null,
-          is_service: true,
-          catalogue_item_id: null,
-          quantity: '1',
-          unit: 'year',
-          unitCost: l.sell.toFixed(2),
-          margin: '0',
-          is_optional: Boolean(l.optional),
-          option_group: l.optionGroup ?? null,
-          standard: l.standard ?? null,
-          // Attach the snapshot to the first line so the calculation can be
-          // re-opened from the system's line list.
-          calculatorSnapshot: i === 0 ? result.snapshot : null,
-        }
-      })
+      const lines: EditLine[] = maintenanceResultToLines(result)
 
       setSystems((prev) => {
         const idx = prev.findIndex((s) => s.system_name === 'Routine Maintenance')
@@ -1774,6 +1796,36 @@ export function QuoteBuilder({
             </div>
           </div>
 
+          {zeroMarginLines.length > 0 && (
+            <div
+              role="alert"
+              className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/5 p-4 text-destructive"
+            >
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+              <div className="text-sm">
+                <p className="font-medium">
+                  {zeroMarginLines.length === 1
+                    ? '1 item has zero margin'
+                    : `${zeroMarginLines.length} items have zero margin`}
+                </p>
+                <p className="text-pretty text-destructive/90">
+                  The following {zeroMarginLines.length === 1 ? 'item is' : 'items are'} priced at
+                  cost (no profit). Set a margin before sending:
+                </p>
+                <ul className="mt-1 list-disc pl-5 text-destructive/90">
+                  {zeroMarginLines.slice(0, 6).map((z, idx) => (
+                    <li key={idx}>
+                      {z.system} — {z.line}
+                    </li>
+                  ))}
+                  {zeroMarginLines.length > 6 && (
+                    <li>and {zeroMarginLines.length - 6} more…</li>
+                  )}
+                </ul>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2 rounded-lg border bg-muted/30 p-4">
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Subtotal</span>
@@ -1792,8 +1844,8 @@ export function QuoteBuilder({
         </CardContent>
       </Card>
 
-      {!readOnly && (
-        <div className="sticky bottom-4 flex items-center justify-end gap-3">
+      {(!readOnly || quote?.id) && (
+        <div className="sticky bottom-4 flex flex-wrap items-center justify-end gap-3">
           {canAutosave && autosaveState !== 'idle' && (
             <span
               className="rounded-md bg-background/80 px-3 py-1.5 text-sm text-muted-foreground shadow-sm backdrop-blur"
@@ -1806,10 +1858,40 @@ export function QuoteBuilder({
               )}
             </span>
           )}
-          <Button size="lg" onClick={handleSave} disabled={isPending || !title.trim()} className="shadow-lg">
-            <Save className="mr-2 h-4 w-4" />
-            {quote?.id ? 'Save changes' : 'Create quote'}
-          </Button>
+
+          {/* View + Send are available once the quote is saved (they act on the
+              persisted version). Drafts autosave; use Save first if unsure. */}
+          {quote?.id && (
+            <Button size="lg" variant="outline" className="shadow-lg" asChild>
+              <a
+                href={`/dashboard/sales/${quote.id}/print`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Eye className="mr-2 h-4 w-4" />
+                View quote
+              </a>
+            </Button>
+          )}
+
+          {quote?.id && (
+            <SendQuoteDialog
+              quote={quote}
+              trigger={
+                <Button size="lg" variant="outline" className="shadow-lg">
+                  <Send className="mr-2 h-4 w-4" />
+                  Send quote
+                </Button>
+              }
+            />
+          )}
+
+          {!readOnly && (
+            <Button size="lg" onClick={handleSave} disabled={isPending || !title.trim()} className="shadow-lg">
+              <Save className="mr-2 h-4 w-4" />
+              {quote?.id ? 'Save changes' : 'Create quote'}
+            </Button>
+          )}
         </div>
       )}
     </div>

@@ -408,9 +408,11 @@ export function CallsMap({
         )}
       </div>
 
-      <div className="flex flex-col gap-4 lg:flex-row">
-        {/* Control panel */}
-        <div className="w-full shrink-0 space-y-4 lg:w-80">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+        {/* Control panel — sticky, self-scrolling sidebar so filters, the
+            emergency-calls list and the legend stay reachable together while
+            the map keeps its full height alongside. */}
+        <div className="w-full shrink-0 space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-9rem)] lg:w-80 lg:overflow-y-auto lg:pr-1">
         {/* Emergency alert banner */}
         {emergencyCalls.length > 0 && (
           <Card className="border-destructive/50 bg-destructive/5">
@@ -881,36 +883,42 @@ export function CallsMap({
           </Card>
         )}
 
-        {/* Legend */}
+        {/* Legend — two compact columns so calls + engineers keys read side by
+            side and don't push the sidebar down. */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Legend</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">Calls</p>
-            {URGENCY_LEGEND.map((l) => (
-              <div key={l.key} className="flex items-center gap-2 text-sm">
-                <span className={cn('inline-block h-3 w-3 rounded-full', l.className)} />
-                <span>{l.label}</span>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground">Calls</p>
+                {URGENCY_LEGEND.map((l) => (
+                  <div key={l.key} className="flex items-center gap-2 text-xs">
+                    <span className={cn('inline-block h-2.5 w-2.5 shrink-0 rounded-full', l.className)} />
+                    <span>{l.label}</span>
+                  </div>
+                ))}
+                <div className="flex items-center gap-2 text-xs">
+                  <Siren className="h-3 w-3 shrink-0 text-destructive" />
+                  <span>Emergency</span>
+                </div>
               </div>
-            ))}
-            <div className="flex items-center gap-2 text-sm">
-              <Siren className="h-3.5 w-3.5 text-destructive" />
-              <span>Emergency (pulsing)</span>
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground">Engineers</p>
+                {DISCIPLINES.map((d) => (
+                  <div key={d.key} className="flex items-center gap-2 text-xs">
+                    <span
+                      className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ background: d.color }}
+                    />
+                    <span>{d.label}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <Separator className="my-1" />
-            <p className="text-xs font-medium text-muted-foreground">Engineers</p>
-            {DISCIPLINES.map((d) => (
-              <div key={d.key} className="flex items-center gap-2 text-sm">
-                <span
-                  className="inline-block h-3 w-3 rounded-full"
-                  style={{ background: d.color }}
-                />
-                <span>{d.label}</span>
-              </div>
-            ))}
             {overdueCount > 0 && (
-              <Badge variant="destructive" className="mt-1">
+              <Badge variant="destructive" className="mt-3">
                 {overdueCount} overdue
               </Badge>
             )}

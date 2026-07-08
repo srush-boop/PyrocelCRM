@@ -124,6 +124,147 @@ function MapController({
   return null
 }
 
+// Call markers, split out and memoised so they only rebuild when the call list
+// (or the dispatch callback) actually changes. Dispatch-mode state — radius,
+// candidates, highlighted route — lives on the parent canvas; keeping these
+// markers separate means clicking "Find engineers" (whose handler sits on the
+// Leaflet container) no longer rebuilds every pin, which was the INP hotspot.
+const CallMarkers = memo(function CallMarkers({
+  calls,
+  onDispatch,
+}: {
+  calls: MapCall[]
+  onDispatch?: (call: MapCall) => void
+}) {
+  return (
+    <>
+      {calls.map((c) => (
+        <Marker
+          key={c.taskId}
+          position={[c.latitude, c.longitude]}
+          icon={c.isEmergency ? emergencyIcon(URGENCY_COLOR.overdue) : pinIcon(URGENCY_COLOR[c.urgency], BUILDING_SVG)}
+          zIndexOffset={c.isEmergency ? 1000 : 0}
+        >
+          <Tooltip direction="top" offset={[0, -18]}>
+            <span className="text-xs">
+              {c.isEmergency && <strong style={{ color: URGENCY_COLOR.overdue }}>EMERGENCY · </strong>}
+              <strong>{c.siteName}</strong>
+              {' · '}~{formatDuration(c.expected.minutes)}
+            </span>
+          </Tooltip>
+          <Popup>
+            <div className="min-w-[200px] space-y-1 text-[13px] leading-snug">
+              {c.isEmergency && (
+                <p className="font-bold" style={{ color: URGENCY_COLOR.overdue }}>
+                  EMERGENCY CALL
+                </p>
+              )}
+              <p className="font-semibold">{c.siteName}</p>
+              {c.clientName && <p className="text-muted-foreground">{c.clientName}</p>}
+              <p>
+                {[c.systemTypeName, c.callTypeName ?? c.serviceTypeName].filter(Boolean).join(' · ') ||
+                  'Service call'}
+                {c.visitTypeName ? ` (${c.visitTypeName})` : ''}
+              </p>
+              {c.respondBy && (
+                <p style={{ color: URGENCY_COLOR.overdue }}>
+                  Attend by {formatDateUK(c.respondBy)} {new Date(c.respondBy).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                </p>
+              )}
+              <p>
+                <strong>~{formatDuration(c.expected.minutes)}</strong> on site
+              </p>
+              <p>
+                {c.urgency === 'overdue' && !c.isEmergency && (
+                  <span style={{ color: URGENCY_COLOR.overdue }}>Overdue · </span>
+                )}
+                {c.scheduledDate ? `Due ${formatDateUK(c.scheduledDate)}` : 'Unscheduled'}
+              </p>
+              <p className="text-muted-foreground">
+                {c.assignedEngineerName ? `Assigned: ${c.assignedEngineerName}` : 'Unassigned'}
+                {c.postcode ? ` · ${c.postcode}` : ''}
+              </p>
+              <div className="flex items-center gap-3 pt-1">
+                {onDispatch && (
+                  <button
+                    type="button"
+                    onClick={() => onDispatch(c)}
+                    className="font-medium text-primary underline"
+                  >
+                    Find engineers
+                  </button>
+                )}
+                <a
+                  href={`/dashboard/tasks/${c.taskId}?from=/dashboard/schedule/map`}
+                  className="font-medium text-primary underline"
+                >
+                  Open call
+                </a>
+              </div>
+            </div>
+          </Popup>
+        </Marker>
+      ))}
+    </>
+  )
+})
+
+// Engineer markers, memoised for the same reason as CallMarkers above.
+const EngineerMarkers = memo(function EngineerMarkers({
+  engineers,
+}: {
+  engineers: MapEngineer[]
+}) {
+  return (
+    <>
+      {engineers
+        .filter((e) => e.latitude != null && e.longitude != null)
+        .map((e) => {
+          const meta = disciplineMeta(e.discipline)
+          return (
+            <Marker
+              key={e.id}
+              position={[e.latitude!, e.longitude!]}
+              icon={engineerIcon(meta.color, ENGINEER_SVG, e.onLeave)}
+              opacity={e.onLeave ? 0.6 : 1}
+            >
+              <Tooltip direction="top" offset={[0, -14]}>
+                <span className="text-xs">
+                  <strong>{e.name}</strong> · {meta.label}
+                  {e.onLeave ? ' · on leave' : ''}
+                </span>
+              </Tooltip>
+              <Popup>
+                <div className="min-w-[190px] space-y-1 text-[13px] leading-snug">
+                  <p className="font-semibold">{e.name}</p>
+                  <p>
+                    <span
+                      className="mr-1 inline-block rounded px-1.5 py-0.5 text-[11px] font-medium"
+                      style={{ background: meta.color, color: meta.onColor }}
+                    >
+                      {meta.label}
+                    </span>
+                    {e.roleLabel && <span className="text-muted-foreground">{e.roleLabel}</span>}
+                  </p>
+                  {e.departmentName && <p className="text-muted-foreground">{e.departmentName}</p>}
+                  <p>{e.lastSeenLabel ?? 'No recent activity'}</p>
+                  {e.onLeave && (
+                    <p style={{ color: URGENCY_COLOR.overdue }}>
+                      On leave today{e.leaveReason ? ` · ${e.leaveReason}` : ''}
+                    </p>
+                  )}
+                  <p className="text-muted-foreground">
+                    {e.bookedTodayCount} booked call{e.bookedTodayCount === 1 ? '' : 's'} today
+                  </p>
+                </div>
+              </Popup>
+            </Marker>
+          )
+        })}
+    </>
+  )
+})
+
 // Memoised: this renders every Leaflet marker (each with a popup + tooltip),
 // which is expensive. Without memo, any parent state change (e.g. typing in a
 // filter or picking an engineer in the assign panel) rebuilds the whole map and
@@ -198,120 +339,10 @@ export const CallsMapCanvas = memo(function CallsMapCanvas({
         />
       )}
 
-      {/* Call markers */}
-      {calls.map((c) => (
-        <Marker
-          key={c.taskId}
-          position={[c.latitude, c.longitude]}
-          icon={c.isEmergency ? emergencyIcon(URGENCY_COLOR.overdue) : pinIcon(URGENCY_COLOR[c.urgency], BUILDING_SVG)}
-          zIndexOffset={c.isEmergency ? 1000 : 0}
-        >
-          <Tooltip direction="top" offset={[0, -18]}>
-            <span className="text-xs">
-              {c.isEmergency && <strong style={{ color: URGENCY_COLOR.overdue }}>EMERGENCY · </strong>}
-              <strong>{c.siteName}</strong>
-              {' · '}~{formatDuration(c.expected.minutes)}
-            </span>
-          </Tooltip>
-          <Popup>
-            <div className="min-w-[200px] space-y-1 text-[13px] leading-snug">
-              {c.isEmergency && (
-                <p className="font-bold" style={{ color: URGENCY_COLOR.overdue }}>
-                  EMERGENCY CALL
-                </p>
-              )}
-              <p className="font-semibold">{c.siteName}</p>
-              {c.clientName && <p className="text-muted-foreground">{c.clientName}</p>}
-              <p>
-                {[c.systemTypeName, c.callTypeName ?? c.serviceTypeName].filter(Boolean).join(' · ') ||
-                  'Service call'}
-                {c.visitTypeName ? ` (${c.visitTypeName})` : ''}
-              </p>
-              {c.respondBy && (
-                <p style={{ color: URGENCY_COLOR.overdue }}>
-                  Attend by {formatDateUK(c.respondBy)} {new Date(c.respondBy).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-                </p>
-              )}
-              <p>
-                <strong>~{formatDuration(c.expected.minutes)}</strong> on site
-              </p>
-              <p>
-                {c.urgency === 'overdue' && !c.isEmergency && (
-                  <span style={{ color: URGENCY_COLOR.overdue }}>Overdue · </span>
-                )}
-                {c.scheduledDate ? `Due ${formatDateUK(c.scheduledDate)}` : 'Unscheduled'}
-              </p>
-              <p className="text-muted-foreground">
-                {c.assignedEngineerName ? `Assigned: ${c.assignedEngineerName}` : 'Unassigned'}
-                {c.postcode ? ` · ${c.postcode}` : ''}
-              </p>
-              <div className="flex items-center gap-3 pt-1">
-                {onDispatch && (
-                  <button
-                    type="button"
-                    onClick={() => onDispatch(c)}
-                    className="font-medium text-primary underline"
-                  >
-                    Find engineers
-                  </button>
-                )}
-                <a
-                  href={`/dashboard/tasks/${c.taskId}?from=/dashboard/schedule/map`}
-                  className="font-medium text-primary underline"
-                >
-                  Open call
-                </a>
-              </div>
-            </div>
-          </Popup>
-        </Marker>
-      ))}
-
-      {/* Engineer markers (positioned from latest activity), tinted by discipline */}
-      {engineers
-        .filter((e) => e.latitude != null && e.longitude != null)
-        .map((e) => {
-          const meta = disciplineMeta(e.discipline)
-          return (
-            <Marker
-              key={e.id}
-              position={[e.latitude!, e.longitude!]}
-              icon={engineerIcon(meta.color, ENGINEER_SVG, e.onLeave)}
-              opacity={e.onLeave ? 0.6 : 1}
-            >
-              <Tooltip direction="top" offset={[0, -14]}>
-                <span className="text-xs">
-                  <strong>{e.name}</strong> · {meta.label}
-                  {e.onLeave ? ' · on leave' : ''}
-                </span>
-              </Tooltip>
-              <Popup>
-                <div className="min-w-[190px] space-y-1 text-[13px] leading-snug">
-                  <p className="font-semibold">{e.name}</p>
-                  <p>
-                    <span
-                      className="mr-1 inline-block rounded px-1.5 py-0.5 text-[11px] font-medium"
-                      style={{ background: meta.color, color: meta.onColor }}
-                    >
-                      {meta.label}
-                    </span>
-                    {e.roleLabel && <span className="text-muted-foreground">{e.roleLabel}</span>}
-                  </p>
-                  {e.departmentName && <p className="text-muted-foreground">{e.departmentName}</p>}
-                  <p>{e.lastSeenLabel ?? 'No recent activity'}</p>
-                  {e.onLeave && (
-                    <p style={{ color: URGENCY_COLOR.overdue }}>
-                      On leave today{e.leaveReason ? ` · ${e.leaveReason}` : ''}
-                    </p>
-                  )}
-                  <p className="text-muted-foreground">
-                    {e.bookedTodayCount} booked call{e.bookedTodayCount === 1 ? '' : 's'} today
-                  </p>
-                </div>
-              </Popup>
-            </Marker>
-          )
-        })}
+      {/* Call + engineer markers (memoised so dispatch-mode state changes don't
+          rebuild them — see CallMarkers/EngineerMarkers above). */}
+      <CallMarkers calls={calls} onDispatch={onDispatch} />
+      <EngineerMarkers engineers={engineers} />
 
       {/* Selected engineer route (driving geometry when available) */}
       {routeLine.length > 1 && (

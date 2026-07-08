@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -27,6 +27,7 @@ import { Switch } from '@/components/ui/switch'
 import { Plus, Loader2, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { PostcodeLookup } from '@/components/dashboard/shared/postcode-lookup'
+import { SiteClassificationFields } from '@/components/dashboard/sites/site-classification-fields'
 import type { Client, Branch, PropertyType } from '@/lib/types/database'
 
 interface AddSiteDialogProps {
@@ -77,7 +78,8 @@ export function AddSiteDialog({ clients, branches = [], propertyTypes = [] }: Ad
 
   // Fill the postcode and, when the address doesn't already mention the locality,
   // append it so the engineer/typist only needs to add the street line.
-  const applyPostcode = (r: { postcode: string; locality: string }) => {
+  // Stable identity so the memoized PostcodeLookup doesn't re-render each keystroke.
+  const applyPostcode = useCallback((r: { postcode: string; locality: string }) => {
     setFormData((prev) => {
       const hasLocality =
         r.locality && prev.address.toLowerCase().includes(r.locality.toLowerCase())
@@ -87,7 +89,21 @@ export function AddSiteDialog({ clients, branches = [], propertyTypes = [] }: Ad
           : prev.address
       return { ...prev, postcode: r.postcode, address }
     })
-  }
+  }, [])
+
+  // Stable handlers so the memoized SiteClassificationFields (which contains the
+  // relatively expensive Radix Selects) only re-renders when a selected value
+  // changes — not on every keystroke in the text fields.
+  const handleClientChange = useCallback((value: string) => {
+    setFormData((prev) => ({ ...prev, client_id: value }))
+    setError(null)
+  }, [])
+  const handleBranchChange = useCallback((value: string) => {
+    setFormData((prev) => ({ ...prev, branch_id: value }))
+  }, [])
+  const handlePropertyTypeChange = useCallback((value: string) => {
+    setFormData((prev) => ({ ...prev, property_type_id: value }))
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -100,7 +116,9 @@ export function AddSiteDialog({ clients, branches = [], propertyTypes = [] }: Ad
 
     setLoading(true)
 
-    const { error: insertError } = await supabase.from('sites').insert({
+    const { data: inserted, error: insertError } = await supabase
+      .from('sites')
+      .insert({
       ...formData,
       client_id: formData.client_id || null,
       branch_id: formData.branch_id || null,
@@ -118,7 +136,9 @@ export function AddSiteDialog({ clients, branches = [], propertyTypes = [] }: Ad
         ? formData.monitoring_station_url.trim() || null
         : null,
       reporting_emails: reportingEmails,
-    })
+      })
+      .select('id')
+      .single()
 
     setLoading(false)
 
@@ -147,7 +167,13 @@ export function AddSiteDialog({ clients, branches = [], propertyTypes = [] }: Ad
       })
       setReportingEmails([])
       setNewReportingEmail('')
-      router.refresh()
+      // Take the user straight to the new site's Systems tab so they can start
+      // adding systems immediately.
+      if (inserted?.id) {
+        router.push(`/dashboard/sites/${inserted.id}?tab=systems`)
+      } else {
+        router.refresh()
+      }
     }
   }
 
@@ -232,75 +258,18 @@ export function AddSiteDialog({ clients, branches = [], propertyTypes = [] }: Ad
                 required
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="client">
-                Client {formData.status === 'live' && <span className="text-destructive">*</span>}
-              </Label>
-              <Select
-                value={formData.client_id}
-                onValueChange={(value) => {
-                  setFormData({ ...formData, client_id: value })
-                  setError(null)
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select client (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {clients.map((client) => (
-                    <SelectItem key={client.id} value={client.id}>
-                      {client.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {branches.length > 0 && (
-              <div className="grid gap-2">
-                <Label htmlFor="branch">Branch</Label>
-                <Select
-                  value={formData.branch_id || 'none'}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, branch_id: value === 'none' ? '' : value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="No branch" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No branch</SelectItem>
-                    {branches.map((branch) => (
-                      <SelectItem key={branch.id} value={branch.id}>
-                        {branch.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {propertyTypes.length > 0 && (
-              <div className="grid gap-2">
-                <Label htmlFor="property_type">Property Type</Label>
-                <Select
-                  value={formData.property_type_id || 'none'}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, property_type_id: value === 'none' ? '' : value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="No property type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No property type</SelectItem>
-                    {propertyTypes.map((pt) => (
-                      <SelectItem key={pt.id} value={pt.id}>
-                        {pt.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            <SiteClassificationFields
+              clientId={formData.client_id}
+              branchId={formData.branch_id}
+              propertyTypeId={formData.property_type_id}
+              status={formData.status}
+              clients={clients}
+              branches={branches}
+              propertyTypes={propertyTypes}
+              onClientChange={handleClientChange}
+              onBranchChange={handleBranchChange}
+              onPropertyTypeChange={handlePropertyTypeChange}
+            />
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label htmlFor="site_id_cash">Site ID (CASH)</Label>

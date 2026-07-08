@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -18,7 +18,7 @@ interface PostcodeLookupProps {
   id?: string
 }
 
-export function PostcodeLookup({
+export const PostcodeLookup = memo(function PostcodeLookup({
   onResolved,
   initialValue = '',
   label = 'Address finder',
@@ -90,4 +90,4 @@ export function PostcodeLookup({
       )}
     </div>
   )
-}
+})

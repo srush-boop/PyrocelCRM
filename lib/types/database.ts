@@ -155,6 +155,13 @@ export interface Profile {
   // role; an explicit true/false overrides the role default. Resolve with
   // `isTimesheetRequired()`.
   timesheet_required: boolean | null
+  // Engineer home location — the start/finish anchor for the calls-map route
+  // preview and closeness hints. `home_postcode` is user-entered; the lat/lng
+  // are geocoded from it (postcodes.io) on save, and re-tried on read if null.
+  home_postcode: string | null
+  home_latitude: number | null
+  home_longitude: number | null
+  home_geocoded_at: string | null
   created_at: string
   updated_at: string
   department?: Department | null

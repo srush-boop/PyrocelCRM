@@ -200,6 +200,7 @@ export function EngineersTable({
     employee_number: '',
     holiday_entitlement_days: '',
     holiday_entitlement_hours: '',
+    home_postcode: '',
   })
   const [editError, setEditError] = useState<string | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
@@ -339,6 +340,7 @@ export function EngineersTable({
         user.holiday_entitlement_days != null ? String(user.holiday_entitlement_days) : '',
       holiday_entitlement_hours:
         user.holiday_entitlement_hours != null ? String(user.holiday_entitlement_hours) : '',
+      home_postcode: user.home_postcode ?? '',
     })
     setEditError(null)
   }
@@ -386,6 +388,7 @@ export function EngineersTable({
           employee_number: editForm.employee_number.trim() || null,
           holiday_entitlement_days: days === '' ? null : Number(days),
           holiday_entitlement_hours: hours === '' ? null : Number(hours),
+          home_postcode: editForm.home_postcode.trim() || null,
         }),
       })
       const data = await res.json()
@@ -872,6 +875,20 @@ export function EngineersTable({
                 />
                 <p className="text-xs text-muted-foreground">
                   Used to match training imports and for anonymised exports.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-home-postcode">Home postcode</Label>
+                <Input
+                  id="edit-home-postcode"
+                  value={editForm.home_postcode}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, home_postcode: e.target.value })
+                  }
+                  placeholder="e.g. NG1 5DT"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Start/finish point for the calls map route. Geocoded on save.
                 </p>
               </div>
             </div>

@@ -90,6 +90,7 @@ const adminCallsNavItem: NavItem = {
   icon: Calendar,
   children: [
     { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
+    { title: 'Map', href: '/dashboard/schedule/map', icon: MapPinned },
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
     { title: 'Reports', href: '/dashboard/reports', icon: FileText },
     { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
@@ -103,6 +104,7 @@ const officeCallsNavItem: NavItem = {
   icon: Calendar,
   children: [
     { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
+    { title: 'Map', href: '/dashboard/schedule/map', icon: MapPinned },
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
     { title: 'Reports', href: '/dashboard/reports', icon: FileText },
     { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },

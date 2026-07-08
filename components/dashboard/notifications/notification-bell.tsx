@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import useSWR from 'swr'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Bell, BellRing, Check } from 'lucide-react'
+import { toast } from 'sonner'
+import { Bell, BellRing, Check, Siren } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -51,6 +52,34 @@ export function NotificationBell() {
 
   const notifications = data?.notifications ?? []
   const unread = data?.unread ?? 0
+  // Any unread emergency call ⇒ make the bell impossible to miss.
+  const hasUnreadEmergency = notifications.some(
+    (n) => n.category === 'emergency_call' && !n.read_at,
+  )
+
+  // Raise a prominent toast the moment a *new* emergency notification arrives
+  // via polling, so an assigned engineer notices even if the bell is off-screen.
+  // We skip the very first load (seed the seen-set) to avoid toasting history.
+  const seenEmergencyIds = useRef<Set<string> | null>(null)
+  useEffect(() => {
+    const emergencies = notifications.filter((n) => n.category === 'emergency_call' && !n.read_at)
+    if (seenEmergencyIds.current === null) {
+      seenEmergencyIds.current = new Set(emergencies.map((n) => n.id))
+      return
+    }
+    for (const n of emergencies) {
+      if (!seenEmergencyIds.current.has(n.id)) {
+        seenEmergencyIds.current.add(n.id)
+        toast.error(n.title, {
+          description: n.body ?? undefined,
+          duration: 12000,
+          action: n.url
+            ? { label: 'View', onClick: () => router.push(n.url as string) }
+            : undefined,
+        })
+      }
+    }
+  }, [notifications, router])
 
   async function handleMarkAll() {
     await markNotificationsRead()
@@ -72,13 +101,24 @@ export function NotificationBell() {
         <Button
           variant="ghost"
           size="icon"
-          className="relative"
-          aria-label={`Notifications${unread > 0 ? `, ${unread} unread` : ''}`}
+          className={cn('relative', hasUnreadEmergency && 'text-destructive')}
+          aria-label={`Notifications${unread > 0 ? `, ${unread} unread` : ''}${
+            hasUnreadEmergency ? ', including an emergency' : ''
+          }`}
         >
-          {unread > 0 ? <BellRing className="h-5 w-5" /> : <Bell className="h-5 w-5" />}
+          {hasUnreadEmergency ? (
+            <Siren className="h-5 w-5 animate-pulse" />
+          ) : unread > 0 ? (
+            <BellRing className="h-5 w-5" />
+          ) : (
+            <Bell className="h-5 w-5" />
+          )}
           {unread > 0 && (
             <Badge
-              className="absolute -right-0.5 -top-0.5 h-5 min-w-5 justify-center rounded-full px-1 text-[10px] tabular-nums"
+              className={cn(
+                'absolute -right-0.5 -top-0.5 h-5 min-w-5 justify-center rounded-full px-1 text-[10px] tabular-nums',
+                hasUnreadEmergency && 'animate-pulse',
+              )}
               variant="destructive"
             >
               {unread > 99 ? '99+' : unread}
@@ -116,12 +156,29 @@ export function NotificationBell() {
                     className={cn(
                       'flex w-full flex-col items-start gap-1 px-4 py-3 text-left transition-colors hover:bg-muted/60',
                       !n.read_at && 'bg-muted/40',
+                      n.category === 'emergency_call' &&
+                        !n.read_at &&
+                        'border-l-2 border-destructive bg-destructive/5',
                     )}
                   >
                     <div className="flex w-full items-start justify-between gap-2">
-                      <span className="text-sm font-medium leading-snug">{n.title}</span>
+                      <span
+                        className={cn(
+                          'flex items-center gap-1.5 text-sm font-medium leading-snug',
+                          n.category === 'emergency_call' && 'text-destructive',
+                        )}
+                      >
+                        {n.category === 'emergency_call' && <Siren className="h-3.5 w-3.5 shrink-0" />}
+                        {n.title}
+                      </span>
                       {!n.read_at && (
-                        <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" aria-hidden />
+                        <span
+                          className={cn(
+                            'mt-1 h-2 w-2 shrink-0 rounded-full bg-primary',
+                            n.category === 'emergency_call' && 'bg-destructive',
+                          )}
+                          aria-hidden
+                        />
                       )}
                     </div>
                     {n.body && (

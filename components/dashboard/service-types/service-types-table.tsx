@@ -29,7 +29,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { MoreHorizontal, Pencil, Trash2, Wrench } from 'lucide-react'
+import { MoreHorizontal, Pencil, Trash2, Wrench, Siren } from 'lucide-react'
 import { PrintButton } from '@/components/ui/print-button'
 import { EditServiceTypeDialog } from './edit-service-type-dialog'
 import { SystemBadge } from '@/lib/system-types'
@@ -93,15 +93,33 @@ export function ServiceTypesTable({ serviceTypes, systemTypes }: ServiceTypesTab
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={(serviceType.status || 'live') === 'live' ? 'default' : 'destructive'}>
-                      {serviceType.status || 'live'}
-                    </Badge>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Badge variant={(serviceType.status || 'live') === 'live' ? 'default' : 'destructive'}>
+                        {serviceType.status || 'live'}
+                      </Badge>
+                      {serviceType.is_recurring === false && (
+                        serviceType.is_emergency ? (
+                          <Badge variant="destructive" className="gap-1">
+                            <Siren className="h-3 w-3" />
+                            Emergency
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary">Reactive</Badge>
+                        )
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {serviceType.description || '-'}
                   </TableCell>
                   <TableCell>
-                    {serviceType.default_frequency_value} {serviceType.default_frequency_unit}
+                    {serviceType.is_recurring === false ? (
+                      <span className="text-muted-foreground">
+                        On demand{serviceType.default_kpi_hours ? ` · attend in ${serviceType.default_kpi_hours}h` : ''}
+                      </span>
+                    ) : (
+                      `${serviceType.default_frequency_value} ${serviceType.default_frequency_unit}`
+                    )}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>

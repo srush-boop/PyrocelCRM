@@ -35,10 +35,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Pencil, Trash2, Layers, Wrench, ExternalLink, Settings2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, Layers, Wrench, ExternalLink, Settings2, Siren } from 'lucide-react'
 import { toast } from 'sonner'
 import { buildSeedTaskRows, fetchVisitsByServiceType } from '@/lib/scheduling'
 import { SystemPanelsManager } from '@/components/dashboard/sites/system-panels-manager'
+import { CreateTaskDialog } from '@/components/dashboard/schedule/create-task-dialog'
 import type {
   SiteSystem,
   SiteService,
@@ -47,6 +48,8 @@ import type {
   PanelFieldDef,
   SystemPanel,
   Supplier,
+  Profile,
+  Site,
 } from '@/lib/types/database'
 
 type ServiceWithType = SiteService & { service_type?: ServiceType }
@@ -64,6 +67,12 @@ interface SiteSystemsManagerProps {
   panels?: SystemPanel[]
   // Active sub-contractors, for the per-system default assignment.
   subcontractors?: Supplier[]
+  // Data for the per-system "Book call" (reactive/emergency) dialog. When
+  // reactiveServiceTypes is empty the button is hidden.
+  site?: Site
+  engineers?: Profile[]
+  clients?: { id: string; name: string }[]
+  reactiveServiceTypes?: ServiceType[]
 }
 
 export function SiteSystemsManager({
@@ -76,6 +85,10 @@ export function SiteSystemsManager({
   panelFieldDefs = [],
   panels = [],
   subcontractors = [],
+  site,
+  engineers = [],
+  clients = [],
+  reactiveServiceTypes = [],
 }: SiteSystemsManagerProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -406,6 +419,25 @@ export function SiteSystemsManager({
                     )}
                   </div>
                   <div className="flex gap-1">
+                    {reactiveServiceTypes.length > 0 && site && (
+                      <CreateTaskDialog
+                        siteServices={[]}
+                        engineers={engineers}
+                        clients={clients}
+                        reactiveServiceTypes={reactiveServiceTypes}
+                        sites={[site]}
+                        systemTypes={systemTypes}
+                        defaultSiteId={siteId}
+                        defaultSystemTypeId={system.system_type_id ?? undefined}
+                        defaultMode="reactive"
+                        trigger={
+                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Book a call for this system">
+                            <Siren className="h-4 w-4" />
+                            <span className="sr-only">Book call for this system</span>
+                          </Button>
+                        }
+                      />
+                    )}
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(system)}>
                       <Pencil className="h-4 w-4" />
                       <span className="sr-only">Edit system</span>

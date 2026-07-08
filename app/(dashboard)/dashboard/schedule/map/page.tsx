@@ -4,9 +4,10 @@ import { createClient } from '@/lib/supabase/server'
 import { getBranchScope } from '@/lib/branches'
 import { getCallsMapData } from './actions'
 import { CallsMap } from '@/components/dashboard/schedule/calls-map'
+import { CreateTaskDialog } from '@/components/dashboard/schedule/create-task-dialog'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
-import type { Profile } from '@/lib/types/database'
+import type { Profile, ServiceType, SystemType, Site } from '@/lib/types/database'
 
 export const metadata = {
   title: 'Calls Map | Pyrocel',
@@ -34,6 +35,22 @@ export default async function CallsMapPage({
   const scope = await getBranchScope(profile as Profile, branch)
   const res = await getCallsMapData({ branchId: scope.activeBranchId })
 
+  // Data for the "Book Call" dialog (reactive / emergency calls logged from the map).
+  const [serviceTypesRes, systemTypesRes, sitesRes, engineersRes, clientsRes] = await Promise.all([
+    supabase.from('service_types').select('*, system_type:system_types(*)').order('name'),
+    supabase.from('system_types').select('*').order('name'),
+    supabase.from('sites').select('*').order('name'),
+    supabase.from('profiles').select('*').eq('role', 'engineer').order('full_name'),
+    supabase.from('clients').select('id, name').order('name'),
+  ])
+  const reactiveServiceTypes = ((serviceTypesRes.data || []) as ServiceType[]).filter(
+    (st) => st.is_recurring === false && (st.status || 'live') !== 'dead',
+  )
+  const systemTypes = (systemTypesRes.data || []) as SystemType[]
+  const bookingSites = (sitesRes.data || []) as Site[]
+  const engineers = (engineersRes.data || []) as Profile[]
+  const clients = (clientsRes.data || []) as { id: string; name: string }[]
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -49,6 +66,17 @@ export default async function CallsMapPage({
             Open unbooked calls and live engineer positions — find the closest free engineer, or the nearest work.
           </p>
         </div>
+        {reactiveServiceTypes.length > 0 && (
+          <CreateTaskDialog
+            siteServices={[]}
+            engineers={engineers}
+            clients={clients}
+            reactiveServiceTypes={reactiveServiceTypes}
+            sites={bookingSites}
+            systemTypes={systemTypes}
+            defaultMode="reactive"
+          />
+        )}
       </div>
 
       <CallsMap

@@ -33,6 +33,10 @@ export function isTimesheetRequired(
 // Who performs a service. Independent of how the work is routed/assigned.
 export type WorkerType = 'cdo' | 'engineer' | 'subcontractor'
 
+// An engineer's discipline / trade. Drives map colour-coding, icons and the
+// skill match used when dispatching a call to the best-placed engineer.
+export type Discipline = 'fire' | 'security' | 'installer' | 'cdo' | 'general'
+
 // Unit for a compliance tolerance window.
 export type ToleranceUnit = 'days' | 'months'
 
@@ -162,6 +166,9 @@ export interface Profile {
   home_latitude: number | null
   home_longitude: number | null
   home_geocoded_at: string | null
+  // Engineer discipline / trade. Drives map colour-coding, iconography and the
+  // skill match when dispatching a call. NULL for non-engineers.
+  discipline: Discipline | null
   created_at: string
   updated_at: string
   department?: Department | null
@@ -264,6 +271,17 @@ export interface ServiceType {
   icon?: string | null
   defects_to_email: string | null
   default_worker_type: WorkerType
+  // Whether this service type schedules recurring PPM visits. When false it is a
+  // reactive / on-demand "call type" (e.g. Reactive, Emergency Callout) that is
+  // logged ad-hoc against a site + system with no recurring service, and is
+  // excluded from PPM auto-generation and the site recurring-service picker.
+  is_recurring: boolean
+  // Marks a non-recurring type as an emergency call type (pulsing map marker +
+  // engineer emergency notification on assignment).
+  is_emergency: boolean
+  // Default "attend within X hours" KPI applied when logging a call of this
+  // type (editable at booking). NULL = no default KPI.
+  default_kpi_hours: number | null
   status: 'live' | 'dead'
   created_at: string
   system_type?: SystemType | null
@@ -683,7 +701,24 @@ export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled'
 
 export interface Task {
   id: string
-  site_service_id: string
+  // Recurring PPM calls hang off a site_service. Reactive / emergency calls have
+  // no recurring service, so this is null and the call is anchored by site_id +
+  // service_type_id + system_type_id instead. Exactly one anchor is guaranteed
+  // by a CHECK constraint.
+  site_service_id: string | null
+  // Direct anchors. Always populated for reactive/emergency calls, and
+  // backfilled on existing recurring calls (from the linked service) so reads
+  // can rely on them regardless of call kind.
+  site_id: string | null
+  service_type_id: string | null
+  system_type_id: string | null
+  // Emergency call: shown with a pulsing map marker until started and triggers a
+  // prominent engineer notification on assignment.
+  is_emergency: boolean
+  // "Attend within X hours" KPI deadline. NULL = no KPI on this call.
+  respond_by: string | null
+  // When an engineer was assigned (drives KPI/response reporting).
+  assigned_at: string | null
   // Client this call is billed to. Defaults to the site's client at scheduling
   // time but can be overridden.
   client_id: string | null
@@ -713,6 +748,11 @@ export interface Task {
   source_quote_id: string | null
   source_defect_id: string | null
   site_service?: SiteService
+  // Direct joins for reactive/emergency calls (and available on recurring calls
+  // via the backfilled ids).
+  site?: Site | null
+  service_type?: ServiceType | null
+  system_type?: SystemType | null
   assigned_engineer?: Profile | null
   visit_type?: ServiceVisitType | null
   client?: Client | null

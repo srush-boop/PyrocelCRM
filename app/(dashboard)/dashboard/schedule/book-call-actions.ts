@@ -24,6 +24,8 @@ export interface BookCallInput {
   bookedEndTime?: string | null
   /** KPI hours for reactive calls (attend within X hours). */
   respondByHours?: number | null
+  /** Free-text call description / notes (shown as "Call notes" on the task). */
+  notes?: string | null
 }
 
 export interface BookCallResult {
@@ -74,6 +76,7 @@ export async function bookCall(input: BookCallInput): Promise<BookCallResult> {
     booked_end_time: input.bookedEndTime || null,
     status: 'pending' as const,
     assigned_at: input.assignedEngineerId ? new Date().toISOString() : null,
+    notes: input.notes?.trim() || null,
   }
 
   let isEmergency = false

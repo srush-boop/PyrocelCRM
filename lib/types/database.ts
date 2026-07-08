@@ -697,7 +697,10 @@ export interface TaskAttachment {
   } | null
 }
 
-export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled'
+// 'paused' = an inspection an engineer started but left before completing (e.g.
+// they need to return another day). It keeps its progress/checklist intact and
+// still counts as active/open work, but the engineer is no longer on site.
+export type TaskStatus = 'pending' | 'in_progress' | 'paused' | 'completed' | 'cancelled'
 
 export interface Task {
   id: string
@@ -734,6 +737,12 @@ export interface Task {
   status: TaskStatus
   started_at: string | null
   completed_at: string | null
+  // Set when the task is paused (engineer left site before completing). Cleared
+  // on resume. `started_at` is preserved across a pause so elapsed/first-started
+  // reporting stays intact.
+  paused_at: string | null
+  pause_note: string | null
+  paused_by: string | null
   notes: string | null
   public_token: string
   created_at: string

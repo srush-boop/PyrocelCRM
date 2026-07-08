@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { TaskHeader } from '@/components/dashboard/tasks/task-header'
+import { PauseResumeControls } from '@/components/dashboard/tasks/pause-resume-controls'
 import { Progress } from '@/components/ui/progress'
 import {
   AlertDialog,
@@ -151,7 +152,8 @@ export function EmergencyLightTaskExecution({
     setAddOpen(false)
   }
 
-  const canEdit = status !== 'completed' && status !== 'cancelled'
+  // Paused inspections are read-only until resumed (see PauseResumeControls).
+  const canEdit = status !== 'completed' && status !== 'cancelled' && status !== 'paused'
 
   const summary = useMemo(() => {
     const values = Object.values(states)
@@ -359,6 +361,8 @@ export function EmergencyLightTaskExecution({
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-28">
       <TaskHeader task={task} status={status} />
+
+      <PauseResumeControls task={task} status={status} onStatusChange={setStatus} />
 
       {preAttendance}
 

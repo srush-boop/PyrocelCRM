@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { TaskHeader } from '@/components/dashboard/tasks/task-header'
+import { PauseResumeControls } from '@/components/dashboard/tasks/pause-resume-controls'
 import { Progress } from '@/components/ui/progress'
 import {
   AlertDialog,
@@ -164,7 +165,8 @@ export function DamperTaskExecution({
   })
 
   const isEngineer = profile.role === 'engineer'
-  const canEdit = status !== 'completed' && status !== 'cancelled' && (isEngineer || profile.role !== 'engineer')
+  // Paused inspections are read-only until resumed (see PauseResumeControls).
+  const canEdit = status !== 'completed' && status !== 'cancelled' && status !== 'paused' && (isEngineer || profile.role !== 'engineer')
 
   const summary = useMemo(() => {
     const values = Object.values(states)
@@ -419,6 +421,9 @@ export function DamperTaskExecution({
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-28">
       <TaskHeader task={task} status={status} />
+
+      <PauseResumeControls task={task} status={status} onStatusChange={setStatus} />
+
       <div className="flex flex-wrap items-center justify-end gap-2">
         {status === 'completed' && (
           <Button variant="outline" size="sm" asChild>

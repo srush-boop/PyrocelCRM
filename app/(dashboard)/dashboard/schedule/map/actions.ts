@@ -194,7 +194,7 @@ export async function getCallsMapData(
       site:sites(id, name, address, postcode, latitude, longitude, branch_id, client:clients(id, name))
       )`,
     )
-    .in('status', ['pending', 'in_progress'])
+    .in('status', ['pending', 'in_progress', 'paused'])
 
   if (taskErr) return { ok: false, error: taskErr.message }
 

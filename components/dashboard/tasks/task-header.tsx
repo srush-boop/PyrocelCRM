@@ -19,6 +19,7 @@ import type { TaskWithDetails, TaskStatus } from '@/lib/types/database'
 const STATUS_STYLES: Record<TaskStatus, { label: string; className: string }> = {
   pending: { label: 'Pending', className: 'border-border bg-muted text-foreground' },
   in_progress: { label: 'In progress', className: 'border-transparent bg-amber-500 text-white' },
+  paused: { label: 'Paused', className: 'border-transparent bg-orange-400 text-white' },
   completed: { label: 'Completed', className: 'border-transparent bg-emerald-600 text-white' },
   cancelled: { label: 'Cancelled', className: 'border-transparent bg-destructive text-white' },
 }

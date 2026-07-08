@@ -58,6 +58,8 @@ import {
   Wrench,
   CalendarClock,
   Navigation,
+  PauseCircle,
+  BellRing,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
@@ -98,6 +100,7 @@ interface ScheduleViewProps {
 const statusConfig = {
   pending: { label: 'Pending', icon: Clock, variant: 'secondary' as const },
   in_progress: { label: 'In Progress', icon: ClipboardCheck, variant: 'default' as const },
+  paused: { label: 'Paused', icon: PauseCircle, variant: 'outline' as const },
   completed: { label: 'Completed', icon: CheckCircle2, variant: 'outline' as const },
   cancelled: { label: 'Cancelled', icon: XCircle, variant: 'destructive' as const },
 }
@@ -332,7 +335,8 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   })
 
   const upcomingTasks = sortedTasks.filter(
-    (task) => task.status === 'pending' || task.status === 'in_progress'
+    (task) =>
+      task.status === 'pending' || task.status === 'in_progress' || task.status === 'paused'
   )
   const completedTasks = sortedTasks.filter((task) => task.status === 'completed')
   const overdueTasks = upcomingTasks.filter(
@@ -393,6 +397,13 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
               <SystemIcon system={system ?? {}} boxed boxClassName="h-9 w-9 shrink-0" />
               <div className="min-w-0">
                 <CardTitle className="flex flex-wrap items-center gap-2 text-lg">
+                  {isEngineer && task.is_emergency && (
+                    <BellRing
+                      className="h-4 w-4 shrink-0 animate-pulse text-destructive"
+                      role="img"
+                      aria-label="Emergency call"
+                    />
+                  )}
                   {task.site_service?.site?.name}
                   {system?.name && (
                     <SystemBadge system={system} className="text-xs font-normal" />
@@ -534,6 +545,13 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
           <SystemIcon system={system ?? {}} className="h-4 w-4" />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
+              {isEngineer && task.is_emergency && (
+                <BellRing
+                  className="h-3.5 w-3.5 shrink-0 animate-pulse text-destructive"
+                  role="img"
+                  aria-label="Emergency call"
+                />
+              )}
               <p className="truncate text-sm font-medium leading-tight">{task.site_service?.site?.name}</p>
               {system?.name && (
                 <SystemBadge system={system} codeOnly showIcon={false} className="shrink-0 px-1.5 py-0 text-[10px]" />

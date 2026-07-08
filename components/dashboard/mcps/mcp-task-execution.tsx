@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { TaskHeader } from '@/components/dashboard/tasks/task-header'
+import { PauseResumeControls } from '@/components/dashboard/tasks/pause-resume-controls'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -140,7 +141,8 @@ export function McpTaskExecution({
     return map
   })
 
-  const canEdit = status !== 'completed' && status !== 'cancelled'
+  // Paused inspections are read-only until resumed (see PauseResumeControls).
+  const canEdit = status !== 'completed' && status !== 'cancelled' && status !== 'paused'
 
   const handleAddMcp = async () => {
     setAddSaving(true)
@@ -471,6 +473,8 @@ export function McpTaskExecution({
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-72 md:pb-6">
       <TaskHeader task={task} status={status} />
+
+      <PauseResumeControls task={task} status={status} onStatusChange={setStatus} />
 
       {preAttendance}
 

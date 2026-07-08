@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/select'
 import { TaskAttachments } from '@/components/dashboard/tasks/task-attachments'
 import { TaskHeader } from '@/components/dashboard/tasks/task-header'
+import { PauseResumeControls } from '@/components/dashboard/tasks/pause-resume-controls'
 import { ReportNotesAssist } from '@/components/dashboard/reports/report-notes-assist'
 import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
 import { formatDateUK, cn } from '@/lib/utils'
@@ -481,7 +482,8 @@ export function TaskExecution({
   }
 
   const isEngineer = profile.role === 'engineer'
-  const canEdit = isEngineer && status !== 'completed' && status !== 'cancelled'
+  // Paused inspections are read-only until resumed (see PauseResumeControls).
+  const canEdit = isEngineer && status !== 'completed' && status !== 'cancelled' && status !== 'paused'
 
   // Group checklist rows by panel for rendering. Preserves the order results
   // were built in (per panel, then per item). Legacy results with no panel_id
@@ -512,6 +514,8 @@ export function TaskExecution({
       )}
     >
       <TaskHeader task={task} status={status} />
+
+      <PauseResumeControls task={task} status={status} onStatusChange={setStatus} />
 
       {preAttendance}
 

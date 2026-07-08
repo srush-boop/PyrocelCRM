@@ -168,7 +168,8 @@ export default async function ServiceDashboardPage() {
           site_service:site_services(
             site:sites(name),
             service_type:service_types(name)
-          )
+          ),
+          direct_site:sites!tasks_site_id_fkey(name)
         )
       `,
       )
@@ -513,6 +514,9 @@ export default async function ServiceDashboardPage() {
                   ? task?.site_service[0]
                   : task?.site_service
                 const site = Array.isArray(ss?.site) ? ss?.site[0] : ss?.site
+                const directSite = Array.isArray(task?.direct_site)
+                  ? task?.direct_site[0]
+                  : task?.direct_site
                 const service = Array.isArray(ss?.service_type)
                   ? ss?.service_type[0]
                   : ss?.service_type
@@ -523,7 +527,9 @@ export default async function ServiceDashboardPage() {
                     className="flex items-center justify-between gap-3 py-3 transition-colors hover:bg-accent/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <div className="min-w-0 space-y-0.5">
-                      <p className="truncate font-medium">{site?.name || 'Unknown Site'}</p>
+                      <p className="truncate font-medium">
+                        {site?.name || directSite?.name || 'Unknown Site'}
+                      </p>
                       <p className="truncate text-sm text-muted-foreground">
                         {service?.name || 'Service'}
                         {r.reference_number ? ` · ${r.reference_number}` : ''}

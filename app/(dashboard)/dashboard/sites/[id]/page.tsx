@@ -218,9 +218,15 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
     task_result: TaskResult | null 
   })[]
 
-  // Filter out service types already added to this site
+  // Filter out service types already added to this site. Reactive / emergency
+  // (non-recurring) call types are excluded here — they aren't recurring
+  // services, they're logged ad-hoc via "Book Call".
   const availableServiceTypes = serviceTypes.filter(
-    (st) => !siteServices.some((ss) => ss.service_type_id === st.id)
+    (st) => st.is_recurring !== false && !siteServices.some((ss) => ss.service_type_id === st.id)
+  )
+  // Reactive / emergency call types available to log against this site.
+  const reactiveServiceTypes = serviceTypes.filter(
+    (st) => st.is_recurring === false && (st.status || 'live') !== 'dead'
   )
 
   // Damper register: shown when the site has the damper service or any dampers

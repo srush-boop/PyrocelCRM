@@ -25,7 +25,7 @@ interface ServiceRow {
   next_service_date: string | null
   active: boolean | null
   site: { status: string | null } | null
-  service_type: { status: string | null } | null
+  service_type: { status: string | null; is_recurring: boolean | null } | null
 }
 
 interface TaskRow {
@@ -98,14 +98,20 @@ export async function generateMonthlyCalls(
     .select(
       `id, service_type_id, frequency_value, frequency_unit, next_service_date, active,
        site:sites(status),
-       service_type:service_types(status)`,
+       service_type:service_types(status, is_recurring)`,
     )
   if (svcError) {
     return { ok: false, error: 'Could not load services.', ...empty }
   }
 
   const services = ((serviceData || []) as unknown as ServiceRow[]).filter(
-    (s) => s.active !== false && s.site?.status !== 'dead' && s.service_type?.status !== 'dead',
+    (s) =>
+      s.active !== false &&
+      s.site?.status !== 'dead' &&
+      s.service_type?.status !== 'dead' &&
+      // Reactive / emergency (non-recurring) call types never auto-generate PPM
+      // calls — they are logged ad-hoc via "Book Call".
+      s.service_type?.is_recurring !== false,
   )
   if (services.length === 0) {
     return { ok: true, ...empty }

@@ -16,7 +16,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Plus, Loader2 } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { Plus, Loader2, Repeat, Siren } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -44,6 +45,11 @@ export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[
     color: PYROCEL_RED,
     regulatory_tolerance_value: 0,
     regulatory_tolerance_unit: 'months' as ToleranceUnit,
+    // Recurring PPM by default. Turn off to make this a reactive / on-demand
+    // "call type" (Reactive, Emergency Callout) logged ad-hoc against a site.
+    is_recurring: true,
+    is_emergency: false,
+    default_kpi_hours: 24,
   })
   const router = useRouter()
   const supabase = createClient()
@@ -73,6 +79,10 @@ export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[
       // set per site/service. Keep the legacy default columns in sync as the fallback.
       client_tolerance_value: formData.regulatory_tolerance_value,
       client_tolerance_unit: formData.regulatory_tolerance_unit,
+      is_recurring: formData.is_recurring,
+      // Emergency + KPI only apply to reactive (non-recurring) call types.
+      is_emergency: formData.is_recurring ? false : formData.is_emergency,
+      default_kpi_hours: formData.is_recurring ? null : formData.default_kpi_hours,
     })
 
     setLoading(false)
@@ -93,6 +103,9 @@ export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[
         color: PYROCEL_RED,
         regulatory_tolerance_value: 0,
         regulatory_tolerance_unit: 'months',
+        is_recurring: true,
+        is_emergency: false,
+        default_kpi_hours: 24,
       })
       router.refresh()
     }
@@ -160,42 +173,106 @@ export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[
               value={formData.color}
               onChange={(color) => setFormData({ ...formData, color })}
             />
-            <div className="grid grid-cols-2 gap-2">
-              <div className="grid gap-2">
-                <Label htmlFor="frequency-value">Frequency Value *</Label>
-                <Input
-                  id="frequency-value"
-                  type="number"
-                  min={1}
-                  max={60}
-                  value={formData.default_frequency_value}
-                  onChange={(e) =>
-                    setFormData({ ...formData, default_frequency_value: parseInt(e.target.value) || 12 })
-                  }
-                />
+            <div className="flex items-start justify-between gap-3 rounded-md border p-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="is-recurring" className="flex items-center gap-2">
+                  <Repeat className="h-4 w-4 text-muted-foreground" />
+                  Recurring service
+                </Label>
+                <p className="text-xs text-muted-foreground text-pretty">
+                  On = scheduled PPM visits. Off = a reactive / on-demand call type (e.g. Reactive,
+                  Emergency Callout) logged ad-hoc against a site, with an attend-within KPI.
+                </p>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="frequency-unit">Unit *</Label>
-                <Select value={formData.default_frequency_unit} onValueChange={(value) =>
-                  setFormData({ ...formData, default_frequency_unit: value as 'weeks' | 'months' })
-                }>
-                  <SelectTrigger id="frequency-unit">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="weeks">Weeks</SelectItem>
-                    <SelectItem value="months">Months</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <Switch
+                id="is-recurring"
+                checked={formData.is_recurring}
+                onCheckedChange={(v) => setFormData({ ...formData, is_recurring: v })}
+              />
             </div>
-            <ToleranceFields
-              value={{
-                regulatory_tolerance_value: formData.regulatory_tolerance_value,
-                regulatory_tolerance_unit: formData.regulatory_tolerance_unit,
-              }}
-              onChange={(t) => setFormData({ ...formData, ...t })}
-            />
+            {formData.is_recurring ? (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="grid gap-2">
+                    <Label htmlFor="frequency-value">Frequency Value *</Label>
+                    <Input
+                      id="frequency-value"
+                      type="number"
+                      min={1}
+                      max={60}
+                      value={formData.default_frequency_value}
+                      onChange={(e) =>
+                        setFormData({ ...formData, default_frequency_value: parseInt(e.target.value) || 12 })
+                      }
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="frequency-unit">Unit *</Label>
+                    <Select value={formData.default_frequency_unit} onValueChange={(value) =>
+                      setFormData({ ...formData, default_frequency_unit: value as 'weeks' | 'months' })
+                    }>
+                      <SelectTrigger id="frequency-unit">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="weeks">Weeks</SelectItem>
+                        <SelectItem value="months">Months</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <ToleranceFields
+                  value={{
+                    regulatory_tolerance_value: formData.regulatory_tolerance_value,
+                    regulatory_tolerance_unit: formData.regulatory_tolerance_unit,
+                  }}
+                  onChange={(t) => setFormData({ ...formData, ...t })}
+                />
+              </>
+            ) : (
+              <div className="grid gap-4 rounded-md border border-dashed p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="is-emergency" className="flex items-center gap-2">
+                      <Siren className="h-4 w-4 text-destructive" />
+                      Emergency call type
+                    </Label>
+                    <p className="text-xs text-muted-foreground text-pretty">
+                      Emergency calls show a pulsing marker on the map and send the assigned
+                      engineer an urgent notification.
+                    </p>
+                  </div>
+                  <Switch
+                    id="is-emergency"
+                    checked={formData.is_emergency}
+                    onCheckedChange={(v) =>
+                      setFormData({
+                        ...formData,
+                        is_emergency: v,
+                        // Sensible KPI default when flipping to emergency.
+                        default_kpi_hours: v && formData.default_kpi_hours > 8 ? 4 : formData.default_kpi_hours,
+                      })
+                    }
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="kpi-hours">Attend within (hours)</Label>
+                  <Input
+                    id="kpi-hours"
+                    type="number"
+                    min={1}
+                    max={720}
+                    value={formData.default_kpi_hours}
+                    onChange={(e) =>
+                      setFormData({ ...formData, default_kpi_hours: parseInt(e.target.value) || 1 })
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Default response KPI when logging this call. Editable per call at booking.
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="grid gap-2">
               <Label htmlFor="default-worker-type">Default delivered by</Label>
               <Select

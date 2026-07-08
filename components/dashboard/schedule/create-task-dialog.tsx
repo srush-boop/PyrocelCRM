@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
 import {
   Select,
   SelectContent,
@@ -24,15 +25,30 @@ import {
 } from '@/components/ui/select'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Plus, Loader2, CalendarIcon } from 'lucide-react'
+import { Plus, Loader2, CalendarIcon, Siren } from 'lucide-react'
 import { format } from 'date-fns'
-import type { Profile, SiteService, Site, ServiceType } from '@/lib/types/database'
+import type { Profile, SiteService, Site, ServiceType, SystemType } from '@/lib/types/database'
 import { cn } from '@/lib/utils'
+import { bookCall } from '@/app/(dashboard)/dashboard/schedule/book-call-actions'
 
 interface CreateTaskDialogProps {
   siteServices: (SiteService & { site: Site; service_type: ServiceType })[]
   engineers: Profile[]
   clients: { id: string; name: string }[]
+  /** Reactive / emergency call types (non-recurring service types). */
+  reactiveServiceTypes?: ServiceType[]
+  /** All sites, used for the reactive site picker (may not have services yet). */
+  sites?: Site[]
+  /** System types, used for the reactive system picker. */
+  systemTypes?: SystemType[]
+  /** Prefill + lock the site (e.g. launched from a site page). */
+  defaultSiteId?: string
+  /** Prefill the system (e.g. launched from a specific system). */
+  defaultSystemTypeId?: string
+  /** Which mode to open in. Defaults to recurring. */
+  defaultMode?: 'recurring' | 'reactive'
+  /** Custom trigger. Omit for the default "Book Call" button. */
+  trigger?: React.ReactNode
 }
 
 const ALL_VISITS = '__all__'
@@ -40,14 +56,38 @@ const ALL_VISITS = '__all__'
 // selectable rather than being hidden behind an empty system list.
 const NONE_SYSTEM = '__none__'
 const NO_CLIENT = '__none__'
+const NO_SYSTEM = '__none__'
 
-export function CreateTaskDialog({ siteServices, engineers, clients }: CreateTaskDialogProps) {
+export function CreateTaskDialog({
+  siteServices,
+  engineers,
+  clients,
+  reactiveServiceTypes = [],
+  sites: allSites,
+  systemTypes = [],
+  defaultSiteId,
+  defaultSystemTypeId,
+  defaultMode = 'recurring',
+  trigger,
+}: CreateTaskDialogProps) {
+  const reactiveEnabled = reactiveServiceTypes.length > 0
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [mode, setMode] = useState<'recurring' | 'reactive'>(
+    reactiveEnabled ? defaultMode : 'recurring',
+  )
+
   // Cascading selection: site -> system -> service (which resolves to a site_service).
-  const [siteId, setSiteId] = useState('')
+  const [siteId, setSiteId] = useState(defaultSiteId ?? '')
   const [systemTypeId, setSystemTypeId] = useState('')
   const [clientId, setClientId] = useState('')
+
+  // Reactive-mode selections.
+  const [reactiveTypeId, setReactiveTypeId] = useState('')
+  const [reactiveSystemTypeId, setReactiveSystemTypeId] = useState(defaultSystemTypeId ?? NO_SYSTEM)
+  const [kpiHours, setKpiHours] = useState<number | ''>('')
+
   const [formData, setFormData] = useState({
     site_service_id: '',
     assigned_engineer_id: '',
@@ -55,26 +95,29 @@ export function CreateTaskDialog({ siteServices, engineers, clients }: CreateTas
     booked_start_time: '',
     booked_end_time: '',
   })
-  // Visit types for the currently-selected service (multi-visit services only),
-  // plus which visit the new task is for.
   const [visitTypes, setVisitTypes] = useState<{ id: string; name: string }[]>([])
   const [visitTypeId, setVisitTypeId] = useState<string>(ALL_VISITS)
   const [timeError, setTimeError] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
-  // Inactive services and dead sites/service types cannot have new calls
-  // scheduled — hide them from the pickers.
   const schedulableServices = siteServices.filter((ss) => ss.active !== false)
 
-  // Distinct sites that have at least one schedulable service.
-  const sites = Array.from(
+  // Sites for the recurring cascade (those with at least one schedulable service).
+  const recurringSites = Array.from(
     new Map(schedulableServices.map((ss) => [ss.site.id, ss.site])).values(),
   ).sort((a, b) => (a.name || '').localeCompare(b.name || ''))
 
-  const selectedSite = sites.find((s) => s.id === siteId)
+  // Sites for the reactive picker: prefer the full list; fall back to sites with
+  // services if a full list wasn't supplied.
+  const reactiveSites = (allSites && allSites.length > 0 ? allSites : recurringSites)
+    .filter((s) => s.status !== 'dead')
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
 
-  // Systems available at the selected site, derived from its services.
+  const selectedRecurringSite = recurringSites.find((s) => s.id === siteId)
+  const selectedReactiveSite = reactiveSites.find((s) => s.id === siteId)
+  const lockSite = Boolean(defaultSiteId)
+
   const systemsForSite = siteId
     ? Array.from(
         new Map(
@@ -89,7 +132,6 @@ export function CreateTaskDialog({ siteServices, engineers, clients }: CreateTas
       ).sort((a, b) => a.name.localeCompare(b.name))
     : []
 
-  // Services at the selected site + system.
   const servicesForSelection =
     siteId && systemTypeId
       ? schedulableServices.filter(
@@ -99,14 +141,21 @@ export function CreateTaskDialog({ siteServices, engineers, clients }: CreateTas
         )
       : []
 
+  const selectedReactiveType = reactiveServiceTypes.find((t) => t.id === reactiveTypeId)
+
   const handleSiteChange = (value: string) => {
     setSiteId(value)
     setSystemTypeId('')
     setVisitTypes([])
     setVisitTypeId(ALL_VISITS)
     setFormData((prev) => ({ ...prev, site_service_id: '' }))
-    // Default the client to the site's client, but allow it to be overridden.
-    const site = sites.find((s) => s.id === value)
+    const site = recurringSites.find((s) => s.id === value)
+    setClientId(site?.client_id ?? '')
+  }
+
+  const handleReactiveSiteChange = (value: string) => {
+    setSiteId(value)
+    const site = reactiveSites.find((s) => s.id === value)
     setClientId(site?.client_id ?? '')
   }
 
@@ -117,8 +166,6 @@ export function CreateTaskDialog({ siteServices, engineers, clients }: CreateTas
     setFormData((prev) => ({ ...prev, site_service_id: '' }))
   }
 
-  // When a service is picked, load its service type's visit types so the user
-  // can schedule a specific visit (e.g. Annual vs Periodic).
   const handleServiceChange = async (siteServiceId: string) => {
     setFormData({ ...formData, site_service_id: siteServiceId })
     setVisitTypeId(ALL_VISITS)
@@ -135,10 +182,24 @@ export function CreateTaskDialog({ siteServices, engineers, clients }: CreateTas
     setVisitTypes((data as { id: string; name: string }[]) ?? [])
   }
 
+  const handleReactiveTypeChange = (value: string) => {
+    setReactiveTypeId(value)
+    const t = reactiveServiceTypes.find((st) => st.id === value)
+    // Prefill KPI from the call type default, and the system from the type.
+    setKpiHours(t?.default_kpi_hours ?? '')
+    if (!defaultSystemTypeId && t?.system_type_id) {
+      setReactiveSystemTypeId(t.system_type_id)
+    }
+  }
+
   const resetForm = () => {
-    setSiteId('')
+    setSiteId(defaultSiteId ?? '')
     setSystemTypeId('')
     setClientId('')
+    setReactiveTypeId('')
+    setReactiveSystemTypeId(defaultSystemTypeId ?? NO_SYSTEM)
+    setKpiHours('')
+    setError(null)
     setFormData({
       site_service_id: '',
       assigned_engineer_id: '',
@@ -148,12 +209,11 @@ export function CreateTaskDialog({ siteServices, engineers, clients }: CreateTas
     })
     setVisitTypes([])
     setVisitTypeId(ALL_VISITS)
+    setMode(reactiveEnabled ? defaultMode : 'recurring')
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    // If both times are given, end must be after start.
     if (
       formData.booked_start_time &&
       formData.booked_end_time &&
@@ -163,27 +223,47 @@ export function CreateTaskDialog({ siteServices, engineers, clients }: CreateTas
       return
     }
     setTimeError(null)
+    setError(null)
     setLoading(true)
 
-    const { error } = await supabase.from('tasks').insert({
-      site_service_id: formData.site_service_id,
-      client_id: clientId || null,
-      assigned_engineer_id: formData.assigned_engineer_id || null,
-      scheduled_date: format(formData.scheduled_date, 'yyyy-MM-dd'),
-      booked_start_time: formData.booked_start_time || null,
-      booked_end_time: formData.booked_end_time || null,
-      status: 'pending',
-      visit_type_id: visitTypeId === ALL_VISITS ? null : visitTypeId,
-    })
+    const shared = {
+      clientId: clientId || null,
+      assignedEngineerId: formData.assigned_engineer_id || null,
+      scheduledDate: format(formData.scheduled_date, 'yyyy-MM-dd'),
+      bookedStartTime: formData.booked_start_time || null,
+      bookedEndTime: formData.booked_end_time || null,
+    }
+
+    const result =
+      mode === 'recurring'
+        ? await bookCall({
+            mode: 'recurring',
+            siteServiceId: formData.site_service_id,
+            visitTypeId: visitTypeId === ALL_VISITS ? null : visitTypeId,
+            ...shared,
+          })
+        : await bookCall({
+            mode: 'reactive',
+            siteId,
+            serviceTypeId: reactiveTypeId,
+            systemTypeId: reactiveSystemTypeId === NO_SYSTEM ? null : reactiveSystemTypeId,
+            respondByHours: kpiHours === '' ? null : Number(kpiHours),
+            ...shared,
+          })
 
     setLoading(false)
 
-    if (!error) {
+    if (result.ok) {
       setOpen(false)
       resetForm()
       router.refresh()
+    } else {
+      setError(result.error ?? 'Something went wrong.')
     }
   }
+
+  const canSubmit =
+    mode === 'recurring' ? Boolean(formData.site_service_id) : Boolean(siteId && reactiveTypeId)
 
   return (
     <Dialog
@@ -194,81 +274,197 @@ export function CreateTaskDialog({ siteServices, engineers, clients }: CreateTas
       }}
     >
       <DialogTrigger asChild>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Book Call
-        </Button>
+        {trigger ?? (
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            Book Call
+          </Button>
+        )}
       </DialogTrigger>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Book New Call</DialogTitle>
             <DialogDescription>
-              Create a new service call for a site
+              Log a scheduled service call or a reactive / emergency call-out.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label>Site *</Label>
-              <Select value={siteId} onValueChange={handleSiteChange} required>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a site" />
-                </SelectTrigger>
-                <SelectContent>
-                  {sites.map((site) => (
-                    <SelectItem key={site.id} value={site.id}>
-                      {site.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {reactiveEnabled && (
+              <div className="grid grid-cols-2 gap-2 rounded-md bg-muted p-1">
+                <Button
+                  type="button"
+                  variant={mode === 'recurring' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setMode('recurring')}
+                >
+                  Scheduled
+                </Button>
+                <Button
+                  type="button"
+                  variant={mode === 'reactive' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setMode('reactive')}
+                >
+                  Reactive / Emergency
+                </Button>
+              </div>
+            )}
 
-            <div className="grid gap-2">
-              <Label>System *</Label>
-              <Select
-                value={systemTypeId}
-                onValueChange={handleSystemChange}
-                disabled={!siteId}
-              >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={siteId ? 'Select a system' : 'Select a site first'}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {systemsForSite.map((sys) => (
-                    <SelectItem key={sys.id} value={sys.id}>
-                      {sys.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {mode === 'recurring' ? (
+              <>
+                <div className="grid gap-2">
+                  <Label>Site *</Label>
+                  <Select value={siteId} onValueChange={handleSiteChange} disabled={lockSite}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a site" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {recurringSites.map((site) => (
+                        <SelectItem key={site.id} value={site.id}>
+                          {site.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            <div className="grid gap-2">
-              <Label>Service Type *</Label>
-              <Select
-                value={formData.site_service_id}
-                onValueChange={handleServiceChange}
-                disabled={!systemTypeId}
-              >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={
-                      systemTypeId ? 'Select a service type' : 'Select a system first'
-                    }
+                <div className="grid gap-2">
+                  <Label>System *</Label>
+                  <Select value={systemTypeId} onValueChange={handleSystemChange} disabled={!siteId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={siteId ? 'Select a system' : 'Select a site first'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {systemsForSite.map((sys) => (
+                        <SelectItem key={sys.id} value={sys.id}>
+                          {sys.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label>Service Type *</Label>
+                  <Select
+                    value={formData.site_service_id}
+                    onValueChange={handleServiceChange}
+                    disabled={!systemTypeId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue
+                        placeholder={systemTypeId ? 'Select a service type' : 'Select a system first'}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {servicesForSelection.map((ss) => (
+                        <SelectItem key={ss.id} value={ss.id}>
+                          {ss.service_type?.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {visitTypes.length > 0 && (
+                  <div className="grid gap-2">
+                    <Label>Visit</Label>
+                    <Select value={visitTypeId} onValueChange={setVisitTypeId}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={ALL_VISITS}>Unspecified</SelectItem>
+                        {visitTypes.map((vt) => (
+                          <SelectItem key={vt.id} value={vt.id}>
+                            {vt.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="grid gap-2">
+                  <Label>Call type *</Label>
+                  <Select value={reactiveTypeId} onValueChange={handleReactiveTypeChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a call type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {reactiveServiceTypes.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          <span className="flex items-center gap-2">
+                            {t.name}
+                            {t.is_emergency && <Siren className="h-3.5 w-3.5 text-destructive" />}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedReactiveType?.is_emergency && (
+                    <Badge variant="destructive" className="w-fit gap-1">
+                      <Siren className="h-3 w-3" />
+                      Emergency call — engineer is notified on assignment
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="grid gap-2">
+                  <Label>Site *</Label>
+                  <Select value={siteId} onValueChange={handleReactiveSiteChange} disabled={lockSite}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a site" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {reactiveSites.map((site) => (
+                        <SelectItem key={site.id} value={site.id}>
+                          {site.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {systemTypes.length > 0 && (
+                  <div className="grid gap-2">
+                    <Label>System</Label>
+                    <Select value={reactiveSystemTypeId} onValueChange={setReactiveSystemTypeId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a system (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NO_SYSTEM}>Unspecified</SelectItem>
+                        {systemTypes.map((st) => (
+                          <SelectItem key={st.id} value={st.id}>
+                            {st.code ? `${st.code} — ${st.name}` : st.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                <div className="grid gap-2">
+                  <Label htmlFor="kpi-hours">Attend within (hours)</Label>
+                  <Input
+                    id="kpi-hours"
+                    type="number"
+                    min={1}
+                    max={720}
+                    value={kpiHours}
+                    onChange={(e) => setKpiHours(e.target.value === '' ? '' : parseInt(e.target.value) || 1)}
+                    placeholder="e.g. 4"
                   />
-                </SelectTrigger>
-                <SelectContent>
-                  {servicesForSelection.map((ss) => (
-                    <SelectItem key={ss.id} value={ss.id}>
-                      {ss.service_type?.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                  <p className="text-xs text-muted-foreground">
+                    Response KPI for this call. Prefilled from the call type; leave blank for none.
+                  </p>
+                </div>
+              </>
+            )}
 
             <div className="grid gap-2">
               <Label>Client</Label>
@@ -288,32 +484,12 @@ export function CreateTaskDialog({ siteServices, engineers, clients }: CreateTas
                   ))}
                 </SelectContent>
               </Select>
-              {selectedSite && (
+              {(selectedRecurringSite || selectedReactiveSite) && (
                 <p className="text-xs text-muted-foreground">
-                  Defaults to the site&apos;s client. Change it to bill this call to a
-                  different client.
+                  Defaults to the site&apos;s client. Change it to bill this call to a different client.
                 </p>
               )}
             </div>
-
-            {visitTypes.length > 0 && (
-              <div className="grid gap-2">
-                <Label>Visit</Label>
-                <Select value={visitTypeId} onValueChange={setVisitTypeId}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={ALL_VISITS}>Unspecified</SelectItem>
-                    {visitTypes.map((vt) => (
-                      <SelectItem key={vt.id} value={vt.id}>
-                        {vt.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
 
             <div className="grid gap-2">
               <Label>Assign Engineer</Label>
@@ -342,7 +518,7 @@ export function CreateTaskDialog({ siteServices, engineers, clients }: CreateTas
                     variant="outline"
                     className={cn(
                       'justify-start text-left font-normal',
-                      !formData.scheduled_date && 'text-muted-foreground'
+                      !formData.scheduled_date && 'text-muted-foreground',
                     )}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
@@ -371,9 +547,7 @@ export function CreateTaskDialog({ siteServices, engineers, clients }: CreateTas
                   type="time"
                   aria-label="Booked start time"
                   value={formData.booked_start_time}
-                  onChange={(e) =>
-                    setFormData({ ...formData, booked_start_time: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, booked_start_time: e.target.value })}
                   className="flex-1"
                 />
                 <span className="text-sm text-muted-foreground">to</span>
@@ -381,9 +555,7 @@ export function CreateTaskDialog({ siteServices, engineers, clients }: CreateTas
                   type="time"
                   aria-label="Booked end time"
                   value={formData.booked_end_time}
-                  onChange={(e) =>
-                    setFormData({ ...formData, booked_end_time: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, booked_end_time: e.target.value })}
                   className="flex-1"
                 />
               </div>
@@ -395,16 +567,18 @@ export function CreateTaskDialog({ siteServices, engineers, clients }: CreateTas
                 </p>
               )}
             </div>
+
+            {error && <p className="text-sm text-destructive">{error}</p>}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading || !formData.site_service_id}>
+            <Button type="submit" disabled={loading || !canSubmit}>
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating...
+                  Booking...
                 </>
               ) : (
                 'Book Call'

@@ -13,9 +13,6 @@ import type {
   DocumentTemplate,
 } from '@/lib/types/database'
 
-// PDF generation + email can take a moment.
-export const maxDuration = 60
-
 type ActionResult<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string }

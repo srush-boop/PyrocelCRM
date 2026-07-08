@@ -111,6 +111,7 @@ export function CallsMap({
 }: CallsMapProps) {
   const { calls, engineers, sites } = initialData
   const [showCalls, setShowCalls] = useState(true)
+  const [overdueOnly, setOverdueOnly] = useState(false)
   const [showEngineers, setShowEngineers] = useState(true)
   const [disciplineFilter, setDisciplineFilter] = useState<string>('all')
   const [departmentFilter, setDepartmentFilter] = useState<string>('all')
@@ -252,9 +253,11 @@ export function CallsMap({
       const others = emergencyCalls.filter((c) => c.taskId !== dispatchCall.taskId)
       return [dispatchCall, ...others]
     }
-    if (showCalls) return calls
-    return emergencyCalls
-  }, [dispatchCall, showCalls, calls, emergencyCalls])
+    if (!showCalls) return emergencyCalls
+    if (!overdueOnly) return calls
+    // Overdue-only: show overdue calls, plus emergencies (which always render).
+    return calls.filter((c) => c.urgency === 'overdue' || c.isEmergency)
+  }, [dispatchCall, showCalls, overdueOnly, calls, emergencyCalls])
 
   return (
     <div className="space-y-4">
@@ -540,9 +543,31 @@ export function CallsMap({
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label htmlFor="show-calls">Open calls</Label>
-                  <p className="text-xs text-muted-foreground">{calls.length} shown</p>
+                  <p className="text-xs text-muted-foreground">
+                    {overdueOnly ? `${overdueCount} overdue` : `${calls.length} shown`}
+                  </p>
                 </div>
                 <Switch id="show-calls" checked={showCalls} onCheckedChange={setShowCalls} />
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="overdue-only"
+                    className={cn('flex items-center gap-1.5', !showCalls && 'text-muted-foreground')}
+                  >
+                    <span className="h-2.5 w-2.5 rounded-full bg-destructive" aria-hidden />
+                    Overdue only
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    {overdueCount} overdue call{overdueCount === 1 ? '' : 's'}
+                  </p>
+                </div>
+                <Switch
+                  id="overdue-only"
+                  checked={overdueOnly}
+                  onCheckedChange={setOverdueOnly}
+                  disabled={!showCalls}
+                />
               </div>
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">

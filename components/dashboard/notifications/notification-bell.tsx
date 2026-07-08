@@ -57,6 +57,30 @@ export function NotificationBell() {
     (n) => n.category === 'emergency_call' && !n.read_at,
   )
 
+  // Raise a prominent toast the moment a *new* emergency notification arrives
+  // via polling, so an assigned engineer notices even if the bell is off-screen.
+  // We skip the very first load (seed the seen-set) to avoid toasting history.
+  const seenEmergencyIds = useRef<Set<string> | null>(null)
+  useEffect(() => {
+    const emergencies = notifications.filter((n) => n.category === 'emergency_call' && !n.read_at)
+    if (seenEmergencyIds.current === null) {
+      seenEmergencyIds.current = new Set(emergencies.map((n) => n.id))
+      return
+    }
+    for (const n of emergencies) {
+      if (!seenEmergencyIds.current.has(n.id)) {
+        seenEmergencyIds.current.add(n.id)
+        toast.error(n.title, {
+          description: n.body ?? undefined,
+          duration: 12000,
+          action: n.url
+            ? { label: 'View', onClick: () => router.push(n.url as string) }
+            : undefined,
+        })
+      }
+    }
+  }, [notifications, router])
+
   async function handleMarkAll() {
     await markNotificationsRead()
     mutate()

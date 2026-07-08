@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { geocodePostcodes } from '@/lib/geocode'
+  import { geocodeSites } from '@/lib/geocode'
 import { computeRespondBy, notifyEmergencyAssignment } from '@/lib/dispatch'
 
 export interface BookCallInput {
@@ -146,21 +146,34 @@ export async function bookCall(input: BookCallInput): Promise<BookCallResult> {
       respond_by: respondBy,
     }
 
-    // Best-effort: geocode the site if it has a postcode but no coordinates yet,
-    // so it appears on the dispatch map immediately.
+    // Best-effort: geocode the site if it has no coordinates yet, so it appears
+    // on the dispatch map immediately. Uses the street address + postcode for
+    // accurate marker placement (falls back to the postcode centroid).
     const { data: site } = await supabase
       .from('sites')
-      .select('name, postcode, latitude, longitude')
+      .select('name, address, postcode, latitude, longitude')
       .eq('id', input.siteId)
       .single()
     const siteRow = site as
-      | { name: string; postcode: string | null; latitude: number | null; longitude: number | null }
+      | {
+          name: string
+          address: string | null
+          postcode: string | null
+          latitude: number | null
+          longitude: number | null
+        }
       | null
     siteName = siteRow?.name ?? null
-    if (siteRow?.postcode && (siteRow.latitude == null || siteRow.longitude == null)) {
+    if (
+      siteRow &&
+      (siteRow.address || siteRow.postcode) &&
+      (siteRow.latitude == null || siteRow.longitude == null)
+    ) {
       try {
-        const geo = await geocodePostcodes([siteRow.postcode])
-        const hit = geo.get(siteRow.postcode.trim().toUpperCase().replace(/\s+/g, ' '))
+        const geo = await geocodeSites([
+          { id: input.siteId, address: siteRow.address, postcode: siteRow.postcode },
+        ])
+        const hit = geo.get(input.siteId)
         if (hit) {
           await supabase
             .from('sites')

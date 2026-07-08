@@ -76,6 +76,108 @@ export async function geocodePostcodes(
   return out
 }
 
+/** A site (or any location) to resolve to coordinates for map placement. */
+export interface GeocodeSiteInput {
+  id: string
+  address: string | null
+  postcode: string | null
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * Geocode a single free-form UK address (+ postcode) via Nominatim
+ * (OpenStreetMap). This resolves the actual street address, so markers land on
+ * the building rather than the postcode centroid. Free and key-less, but
+ * rate-limited (~1 req/s) and requires a descriptive User-Agent.
+ */
+async function geocodeAddressNominatim(
+  address: string | null,
+  postcode: string | null
+): Promise<LatLng | null> {
+  const parts = [address?.trim(), postcode?.trim()].filter(
+    (p): p is string => Boolean(p && p.length > 0)
+  )
+  if (parts.length === 0) return null
+  const query = `${parts.join(", ")}, United Kingdom`
+  try {
+    const url =
+      "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=gb&q=" +
+      encodeURIComponent(query)
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "PyrocelCRM/1.0 (dispatch map site geocoding)",
+        "Accept-Language": "en-GB",
+      },
+      cache: "no-store",
+    })
+    if (!res.ok) return null
+    const data = (await res.json()) as Array<{ lat: string; lon: string }>
+    if (!Array.isArray(data) || data.length === 0) return null
+    const latitude = Number.parseFloat(data[0].lat)
+    const longitude = Number.parseFloat(data[0].lon)
+    if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+      return { latitude, longitude }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Resolve sites to coordinates for map markers, preferring the full street
+ * address (via Nominatim) for accuracy and falling back to the postcode
+ * centroid (via postcodes.io) when the address can't be resolved or is missing.
+ * Returns a map keyed by the site id.
+ *
+ * Address lookups run sequentially to respect Nominatim's ~1 req/s policy and
+ * are capped per call (`maxAddressLookups`) so a large backlog never blocks a
+ * request; the remainder use the fast bulk postcode fallback and will be
+ * upgraded on subsequent runs as results are cached by callers.
+ */
+export async function geocodeSites(
+  sites: GeocodeSiteInput[],
+  maxAddressLookups = 8
+): Promise<Map<string, LatLng>> {
+  const out = new Map<string, LatLng>()
+  if (sites.length === 0) return out
+
+  const needPostcodeFallback: GeocodeSiteInput[] = []
+  let addressLookups = 0
+  for (const site of sites) {
+    const hasAddress = Boolean(site.address && site.address.trim().length > 0)
+    if (hasAddress && addressLookups < maxAddressLookups) {
+      addressLookups += 1
+      const hit = await geocodeAddressNominatim(site.address, site.postcode)
+      if (hit) {
+        out.set(site.id, hit)
+        // Space out requests to stay within Nominatim's usage policy.
+        await sleep(1100)
+        continue
+      }
+    }
+    needPostcodeFallback.push(site)
+  }
+
+  // Postcode-centroid fallback (bulk, fast) for anything not resolved above.
+  const fallbackPostcodes = needPostcodeFallback
+    .map((s) => s.postcode)
+    .filter((p): p is string => Boolean(p && p.trim().length > 0))
+  if (fallbackPostcodes.length > 0) {
+    const byPostcode = await geocodePostcodes(fallbackPostcodes)
+    for (const site of needPostcodeFallback) {
+      if (!site.postcode) continue
+      const hit = byPostcode.get(normalisePostcode(site.postcode))
+      if (hit) out.set(site.id, hit)
+    }
+  }
+
+  return out
+}
+
 /** Haversine great-circle distance in miles between two coordinates. */
 export function distanceMiles(a: LatLng, b: LatLng): number {
   const R = 3958.8 // Earth radius in miles

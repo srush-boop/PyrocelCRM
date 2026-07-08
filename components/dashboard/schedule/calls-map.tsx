@@ -8,6 +8,7 @@ import { CreateTaskDialog } from '@/components/dashboard/schedule/create-task-di
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -83,6 +84,11 @@ interface CallsMapProps {
   clients?: { id: string; name: string }[]
 }
 
+// Dispatch search radius bounds (miles).
+const DEFAULT_DISPATCH_RADIUS_MILES = 10
+const MIN_DISPATCH_RADIUS_MILES = 5
+const MAX_DISPATCH_RADIUS_MILES = 100
+
 const URGENCY_LEGEND: { key: string; label: string; className: string }[] = [
   { key: 'overdue', label: 'Overdue', className: 'bg-destructive' },
   { key: 'due-soon', label: 'Due today', className: 'bg-amber-500' },
@@ -111,6 +117,7 @@ export function CallsMap({
 }: CallsMapProps) {
   const { calls, engineers, sites } = initialData
   const [showCalls, setShowCalls] = useState(true)
+  const [overdueOnly, setOverdueOnly] = useState(false)
   const [showEngineers, setShowEngineers] = useState(true)
   const [disciplineFilter, setDisciplineFilter] = useState<string>('all')
   const [departmentFilter, setDepartmentFilter] = useState<string>('all')
@@ -128,6 +135,10 @@ export function CallsMap({
   const [highlightCandidateId, setHighlightCandidateId] = useState<string | null>(null)
   const [isDispatching, startDispatch] = useTransition()
   const [assigningId, setAssigningId] = useState<string | null>(null)
+  // Adjustable search radius (miles) for finding dispatch candidates.
+  const [radiusMiles, setRadiusMiles] = useState(DEFAULT_DISPATCH_RADIUS_MILES)
+  // Manual override: assign any engineer regardless of radius/skill match.
+  const [manualEngineerId, setManualEngineerId] = useState('')
 
   const selectedSite = useMemo(
     () => sites.find((s) => s.id === selectedSiteId) ?? null,
@@ -171,20 +182,16 @@ export function CallsMap({
     })
   }
 
-  // Enter dispatch mode for a call: fetch skill-matched, in-radius candidates.
-  function startDispatchForCall(call: MapCall) {
-    setDispatchCall(call)
-    setCandidates([])
-    setHighlightCandidateId(null)
-    setSelectedEngineerId('none')
-    setRoute(null)
+  // Fetch skill-matched candidates for a call within the given radius. Toasts
+  // are optional so re-running from the radius slider stays quiet.
+  function runDispatchSearch(call: MapCall, miles: number, notify = true) {
     startDispatch(async () => {
       const res = await getDispatchCandidates({
         callLat: call.latitude,
         callLng: call.longitude,
         systemTypeName: call.systemTypeName,
         branchId: activeBranchId,
-        radiusMiles: 10,
+        radiusMiles: miles,
       })
       if (!res.ok) {
         toast.error(res.error || 'Could not find engineers')
@@ -195,11 +202,32 @@ export function CallsMap({
       if ((res.candidates ?? []).length > 0) {
         setHighlightCandidateId(res.candidates![0].engineerId)
       } else {
-        toast.message('No engineers within 10 miles', {
-          description: 'Try widening the search or check who is on leave.',
-        })
+        setHighlightCandidateId(null)
+        if (notify) {
+          toast.message(`No engineers within ${miles} miles`, {
+            description: 'Try widening the radius or check who is on leave.',
+          })
+        }
       }
     })
+  }
+
+  // Enter dispatch mode for a call: reset the radius and fetch candidates.
+  function startDispatchForCall(call: MapCall) {
+    setDispatchCall(call)
+    setCandidates([])
+    setHighlightCandidateId(null)
+    setSelectedEngineerId('none')
+    setRoute(null)
+    setRadiusMiles(DEFAULT_DISPATCH_RADIUS_MILES)
+    runDispatchSearch(call, DEFAULT_DISPATCH_RADIUS_MILES)
+  }
+
+  // Re-run the search when the user drags the radius slider (debounced by
+  // committing on release via onValueCommit).
+  function handleRadiusCommit(miles: number) {
+    setRadiusMiles(miles)
+    if (dispatchCall) runDispatchSearch(dispatchCall, miles)
   }
 
   function exitDispatch() {
@@ -207,6 +235,29 @@ export function CallsMap({
     setCandidates([])
     setHighlightCandidateId(null)
     setRequiredDiscipline(null)
+    setManualEngineerId('')
+  }
+
+  // Assign the call to a specific engineer, bypassing the radius/skill ranking.
+  // Used when no candidates are found (or the dispatcher wants to override).
+  function handleManualAssign() {
+    if (!dispatchCall || !manualEngineerId) return
+    const eng = bookingEngineers.find((e) => e.id === manualEngineerId)
+    setAssigningId(manualEngineerId)
+    startDispatch(async () => {
+      const res = await assignCall(dispatchCall.taskId, manualEngineerId)
+      setAssigningId(null)
+      if (!res.ok) {
+        toast.error(res.error || 'Could not assign the call')
+        return
+      }
+      toast.success(`Assigned to ${eng?.full_name ?? 'engineer'}`, {
+        description: dispatchCall.isEmergency
+          ? 'Emergency notification sent to the engineer.'
+          : undefined,
+      })
+      exitDispatch()
+    })
   }
 
   // After a call is booked from the header, zoom the map to that site so the
@@ -252,9 +303,48 @@ export function CallsMap({
       const others = emergencyCalls.filter((c) => c.taskId !== dispatchCall.taskId)
       return [dispatchCall, ...others]
     }
-    if (showCalls) return calls
-    return emergencyCalls
-  }, [dispatchCall, showCalls, calls, emergencyCalls])
+    if (!showCalls) return emergencyCalls
+    if (!overdueOnly) return calls
+    // Overdue-only: show overdue calls, plus emergencies (which always render).
+    return calls.filter((c) => c.urgency === 'overdue' || c.isEmergency)
+  }, [dispatchCall, showCalls, overdueOnly, calls, emergencyCalls])
+
+  // Manual engineer picker — assign any engineer directly, bypassing the
+  // radius/skill ranking. Rendered in the dispatch panel as a fallback when no
+  // candidates are found, and as an override beneath the ranked list.
+  const manualAssignBlock = (
+    <div className="space-y-2 rounded-md border border-dashed p-2">
+      <Label htmlFor="manual-engineer" className="text-xs font-medium">
+        Assign manually
+      </Label>
+      <Select value={manualEngineerId} onValueChange={setManualEngineerId}>
+        <SelectTrigger id="manual-engineer" className="h-8 text-xs">
+          <SelectValue placeholder="Choose an engineer…" />
+        </SelectTrigger>
+        <SelectContent>
+          {bookingEngineers.map((e) => (
+            <SelectItem key={e.id} value={e.id} className="text-xs">
+              {e.full_name ?? 'Unnamed engineer'}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button
+        size="sm"
+        variant="secondary"
+        className="h-7 w-full gap-1 text-xs"
+        disabled={isDispatching || !manualEngineerId}
+        onClick={handleManualAssign}
+      >
+        {assigningId && assigningId === manualEngineerId ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : (
+          <Check className="h-3 w-3" />
+        )}
+        Assign{dispatchCall?.isEmergency ? ' & notify' : ''}
+      </Button>
+    </div>
+  )
 
   return (
     <div className="space-y-4">
@@ -375,7 +465,34 @@ export function CallsMap({
                     </span>
                   </p>
                 )}
-                <p className="mt-1 text-muted-foreground">Engineers within 10 miles, best-placed first.</p>
+                <p className="mt-1 text-muted-foreground">
+                  Engineers within {radiusMiles} miles, best-placed first.
+                </p>
+              </div>
+
+              {/* Adjustable search radius */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="dispatch-radius" className="text-xs">
+                    Search radius
+                  </Label>
+                  <span className="text-xs font-medium tabular-nums">{radiusMiles} mi</span>
+                </div>
+                <Slider
+                  id="dispatch-radius"
+                  min={MIN_DISPATCH_RADIUS_MILES}
+                  max={MAX_DISPATCH_RADIUS_MILES}
+                  step={5}
+                  value={[radiusMiles]}
+                  onValueChange={(v) => setRadiusMiles(v[0])}
+                  onValueCommit={(v) => handleRadiusCommit(v[0])}
+                  disabled={isDispatching}
+                  aria-label="Dispatch search radius in miles"
+                />
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>{MIN_DISPATCH_RADIUS_MILES} mi</span>
+                  <span>{MAX_DISPATCH_RADIUS_MILES} mi</span>
+                </div>
               </div>
 
               {isDispatching && candidates.length === 0 ? (
@@ -384,9 +501,13 @@ export function CallsMap({
                   Finding engineers…
                 </p>
               ) : candidates.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  No available engineers within 10 miles.
-                </p>
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    No available engineers within {radiusMiles} miles. Widen the radius above, or
+                    assign someone directly:
+                  </p>
+                  {manualAssignBlock}
+                </div>
               ) : (
                 <div className="space-y-2">
                   {candidates.map((c) => {
@@ -450,6 +571,7 @@ export function CallsMap({
                   <p className="text-[11px] text-muted-foreground">
                     ETAs are driving estimates. * = approximate (routing unavailable).
                   </p>
+                  {manualAssignBlock}
                 </div>
               )}
             </CardContent>
@@ -540,9 +662,31 @@ export function CallsMap({
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label htmlFor="show-calls">Open calls</Label>
-                  <p className="text-xs text-muted-foreground">{calls.length} shown</p>
+                  <p className="text-xs text-muted-foreground">
+                    {overdueOnly ? `${overdueCount} overdue` : `${calls.length} shown`}
+                  </p>
                 </div>
                 <Switch id="show-calls" checked={showCalls} onCheckedChange={setShowCalls} />
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="overdue-only"
+                    className={cn('flex items-center gap-1.5', !showCalls && 'text-muted-foreground')}
+                  >
+                    <span className="h-2.5 w-2.5 rounded-full bg-destructive" aria-hidden />
+                    Overdue only
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    {overdueCount} overdue call{overdueCount === 1 ? '' : 's'}
+                  </p>
+                </div>
+                <Switch
+                  id="overdue-only"
+                  checked={overdueOnly}
+                  onCheckedChange={setOverdueOnly}
+                  disabled={!showCalls}
+                />
               </div>
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
@@ -712,11 +856,12 @@ export function CallsMap({
                 engineers={showEngineers ? filteredEngineers : []}
                 route={route}
                 focusSite={selectedSite}
-                dispatchCall={dispatchCall}
-                candidates={candidates}
-                highlightCandidateId={highlightCandidateId}
-                onDispatch={startDispatchForCall}
-              />
+              dispatchCall={dispatchCall}
+              dispatchRadiusMiles={radiusMiles}
+              candidates={candidates}
+              highlightCandidateId={highlightCandidateId}
+              onDispatch={startDispatchForCall}
+            />
             )}
           </div>
         </Card>

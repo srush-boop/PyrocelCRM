@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { geocodePostcodes, distanceMiles, normalisePostcode, type LatLng } from '@/lib/geocode'
+import { geocodePostcodes, geocodeSites, distanceMiles, normalisePostcode, type LatLng } from '@/lib/geocode'
 import { getExpectedDurations, expectedMinutesFor } from '@/lib/task-duration'
 import { drivingRoute } from '@/lib/routing'
 import { disciplineForSystemType } from '@/lib/disciplines'
@@ -185,14 +185,14 @@ export async function getCallsMapData(
        booked_duration_minutes, is_emergency, respond_by, site_id, service_type_id, system_type_id,
        assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(id, full_name),
        visit_type:service_visit_types(name),
-       direct_site:sites!tasks_site_id_fkey(id, name, postcode, latitude, longitude, branch_id, client:clients(id, name)),
+        direct_site:sites!tasks_site_id_fkey(id, name, address, postcode, latitude, longitude, branch_id, client:clients(id, name)),
        direct_service_type:service_types!tasks_service_type_id_fkey(id, name, system_type:system_types(name)),
        direct_system_type:system_types!tasks_system_type_id_fkey(name),
        site_service:site_services(
          route_id, service_type_id,
          service_type:service_types(id, name, system_type:system_types(name)),
-         site:sites(id, name, postcode, latitude, longitude, branch_id, client:clients(id, name))
-       )`,
+      site:sites(id, name, address, postcode, latitude, longitude, branch_id, client:clients(id, name))
+      )`,
     )
     .in('status', ['pending', 'in_progress'])
 
@@ -201,6 +201,7 @@ export async function getCallsMapData(
   type SiteEmbed = {
     id: string
     name: string
+    address: string | null
     postcode: string | null
     latitude: number | null
     longitude: number | null
@@ -260,19 +261,25 @@ export async function getCallsMapData(
     resolved.push({ row: r, site, serviceType, systemTypeName })
   }
 
-  // Geocode any sites still missing coordinates, and persist back.
-  const sitesNeedingGeocode = new Map<string, string>()
+  // Geocode any sites still missing coordinates (using street address +
+  // postcode for accurate marker placement), and persist back.
+  const sitesNeedingGeocode = new Map<
+    string,
+    { address: string | null; postcode: string | null }
+  >()
   for (const { site } of resolved) {
-    if ((site.latitude == null || site.longitude == null) && site.postcode) {
-      sitesNeedingGeocode.set(site.id, site.postcode)
+    if ((site.latitude == null || site.longitude == null) && (site.address || site.postcode)) {
+      sitesNeedingGeocode.set(site.id, { address: site.address, postcode: site.postcode })
     }
   }
   if (sitesNeedingGeocode.size > 0) {
-    const geocoded = await backfillGeocode(Array.from(sitesNeedingGeocode.values()))
+    const geocoded = await geocodeSites(
+      Array.from(sitesNeedingGeocode, ([id, loc]) => ({ id, ...loc })),
+    )
     const admin = createAdminClient()
     const updates: Array<{ id: string; lat: number; lng: number }> = []
-    for (const [siteId, postcode] of sitesNeedingGeocode) {
-      const hit = geocoded.get(normalisePostcode(postcode))
+    for (const siteId of sitesNeedingGeocode.keys()) {
+      const hit = geocoded.get(siteId)
       if (hit) updates.push({ id: siteId, lat: hit.latitude, lng: hit.longitude })
     }
     await Promise.all(

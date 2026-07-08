@@ -28,6 +28,14 @@ const URGENCY_COLOR: Record<MapCall['urgency'], string> = {
 const DEFAULT_CENTER: [number, number] = [52.8, -1.8]
 const DEFAULT_ZOOM = 6
 
+// Inline SVG glyphs (white line-art) so markers read as what they represent:
+// a building for a site/call, a hard-hatted worker for an engineer. Injected
+// into Leaflet's DivIcon HTML, so they're plain strings (Lucide-style paths).
+const BUILDING_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg>'
+const ENGINEER_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v2z"/><path d="M10 10V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5"/><path d="M4 15v-3a6 6 0 0 1 6-6"/><path d="M14 6a6 6 0 0 1 6 6v3"/></svg>'
+
 function pinIcon(color: string, glyph = ''): L.DivIcon {
   return L.divIcon({
     className: 'calls-map-pin',
@@ -82,15 +90,6 @@ function emergencyIcon(color: string): L.DivIcon {
   })
 }
 
-// Unicode glyphs per discipline (kept ASCII-safe within the HTML string).
-const DISCIPLINE_GLYPH: Record<string, string> = {
-  fire: '\uD83D\uDD25', // flame
-  security: '\uD83D\uDEE1', // shield
-  installer: '\uD83D\uDD27', // wrench
-  cdo: '\u2611', // ballot check
-  general: '\u2691', // flag
-}
-
 /** Imperatively pan/zoom when the user picks a site, or fit route/dispatch bounds. */
 function MapController({
   focusSite,
@@ -131,6 +130,7 @@ export function CallsMapCanvas({
   route,
   focusSite,
   dispatchCall,
+  dispatchRadiusMiles = 10,
   candidates,
   highlightCandidateId,
   onDispatch,
@@ -141,6 +141,8 @@ export function CallsMapCanvas({
   focusSite: MapSite | null
   // When dispatching from the map, the call being dispatched + its candidates.
   dispatchCall?: MapCall | null
+  // Radius (miles) of the dispatch search area, drawn as a circle.
+  dispatchRadiusMiles?: number
   candidates?: DispatchCandidate[]
   highlightCandidateId?: string | null
   // Start dispatch (find best-placed engineers) for a call from its popup.
@@ -182,11 +184,11 @@ export function CallsMapCanvas({
 
       <MapController focusSite={focusSite} route={route} dispatchBounds={dispatchBounds} />
 
-      {/* 10-mile dispatch radius around the call being dispatched. */}
+      {/* Dispatch search radius around the call being dispatched. */}
       {dispatchCall && (
         <Circle
           center={[dispatchCall.latitude, dispatchCall.longitude]}
-          radius={10 * 1609.34}
+          radius={dispatchRadiusMiles * 1609.34}
           pathOptions={{ color: '#dc2626', weight: 1, fillColor: '#dc2626', fillOpacity: 0.06 }}
         />
       )}
@@ -196,7 +198,7 @@ export function CallsMapCanvas({
         <Marker
           key={c.taskId}
           position={[c.latitude, c.longitude]}
-          icon={c.isEmergency ? emergencyIcon(URGENCY_COLOR.overdue) : pinIcon(URGENCY_COLOR[c.urgency])}
+          icon={c.isEmergency ? emergencyIcon(URGENCY_COLOR.overdue) : pinIcon(URGENCY_COLOR[c.urgency], BUILDING_SVG)}
           zIndexOffset={c.isEmergency ? 1000 : 0}
         >
           <Tooltip direction="top" offset={[0, -18]}>
@@ -265,12 +267,11 @@ export function CallsMapCanvas({
         .filter((e) => e.latitude != null && e.longitude != null)
         .map((e) => {
           const meta = disciplineMeta(e.discipline)
-          const glyph = DISCIPLINE_GLYPH[meta.key] ?? DISCIPLINE_GLYPH.general
           return (
             <Marker
               key={e.id}
               position={[e.latitude!, e.longitude!]}
-              icon={engineerIcon(meta.color, glyph, e.onLeave)}
+              icon={engineerIcon(meta.color, ENGINEER_SVG, e.onLeave)}
               opacity={e.onLeave ? 0.6 : 1}
             >
               <Tooltip direction="top" offset={[0, -14]}>

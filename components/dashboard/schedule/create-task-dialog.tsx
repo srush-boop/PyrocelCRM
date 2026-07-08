@@ -194,8 +194,9 @@ export function CreateTaskDialog({
   const handleReactiveTypeChange = (value: string) => {
     setReactiveTypeId(value)
     const t = reactiveServiceTypes.find((st) => st.id === value)
-    // Prefill KPI from the call type default, and the system from the type.
-    setKpiHours(t?.default_kpi_hours ?? '')
+    // Only emergency calls carry an "attend within" KPI. Non-emergency
+    // reactive work (remedial, commissioning, etc.) has no response target.
+    setKpiHours(t?.is_emergency ? t?.default_kpi_hours ?? '' : '')
     if (!defaultSystemTypeId && t?.system_type_id) {
       setReactiveSystemTypeId(t.system_type_id)
     }
@@ -461,21 +462,23 @@ export function CreateTaskDialog({
                   </div>
                 )}
 
-                <div className="grid gap-2">
-                  <Label htmlFor="kpi-hours">Attend within (hours)</Label>
-                  <Input
-                    id="kpi-hours"
-                    type="number"
-                    min={1}
-                    max={720}
-                    value={kpiHours}
-                    onChange={(e) => setKpiHours(e.target.value === '' ? '' : parseInt(e.target.value) || 1)}
-                    placeholder="e.g. 4"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Response KPI for this call. Prefilled from the call type; leave blank for none.
-                  </p>
-                </div>
+                {selectedReactiveType?.is_emergency && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="kpi-hours">Attend within (hours)</Label>
+                    <Input
+                      id="kpi-hours"
+                      type="number"
+                      min={1}
+                      max={720}
+                      value={kpiHours}
+                      onChange={(e) => setKpiHours(e.target.value === '' ? '' : parseInt(e.target.value) || 1)}
+                      placeholder="e.g. 4"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Response KPI for this emergency. Prefilled from the call type; leave blank for none.
+                    </p>
+                  </div>
+                )}
 
                 <div className="grid gap-2">
                   <Label htmlFor="call-description">Call description</Label>

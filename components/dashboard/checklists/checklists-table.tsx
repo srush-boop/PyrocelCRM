@@ -31,12 +31,13 @@ import {
 } from '@/components/ui/alert-dialog'
 import { MoreHorizontal, Pencil, Trash2, ClipboardList } from 'lucide-react'
 import Link from 'next/link'
-import type { ChecklistTemplate, ServiceType, ServiceVisitType } from '@/lib/types/database'
+import type { ChecklistTemplate, ServiceType, ServiceVisitType, SystemType } from '@/lib/types/database'
 
 interface ChecklistsTableProps {
   checklists: (ChecklistTemplate & {
     service_type: ServiceType
     visit_type?: ServiceVisitType | null
+    system_type?: SystemType | null
   })[]
   serviceTypes: ServiceType[]
 }
@@ -95,6 +96,13 @@ export function ChecklistsTable({ checklists }: ChecklistsTableProps) {
                       </Badge>
                       {checklist.visit_type && (
                         <Badge variant="outline">{checklist.visit_type.name}</Badge>
+                      )}
+                      {checklist.system_type && (
+                        <Badge variant="outline">
+                          {checklist.system_type.code
+                            ? `${checklist.system_type.code} — ${checklist.system_type.name}`
+                            : checklist.system_type.name}
+                        </Badge>
                       )}
                     </div>
                   </TableCell>

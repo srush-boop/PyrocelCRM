@@ -282,20 +282,26 @@ export default async function TaskPage({ params }: PageProps) {
     )
   }
 
-  // Fetch the checklist template for this service type. For multi-visit
-  // services each visit type can have its own checklist; prefer the one matching
-  // this task's visit type and fall back to the service-wide template (the one
-  // with no visit_type_id) when the visit has no specific checklist.
+  // Fetch the checklist template for this service type. Resolution order:
+  //  1. Multi-visit services: the template matching this task's visit type.
+  //  2. Multi-system call types (reactive/planned): the template matching the
+  //     booked system, then the general (no-system) fallback.
+  //  3. The service-wide template (no visit type), then any template.
   const { data: checklistTemplates } = await supabase
     .from('checklist_templates')
     .select('*')
     .eq('service_type_id', task.site_service.service_type_id)
 
+  const taskSystemTypeId = (task as { system_type_id?: string | null }).system_type_id ?? null
   const templates = (checklistTemplates || []) as ChecklistTemplate[]
   let checklistTemplate =
     (task.visit_type_id
       ? templates.find((t) => t.visit_type_id === task.visit_type_id)
       : undefined) ??
+    (taskSystemTypeId
+      ? templates.find((t) => !t.visit_type_id && t.system_type_id === taskSystemTypeId)
+      : undefined) ??
+    templates.find((t) => !t.visit_type_id && !t.system_type_id) ??
     templates.find((t) => !t.visit_type_id) ??
     templates[0] ??
     null

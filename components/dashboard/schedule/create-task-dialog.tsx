@@ -153,6 +153,33 @@ export function CreateTaskDialog({
 
   const selectedReactiveType = reactiveServiceTypes.find((t) => t.id === reactiveTypeId)
 
+  // Load the systems this call type has been configured for (via its per-system
+  // checklists). When present, the system picker is scoped to just these; a
+  // general (system_type_id = null) checklist means "Unspecified" is allowed too.
+  const { data: callTypeSystems } = useSWR(
+    reactiveTypeId ? ['call-type-systems', reactiveTypeId] : null,
+    async () => {
+      const { data } = await supabase
+        .from('checklist_templates')
+        .select('system_type_id')
+        .eq('service_type_id', reactiveTypeId)
+        .is('visit_type_id', null)
+      const rows = (data ?? []) as { system_type_id: string | null }[]
+      return {
+        systemIds: rows.map((r) => r.system_type_id).filter((id): id is string => !!id),
+        hasGeneral: rows.some((r) => r.system_type_id === null),
+      }
+    },
+  )
+
+  // Options for the reactive system picker. If the call type defines per-system
+  // checklists, scope to those systems; otherwise show all systems (legacy).
+  const scopedToCallType = (callTypeSystems?.systemIds.length ?? 0) > 0
+  const reactiveSystemOptions = scopedToCallType
+    ? systemTypes.filter((st) => callTypeSystems!.systemIds.includes(st.id))
+    : systemTypes
+  const allowUnspecifiedSystem = !scopedToCallType || (callTypeSystems?.hasGeneral ?? false)
+
   const handleSiteChange = (value: string) => {
     setSiteId(value)
     setSystemTypeId('')
@@ -198,8 +225,13 @@ export function CreateTaskDialog({
     // Only emergency calls carry an "attend within" KPI. Non-emergency
     // reactive work (remedial, commissioning, etc.) has no response target.
     setKpiHours(t?.is_emergency ? t?.default_kpi_hours ?? '' : '')
-    if (!defaultSystemTypeId && t?.system_type_id) {
-      setReactiveSystemTypeId(t.system_type_id)
+    // Reset the system selection; the picker's options reload for the new call
+    // type (it may be scoped to specific systems). Seed the type's own system
+    // when there is no locked default.
+    if (defaultSystemTypeId) {
+      setReactiveSystemTypeId(defaultSystemTypeId)
+    } else {
+      setReactiveSystemTypeId(t?.system_type_id ?? NO_SYSTEM)
     }
   }
 
@@ -235,6 +267,19 @@ export function CreateTaskDialog({
       return
     }
     setTimeError(null)
+
+    // When a call type is scoped to specific systems and has no general
+    // fallback checklist, a system must be chosen so the right checklist loads.
+    if (
+      mode === 'reactive' &&
+      scopedToCallType &&
+      !allowUnspecifiedSystem &&
+      (reactiveSystemTypeId === NO_SYSTEM || !reactiveSystemTypeId)
+    ) {
+      setError('Select a system for this call type.')
+      return
+    }
+
     setError(null)
     setLoading(true)
 
@@ -444,22 +489,28 @@ export function CreateTaskDialog({
                   </Select>
                 </div>
 
-                {systemTypes.length > 0 && (
+                {reactiveSystemOptions.length > 0 && (
                   <div className="grid gap-2">
-                    <Label>System</Label>
+                    <Label>System{scopedToCallType ? ' *' : ''}</Label>
                     <Select value={reactiveSystemTypeId} onValueChange={setReactiveSystemTypeId}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select a system (optional)" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={NO_SYSTEM}>Unspecified</SelectItem>
-                        {systemTypes.map((st) => (
+                        {allowUnspecifiedSystem && <SelectItem value={NO_SYSTEM}>Unspecified</SelectItem>}
+                        {reactiveSystemOptions.map((st) => (
                           <SelectItem key={st.id} value={st.id}>
                             {st.code ? `${st.code} — ${st.name}` : st.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    {scopedToCallType && (
+                      <p className="text-xs text-muted-foreground">
+                        This call type has a checklist per system. The engineer&apos;s checklist is
+                        chosen from the system selected here.
+                      </p>
+                    )}
                   </div>
                 )}
 

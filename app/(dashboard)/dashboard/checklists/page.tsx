@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { ChecklistsTable } from '@/components/dashboard/checklists/checklists-table'
 import { AddChecklistDialog } from '@/components/dashboard/checklists/add-checklist-dialog'
-import type { Profile, ChecklistTemplate, ServiceType, ServiceVisitType } from '@/lib/types/database'
+import type { Profile, ChecklistTemplate, ServiceType, ServiceVisitType, SystemType } from '@/lib/types/database'
 
 export default async function ChecklistsPage() {
   const supabase = await createClient()
@@ -26,7 +26,8 @@ export default async function ChecklistsPage() {
       .select(`
         *,
         service_type:service_types(*),
-        visit_type:service_visit_types(*)
+        visit_type:service_visit_types(*),
+        system_type:system_types(*)
       `)
       .order('name'),
     supabase.from('service_types').select('*').order('name'),
@@ -35,6 +36,7 @@ export default async function ChecklistsPage() {
   const checklists = (checklistsResult.data || []) as (ChecklistTemplate & {
     service_type: ServiceType
     visit_type: ServiceVisitType | null
+    system_type: SystemType | null
   })[]
   const serviceTypes = (serviceTypesResult.data || []) as ServiceType[]
 

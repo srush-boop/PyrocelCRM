@@ -21,7 +21,7 @@ const kindIcon: Record<StockLocationKind, typeof Warehouse> = {
 
 const kindLabel: Record<StockLocationKind, string> = {
   warehouse: 'Warehouse',
-  van: 'Engineer van',
+  van: 'Engineer vehicle',
   other: 'Other',
 }
 

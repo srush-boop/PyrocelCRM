@@ -50,7 +50,9 @@ export default async function TaskPage({ params }: PageProps) {
 
   if (!profile) redirect('/auth/login')
 
-  // Fetch task with all related data
+  // Fetch task with all related data. Reactive/emergency calls (booked from the
+  // dispatch map) have no site_service — they anchor directly to site /
+  // service_type / system_type — so we also embed those direct relations.
   const { data: task } = await supabase
     .from('tasks')
     .select(`
@@ -60,6 +62,8 @@ export default async function TaskPage({ params }: PageProps) {
         site:sites(*, client:clients(id, name)),
         service_type:service_types(*, system_type:system_types(*))
       ),
+      direct_site:sites!tasks_site_id_fkey(*, client:clients(id, name)),
+      direct_service_type:service_types!tasks_service_type_id_fkey(*, system_type:system_types(*)),
       assigned_engineer:profiles(*),
       visit_type:service_visit_types(*),
       client:clients(id, name)
@@ -68,6 +72,27 @@ export default async function TaskPage({ params }: PageProps) {
     .single()
 
   if (!task) {
+    notFound()
+  }
+
+  // Reactive/emergency calls have no site_service row. Synthesize a
+  // site_service-shaped object from the direct relations so the shared task
+  // flow below (which expects task.site_service) works for them too.
+  if (!task.site_service && task.direct_site && task.direct_service_type) {
+    ;(task as { site_service: unknown }).site_service = {
+      id: null,
+      site_id: task.site_id,
+      service_type_id: task.service_type_id,
+      site_system_id: null,
+      route_id: null,
+      site: task.direct_site,
+      service_type: task.direct_service_type,
+    }
+  }
+
+  // Without a resolvable site + service (neither recurring nor direct), the
+  // execution flow can't render — surface a 404 rather than crashing.
+  if (!task.site_service) {
     notFound()
   }
 

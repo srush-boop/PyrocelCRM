@@ -82,14 +82,16 @@ const sitesNavItem: NavItem = {
   icon: Building2,
 }
 
-// Calls is a clickable group: clicking it opens the calls list (All Calls) and
-// expands its children (All Calls, Transfers, Reports, Defects).
+// Service is a clickable group: clicking it opens the Service Dashboard and
+// expands its children (Service Dashboard, All Calls, Map, Transfers, Reports,
+// Defects). The `key` stays `calls` so existing per-user permissions still map.
 const adminCallsNavItem: NavItem = {
   key: 'calls',
-  title: 'Calls',
-  href: '/dashboard/schedule',
-  icon: Calendar,
+  title: 'Service',
+  href: '/dashboard/service',
+  icon: Wrench,
   children: [
+    { title: 'Service Dashboard', href: '/dashboard/service', icon: LayoutDashboard },
     { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
     { title: 'Map', href: '/dashboard/schedule/map', icon: MapPinned },
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
@@ -100,10 +102,11 @@ const adminCallsNavItem: NavItem = {
 
 const officeCallsNavItem: NavItem = {
   key: 'calls',
-  title: 'Calls',
-  href: '/dashboard/schedule',
-  icon: Calendar,
+  title: 'Service',
+  href: '/dashboard/service',
+  icon: Wrench,
   children: [
+    { title: 'Service Dashboard', href: '/dashboard/service', icon: LayoutDashboard },
     { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
     { title: 'Map', href: '/dashboard/schedule/map', icon: MapPinned },
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
@@ -112,11 +115,13 @@ const officeCallsNavItem: NavItem = {
   ],
 }
 
+// Engineers don't have the management Service Dashboard, so their Service group
+// opens the Schedule directly and keeps their field-focused children.
 const engineerCallsNavItem: NavItem = {
   key: 'calls',
-  title: 'Calls',
+  title: 'Service',
   href: '/dashboard/schedule',
-  icon: Calendar,
+  icon: Wrench,
   children: [
     { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
     { title: 'Nearby Calls', href: '/dashboard/nearby', icon: Navigation },
@@ -335,6 +340,7 @@ const officeNavItems: NavItem[] = [
 ]
 
 const engineerNavItems: NavItem[] = [
+  { key: 'home', title: 'Home', href: '/dashboard', icon: LayoutDashboard, locked: true },
   engineerCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },

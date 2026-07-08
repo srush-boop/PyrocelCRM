@@ -1980,14 +1980,25 @@ export interface CalendarFilterTemplate {
   updated_at: string
 }
 
-// The serialisable shape of the calendar's filter controls. Values mirror the
-// calendar toolbar: 'all' for no filter, a kind ('task'|'route'|'entry'), an
-// owner id (or 'company'), and an entry type name. `view` restores the layout.
+// The serialisable shape of the calendar's filter controls. The toolbar now
+// uses multi-select checklists, so each filter is an array of selected values
+// (an empty/absent array means "no filter"). Values: kinds ('task'|'route'|
+// 'entry'), person ids (or the special 'company' for unassigned/company-wide
+// items), entry type names, and department ids. `view` restores the layout.
+//
+// The legacy single-value fields (kindFilter/personFilter/typeFilter) are kept
+// optional so templates saved before the multi-select change still load — they
+// are converted to single-element arrays on read.
 export interface CalendarFilterState {
+  kinds?: string[]
+  personIds?: string[]
+  types?: string[]
+  departmentIds?: string[]
+  view?: 'day' | 'week' | 'month' | 'list'
+  // Legacy (pre multi-select) fields — read-only for back-compat.
   kindFilter?: string
   personFilter?: string
   typeFilter?: string
-  view?: 'day' | 'week' | 'month' | 'list'
 }
 
 // A normalised item the calendar can render, derived from a booked task, a

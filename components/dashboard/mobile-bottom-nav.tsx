@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Calendar, Navigation, CalendarDays, Boxes, Menu } from 'lucide-react'
+import { Calendar, Navigation, CalendarDays, Boxes, Menu, Home } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useSidebar } from '@/components/ui/sidebar'
 import { getVisibleMenu } from '@/lib/config/navigation'
@@ -19,6 +19,7 @@ type BottomNavItem = {
 }
 
 const engineerItems: BottomNavItem[] = [
+  { menuKey: 'home', title: 'Home', href: '/dashboard', icon: Home },
   { menuKey: 'calls', title: 'Calls', href: '/dashboard/schedule', icon: Calendar },
   { menuKey: 'calls', title: 'Nearby', href: '/dashboard/nearby', icon: Navigation },
   { menuKey: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
@@ -35,7 +36,11 @@ export function MobileBottomNav({ profile }: { profile: Profile }) {
   const items = engineerItems.filter((item) => visibleKeys.has(item.menuKey))
 
   const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(`${href}/`)
+    // The dashboard root must match exactly, otherwise it would light up on
+    // every /dashboard/* route.
+    href === '/dashboard'
+      ? pathname === href
+      : pathname === href || pathname.startsWith(`${href}/`)
 
   return (
     <nav

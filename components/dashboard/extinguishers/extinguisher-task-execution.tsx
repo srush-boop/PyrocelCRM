@@ -48,6 +48,7 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
+import { CallPartsPicker } from '@/components/dashboard/tasks/call-parts-picker'
 import { emptyPhotoCategories, generateUrn, EXTINGUISHER_TYPE_LABELS } from '@/lib/extinguishers'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import { ExtinguisherInspectionCard, type InspectionState } from './extinguisher-inspection-card'
@@ -181,6 +182,9 @@ export function ExtinguisherTaskExecution({
   const isEngineer = profile.role === 'engineer'
   // Paused inspections are read-only until resumed (see PauseResumeControls).
   const canEdit = status !== 'completed' && status !== 'cancelled' && status !== 'paused' && (isEngineer || profile.role !== 'engineer')
+  // Office/admin can correct parts at any status (incl. completed); the engineer
+  // only while the call is active. RLS enforces this server-side too.
+  const canManageParts = profile.role === 'admin' || profile.role === 'office' || canEdit
 
   const summary = useMemo(() => {
     const values = Object.values(states)
@@ -489,6 +493,9 @@ export function ExtinguisherTaskExecution({
           {summary.failed > 0 && (
             <SuggestedPartsPicker taskId={task.id} canEdit={canEdit} />
           )}
+
+          {/* Parts used on this call (internal) — always available */}
+          <CallPartsPicker taskId={task.id} canEdit={canManageParts} />
 
           {extinguishers.length === 0 ? (
             <Card>

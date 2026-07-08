@@ -48,6 +48,7 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
+import { CallPartsPicker } from '@/components/dashboard/tasks/call-parts-picker'
 import { emptyPhotoCategories, generateUrn } from '@/lib/dampers'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import { DamperInspectionCard, type InspectionState } from './damper-inspection-card'
@@ -475,6 +476,9 @@ export function DamperTaskExecution({
           {summary.failed > 0 && (
             <SuggestedPartsPicker taskId={task.id} canEdit={canEdit} />
           )}
+
+          {/* Parts used on this call (internal) — always available */}
+          <CallPartsPicker taskId={task.id} canEdit={canManageParts} />
 
           {dampers.length === 0 ? (
             <Card>

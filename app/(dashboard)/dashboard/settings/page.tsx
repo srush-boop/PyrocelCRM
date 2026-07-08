@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { SettingsContent } from '@/components/dashboard/settings/settings-content'
-import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType } from '@/lib/types/database'
+import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType, DocumentTemplate } from '@/lib/types/database'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -17,7 +17,10 @@ export default async function SettingsPage() {
 
   if (!profile) redirect('/auth/login')
 
-  const isAdmin = (profile as Profile).role === 'admin'
+  const role = (profile as Profile).role
+  const isAdmin = role === 'admin'
+  // Document templates (mail-merge letters) are managed by office/admin.
+  const canManageTemplates = role === 'admin' || role === 'office'
 
   // Company info, branches, departments + roles are only needed for admin tabs.
   const [companyResult, branchesResult, departmentsResult, rolesResult, propertyTypesResult] = isAdmin
@@ -29,6 +32,10 @@ export default async function SettingsPage() {
         supabase.from('property_types').select('*').order('name'),
       ])
     : [{ data: null }, { data: [] }, { data: [] }, { data: [] }, { data: [] }]
+
+  const templatesResult = canManageTemplates
+    ? await supabase.from('document_templates').select('*').order('name')
+    : { data: [] }
 
   return (
     <div className="space-y-6">
@@ -47,6 +54,7 @@ export default async function SettingsPage() {
         departments={(departmentsResult.data as Department[]) || []}
         roles={(rolesResult.data as Role[]) || []}
         propertyTypes={(propertyTypesResult.data as PropertyType[]) || []}
+        documentTemplates={(templatesResult.data as DocumentTemplate[]) || []}
       />
     </div>
   )

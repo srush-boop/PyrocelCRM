@@ -50,9 +50,9 @@ interface TransferStockFormProps {
 type Mode = 'transfer' | 'usage' | 'receive'
 
 function locationLabel(l: StockLocation) {
-  const tag = l.kind === 'van' ? ' (Van)' : l.kind === 'warehouse' ? '' : ''
-  // names already include "(Van)" for engineer locations; keep it simple
-  return l.name + (l.name.includes('(Van)') ? '' : tag)
+  const tag = l.kind === 'van' ? ' (Vehicle)' : l.kind === 'warehouse' ? '' : ''
+  // some legacy names already include "(Van)"/"(Vehicle)"; avoid double tags
+  return l.name + (/\((Van|Vehicle)\)/.test(l.name) ? '' : tag)
 }
 
 export function TransferStockForm({

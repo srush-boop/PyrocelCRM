@@ -6,6 +6,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { CreateDocumentButton } from '@/components/documents/create-document-dialog'
 import { formatDateUK } from '@/lib/utils'
 import {
   Select,
@@ -35,9 +36,10 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Plus, Trash2, Wrench, Loader2, Calendar as CalendarIcon, Edit2, Clock, X, MapPin, MapPinned, User, HardHat, Power, PowerOff } from 'lucide-react'
+import { Plus, Trash2, Wrench, Loader2, Calendar as CalendarIcon, Edit2, Clock, X, MapPin, MapPinned, User, HardHat, Power, PowerOff, ShieldCheck } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { describeTolerance } from '@/lib/kpi'
@@ -109,6 +111,10 @@ export function SiteServicesManager({
   const [editReportingEmails, setEditReportingEmails] = useState<string[]>([])
   const [editDefectsToEmail, setEditDefectsToEmail] = useState('')
   const [editAnchorNextToSchedule, setEditAnchorNextToSchedule] = useState(true)
+  // Comprehensive cover: when on, this system is under cover for the client and
+  // is used by future charging logic to decide what a chargeable call costs.
+  const [editComprehensiveCover, setEditComprehensiveCover] = useState(false)
+  const [editComprehensiveCoverNote, setEditComprehensiveCoverNote] = useState('')
   const [newEmail, setNewEmail] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
 
@@ -242,6 +248,8 @@ export function SiteServicesManager({
     setEditReportingEmails(Array.isArray(ss.reporting_emails) ? ss.reporting_emails : [])
     setEditDefectsToEmail(ss.defects_to_email || '')
     setEditAnchorNextToSchedule(ss.anchor_next_to_schedule ?? true)
+    setEditComprehensiveCover(ss.comprehensive_cover ?? false)
+    setEditComprehensiveCoverNote(ss.comprehensive_cover_note ?? '')
     setNewEmail('')
   }
 
@@ -301,6 +309,10 @@ export function SiteServicesManager({
         reporting_emails: editReportingEmails,
         defects_to_email: editDefectsToEmail.trim() || null,
         anchor_next_to_schedule: editAnchorNextToSchedule,
+        comprehensive_cover: editComprehensiveCover,
+        comprehensive_cover_note: editComprehensiveCover
+          ? editComprehensiveCoverNote.trim() || null
+          : null,
       })
       .eq('id', editingId)
 
@@ -443,6 +455,16 @@ export function SiteServicesManager({
                             {pendingTasks} pending
                           </Badge>
                         )}
+                        {ss.comprehensive_cover && (
+                          <Badge
+                            variant="outline"
+                            className="gap-1 border-emerald-500 text-xs text-emerald-700 dark:text-emerald-400"
+                            title={ss.comprehensive_cover_note || 'Under comprehensive cover'}
+                          >
+                            <ShieldCheck className="h-3 w-3" />
+                            Cover
+                          </Badge>
+                        )}
                       </div>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
                         <span>Every {ss.frequency_value} {ss.frequency_unit}</span>
@@ -538,6 +560,16 @@ export function SiteServicesManager({
                           <PowerOff className="h-4 w-4" />
                         )}
                       </Button>
+                      <CreateDocumentButton
+                        ownerType="site_service"
+                        ownerId={ss.id}
+                        entityLabel={ss.service_type?.name}
+                        revalidatePath={pathname}
+                        variant="ghost"
+                        iconOnly
+                        label="Create document"
+                        className="text-muted-foreground hover:text-foreground"
+                      />
                       <Button
                         variant="ghost"
                         size="icon"
@@ -942,6 +974,41 @@ export function SiteServicesManager({
                     : 'On completion, the next due date is calculated from the actual completion date (the schedule drifts with each visit).'}
                 </p>
               </div>
+            </div>
+
+            <div className="flex flex-col gap-3 rounded-md border p-3">
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  id="comprehensive-cover"
+                  checked={editComprehensiveCover}
+                  onCheckedChange={(checked) => setEditComprehensiveCover(checked === true)}
+                  className="mt-0.5"
+                />
+                <div className="grid gap-1">
+                  <Label htmlFor="comprehensive-cover" className="flex cursor-pointer items-center gap-1.5">
+                    <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                    Comprehensive cover
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    This system is under comprehensive cover for the client. Used when working out
+                    what a chargeable call costs the client (cover typically means no charge).
+                  </p>
+                </div>
+              </div>
+              {editComprehensiveCover && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="comprehensive-cover-note" className="text-xs">
+                    Cover note (optional)
+                  </Label>
+                  <Textarea
+                    id="comprehensive-cover-note"
+                    value={editComprehensiveCoverNote}
+                    onChange={(e) => setEditComprehensiveCoverNote(e.target.value)}
+                    placeholder="e.g. Parts and labour included under annual cover contract."
+                    rows={2}
+                  />
+                </div>
+              )}
             </div>
 
             <div className="grid gap-2 rounded-md border p-3">

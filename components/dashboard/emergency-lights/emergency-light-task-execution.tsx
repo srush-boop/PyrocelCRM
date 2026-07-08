@@ -40,6 +40,7 @@ import {
 } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
+import { CallPartsPicker } from '@/components/dashboard/tasks/call-parts-picker'
 import {
   EMERGENCY_LIGHT_CHECKLIST,
   FITTING_TYPES,
@@ -154,6 +155,9 @@ export function EmergencyLightTaskExecution({
 
   // Paused inspections are read-only until resumed (see PauseResumeControls).
   const canEdit = status !== 'completed' && status !== 'cancelled' && status !== 'paused'
+  // Office/admin can correct parts at any status (incl. completed); the engineer
+  // only while the call is active. RLS enforces this server-side too.
+  const canManageParts = profile.role === 'admin' || profile.role === 'office' || canEdit
 
   const summary = useMemo(() => {
     const values = Object.values(states)
@@ -360,7 +364,7 @@ export function EmergencyLightTaskExecution({
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-28">
-      <TaskHeader task={task} status={status} />
+      <TaskHeader task={task} status={status} canCreateDocument={profile.role === 'admin' || profile.role === 'office'} />
 
       <PauseResumeControls task={task} status={status} onStatusChange={setStatus} />
 
@@ -400,6 +404,9 @@ export function EmergencyLightTaskExecution({
           {summary.failed > 0 && (
             <SuggestedPartsPicker taskId={task.id} canEdit={canEdit} />
           )}
+
+          {/* Parts used on this call (internal) — always available */}
+          <CallPartsPicker taskId={task.id} canEdit={canManageParts} />
 
           {lightList.length === 0 ? (
             <Card>

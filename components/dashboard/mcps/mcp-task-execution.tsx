@@ -46,6 +46,7 @@ import {
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
+import { CallPartsPicker } from '@/components/dashboard/tasks/call-parts-picker'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import { generateMcpUrn, TEST_KEY_TYPES, MCP_CHECKLIST } from '@/lib/mcps'
 import { McpInspectionCard, type McpInspectionState, type CheckValue } from './mcp-inspection-card'
@@ -143,6 +144,9 @@ export function McpTaskExecution({
 
   // Paused inspections are read-only until resumed (see PauseResumeControls).
   const canEdit = status !== 'completed' && status !== 'cancelled' && status !== 'paused'
+  // Office/admin can correct parts at any status (incl. completed); the engineer
+  // only while the call is active. RLS enforces this server-side too.
+  const canManageParts = profile.role === 'admin' || profile.role === 'office' || canEdit
 
   const handleAddMcp = async () => {
     setAddSaving(true)
@@ -472,7 +476,7 @@ export function McpTaskExecution({
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-72 md:pb-6">
-      <TaskHeader task={task} status={status} />
+      <TaskHeader task={task} status={status} canCreateDocument={profile.role === 'admin' || profile.role === 'office'} />
 
       <PauseResumeControls task={task} status={status} onStatusChange={setStatus} />
 
@@ -579,6 +583,9 @@ export function McpTaskExecution({
           {summary.failed > 0 && (
             <SuggestedPartsPicker taskId={task.id} canEdit={canEdit} />
           )}
+
+          {/* Parts used on this call (internal) — always available */}
+          <CallPartsPicker taskId={task.id} canEdit={canManageParts} />
 
           {mcpList.length === 0 ? (
             <Card>

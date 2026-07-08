@@ -48,6 +48,7 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
+import { CallPartsPicker } from '@/components/dashboard/tasks/call-parts-picker'
 import { emptyPhotoCategories, generateUrn } from '@/lib/dampers'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import { DamperInspectionCard, type InspectionState } from './damper-inspection-card'
@@ -167,6 +168,9 @@ export function DamperTaskExecution({
   const isEngineer = profile.role === 'engineer'
   // Paused inspections are read-only until resumed (see PauseResumeControls).
   const canEdit = status !== 'completed' && status !== 'cancelled' && status !== 'paused' && (isEngineer || profile.role !== 'engineer')
+  // Office/admin can correct parts at any status (incl. completed); the engineer
+  // only while the call is active. RLS enforces this server-side too.
+  const canManageParts = profile.role === 'admin' || profile.role === 'office' || canEdit
 
   const summary = useMemo(() => {
     const values = Object.values(states)
@@ -420,7 +424,7 @@ export function DamperTaskExecution({
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-28">
-      <TaskHeader task={task} status={status} />
+      <TaskHeader task={task} status={status} canCreateDocument={profile.role === 'admin' || profile.role === 'office'} />
 
       <PauseResumeControls task={task} status={status} onStatusChange={setStatus} />
 
@@ -472,6 +476,9 @@ export function DamperTaskExecution({
           {summary.failed > 0 && (
             <SuggestedPartsPicker taskId={task.id} canEdit={canEdit} />
           )}
+
+          {/* Parts used on this call (internal) — always available */}
+          <CallPartsPicker taskId={task.id} canEdit={canManageParts} />
 
           {dampers.length === 0 ? (
             <Card>

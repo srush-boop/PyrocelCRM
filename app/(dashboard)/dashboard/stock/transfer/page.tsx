@@ -35,8 +35,8 @@ export default async function TransferStockPage({
     getJobOptions(),
   ])
 
-  // Engineers default the "from" location to their own van.
-  const myVan =
+  // Engineers default the "from" location to their own vehicle.
+  const myVehicle =
     locations.find((l) => l.engineer_id === user.id) ?? null
 
   return (
@@ -54,7 +54,7 @@ export default async function TransferStockPage({
         parts={parts.filter((p) => p.is_active)}
         locations={locations}
         jobs={jobs}
-        defaultFromLocationId={myVan?.id ?? null}
+        defaultFromLocationId={myVehicle?.id ?? null}
         canReceive={['admin', 'office'].includes(profile.role)}
         initialPartId={partId ?? null}
         initialToLocationId={toLocationId ?? null}

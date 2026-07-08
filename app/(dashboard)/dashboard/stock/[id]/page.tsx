@@ -67,7 +67,7 @@ export default async function StockLocationPage({
             <h1 className="text-3xl font-bold tracking-tight">{location.name}</h1>
             <p className="text-muted-foreground">
               {location.engineer?.full_name
-                ? `Engineer van · ${location.engineer.full_name}`
+                ? `Engineer vehicle · ${location.engineer.full_name}`
                 : location.kind === 'warehouse'
                   ? 'Warehouse'
                   : 'Stock location'}

@@ -11,6 +11,7 @@ import { isFireAlarmService } from '@/lib/mcps'
 import { isEmergencyLightService } from '@/lib/emergency-lights'
 import { isExtinguisherService } from '@/lib/extinguishers'
 import { PreAttendancePanel } from '@/components/dashboard/site-info/pre-attendance-panel'
+import { CommissioningJobPanel } from '@/components/dashboard/tasks/commissioning-job-panel'
 import { resolveSiteFlags } from '@/lib/site-flags'
 import { getOpenRemedialForSite } from '@/lib/remedial'
 import type { DocumentFile, DocumentFolder, SiteInternalNote } from '@/lib/types/database'
@@ -153,6 +154,56 @@ export default async function TaskPage({ params }: PageProps) {
     )
   }
 
+  // Commissioning calls booked from a job: give the engineer the job context +
+  // read-only access to the job's documents folder, shown above the shared
+  // pre-attendance panel. Both are passed through the single `preAttendance`
+  // slot so every execution variant renders them without extra props.
+  if (task.is_commissioning && task.source_job_id) {
+    const jobId = task.source_job_id as string
+    const [{ data: jobRow }, { data: jobFolders }, { data: jobFiles }] = await Promise.all([
+      supabase
+        .from('jobs')
+        .select('id, job_number, title, po_number, notes')
+        .eq('id', jobId)
+        .maybeSingle(),
+      supabase.from('document_folders').select('*').eq('owner_type', 'job').eq('owner_id', jobId),
+      supabase
+        .from('documents')
+        .select('*')
+        .eq('owner_type', 'job')
+        .eq('owner_id', jobId)
+        .order('created_at', { ascending: false }),
+    ])
+
+    if (jobRow) {
+      const j = jobRow as {
+        id: string
+        job_number: string | null
+        title: string | null
+        po_number: string | null
+        notes: string | null
+      }
+      const commissioningPanel = (
+        <CommissioningJobPanel
+          jobId={j.id}
+          jobNumber={j.job_number}
+          jobTitle={j.title}
+          poNumber={j.po_number}
+          jobNotes={j.notes}
+          folders={(jobFolders || []) as DocumentFolder[]}
+          files={(jobFiles || []) as DocumentFile[]}
+          canOpenJob={role === 'admin' || role === 'office'}
+        />
+      )
+      preAttendancePanel = (
+        <>
+          {commissioningPanel}
+          {preAttendancePanel}
+        </>
+      )
+    }
+  }
+
   // The shared pre-attendance panel is passed into each execution flow so it can
   // render directly beneath the site/service header (rather than above it).
   // Damper inspection tasks use a dedicated per-asset flow
@@ -282,20 +333,26 @@ export default async function TaskPage({ params }: PageProps) {
     )
   }
 
-  // Fetch the checklist template for this service type. For multi-visit
-  // services each visit type can have its own checklist; prefer the one matching
-  // this task's visit type and fall back to the service-wide template (the one
-  // with no visit_type_id) when the visit has no specific checklist.
+  // Fetch the checklist template for this service type. Resolution order:
+  //  1. Multi-visit services: the template matching this task's visit type.
+  //  2. Multi-system call types (reactive/planned): the template matching the
+  //     booked system, then the general (no-system) fallback.
+  //  3. The service-wide template (no visit type), then any template.
   const { data: checklistTemplates } = await supabase
     .from('checklist_templates')
     .select('*')
     .eq('service_type_id', task.site_service.service_type_id)
 
+  const taskSystemTypeId = (task as { system_type_id?: string | null }).system_type_id ?? null
   const templates = (checklistTemplates || []) as ChecklistTemplate[]
   let checklistTemplate =
     (task.visit_type_id
       ? templates.find((t) => t.visit_type_id === task.visit_type_id)
       : undefined) ??
+    (taskSystemTypeId
+      ? templates.find((t) => !t.visit_type_id && t.system_type_id === taskSystemTypeId)
+      : undefined) ??
+    templates.find((t) => !t.visit_type_id && !t.system_type_id) ??
     templates.find((t) => !t.visit_type_id) ??
     templates[0] ??
     null

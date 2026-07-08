@@ -271,10 +271,16 @@ export interface ServiceType {
   icon?: string | null
   defects_to_email: string | null
   default_worker_type: WorkerType
-  // Whether this service type schedules recurring PPM visits. When false it is a
-  // reactive / on-demand "call type" (e.g. Reactive, Emergency Callout) that is
-  // logged ad-hoc against a site + system with no recurring service, and is
-  // excluded from PPM auto-generation and the site recurring-service picker.
+  // The kind of call this service type represents:
+  // - 'recurring': schedules recurring PPM visits (deadline-driven).
+  // - 'reactive': ad-hoc on-demand call with an "attend within X hours" KPI
+  //   (e.g. Reactive, Emergency Callout).
+  // - 'planned': a scheduled one-off (e.g. Commissioning) with NO deadline/KPI
+  //   and never an emergency; can be assigned to multiple systems.
+  // `is_recurring`/`is_emergency` are kept in sync for backward compatibility.
+  call_kind: 'recurring' | 'reactive' | 'planned'
+  // Whether this service type schedules recurring PPM visits. Mirrors
+  // `call_kind === 'recurring'`. Kept for backward compatibility.
   is_recurring: boolean
   // Marks a non-recurring type as an emergency call type (pulsing map marker +
   // engineer emergency notification on assignment).
@@ -328,11 +334,17 @@ export interface ChecklistTemplate {
   // When set, this template applies only to the matching visit type. When null,
   // it is the service-wide fallback used by visits with no specific template.
   visit_type_id?: string | null
+  // When set, this template applies only when the booked call is for the
+  // matching system type. When null, it is the general/any-system fallback.
+  // Used by non-recurring (reactive/planned) call types that span multiple
+  // systems, each with its own checklist.
+  system_type_id?: string | null
   name: string
   items: ChecklistItem[]
   created_at: string
   updated_at: string
   service_type?: ServiceType
+  system_type?: SystemType | null
 }
 
 // Client-specific checklist items appended to the engineer's checklist. Scoped
@@ -610,6 +622,11 @@ export interface Site {
   two_engineers_required: boolean | null
   remedial_required: boolean | null
   remedial_notes: string | null
+  // When true, this system is under comprehensive cover for the client/site.
+  // Used in future charging logic to decide what a chargeable call costs the
+  // client (comprehensive cover typically means no/reduced charge). Store-only today.
+  comprehensive_cover: boolean
+  comprehensive_cover_note: string | null
   created_at: string
   site?: Site
   site_system?: SiteSystem | null
@@ -630,6 +647,34 @@ export type DocumentOwnerType =
   | 'site_service'
   | 'site_engineer'
   | 'system_reference'
+  // Entities that support generated (mail-merge) documents in addition to uploads.
+  | 'task'
+  | 'quote'
+  | 'job'
+
+// Category of a mail-merge letter template (drives which starter copy / grouping).
+export type DocumentTemplateCategory =
+  | 'cancellation_ack'
+  | 'complaint_response'
+  | 'general_letter'
+  | 'payment_request'
+  | 'other'
+
+// A reusable letter template whose body contains {{merge.tokens}} that are filled
+// from the chosen entity + company branding. `entity_types` limits which owner
+// types a template is offered for. Managed by office/admin under Settings.
+export interface DocumentTemplate {
+  id: string
+  name: string
+  category: DocumentTemplateCategory
+  subject: string | null
+  body: string
+  entity_types: DocumentOwnerType[]
+  is_active: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
 
 // A communal internal note left by staff (engineers/office/admin) against a site.
 export interface SiteInternalNote {
@@ -678,6 +723,8 @@ export interface DocumentFile {
   description?: string | null
   system_type_id?: string | null
   extracted_text?: string | null
+  // Set when this document was generated from a mail-merge template (null for uploads).
+  template_id?: string | null
 }
 
 export interface TaskAttachment {
@@ -756,6 +803,11 @@ export interface Task {
   // When this is a remedial call, the quote/defect it originated from.
   source_quote_id: string | null
   source_defect_id: string | null
+  // When the call was booked from a job (e.g. a commissioning visit), the job it
+  // belongs to. `is_commissioning` flags commissioning calls, which copy key job
+  // info into the notes and expose the job's documents folder to the engineer.
+  source_job_id: string | null
+  is_commissioning: boolean
   site_service?: SiteService
   // Direct joins for reactive/emergency calls (and available on recurring calls
   // via the backfilled ids).
@@ -1747,6 +1799,51 @@ export interface SuggestedPartLine {
   name: string
   sku: string | null
   unit: string
+}
+
+// A catalogue part actually used/fitted on a call (task). Distinct from the
+// defect "suggested parts" flow: always available (no defect required) and
+// editable by the assigned engineer (while in progress) or office/admin (any
+// time). Money is stored in integer pence. The charge-related columns are
+// groundwork for a future charging pass and have no UI yet. Never shown to
+// clients.
+export interface CallPart {
+  id: string
+  task_id: string
+  part_id: string
+  quantity: number
+  // Our cost snapshot (pence) captured when the part was added.
+  unit_cost_pence: number | null
+  // Charge groundwork (no UI yet).
+  chargeable: boolean
+  sale_unit_price_pence: number | null
+  charge_status: 'pending' | 'quoted' | 'invoiced' | 'non_chargeable'
+  notes: string | null
+  added_by: string | null
+  // Stock reconciliation: which vehicle/location the part was pulled from and how
+  // much was actually deducted (may be less than `quantity` if the vehicle was
+  // short, or 0 if the engineer had no linked vehicle). Kept in sync so edits and
+  // removals return the right amount to stock.
+  stock_location_id: string | null
+  stock_deducted_qty: number
+  created_at: string
+  updated_at: string
+  part?: Part | null
+}
+
+// Lightweight shape used by the call-parts picker (part joined in). Includes
+// the cost snapshot so the picker can show line/total cost (info only).
+export interface CallPartLine {
+  part_id: string
+  quantity: number
+  name: string
+  sku: string | null
+  unit: string
+  unit_cost_pence: number | null
+  // How much of `quantity` was actually pulled from vehicle stock. Absent on
+  // search results; present on saved lines so the picker can show whether the
+  // line was deducted from the vehicle or just logged.
+  stock_deducted_qty?: number
 }
 
 // A part held at a location, with its own minimum re-order level and the

@@ -31,13 +31,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { MoreHorizontal, Pencil, Trash2, Search, Building, Plus, ChevronRight, ChevronDown, MapPin, ExternalLink, ListChecks, Link2 } from 'lucide-react'
+import { MoreHorizontal, Pencil, Trash2, Search, Building, Plus, ChevronRight, ChevronDown, MapPin, ExternalLink, ListChecks, Link2, FileText } from 'lucide-react'
 import { PrintButton } from '@/components/ui/print-button'
 import type { Client, Site, SystemType, ServiceType } from '@/lib/types/database'
 import { AddClientDialog } from './add-client-dialog'
 import { EditClientDialog } from './edit-client-dialog'
 import { ClientChecklistDialog } from './client-checklist-dialog'
 import { ClientLinksDialog } from './client-links-dialog'
+import { CreateDocumentDialog } from '@/components/documents/create-document-dialog'
 
 interface ClientsTableProps {
   clients: Client[]
@@ -61,6 +62,7 @@ export function ClientsTable({
   const [editClient, setEditClient] = useState<Client | null>(null)
   const [checklistClient, setChecklistClient] = useState<Client | null>(null)
   const [linksClient, setLinksClient] = useState<Client | null>(null)
+  const [docClient, setDocClient] = useState<Client | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const searchParams = useSearchParams()
   const focusedClientId = searchParams.get('client')
@@ -193,6 +195,10 @@ export function ClientsTable({
                               <Link2 className="mr-2 h-4 w-4" />
                               Links
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setDocClient(client)}>
+                              <FileText className="mr-2 h-4 w-4" />
+                              Create document
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => setDeleteId(client.id)}
                               className="text-destructive"
@@ -314,6 +320,17 @@ export function ClientsTable({
           onOpenChange={(open) => !open && setLinksClient(null)}
           systemTypes={systemTypes}
           serviceTypes={serviceTypes}
+        />
+      )}
+
+      {docClient && (
+        <CreateDocumentDialog
+          open={!!docClient}
+          onOpenChange={(open) => !open && setDocClient(null)}
+          ownerType="client"
+          ownerId={docClient.id}
+          entityLabel={docClient.name}
+          revalidatePath="/dashboard/clients"
         />
       )}
 

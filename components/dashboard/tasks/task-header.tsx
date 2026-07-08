@@ -14,6 +14,7 @@ import {
   Clock,
 } from 'lucide-react'
 import type { TaskWithDetails, TaskStatus } from '@/lib/types/database'
+import { CreateDocumentButton } from '@/components/documents/create-document-dialog'
 
 // Visual treatment for each task status so the banner is scannable at a glance.
 const STATUS_STYLES: Record<TaskStatus, { label: string; className: string }> = {
@@ -39,9 +40,12 @@ function daysUntil(dateStr: string, now: Date): number {
 export function TaskHeader({
   task,
   status,
+  canCreateDocument = false,
 }: {
   task: TaskWithDetails
   status: TaskStatus
+  // Office/admin only: exposes the "Create document" action for this call.
+  canCreateDocument?: boolean
 }) {
   const handleBack = useBackNavigation('/dashboard/schedule')
 
@@ -100,7 +104,17 @@ export function TaskHeader({
           <ArrowLeft className="h-4 w-4" />
           Back
         </Button>
-        <Badge className={cn('capitalize', statusStyle.className)}>{statusStyle.label}</Badge>
+        <div className="flex items-center gap-2">
+          {canCreateDocument && (
+            <CreateDocumentButton
+              ownerType="task"
+              ownerId={task.id}
+              entityLabel={`Call — ${site?.name ?? 'Site'}`}
+              revalidatePath={`/dashboard/tasks/${task.id}`}
+            />
+          )}
+          <Badge className={cn('capitalize', statusStyle.className)}>{statusStyle.label}</Badge>
+        </div>
       </div>
 
       {/* Row 2: site identity */}

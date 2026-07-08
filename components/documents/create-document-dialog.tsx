@@ -46,8 +46,12 @@ interface CreateDocumentButtonProps {
   // Path to revalidate after saving so the Documents list refreshes.
   revalidatePath?: string
   variant?: 'default' | 'outline' | 'secondary' | 'ghost'
-  size?: 'default' | 'sm'
+  size?: 'default' | 'sm' | 'icon'
   className?: string
+  // Render just the icon (for compact action rows); tooltip via title.
+  iconOnly?: boolean
+  // Override the button label.
+  label?: string
 }
 
 const BLANK = '__blank__'
@@ -60,13 +64,21 @@ export function CreateDocumentButton({
   variant = 'outline',
   size = 'sm',
   className,
+  iconOnly = false,
+  label = 'Create document',
 }: CreateDocumentButtonProps) {
   const [open, setOpen] = useState(false)
   return (
     <>
-      <Button variant={variant} size={size} className={className} onClick={() => setOpen(true)}>
-        <FileText className="mr-2 h-4 w-4" />
-        Create document
+      <Button
+        variant={variant}
+        size={iconOnly ? 'icon' : size}
+        className={className}
+        onClick={() => setOpen(true)}
+        title={iconOnly ? label : undefined}
+      >
+        <FileText className={iconOnly ? 'h-4 w-4' : 'mr-2 h-4 w-4'} />
+        {iconOnly ? <span className="sr-only">{label}</span> : label}
       </Button>
       {open && (
         <CreateDocumentDialog
@@ -87,7 +99,7 @@ interface DialogProps extends CreateDocumentButtonProps {
   onOpenChange: (v: boolean) => void
 }
 
-function CreateDocumentDialog({
+export function CreateDocumentDialog({
   open,
   onOpenChange,
   ownerType,

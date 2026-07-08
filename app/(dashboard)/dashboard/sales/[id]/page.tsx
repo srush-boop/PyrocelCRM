@@ -7,6 +7,7 @@ import { QuoteBuilder } from '@/components/dashboard/sales/quote-builder'
 import { QuoteStatusPanel } from '@/components/dashboard/sales/quote-status-panel'
 import { QuoteGroupPanel } from '@/components/dashboard/sales/quote-group-panel'
 import { QuoteQueriesPanel } from '@/components/dashboard/sales/quote-queries-panel'
+import { CreateDocumentButton } from '@/components/documents/create-document-dialog'
 import { resolveDefaultMargin } from '@/lib/sales'
 import { isRequirementStatus } from '@/lib/sales-requirements'
 import type {
@@ -207,14 +208,22 @@ export default async function QuoteDetailPage({
               Back to Quotes
             </Link>
           </Button>
-          {linkedJob ? (
-            <Button variant="outline" size="sm" className="w-fit" asChild>
-              <Link href={`/dashboard/jobs/${(linkedJob as { id: string }).id}`}>
-                <Hammer className="mr-2 h-4 w-4" />
-                View job {(linkedJob as { job_number: string | null }).job_number ?? ''}
-              </Link>
-            </Button>
-          ) : null}
+          <div className="flex items-center gap-2">
+            {linkedJob ? (
+              <Button variant="outline" size="sm" className="w-fit" asChild>
+                <Link href={`/dashboard/jobs/${(linkedJob as { id: string }).id}`}>
+                  <Hammer className="mr-2 h-4 w-4" />
+                  View job {(linkedJob as { job_number: string | null }).job_number ?? ''}
+                </Link>
+              </Button>
+            ) : null}
+            <CreateDocumentButton
+              ownerType="quote"
+              ownerId={typedQuote.id}
+              entityLabel={typedQuote.title}
+              revalidatePath={`/dashboard/sales/${typedQuote.id}`}
+            />
+          </div>
         </div>
         <h1 className="text-3xl font-bold tracking-tight">{typedQuote.title}</h1>
         <p className="text-muted-foreground">

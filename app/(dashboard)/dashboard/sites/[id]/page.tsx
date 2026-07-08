@@ -18,6 +18,7 @@ import { SiteLogbook } from '@/components/dashboard/sites/site-logbook'
 import { SiteDocuments } from '@/components/dashboard/sites/site-documents'
 import { SiteEngineerInfoTab } from '@/components/dashboard/sites/site-engineer-info-tab'
 import { getOwnerDocuments } from '@/lib/documents/data'
+import { CreateDocumentButton } from '@/components/documents/create-document-dialog'
 import type { ReportTimelineItem } from '@/components/logbook/logbook-timeline'
 import { DamperRegister } from '@/components/dashboard/dampers/damper-register'
 import { McpRegister } from '@/components/dashboard/mcps/mcp-register'
@@ -401,6 +402,14 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
               systemTypes={systemTypes}
               defaultSiteId={id}
               defaultMode="reactive"
+            />
+          )}
+          {canManageDocuments && (
+            <CreateDocumentButton
+              ownerType="site"
+              ownerId={id}
+              entityLabel={site.name}
+              revalidatePath={`/dashboard/sites/${id}`}
             />
           )}
           <EditSiteButton site={site as Site & { route: Route | null }} clients={clients} />

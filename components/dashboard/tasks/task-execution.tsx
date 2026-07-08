@@ -519,7 +519,7 @@ export function TaskExecution({
         status === 'in_progress' ? 'pb-44 lg:pb-6' : 'pb-6',
       )}
     >
-      <TaskHeader task={task} status={status} />
+      <TaskHeader task={task} status={status} canCreateDocument={isAdminOrOffice} />
 
       <PauseResumeControls task={task} status={status} onStatusChange={setStatus} />
 

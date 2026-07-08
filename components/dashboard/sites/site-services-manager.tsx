@@ -6,6 +6,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { CreateDocumentButton } from '@/components/documents/create-document-dialog'
 import { formatDateUK } from '@/lib/utils'
 import {
   Select,
@@ -538,6 +539,16 @@ export function SiteServicesManager({
                           <PowerOff className="h-4 w-4" />
                         )}
                       </Button>
+                      <CreateDocumentButton
+                        ownerType="site_service"
+                        ownerId={ss.id}
+                        entityLabel={ss.service_type?.name}
+                        revalidatePath={pathname}
+                        variant="ghost"
+                        iconOnly
+                        label="Create document"
+                        className="text-muted-foreground hover:text-foreground"
+                      />
                       <Button
                         variant="ghost"
                         size="icon"

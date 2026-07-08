@@ -8,15 +8,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home, Wrench, HardHat } from 'lucide-react'
+import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home, Wrench, HardHat, FileText } from 'lucide-react'
 import type { User as AuthUser } from '@supabase/supabase-js'
-import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType } from '@/lib/types/database'
+import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType, DocumentTemplate } from '@/lib/types/database'
 import { CompanySettings } from './company-settings'
 import { DepartmentsSettings } from './departments-settings'
 import { RolesSettings } from './roles-settings'
 import { PropertyTypesSettings } from './property-types-settings'
 import { MaintenanceSettings } from './maintenance-settings'
 import { InstallationSettings } from './installation-settings'
+import { DocumentTemplatesSettings } from './document-templates'
 import { SignatureManager } from './signature-manager'
 
 interface SettingsContentProps {
@@ -27,10 +28,13 @@ interface SettingsContentProps {
   departments: Department[]
   roles: Role[]
   propertyTypes: PropertyType[]
+  documentTemplates: DocumentTemplate[]
 }
 
-export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes }: SettingsContentProps) {
+export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates }: SettingsContentProps) {
   const isAdmin = profile.role === 'admin'
+  // Templates are managed by office/admin (mail-merge letters for client correspondence).
+  const canManageTemplates = profile.role === 'admin' || profile.role === 'office'
   const userTypeLabel = profile.role.charAt(0).toUpperCase() + profile.role.slice(1)
   const assignedRole = profile.role_ref?.name ?? profile.job_title ?? 'Not assigned'
   const [fullName, setFullName] = useState(profile.full_name || '')
@@ -145,6 +149,12 @@ export function SettingsContent({ user, profile, company, branches, departments,
           <TabsTrigger value="installation" className="gap-2">
             <HardHat className="h-4 w-4" />
             Installation
+          </TabsTrigger>
+        )}
+        {canManageTemplates && (
+          <TabsTrigger value="templates" className="gap-2">
+            <FileText className="h-4 w-4" />
+            Documents
           </TabsTrigger>
         )}
       </TabsList>
@@ -327,6 +337,12 @@ export function SettingsContent({ user, profile, company, branches, departments,
       {isAdmin && (
         <TabsContent value="installation" className="space-y-4">
           <InstallationSettings company={company} />
+        </TabsContent>
+      )}
+
+      {canManageTemplates && (
+        <TabsContent value="templates" className="space-y-4">
+          <DocumentTemplatesSettings templates={documentTemplates} />
         </TabsContent>
       )}
 

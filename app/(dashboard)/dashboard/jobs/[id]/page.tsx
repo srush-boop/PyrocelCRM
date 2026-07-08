@@ -15,6 +15,7 @@ import {
   TrendingUp,
   AlertTriangle,
 } from 'lucide-react'
+import { CreateDocumentButton } from '@/components/documents/create-document-dialog'
 import { JobStagePanel, JobContractReview } from '@/components/dashboard/jobs/job-controls'
 import { JobPurchasing } from '@/components/dashboard/jobs/job-purchasing'
 import { jobStageMeta, jobStatusMeta } from '@/lib/jobs/stages'
@@ -126,14 +127,22 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
               {typedJob.title ?? typedJob.quote?.title ?? 'Untitled job'}
             </p>
           </div>
-          {typedJob.quote ? (
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`/dashboard/sales/${typedJob.quote.id}`}>
-                <FileText className="mr-2 h-4 w-4" />
-                View quote {typedJob.quote.quote_number ?? ''}
-              </Link>
-            </Button>
-          ) : null}
+          <div className="flex items-center gap-2">
+            {typedJob.quote ? (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/dashboard/sales/${typedJob.quote.id}`}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  View quote {typedJob.quote.quote_number ?? ''}
+                </Link>
+              </Button>
+            ) : null}
+            <CreateDocumentButton
+              ownerType="job"
+              ownerId={typedJob.id}
+              entityLabel={typedJob.job_number ?? typedJob.title ?? 'Job'}
+              revalidatePath={`/dashboard/jobs/${typedJob.id}`}
+            />
+          </div>
         </div>
       </div>
 

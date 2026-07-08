@@ -476,7 +476,7 @@ export function McpTaskExecution({
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-72 md:pb-6">
-      <TaskHeader task={task} status={status} />
+      <TaskHeader task={task} status={status} canCreateDocument={profile.role === 'admin' || profile.role === 'office'} />
 
       <PauseResumeControls task={task} status={status} onStatusChange={setStatus} />
 

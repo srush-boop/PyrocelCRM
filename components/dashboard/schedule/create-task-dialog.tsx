@@ -49,6 +49,11 @@ interface CreateTaskDialogProps {
   defaultMode?: 'recurring' | 'reactive'
   /** Custom trigger. Omit for the default "Book Call" button. */
   trigger?: React.ReactNode
+  /**
+   * Fired after a call is booked successfully, with the site it was booked
+   * against. Used by the map to fly/zoom to the newly created call.
+   */
+  onBooked?: (info: { siteId: string; mode: 'recurring' | 'reactive' }) => void
 }
 
 const ALL_VISITS = '__all__'
@@ -69,6 +74,7 @@ export function CreateTaskDialog({
   defaultSystemTypeId,
   defaultMode = 'recurring',
   trigger,
+  onBooked,
 }: CreateTaskDialogProps) {
   const reactiveEnabled = reactiveServiceTypes.length > 0
   const [open, setOpen] = useState(false)
@@ -254,9 +260,11 @@ export function CreateTaskDialog({
     setLoading(false)
 
     if (result.ok) {
+      const bookedSiteId = siteId
       setOpen(false)
       resetForm()
       router.refresh()
+      if (bookedSiteId) onBooked?.({ siteId: bookedSiteId, mode })
     } else {
       setError(result.error ?? 'Something went wrong.')
     }

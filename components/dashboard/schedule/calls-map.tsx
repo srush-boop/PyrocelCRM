@@ -2,6 +2,9 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import dynamic from 'next/dynamic'
+import Link from 'next/link'
+import { ArrowLeft } from 'lucide-react'
+import { CreateTaskDialog } from '@/components/dashboard/schedule/create-task-dialog'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -50,7 +53,7 @@ import type {
   MapCall,
   DispatchCandidate,
 } from '@/app/(dashboard)/dashboard/schedule/map/types'
-import type { Branch } from '@/lib/types/database'
+import type { Branch, Profile, ServiceType, SystemType, Site } from '@/lib/types/database'
 
 // Leaflet touches `window`, so the canvas must only render on the client.
 const CallsMapCanvas = dynamic(
@@ -72,6 +75,12 @@ interface CallsMapProps {
   activeBranchId: string | null
   canSwitchBranch: boolean
   loadError: string | null
+  // Data for the header "Book Call" dialog (reactive / emergency calls).
+  reactiveServiceTypes?: ServiceType[]
+  systemTypes?: SystemType[]
+  bookingSites?: Site[]
+  bookingEngineers?: Profile[]
+  clients?: { id: string; name: string }[]
 }
 
 const URGENCY_LEGEND: { key: string; label: string; className: string }[] = [
@@ -94,6 +103,11 @@ export function CallsMap({
   activeBranchId,
   canSwitchBranch,
   loadError,
+  reactiveServiceTypes = [],
+  systemTypes = [],
+  bookingSites = [],
+  bookingEngineers = [],
+  clients = [],
 }: CallsMapProps) {
   const { calls, engineers, sites } = initialData
   const [showCalls, setShowCalls] = useState(true)
@@ -195,6 +209,17 @@ export function CallsMap({
     setRequiredDiscipline(null)
   }
 
+  // After a call is booked from the header, zoom the map to that site so the
+  // new call is immediately visible. Also make sure the calls layer is on and
+  // any active dispatch is cleared so nothing hides the fresh marker.
+  function handleBooked({ siteId }: { siteId: string }) {
+    exitDispatch()
+    setShowCalls(true)
+    if (sites.some((s) => s.id === siteId)) {
+      setSelectedSiteId(siteId)
+    }
+  }
+
   function handleAssign(candidate: DispatchCandidate) {
     if (!dispatchCall) return
     setAssigningId(candidate.engineerId)
@@ -232,9 +257,39 @@ export function CallsMap({
   }, [dispatchCall, showCalls, calls, emergencyCalls])
 
   return (
-    <div className="flex flex-col gap-4 lg:flex-row">
-      {/* Control panel */}
-      <div className="w-full shrink-0 space-y-4 lg:w-80">
+    <div className="space-y-4">
+      {/* Page header (owns the Book Call dialog so booking can zoom the map) */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <Button variant="ghost" size="sm" className="-ml-2 mb-1" asChild>
+            <Link href="/dashboard/schedule">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Calls
+            </Link>
+          </Button>
+          <h1 className="text-3xl font-bold tracking-tight text-balance">Calls Map</h1>
+          <p className="text-muted-foreground text-pretty">
+            Open unbooked calls and live engineer positions — find the closest free engineer, or the
+            nearest work.
+          </p>
+        </div>
+        {reactiveServiceTypes.length > 0 && (
+          <CreateTaskDialog
+            siteServices={[]}
+            engineers={bookingEngineers}
+            clients={clients}
+            reactiveServiceTypes={reactiveServiceTypes}
+            sites={bookingSites}
+            systemTypes={systemTypes}
+            defaultMode="reactive"
+            onBooked={handleBooked}
+          />
+        )}
+      </div>
+
+      <div className="flex flex-col gap-4 lg:flex-row">
+        {/* Control panel */}
+        <div className="w-full shrink-0 space-y-4 lg:w-80">
         {/* Emergency alert banner */}
         {emergencyCalls.length > 0 && (
           <Card className="border-destructive/50 bg-destructive/5">
@@ -642,27 +697,30 @@ export function CallsMap({
         </Card>
       </div>
 
-      {/* Map */}
-      <Card className="flex-1 overflow-hidden p-0">
-        <div className="h-[calc(100vh-16rem)] min-h-[460px] w-full">
-          {loadError ? (
-            <div className="flex h-full items-center justify-center p-6 text-center text-sm text-destructive">
-              {loadError}
-            </div>
-          ) : (
-            <CallsMapCanvas
-              calls={visibleCalls}
-              engineers={showEngineers ? filteredEngineers : []}
-              route={route}
-              focusSite={selectedSite}
-              dispatchCall={dispatchCall}
-              candidates={candidates}
-              highlightCandidateId={highlightCandidateId}
-              onDispatch={startDispatchForCall}
-            />
-          )}
-        </div>
-      </Card>
+        {/* Map. `isolate` creates a stacking context so Leaflet's high internal
+            z-indexes (panes/controls up to ~1000) can't paint over portalled
+            dialogs (e.g. Book Call), which sit at z-50 on the document root. */}
+        <Card className="isolate flex-1 overflow-hidden p-0">
+          <div className="h-[calc(100vh-16rem)] min-h-[460px] w-full">
+            {loadError ? (
+              <div className="flex h-full items-center justify-center p-6 text-center text-sm text-destructive">
+                {loadError}
+              </div>
+            ) : (
+              <CallsMapCanvas
+                calls={visibleCalls}
+                engineers={showEngineers ? filteredEngineers : []}
+                route={route}
+                focusSite={selectedSite}
+                dispatchCall={dispatchCall}
+                candidates={candidates}
+                highlightCandidateId={highlightCandidateId}
+                onDispatch={startDispatchForCall}
+              />
+            )}
+          </div>
+        </Card>
+      </div>
     </div>
   )
 }

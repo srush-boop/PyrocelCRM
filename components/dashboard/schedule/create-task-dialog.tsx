@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import {
   Select,
@@ -93,6 +94,8 @@ export function CreateTaskDialog({
   const [reactiveTypeId, setReactiveTypeId] = useState('')
   const [reactiveSystemTypeId, setReactiveSystemTypeId] = useState(defaultSystemTypeId ?? NO_SYSTEM)
   const [kpiHours, setKpiHours] = useState<number | ''>('')
+  // Free-text description of the reactive / emergency call (fault, access, etc.).
+  const [description, setDescription] = useState('')
 
   const [formData, setFormData] = useState({
     site_service_id: '',
@@ -205,6 +208,7 @@ export function CreateTaskDialog({
     setReactiveTypeId('')
     setReactiveSystemTypeId(defaultSystemTypeId ?? NO_SYSTEM)
     setKpiHours('')
+    setDescription('')
     setError(null)
     setFormData({
       site_service_id: '',
@@ -254,6 +258,7 @@ export function CreateTaskDialog({
             serviceTypeId: reactiveTypeId,
             systemTypeId: reactiveSystemTypeId === NO_SYSTEM ? null : reactiveSystemTypeId,
             respondByHours: kpiHours === '' ? null : Number(kpiHours),
+            notes: description,
             ...shared,
           })
 
@@ -469,6 +474,20 @@ export function CreateTaskDialog({
                   />
                   <p className="text-xs text-muted-foreground">
                     Response KPI for this call. Prefilled from the call type; leave blank for none.
+                  </p>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="call-description">Call description</Label>
+                  <Textarea
+                    id="call-description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Describe the fault, symptoms, access details or anything the engineer should know…"
+                    rows={3}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Optional. Shown to the engineer as the call notes.
                   </p>
                 </div>
               </>

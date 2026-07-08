@@ -118,6 +118,7 @@ export default async function ServiceDashboardPage() {
       site:sites(*),
       service_type:service_types(*)
     ),
+    direct_site:sites!tasks_site_id_fkey(*),
     assigned_engineer:profiles(*)
   `
 
@@ -325,7 +326,7 @@ export default async function ServiceDashboardPage() {
                 >
                   <div className="min-w-0 space-y-0.5">
                     <p className="truncate font-medium">
-                      {task.site_service?.site?.name || 'Unknown Site'}
+                      {task.site_service?.site?.name || task.direct_site?.name || 'Unknown Site'}
                     </p>
                     <p className="truncate text-sm text-muted-foreground">
                       {task.site_service?.service_type?.name || 'Reactive call'}
@@ -416,7 +417,7 @@ export default async function ServiceDashboardPage() {
                   >
                     <div className="min-w-0 space-y-0.5">
                       <p className="truncate font-medium">
-                        {task.site_service?.site?.name || 'Unknown Site'}
+                        {task.site_service?.site?.name || task.direct_site?.name || 'Unknown Site'}
                       </p>
                       <p className="truncate text-sm text-muted-foreground">
                         {task.site_service?.service_type?.name || 'Unknown Service'}
@@ -456,7 +457,7 @@ export default async function ServiceDashboardPage() {
                   >
                     <div className="min-w-0 space-y-0.5">
                       <p className="truncate font-medium">
-                        {task.site_service?.site?.name || 'Unknown Site'}
+                        {task.site_service?.site?.name || task.direct_site?.name || 'Unknown Site'}
                       </p>
                       <p className="truncate text-sm text-muted-foreground">
                         {task.site_service?.service_type?.name || 'Unknown Service'}

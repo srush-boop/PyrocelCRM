@@ -25,6 +25,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Loader2, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { PostcodeLookup } from '@/components/dashboard/shared/postcode-lookup'
 import type { Site, Route, Client, Branch, PropertyType } from '@/lib/types/database'
 
 interface EditSiteDialogProps {
@@ -83,6 +84,21 @@ export function EditSiteDialog({
 
   const handleRemoveReportingEmail = (email: string) => {
     setReportingEmails(reportingEmails.filter((e) => e !== email))
+  }
+
+  // Fill the postcode and, when the address doesn't already mention the locality,
+  // append it so only the street line needs editing.
+  const applyPostcode = (r: { postcode: string; locality: string }) => {
+    setFormData((prev) => {
+      const current = prev.address ?? ''
+      const hasLocality =
+        r.locality && current.toLowerCase().includes(r.locality.toLowerCase())
+      const address =
+        r.locality && !hasLocality
+          ? [current.trim(), r.locality].filter(Boolean).join('\n')
+          : current
+      return { ...prev, postcode: r.postcode, address }
+    })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -149,6 +165,11 @@ export function EditSiteDialog({
                 required
               />
             </div>
+            <PostcodeLookup
+              id="edit-site-postcode-lookup"
+              initialValue={formData.postcode}
+              onResolved={applyPostcode}
+            />
             <div className="grid gap-2">
               <Label htmlFor="address">Address *</Label>
               <Textarea

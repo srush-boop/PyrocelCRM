@@ -10,7 +10,7 @@ import { ShoppingCart, Sparkles, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { formatPence } from '@/lib/sales'
-import { purchaseOrderStatusMeta } from '@/lib/jobs/purchasing'
+import { purchaseOrderStatusMeta } from '@/lib/jobs/purchasing-shared'
 import { generatePurchaseOrdersForJob } from '@/app/(dashboard)/dashboard/purchasing/actions'
 import type { PurchaseOrder } from '@/lib/types/database'
 

@@ -43,6 +43,7 @@ import {
   History,
   Archive,
   Hammer,
+  ShoppingCart,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { UserRole } from '@/lib/types/database'
@@ -182,6 +183,7 @@ const jobsNavItem: NavItem = {
   children: [
     { title: 'Dashboard', href: '/dashboard/jobs', icon: LayoutDashboard },
     { title: 'All Jobs', href: '/dashboard/jobs/list', icon: LayoutList },
+    { title: 'Purchasing', href: '/dashboard/purchasing', icon: ShoppingCart },
   ],
 }
 

@@ -179,6 +179,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                         'font-mono text-sm tabular-nums',
                         row.strong && 'font-semibold',
                         row.accent && 'text-chart-4',
+                        row.warn && 'font-semibold text-destructive',
                       )}
                     >
                       {row.value}
@@ -188,12 +189,19 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
               </dl>
               <Separator />
               <p className="text-xs text-muted-foreground text-pretty">
-                Figures are the snapshot captured when the quote was accepted. Live committed
-                and actual costs (purchase orders, stock, expenses, subcontractors) will feed in
-                as those modules come online.
+                Contract value and quoted cost are the snapshot captured when the quote was
+                accepted. <strong>Committed</strong> reflects live purchase orders (excluding
+                cancelled). Actual costs (stock, expenses, subcontractors) will feed in as those
+                modules come online.
               </p>
             </CardContent>
           </Card>
+
+          <JobPurchasing
+            jobId={typedJob.id}
+            orders={purchaseOrders}
+            pendingSupplierCount={pendingSupplierCount}
+          />
         </div>
 
         {/* Sidebar */}

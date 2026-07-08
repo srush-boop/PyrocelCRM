@@ -292,44 +292,11 @@ export function poLineTotalPence(unitCostPence: number, quantity: number): numbe
   return Math.round((unitCostPence || 0) * (quantity || 0))
 }
 
-/** Whether every line on a PO has been fully received. */
-export function isFullyReceived(
-  lines: Pick<PurchaseOrderLine, 'quantity' | 'quantity_received'>[],
-): boolean {
-  if (lines.length === 0) return false
-  return lines.every((l) => Number(l.quantity_received) >= Number(l.quantity))
-}
-
-export interface PurchaseOrderStatusMeta {
-  key: PurchaseOrderStatus
-  label: string
-  badgeClass: string
-}
-
-export const PURCHASE_ORDER_STATUSES: PurchaseOrderStatusMeta[] = [
-  { key: 'draft', label: 'Draft', badgeClass: 'bg-muted text-muted-foreground border-border' },
-  { key: 'sent', label: 'Sent', badgeClass: 'bg-primary/10 text-primary border-primary/20' },
-  {
-    key: 'part_received',
-    label: 'Part received',
-    badgeClass: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30',
-  },
-  {
-    key: 'received',
-    label: 'Received',
-    badgeClass: 'bg-chart-4/15 text-foreground border-chart-4/30',
-  },
-  {
-    key: 'cancelled',
-    label: 'Cancelled',
-    badgeClass: 'bg-destructive/10 text-destructive border-destructive/20',
-  },
-]
-
-const PO_STATUS_BY_KEY = new Map<PurchaseOrderStatus, PurchaseOrderStatusMeta>(
-  PURCHASE_ORDER_STATUSES.map((s) => [s.key, s]),
-)
-
-export function purchaseOrderStatusMeta(status: PurchaseOrderStatus): PurchaseOrderStatusMeta {
-  return PO_STATUS_BY_KEY.get(status) ?? PURCHASE_ORDER_STATUSES[0]
-}
+// Status metadata + isFullyReceived now live in a client-safe module. Re-export
+// them here so existing server-side importers keep working unchanged.
+export {
+  PURCHASE_ORDER_STATUSES,
+  purchaseOrderStatusMeta,
+  isFullyReceived,
+  type PurchaseOrderStatusMeta,
+} from './purchasing-shared'

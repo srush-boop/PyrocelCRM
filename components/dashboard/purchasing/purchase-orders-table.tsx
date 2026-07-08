@@ -23,7 +23,7 @@ import {
 import { Search, ShoppingCart } from 'lucide-react'
 import { cn, formatDateUK } from '@/lib/utils'
 import { formatPence } from '@/lib/sales'
-import { PURCHASE_ORDER_STATUSES, purchaseOrderStatusMeta } from '@/lib/jobs/purchasing'
+import { PURCHASE_ORDER_STATUSES, purchaseOrderStatusMeta } from '@/lib/jobs/purchasing-shared'
 import type { PurchaseOrder } from '@/lib/types/database'
 
 export function PurchaseOrdersTable({ orders }: { orders: PurchaseOrder[] }) {

@@ -42,7 +42,7 @@ import {
 import { toast } from 'sonner'
 import { cn, formatDateUK } from '@/lib/utils'
 import { formatPence } from '@/lib/sales'
-import { purchaseOrderStatusMeta } from '@/lib/jobs/purchasing'
+import { purchaseOrderStatusMeta } from '@/lib/jobs/purchasing-shared'
 import {
   addPurchaseOrderLine,
   cancelPurchaseOrder,

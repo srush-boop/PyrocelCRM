@@ -1302,6 +1302,56 @@ export interface JobStatusHistory {
   changed_at: string
 }
 
+// draft -> sent -> part_received -> received; cancelled at any point.
+export type PurchaseOrderStatus =
+  | 'draft'
+  | 'sent'
+  | 'part_received'
+  | 'received'
+  | 'cancelled'
+
+export interface PurchaseOrder {
+  id: string
+  po_number: string | null
+  job_id: string | null
+  quote_id: string | null
+  supplier_id: string | null
+  branch_id: string | null
+  status: PurchaseOrderStatus
+  // Supplier order email captured when the PO was sent.
+  order_email: string | null
+  subtotal_pence: number
+  notes: string | null
+  sent_at: string | null
+  received_at: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  // Optional joined relations.
+  supplier?: Supplier | null
+  job?: Job | null
+  branch?: Branch | null
+  lines?: PurchaseOrderLine[]
+  // Convenience aggregate used by list views.
+  line_count?: number
+}
+
+export interface PurchaseOrderLine {
+  id: string
+  purchase_order_id: string
+  catalogue_item_id: string | null
+  quote_line_item_id: string | null
+  description: string
+  product_code: string | null
+  quantity: number
+  unit: string
+  unit_cost_pence: number
+  line_total_pence: number
+  quantity_received: number
+  position: number
+  created_at: string
+}
+
 // One line of the client-request compliance matrix: a requirement extracted
 // from the client's brief and how our quote responds to it.
 export type QuoteRequirementStatus = 'included' | 'partial' | 'excluded' | 'query'

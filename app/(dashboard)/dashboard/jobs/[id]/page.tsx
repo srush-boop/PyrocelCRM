@@ -16,8 +16,10 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import { JobStagePanel, JobContractReview } from '@/components/dashboard/jobs/job-controls'
+import { JobPurchasing } from '@/components/dashboard/jobs/job-purchasing'
 import { jobStageMeta, jobStatusMeta } from '@/lib/jobs/stages'
 import { jobFinance } from '@/lib/jobs/finance'
+import { getJobCommittedCost, getJobPurchaseOrders, getJobOrderingProgress } from '@/lib/jobs/purchasing'
 import { formatPence } from '@/lib/sales'
 import { cn, formatDateUK } from '@/lib/utils'
 import type { Job, Profile } from '@/lib/types/database'
@@ -67,10 +69,36 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   const finance = jobFinance(typedJob)
   const offContract = typedJob.site?.status === 'new' || typedJob.site?.status === 'dead'
 
-  const financeRows = [
+  // Purchasing: committed cost (live POs), the job's orders, per-supplier ordering
+  // progress (quoted vs ordered vs remaining) and the supplier list for the
+  // phased-order builder.
+  const [committedCostPence, purchaseOrders, orderingProgress, suppliersResult] = await Promise.all([
+    getJobCommittedCost(supabase, typedJob.id),
+    getJobPurchaseOrders(supabase, typedJob.id),
+    getJobOrderingProgress(supabase, typedJob.id),
+    supabase.from('suppliers').select('id, name').order('name'),
+  ])
+  const suppliers = (suppliersResult.data ?? []) as { id: string; name: string }[]
+
+  const remainingBudgetPence = finance.quotedCostPence - committedCostPence
+  const overCommitted = committedCostPence > finance.quotedCostPence
+
+  const financeRows: {
+    label: string
+    value: string
+    strong?: boolean
+    accent?: boolean
+    warn?: boolean
+  }[] = [
     { label: 'Contract value (net)', value: formatPence(finance.valuePence), strong: true },
     { label: 'Quoted cost', value: formatPence(finance.quotedCostPence) },
     { label: 'Quoted margin', value: formatPence(finance.quotedMarginPence), accent: true },
+    { label: 'Committed (POs)', value: formatPence(committedCostPence) },
+    {
+      label: 'Remaining budget',
+      value: formatPence(remainingBudgetPence),
+      warn: overCommitted,
+    },
   ]
 
   return (
@@ -151,6 +179,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                         'font-mono text-sm tabular-nums',
                         row.strong && 'font-semibold',
                         row.accent && 'text-chart-4',
+                        row.warn && 'font-semibold text-destructive',
                       )}
                     >
                       {row.value}
@@ -160,12 +189,20 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
               </dl>
               <Separator />
               <p className="text-xs text-muted-foreground text-pretty">
-                Figures are the snapshot captured when the quote was accepted. Live committed
-                and actual costs (purchase orders, stock, expenses, subcontractors) will feed in
-                as those modules come online.
+                Contract value and quoted cost are the snapshot captured when the quote was
+                accepted. <strong>Committed</strong> reflects live purchase orders (excluding
+                cancelled). Actual costs (stock, expenses, subcontractors) will feed in as those
+                modules come online.
               </p>
             </CardContent>
           </Card>
+
+          <JobPurchasing
+            jobId={typedJob.id}
+            orders={purchaseOrders}
+            progress={orderingProgress}
+            suppliers={suppliers}
+          />
         </div>
 
         {/* Sidebar */}

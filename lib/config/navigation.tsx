@@ -43,6 +43,7 @@ import {
   History,
   Archive,
   Hammer,
+  ShoppingCart,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { UserRole } from '@/lib/types/database'
@@ -185,6 +186,15 @@ const jobsNavItem: NavItem = {
   ],
 }
 
+// Purchasing: purchase orders raised against jobs. Top-level so buyers can reach
+// it directly; also surfaced within each job's detail page.
+const purchasingNavItem: NavItem = {
+  key: 'purchasing',
+  title: 'Purchasing',
+  href: '/dashboard/purchasing',
+  icon: ShoppingCart,
+}
+
 const managerStockNavItem: NavItem = {
   key: 'stock',
   title: 'Products',
@@ -297,6 +307,7 @@ const adminNavItems: NavItem[] = [
   adminServiceManagementNavItem,
   salesNavItem,
   jobsNavItem,
+  purchasingNavItem,
   managerStockNavItem,
   adminPeopleNavItem,
   documentsNavItem,
@@ -315,6 +326,7 @@ const officeNavItems: NavItem[] = [
   officeServiceManagementNavItem,
   salesNavItem,
   jobsNavItem,
+  purchasingNavItem,
   managerStockNavItem,
   officePeopleNavItem,
   documentsNavItem,

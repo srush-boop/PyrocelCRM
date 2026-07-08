@@ -36,6 +36,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Plus, Pencil, Trash2, Layers, Wrench, ExternalLink, Settings2, Siren } from 'lucide-react'
+import { EDITABLE_SITE_FLAG_KEYS, SITE_FLAG_META, type EditableSiteFlagKey } from '@/lib/site-flags'
 import { toast } from 'sonner'
 import { buildSeedTaskRows, fetchVisitsByServiceType } from '@/lib/scheduling'
 import { SystemPanelsManager } from '@/components/dashboard/sites/system-panels-manager'
@@ -73,6 +74,9 @@ interface SiteSystemsManagerProps {
   engineers?: Profile[]
   clients?: { id: string; name: string }[]
   reactiveServiceTypes?: ServiceType[]
+  // Site-level attendance defaults, shown as the "Inherit" value for each
+  // system's per-system override.
+  siteFlagDefaults?: Record<EditableSiteFlagKey, boolean>
 }
 
 export function SiteSystemsManager({
@@ -89,6 +93,12 @@ export function SiteSystemsManager({
   engineers = [],
   clients = [],
   reactiveServiceTypes = [],
+  siteFlagDefaults = {
+    booking_required: false,
+    access_required: false,
+    keys_required: false,
+    two_engineers_required: false,
+  },
 }: SiteSystemsManagerProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -108,6 +118,12 @@ export function SiteSystemsManager({
     install_date: '',
     nimbus_url: '',
     default_subcontractor_id: '',
+    // Per-system attendance overrides, tri-state: null inherits the site default.
+    booking_required: null as boolean | null,
+    access_required: null as boolean | null,
+    keys_required: null as boolean | null,
+    two_engineers_required: null as boolean | null,
+    remedial_notes: '',
   })
 
   // Add-services-to-a-system flow
@@ -149,6 +165,11 @@ export function SiteSystemsManager({
       install_date: '',
       nimbus_url: '',
       default_subcontractor_id: '',
+      booking_required: null,
+      access_required: null,
+      keys_required: null,
+      two_engineers_required: null,
+      remedial_notes: '',
     })
     setDialogOpen(true)
   }
@@ -161,6 +182,11 @@ export function SiteSystemsManager({
       install_date: system.install_date ?? '',
       nimbus_url: system.nimbus_url ?? '',
       default_subcontractor_id: system.default_subcontractor_id ?? '',
+      booking_required: system.booking_required ?? null,
+      access_required: system.access_required ?? null,
+      keys_required: system.keys_required ?? null,
+      two_engineers_required: system.two_engineers_required ?? null,
+      remedial_notes: system.remedial_notes ?? '',
     })
     setDialogOpen(true)
   }
@@ -183,6 +209,12 @@ export function SiteSystemsManager({
         ? form.nimbus_url.trim() || null
         : null,
       default_subcontractor_id: form.default_subcontractor_id || null,
+      // Per-system attendance overrides (null = inherit the site default).
+      booking_required: form.booking_required,
+      access_required: form.access_required,
+      keys_required: form.keys_required,
+      two_engineers_required: form.two_engineers_required,
+      remedial_notes: form.remedial_notes.trim() || null,
     }
     const { error } = editing
       ? await supabase.from('site_systems').update(payload).eq('id', editing.id)
@@ -651,6 +683,67 @@ export function SiteSystemsManager({
                 Sub-contracted services under this system default to this sub-contractor unless
                 overridden per service.
               </p>
+            </div>
+
+            <div className="grid gap-3 rounded-lg border p-3">
+              <div>
+                <Label className="text-sm font-medium">Attendance requirements</Label>
+                <p className="text-xs text-muted-foreground">
+                  System defaults for engineers attending this system. Each inherits the site
+                  default unless overridden, and individual services can override these again.
+                </p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {EDITABLE_SITE_FLAG_KEYS.map((key) => {
+                  const meta = SITE_FLAG_META[key]
+                  const Icon = meta.icon
+                  const value = form[key]
+                  return (
+                    <div
+                      key={key}
+                      className="flex items-center justify-between gap-2 rounded-md border p-2"
+                    >
+                      <span className="flex items-center gap-2 text-sm">
+                        <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
+                        {meta.label}
+                      </span>
+                      <Select
+                        value={value === null ? UNASSIGNED : value ? 'yes' : 'no'}
+                        onValueChange={(v) =>
+                          setForm({
+                            ...form,
+                            [key]: v === UNASSIGNED ? null : v === 'yes',
+                          })
+                        }
+                      >
+                        <SelectTrigger className="w-28 shrink-0">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={UNASSIGNED}>
+                            {`Inherit (${siteFlagDefaults[key] ? 'Yes' : 'No'})`}
+                          </SelectItem>
+                          <SelectItem value="yes">Yes</SelectItem>
+                          <SelectItem value="no">No</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="system-remedial" className="text-sm font-medium">
+                  Remedial / parts notes{' '}
+                  <span className="text-muted-foreground">(optional)</span>
+                </Label>
+                <Textarea
+                  id="system-remedial"
+                  value={form.remedial_notes}
+                  onChange={(e) => setForm({ ...form, remedial_notes: e.target.value })}
+                  placeholder="e.g. Faulty detector head zone 3 — bring spare."
+                  rows={2}
+                />
+              </div>
             </div>
           </div>
           <DialogFooter>

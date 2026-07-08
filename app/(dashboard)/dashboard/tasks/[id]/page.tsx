@@ -61,7 +61,8 @@ export default async function TaskPage({ params }: PageProps) {
       site_service:site_services(
         *,
         site:sites(*, client:clients(id, name)),
-        service_type:service_types(*, system_type:system_types(*))
+        service_type:service_types(*, system_type:system_types(*)),
+        site_system:site_systems(*)
       ),
       direct_site:sites!tasks_site_id_fkey(*, client:clients(id, name)),
       direct_service_type:service_types!tasks_service_type_id_fkey(*, system_type:system_types(*)),
@@ -138,7 +139,10 @@ export default async function TaskPage({ params }: PageProps) {
       supabase,
       preAttendanceSiteId,
     )
-    const flags = resolveSiteFlags(task.site_service?.site, task.site_service, { remedialOpen })
+    const flags = resolveSiteFlags(task.site_service?.site, task.site_service, {
+      system: task.site_service?.site_system,
+      remedialOpen,
+    })
 
     preAttendancePanel = (
       <PreAttendancePanel

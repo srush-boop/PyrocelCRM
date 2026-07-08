@@ -630,9 +630,15 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
                   subcontractors={subcontractors}
                   site={site as Site}
                   engineers={engineers}
-                  clients={clients}
-                  reactiveServiceTypes={reactiveServiceTypes}
-                />
+          clients={clients}
+          reactiveServiceTypes={reactiveServiceTypes}
+          siteFlagDefaults={{
+            booking_required: Boolean((site as Site).booking_required),
+            access_required: Boolean((site as Site).access_required),
+            keys_required: Boolean((site as Site).keys_required),
+            two_engineers_required: Boolean((site as Site).two_engineers_required),
+          }}
+          />
         </TabsContent>
 
         <TabsContent value="quotes" className="mt-0">

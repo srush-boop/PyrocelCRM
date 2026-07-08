@@ -19,7 +19,7 @@ type SiteValues = {
   remedial_notes: string | null
 }
 
-// Service values are tri-state: true / false / null (inherit from site).
+// Service and system values are tri-state: true / false / null (inherit).
 type ServiceValues = {
   booking_required: boolean | null
   access_required: boolean | null
@@ -29,10 +29,14 @@ type ServiceValues = {
 }
 
 interface SiteFlagsEditorProps {
-  target: 'site' | 'service'
+  target: 'site' | 'system' | 'service'
   id: string
   initial: SiteValues | ServiceValues
-  /** Site-level values shown as the inherited default for service overrides. */
+  /**
+   * The inherited defaults shown in the "Inherit (…)" option. For a service
+   * under a system this is the resolved site→system default; for a system it is
+   * the site default.
+   */
   siteDefaults?: SiteValues
   canEdit?: boolean
 }
@@ -97,7 +101,7 @@ export function SiteFlagsEditor({
                 <Label className="cursor-default text-sm font-medium">{meta.label}</Label>
               </div>
 
-              {target === 'service' ? (
+              {target === 'service' || target === 'system' ? (
                 <Select
                   disabled={!canEdit}
                   value={value === null || value === undefined ? INHERIT : value ? 'yes' : 'no'}

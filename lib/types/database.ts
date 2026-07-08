@@ -544,6 +544,13 @@ export interface Site {
     position: number
     /** Default sub-contractor for sub-contracted services under this system. */
     default_subcontractor_id: string | null
+    // Per-system attendance overrides. `null` inherits the site default; an
+    // explicit boolean overrides it (and is itself overridden per service).
+    booking_required: boolean | null
+    access_required: boolean | null
+    keys_required: boolean | null
+    two_engineers_required: boolean | null
+    remedial_notes: string | null
     created_at: string
     updated_at: string
     site?: Site

@@ -16,8 +16,10 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import { JobStagePanel, JobContractReview } from '@/components/dashboard/jobs/job-controls'
+import { JobPurchasing } from '@/components/dashboard/jobs/job-purchasing'
 import { jobStageMeta, jobStatusMeta } from '@/lib/jobs/stages'
 import { jobFinance } from '@/lib/jobs/finance'
+import { getJobCommittedCost, getJobPurchaseOrders, previewJobPurchasing } from '@/lib/jobs/purchasing'
 import { formatPence } from '@/lib/sales'
 import { cn, formatDateUK } from '@/lib/utils'
 import type { Job, Profile } from '@/lib/types/database'
@@ -67,10 +69,36 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   const finance = jobFinance(typedJob)
   const offContract = typedJob.site?.status === 'new' || typedJob.site?.status === 'dead'
 
-  const financeRows = [
+  // Purchasing: committed cost (live POs), the job's orders and how many more
+  // suppliers on the quote can still be ordered.
+  const [committedCostPence, purchaseOrders, purchasingPreview] = await Promise.all([
+    getJobCommittedCost(supabase, typedJob.id),
+    getJobPurchaseOrders(supabase, typedJob.id),
+    previewJobPurchasing(supabase, typedJob.id),
+  ])
+  const pendingSupplierCount = purchasingPreview.groups.filter(
+    (g) => !g.alreadyOrdered && g.lines.length > 0,
+  ).length
+
+  const remainingBudgetPence = finance.quotedCostPence - committedCostPence
+  const overCommitted = committedCostPence > finance.quotedCostPence
+
+  const financeRows: {
+    label: string
+    value: string
+    strong?: boolean
+    accent?: boolean
+    warn?: boolean
+  }[] = [
     { label: 'Contract value (net)', value: formatPence(finance.valuePence), strong: true },
     { label: 'Quoted cost', value: formatPence(finance.quotedCostPence) },
     { label: 'Quoted margin', value: formatPence(finance.quotedMarginPence), accent: true },
+    { label: 'Committed (POs)', value: formatPence(committedCostPence) },
+    {
+      label: 'Remaining budget',
+      value: formatPence(remainingBudgetPence),
+      warn: overCommitted,
+    },
   ]
 
   return (

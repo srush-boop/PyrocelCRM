@@ -36,11 +36,11 @@ import {
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import {
-  getEngineerRoute,
-  type CallsMapData,
-  type EngineerRoute,
-} from '@/app/(dashboard)/dashboard/schedule/map/actions'
+import { getEngineerRoute } from '@/app/(dashboard)/dashboard/schedule/map/actions'
+import type {
+  CallsMapData,
+  EngineerRoute,
+} from '@/app/(dashboard)/dashboard/schedule/map/types'
 import type { Branch } from '@/lib/types/database'
 
 // Leaflet touches `window`, so the canvas must only render on the client.

@@ -11,7 +11,7 @@ import type {
   MapEngineer,
   MapSite,
   EngineerRoute,
-} from '@/app/(dashboard)/dashboard/schedule/map/actions'
+} from '@/app/(dashboard)/dashboard/schedule/map/types'
 
 // Marker colours (explicit hex so they render inside Leaflet-injected DOM,
 // independent of Tailwind's class scanner).

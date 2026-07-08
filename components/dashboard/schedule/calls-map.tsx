@@ -119,6 +119,9 @@ export function CallsMap({
   const [showCalls, setShowCalls] = useState(true)
   const [overdueOnly, setOverdueOnly] = useState(false)
   const [showEngineers, setShowEngineers] = useState(true)
+  // Emergency-call filters (assigned status + specific engineer).
+  const [emergencyAssignedFilter, setEmergencyAssignedFilter] = useState<'all' | 'assigned' | 'unassigned'>('all')
+  const [emergencyEngineerFilter, setEmergencyEngineerFilter] = useState<string>('all')
   const [disciplineFilter, setDisciplineFilter] = useState<string>('all')
   const [departmentFilter, setDepartmentFilter] = useState<string>('all')
   const [hideOnLeave, setHideOnLeave] = useState(true)
@@ -292,6 +295,26 @@ export function CallsMap({
 
   const overdueCount = calls.filter((c) => c.urgency === 'overdue').length
   const emergencyCalls = useMemo(() => calls.filter((c) => c.isEmergency), [calls])
+
+  // Engineers currently assigned to emergency calls — options for the
+  // "assigned to" filter (kept scoped to who actually has an emergency).
+  const emergencyEngineers = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const c of emergencyCalls) {
+      if (c.assignedEngineerId) map.set(c.assignedEngineerId, c.assignedEngineerName ?? 'Engineer')
+    }
+    return Array.from(map, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
+  }, [emergencyCalls])
+
+  // Apply the assigned-status + engineer filters to the emergency banner list.
+  const filteredEmergencyCalls = useMemo(() => {
+    return emergencyCalls.filter((c) => {
+      if (emergencyAssignedFilter === 'assigned' && !c.assignedEngineerId) return false
+      if (emergencyAssignedFilter === 'unassigned' && c.assignedEngineerId) return false
+      if (emergencyEngineerFilter !== 'all' && c.assignedEngineerId !== emergencyEngineerFilter) return false
+      return true
+    })
+  }, [emergencyCalls, emergencyAssignedFilter, emergencyEngineerFilter])
   const engineersWithPosition = filteredEngineers.filter(
     (e) => e.latitude != null && e.longitude != null,
   )
@@ -390,7 +413,53 @@ export function CallsMap({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {emergencyCalls.map((c) => (
+              {/* Filters: narrow the emergency list by assigned status / engineer */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Assigned</Label>
+                  <Select
+                    value={emergencyAssignedFilter}
+                    onValueChange={(v) => setEmergencyAssignedFilter(v as 'all' | 'assigned' | 'unassigned')}
+                  >
+                    <SelectTrigger className="h-7 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-xs">All</SelectItem>
+                      <SelectItem value="assigned" className="text-xs">Assigned</SelectItem>
+                      <SelectItem value="unassigned" className="text-xs">Unassigned</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Assigned to</Label>
+                  <Select
+                    value={emergencyEngineerFilter}
+                    onValueChange={setEmergencyEngineerFilter}
+                    disabled={emergencyEngineers.length === 0}
+                  >
+                    <SelectTrigger className="h-7 text-xs">
+                      <SelectValue placeholder="Anyone" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-xs">Anyone</SelectItem>
+                      {emergencyEngineers.map((e) => (
+                        <SelectItem key={e.id} value={e.id} className="text-xs">
+                          {e.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {filteredEmergencyCalls.length === 0 ? (
+                <p className="py-1 text-center text-xs text-muted-foreground">
+                  No emergency calls match these filters.
+                </p>
+              ) : null}
+
+              {filteredEmergencyCalls.map((c) => (
                 <div key={c.taskId} className="rounded-md border border-destructive/30 bg-background p-2 text-xs">
                   <p className="font-semibold">{c.siteName}</p>
                   <p className="text-muted-foreground">

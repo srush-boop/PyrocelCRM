@@ -19,7 +19,7 @@ import { JobStagePanel, JobContractReview } from '@/components/dashboard/jobs/jo
 import { JobPurchasing } from '@/components/dashboard/jobs/job-purchasing'
 import { jobStageMeta, jobStatusMeta } from '@/lib/jobs/stages'
 import { jobFinance } from '@/lib/jobs/finance'
-import { getJobCommittedCost, getJobPurchaseOrders, previewJobPurchasing } from '@/lib/jobs/purchasing'
+import { getJobCommittedCost, getJobPurchaseOrders, getJobOrderingProgress } from '@/lib/jobs/purchasing'
 import { formatPence } from '@/lib/sales'
 import { cn, formatDateUK } from '@/lib/utils'
 import type { Job, Profile } from '@/lib/types/database'
@@ -69,16 +69,16 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   const finance = jobFinance(typedJob)
   const offContract = typedJob.site?.status === 'new' || typedJob.site?.status === 'dead'
 
-  // Purchasing: committed cost (live POs), the job's orders and how many more
-  // suppliers on the quote can still be ordered.
-  const [committedCostPence, purchaseOrders, purchasingPreview] = await Promise.all([
+  // Purchasing: committed cost (live POs), the job's orders, per-supplier ordering
+  // progress (quoted vs ordered vs remaining) and the supplier list for the
+  // phased-order builder.
+  const [committedCostPence, purchaseOrders, orderingProgress, suppliersResult] = await Promise.all([
     getJobCommittedCost(supabase, typedJob.id),
     getJobPurchaseOrders(supabase, typedJob.id),
-    previewJobPurchasing(supabase, typedJob.id),
+    getJobOrderingProgress(supabase, typedJob.id),
+    supabase.from('suppliers').select('id, name').order('name'),
   ])
-  const pendingSupplierCount = purchasingPreview.groups.filter(
-    (g) => !g.alreadyOrdered && g.lines.length > 0,
-  ).length
+  const suppliers = (suppliersResult.data ?? []) as { id: string; name: string }[]
 
   const remainingBudgetPence = finance.quotedCostPence - committedCostPence
   const overCommitted = committedCostPence > finance.quotedCostPence
@@ -200,7 +200,8 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
           <JobPurchasing
             jobId={typedJob.id}
             orders={purchaseOrders}
-            pendingSupplierCount={pendingSupplierCount}
+            progress={orderingProgress}
+            suppliers={suppliers}
           />
         </div>
 

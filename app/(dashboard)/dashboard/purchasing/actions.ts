@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import {
   nextPurchaseOrderNumber,
-  previewJobPurchasing,
+  getJobOrderingProgress,
   poLineTotalPence,
   isFullyReceived,
 } from '@/lib/jobs/purchasing'
@@ -51,15 +51,25 @@ async function recomputeSubtotal(supabase: Supabase, poId: string): Promise<numb
 }
 
 /**
- * Generate one draft purchase order per supplier from a job's quoted parts.
- * Skips supplier groups that already have a live PO for the job, so it's safe to
- * run more than once. Returns how many POs were created.
+ * Create a single draft purchase order for one supplier from a selection of the
+ * job's quoted parts and the quantity of each to order now. This is the basis of
+ * phased purchasing: order some of a supplier's kit now, come back for the rest
+ * later. Quantities are clamped to what's still outstanding on each line.
+ *
+ * Returns the new PO id so the UI can jump straight to it for review/sending.
  */
-export async function generatePurchaseOrdersForJob(
+export async function createJobPurchaseOrder(
   jobId: string,
-): Promise<{ ok: boolean; created?: number; error?: string }> {
+  supplierId: string | null,
+  selections: { quoteLineItemId: string; quantity: number }[],
+): Promise<{ ok: boolean; poId?: string; error?: string }> {
   const { supabase, user, error } = await requireStaff()
   if (error || !user) return { ok: false, error: error ?? 'Not authorised.' }
+
+  if (!supplierId) return { ok: false, error: 'Choose a supplier for this order.' }
+  if (!selections || selections.length === 0) {
+    return { ok: false, error: 'Select at least one item to order.' }
+  }
 
   const { data: job } = await supabase
     .from('jobs')
@@ -70,62 +80,81 @@ export async function generatePurchaseOrdersForJob(
   const branchId = (job as { branch_id: string | null }).branch_id
   const quoteId = (job as { quote_id: string | null }).quote_id
 
-  const { groups } = await previewJobPurchasing(supabase, jobId)
-  const pending = groups.filter((g) => !g.alreadyOrdered && g.lines.length > 0)
-  if (pending.length === 0) {
-    return { ok: false, error: 'No new parts to order for this job.' }
+  // Build a lookup of every quoted line's details + remaining quantity so we can
+  // validate the request and snapshot descriptions/costs onto the PO lines.
+  const progress = await getJobOrderingProgress(supabase, jobId)
+  const lineById = new Map(
+    progress.flatMap((g) => g.lines.map((l) => [l.quoteLineItemId, l] as const)),
+  )
+
+  const chosen = selections
+    .map((sel) => {
+      const detail = lineById.get(sel.quoteLineItemId)
+      if (!detail) return null
+      const qty = Math.min(Math.max(0, Number(sel.quantity) || 0), detail.remainingQty)
+      if (qty <= 0) return null
+      return { detail, qty }
+    })
+    .filter((x): x is { detail: (typeof progress)[number]['lines'][number]; qty: number } => x !== null)
+
+  if (chosen.length === 0) {
+    return { ok: false, error: 'Nothing to order — the selected items are already fully ordered.' }
   }
 
-  let created = 0
-  for (const group of pending) {
-    // Fetch a fresh PO number per insert; retry once on a numbering collision.
-    let poId: string | null = null
-    for (let attempt = 0; attempt < 2 && !poId; attempt++) {
-      const poNumber = await nextPurchaseOrderNumber(supabase)
-      const { data: inserted, error: insErr } = await supabase
-        .from('purchase_orders')
-        .insert({
-          po_number: poNumber,
-          job_id: jobId,
-          quote_id: quoteId,
-          supplier_id: group.supplierId,
-          branch_id: branchId,
-          status: 'draft',
-          subtotal_pence: group.subtotalPence,
-          created_by: user.id,
-        })
-        .select('id')
-        .single()
-      if (!insErr && inserted) {
-        poId = (inserted as { id: string }).id
-      } else if (insErr && !insErr.message.toLowerCase().includes('duplicate')) {
-        console.log('[v0] generatePOs insert error:', insErr.message)
-        break
-      }
-    }
-    if (!poId) continue
+  const subtotalPence = chosen.reduce(
+    (sum, c) => sum + poLineTotalPence(c.detail.unitCostPence, c.qty),
+    0,
+  )
 
-    const lineRows = group.lines.map((l, idx) => ({
-      purchase_order_id: poId,
-      catalogue_item_id: l.catalogueItemId,
-      quote_line_item_id: l.quoteLineItemId,
-      description: l.description,
-      product_code: l.productCode,
-      quantity: l.quantity,
-      unit: l.unit,
-      unit_cost_pence: l.unitCostPence,
-      line_total_pence: l.lineTotalPence,
-      position: idx,
-    }))
-    const { error: linesErr } = await supabase.from('purchase_order_lines').insert(lineRows)
-    if (linesErr) {
-      console.log('[v0] generatePOs lines error:', linesErr.message)
+  // Insert the PO header, retrying once on a numbering collision.
+  let poId: string | null = null
+  for (let attempt = 0; attempt < 2 && !poId; attempt++) {
+    const poNumber = await nextPurchaseOrderNumber(supabase)
+    const { data: inserted, error: insErr } = await supabase
+      .from('purchase_orders')
+      .insert({
+        po_number: poNumber,
+        job_id: jobId,
+        quote_id: quoteId,
+        supplier_id: supplierId,
+        branch_id: branchId,
+        status: 'draft',
+        subtotal_pence: subtotalPence,
+        created_by: user.id,
+      })
+      .select('id')
+      .single()
+    if (!insErr && inserted) {
+      poId = (inserted as { id: string }).id
+    } else if (insErr && !insErr.message.toLowerCase().includes('duplicate')) {
+      console.log('[v0] createJobPurchaseOrder insert error:', insErr.message)
+      return { ok: false, error: 'Could not create the purchase order.' }
     }
-    created += 1
+  }
+  if (!poId) return { ok: false, error: 'Could not allocate a PO number, please try again.' }
+
+  const lineRows = chosen.map((c, idx) => ({
+    purchase_order_id: poId,
+    catalogue_item_id: c.detail.catalogueItemId,
+    quote_line_item_id: c.detail.quoteLineItemId,
+    description: c.detail.description,
+    product_code: c.detail.productCode,
+    quantity: c.qty,
+    unit: c.detail.unit,
+    unit_cost_pence: c.detail.unitCostPence,
+    line_total_pence: poLineTotalPence(c.detail.unitCostPence, c.qty),
+    position: idx,
+  }))
+  const { error: linesErr } = await supabase.from('purchase_order_lines').insert(lineRows)
+  if (linesErr) {
+    console.log('[v0] createJobPurchaseOrder lines error:', linesErr.message)
+    // Roll back the empty header so we don't leave an orphan PO.
+    await supabase.from('purchase_orders').delete().eq('id', poId)
+    return { ok: false, error: 'Could not add the order lines.' }
   }
 
-  revalidatePurchasing(undefined, jobId)
-  return { ok: true, created }
+  revalidatePurchasing(poId, jobId)
+  return { ok: true, poId }
 }
 
 /** Editing lines is only allowed while a PO is still a draft. */

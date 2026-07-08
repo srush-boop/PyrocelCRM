@@ -180,6 +180,91 @@ export async function previewJobPurchasing(
 }
 
 // ---------------------------------------------------------------------------
+// Ordering progress (quoted vs ordered vs remaining) for phased purchasing
+// ---------------------------------------------------------------------------
+
+/** A single quoted part with how much has been ordered vs still to order. */
+export interface OrderingProgressLine {
+  quoteLineItemId: string
+  catalogueItemId: string | null
+  description: string
+  productCode: string | null
+  unit: string
+  unitCostPence: number
+  quotedQty: number
+  orderedQty: number
+  remainingQty: number
+}
+
+/** A supplier's quoted parts, aggregated for the job ordering progress view. */
+export interface SupplierOrderingProgress {
+  supplierId: string | null
+  supplierName: string
+  orderEmail: string | null
+  lines: OrderingProgressLine[]
+  quotedValuePence: number
+  remainingValuePence: number
+  remainingLineCount: number
+}
+
+/**
+ * Per-supplier ordering progress for a job: for each quoted part, how many were
+ * quoted, how many have already been ordered (summed across all non-cancelled
+ * POs for the job), and how many remain. This drives the phased-ordering UI —
+ * you can order part of a supplier's kit now and the rest later.
+ */
+export async function getJobOrderingProgress(
+  supabase: SupabaseClient,
+  jobId: string,
+): Promise<SupplierOrderingProgress[]> {
+  const { groups } = await previewJobPurchasing(supabase, jobId)
+  if (groups.length === 0) return []
+
+  // Sum ordered quantity per quoted line across the job's live POs.
+  const { data: poLines } = await supabase
+    .from('purchase_order_lines')
+    .select('quantity, quote_line_item_id, purchase_orders!inner(job_id, status)')
+    .eq('purchase_orders.job_id', jobId)
+    .neq('purchase_orders.status', 'cancelled')
+
+  const orderedByLine = new Map<string, number>()
+  for (const row of (poLines ?? []) as { quantity: number | string | null; quote_line_item_id: string | null }[]) {
+    if (!row.quote_line_item_id) continue
+    orderedByLine.set(
+      row.quote_line_item_id,
+      (orderedByLine.get(row.quote_line_item_id) ?? 0) + Number(row.quantity ?? 0),
+    )
+  }
+
+  return groups.map((g) => {
+    const lines: OrderingProgressLine[] = g.lines.map((l) => {
+      const orderedQty = orderedByLine.get(l.quoteLineItemId) ?? 0
+      const remainingQty = Math.max(0, l.quantity - orderedQty)
+      return {
+        quoteLineItemId: l.quoteLineItemId,
+        catalogueItemId: l.catalogueItemId,
+        description: l.description,
+        productCode: l.productCode,
+        unit: l.unit,
+        unitCostPence: l.unitCostPence,
+        quotedQty: l.quantity,
+        orderedQty,
+        remainingQty,
+      }
+    })
+    return {
+      supplierId: g.supplierId,
+      supplierName: g.supplierName,
+      orderEmail: g.orderEmail,
+      lines,
+      quotedValuePence: lines.reduce((s, l) => s + Math.round(l.unitCostPence * l.quotedQty), 0),
+      remainingValuePence: lines.reduce((s, l) => s + Math.round(l.unitCostPence * l.remainingQty), 0),
+      remainingLineCount: lines.filter((l) => l.remainingQty > 0).length,
+    }
+  })
+}
+
+// ---------------------------------------------------------------------------
 // Reads used by the pages
 // ---------------------------------------------------------------------------
 

@@ -183,8 +183,16 @@ const jobsNavItem: NavItem = {
   children: [
     { title: 'Dashboard', href: '/dashboard/jobs', icon: LayoutDashboard },
     { title: 'All Jobs', href: '/dashboard/jobs/list', icon: LayoutList },
-    { title: 'Purchasing', href: '/dashboard/purchasing', icon: ShoppingCart },
   ],
+}
+
+// Purchasing: purchase orders raised against jobs. Top-level so buyers can reach
+// it directly; also surfaced within each job's detail page.
+const purchasingNavItem: NavItem = {
+  key: 'purchasing',
+  title: 'Purchasing',
+  href: '/dashboard/purchasing',
+  icon: ShoppingCart,
 }
 
 const managerStockNavItem: NavItem = {
@@ -299,6 +307,7 @@ const adminNavItems: NavItem[] = [
   adminServiceManagementNavItem,
   salesNavItem,
   jobsNavItem,
+  purchasingNavItem,
   managerStockNavItem,
   adminPeopleNavItem,
   documentsNavItem,
@@ -317,6 +326,7 @@ const officeNavItems: NavItem[] = [
   officeServiceManagementNavItem,
   salesNavItem,
   jobsNavItem,
+  purchasingNavItem,
   managerStockNavItem,
   officePeopleNavItem,
   documentsNavItem,

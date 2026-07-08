@@ -642,6 +642,34 @@ export type DocumentOwnerType =
   | 'site_service'
   | 'site_engineer'
   | 'system_reference'
+  // Entities that support generated (mail-merge) documents in addition to uploads.
+  | 'task'
+  | 'quote'
+  | 'job'
+
+// Category of a mail-merge letter template (drives which starter copy / grouping).
+export type DocumentTemplateCategory =
+  | 'cancellation_ack'
+  | 'complaint_response'
+  | 'general_letter'
+  | 'payment_request'
+  | 'other'
+
+// A reusable letter template whose body contains {{merge.tokens}} that are filled
+// from the chosen entity + company branding. `entity_types` limits which owner
+// types a template is offered for. Managed by office/admin under Settings.
+export interface DocumentTemplate {
+  id: string
+  name: string
+  category: DocumentTemplateCategory
+  subject: string | null
+  body: string
+  entity_types: DocumentOwnerType[]
+  is_active: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
 
 // A communal internal note left by staff (engineers/office/admin) against a site.
 export interface SiteInternalNote {
@@ -690,6 +718,8 @@ export interface DocumentFile {
   description?: string | null
   system_type_id?: string | null
   extracted_text?: string | null
+  // Set when this document was generated from a mail-merge template (null for uploads).
+  template_id?: string | null
 }
 
 export interface TaskAttachment {

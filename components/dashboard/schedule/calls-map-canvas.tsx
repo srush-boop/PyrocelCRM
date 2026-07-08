@@ -130,6 +130,7 @@ export function CallsMapCanvas({
   route,
   focusSite,
   dispatchCall,
+  dispatchRadiusMiles = 10,
   candidates,
   highlightCandidateId,
   onDispatch,
@@ -140,6 +141,8 @@ export function CallsMapCanvas({
   focusSite: MapSite | null
   // When dispatching from the map, the call being dispatched + its candidates.
   dispatchCall?: MapCall | null
+  // Radius (miles) of the dispatch search area, drawn as a circle.
+  dispatchRadiusMiles?: number
   candidates?: DispatchCandidate[]
   highlightCandidateId?: string | null
   // Start dispatch (find best-placed engineers) for a call from its popup.
@@ -181,11 +184,11 @@ export function CallsMapCanvas({
 
       <MapController focusSite={focusSite} route={route} dispatchBounds={dispatchBounds} />
 
-      {/* 10-mile dispatch radius around the call being dispatched. */}
+      {/* Dispatch search radius around the call being dispatched. */}
       {dispatchCall && (
         <Circle
           center={[dispatchCall.latitude, dispatchCall.longitude]}
-          radius={10 * 1609.34}
+          radius={dispatchRadiusMiles * 1609.34}
           pathOptions={{ color: '#dc2626', weight: 1, fillColor: '#dc2626', fillOpacity: 0.06 }}
         />
       )}

@@ -622,6 +622,11 @@ export interface Site {
   two_engineers_required: boolean | null
   remedial_required: boolean | null
   remedial_notes: string | null
+  // When true, this system is under comprehensive cover for the client/site.
+  // Used in future charging logic to decide what a chargeable call costs the
+  // client (comprehensive cover typically means no/reduced charge). Store-only today.
+  comprehensive_cover: boolean
+  comprehensive_cover_note: string | null
   created_at: string
   site?: Site
   site_system?: SiteSystem | null
@@ -798,6 +803,11 @@ export interface Task {
   // When this is a remedial call, the quote/defect it originated from.
   source_quote_id: string | null
   source_defect_id: string | null
+  // When the call was booked from a job (e.g. a commissioning visit), the job it
+  // belongs to. `is_commissioning` flags commissioning calls, which copy key job
+  // info into the notes and expose the job's documents folder to the engineer.
+  source_job_id: string | null
+  is_commissioning: boolean
   site_service?: SiteService
   // Direct joins for reactive/emergency calls (and available on recurring calls
   // via the backfilled ids).
@@ -1810,6 +1820,12 @@ export interface CallPart {
   charge_status: 'pending' | 'quoted' | 'invoiced' | 'non_chargeable'
   notes: string | null
   added_by: string | null
+  // Stock reconciliation: which vehicle/location the part was pulled from and how
+  // much was actually deducted (may be less than `quantity` if the vehicle was
+  // short, or 0 if the engineer had no linked vehicle). Kept in sync so edits and
+  // removals return the right amount to stock.
+  stock_location_id: string | null
+  stock_deducted_qty: number
   created_at: string
   updated_at: string
   part?: Part | null
@@ -1824,6 +1840,10 @@ export interface CallPartLine {
   sku: string | null
   unit: string
   unit_cost_pence: number | null
+  // How much of `quantity` was actually pulled from vehicle stock. Absent on
+  // search results; present on saved lines so the picker can show whether the
+  // line was deducted from the vehicle or just logged.
+  stock_deducted_qty?: number
 }
 
 // A part held at a location, with its own minimum re-order level and the

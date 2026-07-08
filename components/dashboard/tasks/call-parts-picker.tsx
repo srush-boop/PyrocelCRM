@@ -157,6 +157,23 @@ export function CallPartsPicker({ taskId, canEdit = true }: CallPartsPickerProps
                         {line.sku ? `${line.sku} · ` : ''}
                         {formatPence(line.unit_cost_pence)} each
                       </p>
+                      {line.stock_deducted_qty != null && (
+                        <p className="mt-0.5 text-xs">
+                          {line.stock_deducted_qty >= line.quantity ? (
+                            <span className="text-muted-foreground">
+                              Deducted from vehicle
+                            </span>
+                          ) : line.stock_deducted_qty > 0 ? (
+                            <span className="text-amber-600 dark:text-amber-500">
+                              {line.stock_deducted_qty} of {line.quantity} from vehicle
+                            </span>
+                          ) : (
+                            <span className="text-amber-600 dark:text-amber-500">
+                              Logged (no vehicle stock)
+                            </span>
+                          )}
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       {canEdit ? (

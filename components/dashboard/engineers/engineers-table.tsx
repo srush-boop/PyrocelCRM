@@ -51,6 +51,7 @@ import {
   KeyRound,
   Pencil,
   PanelLeft,
+  Truck,
 } from 'lucide-react'
 import {
   Dialog,
@@ -66,6 +67,7 @@ import type { LeaveBalance } from '@/lib/leave-utils'
 import { formatDateUK } from '@/lib/utils'
 import { InviteEngineerDialog } from './invite-engineer-dialog'
 import { MenuAccessDialog } from './menu-access-dialog'
+import { VehicleDialog } from './vehicle-dialog'
 import { PrintButton } from '@/components/ui/print-button'
 
 const NO_DEPARTMENT = '__none__'
@@ -209,6 +211,7 @@ export function EngineersTable({
   const [hoursError, setHoursError] = useState<string | null>(null)
   const [savingHours, setSavingHours] = useState(false)
   const [menuAccessUser, setMenuAccessUser] = useState<Profile | null>(null)
+  const [vehicleUser, setVehicleUser] = useState<Profile | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -647,6 +650,12 @@ export function EngineersTable({
                           <DropdownMenuItem onClick={() => setMenuAccessUser(user)}>
                             <PanelLeft className="mr-2 h-4 w-4" />
                             Menu Access
+                          </DropdownMenuItem>
+                        )}
+                        {user.role === 'engineer' && (
+                          <DropdownMenuItem onClick={() => setVehicleUser(user)}>
+                            <Truck className="mr-2 h-4 w-4" />
+                            Vehicle / stock location
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuSeparator />
@@ -1135,6 +1144,11 @@ export function EngineersTable({
       <MenuAccessDialog
         user={menuAccessUser}
         onOpenChange={(open) => !open && setMenuAccessUser(null)}
+      />
+
+      <VehicleDialog
+        user={vehicleUser}
+        onOpenChange={(open) => !open && setVehicleUser(null)}
       />
     </div>
   )

@@ -11,6 +11,113 @@ import type { CallPartLine } from '@/lib/types/database'
 // manage anytime, the assigned engineer only while the task is in_progress,
 // and clients never. These helpers mirror lib/actions/suggested-parts.ts.
 
+/**
+ * Find the stock location (vehicle) to draw from for a call: the first active
+ * location linked to the task's assigned engineer, preferring a vehicle
+ * (`kind='van'`, the internal stored value) over any other linked location.
+ * Returns null when there's no assigned engineer or no linked location, in
+ * which case parts are recorded without touching stock (log-only).
+ */
+async function resolveEngineerVehicle(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  taskId: string,
+): Promise<string | null> {
+  const { data: task } = await supabase
+    .from('tasks')
+    .select('assigned_engineer_id')
+    .eq('id', taskId)
+    .maybeSingle()
+
+  const engineerId = (task as { assigned_engineer_id: string | null } | null)?.assigned_engineer_id
+  if (!engineerId) return null
+
+  const { data: locations } = await supabase
+    .from('stock_locations')
+    .select('id, kind')
+    .eq('engineer_id', engineerId)
+    .eq('is_active', true)
+
+  if (!locations || locations.length === 0) return null
+  const vehicle = (locations as { id: string; kind: string }[]).find((l) => l.kind === 'van')
+  return (vehicle ?? (locations as { id: string }[])[0]).id
+}
+
+/**
+ * Reconcile stock for a call part line towards `targetQty`, given what was
+ * previously deducted (`prevDeducted`) from `prevLocationId`. Deducts up to what
+ * the vehicle holds when increasing (log-only if short) and returns stock when
+ * decreasing. Never throws — a stock hiccup must not block recording the part.
+ * Returns the new deducted qty + location to persist on the call_parts row.
+ */
+async function reconcileStock(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  opts: {
+    taskId: string
+    partId: string
+    targetQty: number
+    prevDeducted: number
+    prevLocationId: string | null
+  },
+): Promise<{ stock_deducted_qty: number; stock_location_id: string | null }> {
+  const { taskId, partId, targetQty, prevDeducted, prevLocationId } = opts
+  let deducted = prevDeducted
+  let locationId = prevLocationId
+
+  try {
+    const delta = targetQty - deducted
+
+    if (delta > 0) {
+      // Need to pull more. Draw from the previously-used location if set,
+      // otherwise resolve the engineer's vehicle.
+      const location = locationId ?? (await resolveEngineerVehicle(supabase, taskId))
+      if (location) {
+        const { data: item } = await supabase
+          .from('stock_items')
+          .select('quantity')
+          .eq('location_id', location)
+          .eq('part_id', partId)
+          .maybeSingle()
+        const available = (item as { quantity: number } | null)?.quantity ?? 0
+        const take = Math.min(delta, available)
+        if (take > 0) {
+          const { error } = await supabase.rpc('record_stock_movement', {
+            p_part_id: partId,
+            p_quantity: take,
+            p_type: 'usage',
+            p_from_location_id: location,
+            p_task_id: taskId,
+            p_notes: 'Used on call',
+          })
+          if (!error) {
+            deducted += take
+            locationId = location
+          }
+        }
+      }
+    } else if (delta < 0 && deducted > 0 && locationId) {
+      // Quantity reduced (or line being removed): return the difference.
+      const giveBack = Math.min(-delta, deducted)
+      if (giveBack > 0) {
+        const { error } = await supabase.rpc('record_stock_movement', {
+          p_part_id: partId,
+          p_quantity: giveBack,
+          p_type: 'receipt',
+          p_to_location_id: locationId,
+          p_task_id: taskId,
+          p_notes: 'Returned from call',
+        })
+        if (!error) {
+          deducted -= giveBack
+        }
+      }
+    }
+  } catch {
+    // Swallow: recording the part must succeed even if stock movement fails.
+  }
+
+  return { stock_deducted_qty: deducted, stock_location_id: deducted > 0 ? locationId : null }
+}
+
 async function requireStaffOrEngineer() {
   const supabase = await createClient()
   const {
@@ -68,7 +175,7 @@ export async function getCallParts(taskId: string): Promise<CallPartLine[]> {
   // unambiguous and avoids the recurring ambiguous-embed error).
   const { data } = await supabase
     .from('call_parts')
-    .select('part_id, quantity, unit_cost_pence, part:parts(name, sku, unit)')
+    .select('part_id, quantity, unit_cost_pence, stock_deducted_qty, part:parts(name, sku, unit)')
     .eq('task_id', taskId)
     .order('created_at')
 
@@ -79,6 +186,7 @@ export async function getCallParts(taskId: string): Promise<CallPartLine[]> {
     sku: r.part?.sku ?? null,
     unit: r.part?.unit ?? 'unit',
     unit_cost_pence: r.unit_cost_pence ?? null,
+    stock_deducted_qty: r.stock_deducted_qty ?? 0,
   }))
 }
 
@@ -101,15 +209,26 @@ export async function upsertCallPart(
   // original cost snapshot is retained.
   const { data: existing } = await supabase
     .from('call_parts')
-    .select('id')
+    .select('id, stock_deducted_qty, stock_location_id')
     .eq('task_id', taskId)
     .eq('part_id', partId)
     .maybeSingle()
 
   if (existing) {
+    const row = existing as {
+      stock_deducted_qty: number | null
+      stock_location_id: string | null
+    }
+    const stock = await reconcileStock(supabase, {
+      taskId,
+      partId,
+      targetQty: qty,
+      prevDeducted: row.stock_deducted_qty ?? 0,
+      prevLocationId: row.stock_location_id,
+    })
     const { error } = await supabase
       .from('call_parts')
-      .update({ quantity: qty })
+      .update({ quantity: qty, ...stock })
       .eq('task_id', taskId)
       .eq('part_id', partId)
     if (error) return { error: error.message }
@@ -125,12 +244,22 @@ export async function upsertCallPart(
     .eq('id', partId)
     .single()
 
+  // Deduct from the engineer's vehicle (log-only if none / short) before insert.
+  const stock = await reconcileStock(supabase, {
+    taskId,
+    partId,
+    targetQty: qty,
+    prevDeducted: 0,
+    prevLocationId: null,
+  })
+
   const { error } = await supabase.from('call_parts').insert({
     task_id: taskId,
     part_id: partId,
     quantity: qty,
     unit_cost_pence: costToPence(part),
     added_by: user.id,
+    ...stock,
   })
 
   if (error) return { error: error.message }
@@ -145,6 +274,28 @@ export async function removeCallPart(
 ): Promise<{ error?: string }> {
   const { supabase, user } = await requireStaffOrEngineer()
   if (!user) return { error: 'Not authorised' }
+
+  // Return any deducted stock to the vehicle before removing the line.
+  const { data: existing } = await supabase
+    .from('call_parts')
+    .select('stock_deducted_qty, stock_location_id')
+    .eq('task_id', taskId)
+    .eq('part_id', partId)
+    .maybeSingle()
+
+  if (existing) {
+    const row = existing as {
+      stock_deducted_qty: number | null
+      stock_location_id: string | null
+    }
+    await reconcileStock(supabase, {
+      taskId,
+      partId,
+      targetQty: 0,
+      prevDeducted: row.stock_deducted_qty ?? 0,
+      prevLocationId: row.stock_location_id,
+    })
+  }
 
   const { error } = await supabase
     .from('call_parts')

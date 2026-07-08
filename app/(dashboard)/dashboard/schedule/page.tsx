@@ -9,7 +9,7 @@ import { GenerateCallsButton } from '@/components/dashboard/schedule/generate-ca
 import { ScanQrButton } from '@/components/dashboard/dampers/scan-qr-button'
 import { BranchFilter } from '@/components/dashboard/branch-filter'
 import { getBranchScope } from '@/lib/branches'
-import type { Profile, Site, ServiceType, SiteService, TaskWithDetails } from '@/lib/types/database'
+import type { Profile, Site, ServiceType, SiteService, SystemType, TaskWithDetails } from '@/lib/types/database'
 
 export default async function SchedulePage({
   searchParams,
@@ -73,18 +73,23 @@ export default async function SchedulePage({
   let engineers: Profile[] = []
   let siteServices: (SiteService & { site: Site; service_type: ServiceType })[] = []
   let clients: { id: string; name: string }[] = []
+  let reactiveServiceTypes: ServiceType[] = []
+  let systemTypes: SystemType[] = []
 
   if (isAdminOrOffice) {
-    const [sitesResult, engineersResult, siteServicesResult, clientsResult] = await Promise.all([
-      supabase.from('sites').select('*').order('name'),
-      supabase.from('profiles').select('*').eq('role', 'engineer').order('full_name'),
-      supabase.from('site_services').select(`
-        *,
-        site:sites(*, client:clients(id, name)),
-        service_type:service_types(*, system_type:system_types(*))
-      `),
-      supabase.from('clients').select('id, name').order('name'),
-    ])
+    const [sitesResult, engineersResult, siteServicesResult, clientsResult, serviceTypesResult, systemTypesResult] =
+      await Promise.all([
+        supabase.from('sites').select('*').order('name'),
+        supabase.from('profiles').select('*').eq('role', 'engineer').order('full_name'),
+        supabase.from('site_services').select(`
+          *,
+          site:sites(*, client:clients(id, name)),
+          service_type:service_types(*, system_type:system_types(*))
+        `),
+        supabase.from('clients').select('id, name').order('name'),
+        supabase.from('service_types').select('*, system_type:system_types(*)').order('name'),
+        supabase.from('system_types').select('*').order('name'),
+      ])
 
     sites = (sitesResult.data || []) as Site[]
     engineers = (engineersResult.data || []) as Profile[]
@@ -92,6 +97,11 @@ export default async function SchedulePage({
     siteServices = ((siteServicesResult.data || []) as (SiteService & { site: Site; service_type: ServiceType })[])
       .filter((ss) => ss.site?.status !== 'dead' && ss.service_type?.status !== 'dead')
     clients = (clientsResult.data || []) as { id: string; name: string }[]
+    // Reactive / emergency (non-recurring) call types are logged ad-hoc via Book Call.
+    reactiveServiceTypes = ((serviceTypesResult.data || []) as ServiceType[]).filter(
+      (st) => st.is_recurring === false && (st.status || 'live') !== 'dead',
+    )
+    systemTypes = (systemTypesResult.data || []) as SystemType[]
   }
 
   return (
@@ -133,6 +143,9 @@ export default async function SchedulePage({
               siteServices={siteServices}
               engineers={engineers}
               clients={clients}
+              reactiveServiceTypes={reactiveServiceTypes}
+              sites={sites}
+              systemTypes={systemTypes}
             />
           </div>
         )}

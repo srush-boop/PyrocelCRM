@@ -2,6 +2,7 @@
 // both the server actions and client components can import them safely — a
 // 'use server' file may only export async functions.
 import type { ExpectedDuration } from '@/lib/task-duration'
+import type { Discipline } from '@/lib/types/database'
 
 export interface MapCall {
   taskId: string
@@ -23,6 +24,14 @@ export interface MapCall {
   // 'overdue' | 'due-soon' | 'scheduled' | 'unscheduled' — drives marker colour.
   urgency: 'overdue' | 'due-soon' | 'scheduled' | 'unscheduled'
   expected: ExpectedDuration
+  // Reactive / emergency call metadata.
+  isEmergency: boolean
+  // KPI deadline (ISO) — "attend by". Null for scheduled PPM calls.
+  respondBy: string | null
+  // The call type name (service type), used in the popup/candidate header.
+  callTypeName: string | null
+  // Required discipline inferred from the system type, for skill matching.
+  requiredDiscipline: Discipline | null
 }
 
 export interface MapEngineer {
@@ -38,6 +47,15 @@ export interface MapEngineer {
   homePostcode: string | null
   // Count of the engineer's booked calls today (for the panel).
   bookedTodayCount: number
+  // Trade / skill, drives marker colour-coding + dispatch skill matching.
+  discipline: Discipline | null
+  // Human-readable role + department, for the popup and department filter.
+  roleLabel: string | null
+  departmentName: string | null
+  // True when on approved leave today (incl. partial day) — dimmed + excluded
+  // from dispatch candidates.
+  onLeave: boolean
+  leaveReason: string | null
 }
 
 export interface MapSite {
@@ -71,4 +89,36 @@ export interface EngineerRoute {
   stops: RouteStop[]
   totalMiles: number
   hasHome: boolean
+  // Real driving polyline ([lat,lng] pairs) from OSRM; empty when unavailable.
+  geometry: [number, number][]
+  // Total driving time in minutes (OSRM) — null when only straight-line known.
+  drivingMinutes: number | null
+  // True when the geometry/time is a straight-line fallback, not a road route.
+  approximate: boolean
+}
+
+/**
+ * A candidate engineer for dispatching a specific call, ranked by skill match
+ * then driving ETA. Produced by `getDispatchCandidates`.
+ */
+export interface DispatchCandidate {
+  engineerId: string
+  engineerName: string
+  discipline: Discipline | null
+  roleLabel: string | null
+  departmentName: string | null
+  // Straight-line miles from the engineer's position to the call.
+  distanceMiles: number
+  // Driving distance/time to the call (OSRM, or straight-line fallback).
+  drivingMiles: number
+  drivingMinutes: number
+  approximate: boolean
+  // True when the engineer's discipline matches the call's required discipline.
+  skillMatch: boolean
+  // The origin used for routing ('current' activity position or 'home').
+  originKind: 'current' | 'home'
+  // Driving route polyline to the call, for drawing on the map.
+  geometry: [number, number][]
+  lastSeenLabel: string | null
+  bookedTodayCount: number
 }

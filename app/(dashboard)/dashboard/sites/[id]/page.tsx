@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ArrowLeft, MapPin, Phone, Mail, Building2, Radio, Building, User, ExternalLink } from 'lucide-react'
 import { EditSiteButton } from '@/components/dashboard/sites/edit-site-button'
+import { CreateTaskDialog } from '@/components/dashboard/schedule/create-task-dialog'
 import { SiteServicesManager } from '@/components/dashboard/sites/site-services-manager'
 import { SiteSystemsManager } from '@/components/dashboard/sites/site-systems-manager'
 import { SiteDefaultSubcontractor } from '@/components/dashboard/sites/site-default-subcontractor'
@@ -389,7 +390,21 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
           </div>
           <h1 className="text-2xl font-bold">{site.name}</h1>
         </div>
-        <EditSiteButton site={site as Site & { route: Route | null }} clients={clients} />
+        <div className="flex items-center gap-2">
+          {reactiveServiceTypes.length > 0 && (
+            <CreateTaskDialog
+              siteServices={[]}
+              engineers={engineers}
+              clients={clients}
+              reactiveServiceTypes={reactiveServiceTypes}
+              sites={[site as Site]}
+              systemTypes={systemTypes}
+              defaultSiteId={id}
+              defaultMode="reactive"
+            />
+          )}
+          <EditSiteButton site={site as Site & { route: Route | null }} clients={clients} />
+        </div>
       </div>
 
       <Tabs
@@ -604,6 +619,10 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
                   panelFieldDefs={panelFieldDefs}
                   panels={panels}
                   subcontractors={subcontractors}
+                  site={site as Site}
+                  engineers={engineers}
+                  clients={clients}
+                  reactiveServiceTypes={reactiveServiceTypes}
                 />
         </TabsContent>
 

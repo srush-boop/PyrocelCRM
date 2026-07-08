@@ -58,6 +58,7 @@ import {
   Wrench,
   CalendarClock,
   Navigation,
+  PauseCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
@@ -98,6 +99,7 @@ interface ScheduleViewProps {
 const statusConfig = {
   pending: { label: 'Pending', icon: Clock, variant: 'secondary' as const },
   in_progress: { label: 'In Progress', icon: ClipboardCheck, variant: 'default' as const },
+  paused: { label: 'Paused', icon: PauseCircle, variant: 'outline' as const },
   completed: { label: 'Completed', icon: CheckCircle2, variant: 'outline' as const },
   cancelled: { label: 'Cancelled', icon: XCircle, variant: 'destructive' as const },
 }
@@ -332,7 +334,8 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   })
 
   const upcomingTasks = sortedTasks.filter(
-    (task) => task.status === 'pending' || task.status === 'in_progress'
+    (task) =>
+      task.status === 'pending' || task.status === 'in_progress' || task.status === 'paused'
   )
   const completedTasks = sortedTasks.filter((task) => task.status === 'completed')
   const overdueTasks = upcomingTasks.filter(

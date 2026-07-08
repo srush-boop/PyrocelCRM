@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useCallback, useMemo, useState, useTransition } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
@@ -165,6 +165,13 @@ export function CallsMap({
     })
   }, [engineers, disciplineFilter, departmentFilter, hideOnLeave])
 
+  // Stable engineers array for the memoised map canvas (avoids a fresh `[]`
+  // literal each render when the engineers layer is toggled off).
+  const canvasEngineers = useMemo(
+    () => (showEngineers ? filteredEngineers : []),
+    [showEngineers, filteredEngineers],
+  )
+
   function handleEngineerChange(id: string) {
     setSelectedEngineerId(id)
     setRoute(null)
@@ -187,7 +194,8 @@ export function CallsMap({
 
   // Fetch skill-matched candidates for a call within the given radius. Toasts
   // are optional so re-running from the radius slider stays quiet.
-  function runDispatchSearch(call: MapCall, miles: number, notify = true) {
+  // useCallback so the onDispatch prop passed to the memoised map stays stable.
+  const runDispatchSearch = useCallback((call: MapCall, miles: number, notify = true) => {
     startDispatch(async () => {
       const res = await getDispatchCandidates({
         callLat: call.latitude,
@@ -213,10 +221,10 @@ export function CallsMap({
         }
       }
     })
-  }
+  }, [activeBranchId])
 
   // Enter dispatch mode for a call: reset the radius and fetch candidates.
-  function startDispatchForCall(call: MapCall) {
+  const startDispatchForCall = useCallback((call: MapCall) => {
     setDispatchCall(call)
     setCandidates([])
     setHighlightCandidateId(null)
@@ -224,7 +232,7 @@ export function CallsMap({
     setRoute(null)
     setRadiusMiles(DEFAULT_DISPATCH_RADIUS_MILES)
     runDispatchSearch(call, DEFAULT_DISPATCH_RADIUS_MILES)
-  }
+  }, [runDispatchSearch])
 
   // Re-run the search when the user drags the radius slider (debounced by
   // committing on release via onValueCommit).
@@ -922,7 +930,7 @@ export function CallsMap({
             ) : (
               <CallsMapCanvas
                 calls={visibleCalls}
-                engineers={showEngineers ? filteredEngineers : []}
+                engineers={canvasEngineers}
                 route={route}
                 focusSite={selectedSite}
               dispatchCall={dispatchCall}

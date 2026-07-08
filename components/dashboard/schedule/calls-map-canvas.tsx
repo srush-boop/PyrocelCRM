@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
+import { memo, useEffect, useMemo } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Tooltip, Polyline, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -124,7 +124,12 @@ function MapController({
   return null
 }
 
-export function CallsMapCanvas({
+// Memoised: this renders every Leaflet marker (each with a popup + tooltip),
+// which is expensive. Without memo, any parent state change (e.g. typing in a
+// filter or picking an engineer in the assign panel) rebuilds the whole map and
+// blocks the main thread. The parent passes referentially-stable props so this
+// only re-renders when the underlying map data actually changes.
+export const CallsMapCanvas = memo(function CallsMapCanvas({
   calls,
   engineers,
   route,
@@ -348,4 +353,4 @@ export function CallsMapCanvas({
       )}
     </MapContainer>
   )
-}
+})

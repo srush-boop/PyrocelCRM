@@ -10,6 +10,7 @@ import { ScanQrButton } from '@/components/dashboard/dampers/scan-qr-button'
 import { BranchFilter } from '@/components/dashboard/branch-filter'
 import { getBranchScope } from '@/lib/branches'
 import type { Profile, Site, ServiceType, SiteService, SystemType, TaskWithDetails } from '@/lib/types/database'
+import { normalizeTasks } from '@/lib/normalize-task'
 
 export default async function SchedulePage({
   searchParams,
@@ -47,6 +48,9 @@ export default async function SchedulePage({
         site:sites(*, route:routes(*), branch:branches(*), client:clients(id, name)),
         service_type:service_types(*, system_type:system_types(*))
       ),
+      direct_site:sites!tasks_site_id_fkey(*, route:routes(*), branch:branches(*), client:clients(id, name)),
+      direct_service_type:service_types!tasks_service_type_id_fkey(*, system_type:system_types(*)),
+      direct_system_type:system_types!tasks_system_type_id_fkey(*),
       assigned_engineer:profiles(*),
       visit_type:service_visit_types(*),
       client:clients(id, name)
@@ -60,13 +64,15 @@ export default async function SchedulePage({
 
   const { data: tasksData } = await tasksQuery
 
+  // Reactive / emergency calls have no recurring site_service — synthesise one
+  // from their direct site/service/system relations so the list renders them.
+  const normalizedTasks = normalizeTasks((tasksData || []) as TaskWithDetails[])
+
   // Scope tasks to the active branch (by the task's site branch). Engineers are
   // already limited to their own tasks; this further narrows admin/office views.
   const tasks = scope.activeBranchId
-    ? ((tasksData || []) as TaskWithDetails[]).filter(
-        (t) => t.site_service?.site?.branch_id === scope.activeBranchId,
-      )
-    : ((tasksData || []) as TaskWithDetails[])
+    ? normalizedTasks.filter((t) => t.site_service?.site?.branch_id === scope.activeBranchId)
+    : normalizedTasks
 
   // Only load additional data for admins/office
   let sites: Site[] = []

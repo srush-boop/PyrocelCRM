@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { Plus, Loader2, Repeat, Siren } from 'lucide-react'
+import { Plus, Loader2, Siren } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -25,11 +25,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { WorkerType, ToleranceUnit, SystemType } from '@/lib/types/database'
+import type { WorkerType, ToleranceUnit, SystemType, ServiceType } from '@/lib/types/database'
 import { WORKER_TYPE_LABELS } from '@/lib/assignment'
 import { ServiceColorPicker } from './service-color-picker'
 import { ToleranceFields } from './tolerance-fields'
 import { PYROCEL_RED } from '@/lib/service-colors'
+import {
+  ServiceTypeChecklistsField,
+  type ServiceTypeChecklistEntry,
+} from './service-type-checklists-field'
+import { syncServiceTypeChecklists } from '@/lib/service-type-checklists'
+import { CALL_KIND_OPTIONS, callKindFlags } from '@/lib/call-kinds'
 
 export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[] }) {
   const [open, setOpen] = useState(false)
@@ -45,14 +51,19 @@ export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[
     color: PYROCEL_RED,
     regulatory_tolerance_value: 0,
     regulatory_tolerance_unit: 'months' as ToleranceUnit,
-    // Recurring PPM by default. Turn off to make this a reactive / on-demand
-    // "call type" (Reactive, Emergency Callout) logged ad-hoc against a site.
-    is_recurring: true,
+    // Recurring PPM by default. Change the kind to make this a reactive
+    // on-demand call type or a planned one-off (e.g. Commissioning).
+    call_kind: 'recurring' as ServiceType['call_kind'],
     is_emergency: false,
     default_kpi_hours: 24,
   })
+  // Per-system checklists for non-recurring call types (reactive/planned).
+  const [checklists, setChecklists] = useState<ServiceTypeChecklistEntry[]>([])
   const router = useRouter()
   const supabase = createClient()
+
+  const isRecurring = formData.call_kind === 'recurring'
+  const isReactive = formData.call_kind === 'reactive'
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -63,27 +74,45 @@ export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[
       ? Math.ceil(formData.default_frequency_value / 4) 
       : formData.default_frequency_value
 
-    const { error } = await supabase.from('service_types').insert({
-      name: formData.name,
-      system_type_id: formData.system_type_id || null,
-      description: formData.description || null,
-      default_frequency_months: frequencyInMonths,
-      default_frequency_value: formData.default_frequency_value,
-      default_frequency_unit: formData.default_frequency_unit,
-      default_worker_type: formData.default_worker_type,
-      defects_to_email: formData.defects_to_email.trim() || null,
-      color: formData.color,
-      regulatory_tolerance_value: formData.regulatory_tolerance_value,
-      regulatory_tolerance_unit: formData.regulatory_tolerance_unit,
-      // Client tier defaults to the regulatory standard; tighter client KPIs are
-      // set per site/service. Keep the legacy default columns in sync as the fallback.
-      client_tolerance_value: formData.regulatory_tolerance_value,
-      client_tolerance_unit: formData.regulatory_tolerance_unit,
-      is_recurring: formData.is_recurring,
-      // Emergency + KPI only apply to reactive (non-recurring) call types.
-      is_emergency: formData.is_recurring ? false : formData.is_emergency,
-      default_kpi_hours: formData.is_recurring ? null : formData.default_kpi_hours,
-    })
+    const { data: created, error } = await supabase
+      .from('service_types')
+      .insert({
+        name: formData.name,
+        system_type_id: formData.system_type_id || null,
+        description: formData.description || null,
+        default_frequency_months: frequencyInMonths,
+        default_frequency_value: formData.default_frequency_value,
+        default_frequency_unit: formData.default_frequency_unit,
+        default_worker_type: formData.default_worker_type,
+        defects_to_email: formData.defects_to_email.trim() || null,
+        color: formData.color,
+        regulatory_tolerance_value: formData.regulatory_tolerance_value,
+        regulatory_tolerance_unit: formData.regulatory_tolerance_unit,
+        // Client tier defaults to the regulatory standard; tighter client KPIs are
+        // set per site/service. Keep the legacy default columns in sync as the fallback.
+        client_tolerance_value: formData.regulatory_tolerance_value,
+        client_tolerance_unit: formData.regulatory_tolerance_unit,
+        // call_kind is the source of truth; is_recurring/is_emergency are kept
+        // in sync for backward compatibility.
+        ...callKindFlags(formData.call_kind, formData.is_emergency),
+        // KPI only applies to reactive call types (planned has no deadline/KPI).
+        default_kpi_hours: isReactive ? formData.default_kpi_hours : null,
+      })
+      .select('id')
+      .single()
+
+    // Persist per-system checklists for non-recurring call types.
+    if (!error && created && !isRecurring && checklists.length > 0) {
+      const { error: clError } = await syncServiceTypeChecklists(supabase, created.id, checklists)
+      if (clError) {
+        setLoading(false)
+        console.error('[v0] Error saving call-type checklists:', clError)
+        alert(`Service type created, but saving checklists failed: ${clError}`)
+        setOpen(false)
+        router.refresh()
+        return
+      }
+    }
 
     setLoading(false)
 
@@ -103,10 +132,11 @@ export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[
         color: PYROCEL_RED,
         regulatory_tolerance_value: 0,
         regulatory_tolerance_unit: 'months',
-        is_recurring: true,
+        call_kind: 'recurring',
         is_emergency: false,
         default_kpi_hours: 24,
       })
+      setChecklists([])
       router.refresh()
     }
   }
@@ -173,24 +203,30 @@ export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[
               value={formData.color}
               onChange={(color) => setFormData({ ...formData, color })}
             />
-            <div className="flex items-start justify-between gap-3 rounded-md border p-3">
-              <div className="space-y-0.5">
-                <Label htmlFor="is-recurring" className="flex items-center gap-2">
-                  <Repeat className="h-4 w-4 text-muted-foreground" />
-                  Recurring service
-                </Label>
-                <p className="text-xs text-muted-foreground text-pretty">
-                  On = scheduled PPM visits. Off = a reactive / on-demand call type (e.g. Reactive,
-                  Emergency Callout) logged ad-hoc against a site, with an attend-within KPI.
-                </p>
-              </div>
-              <Switch
-                id="is-recurring"
-                checked={formData.is_recurring}
-                onCheckedChange={(v) => setFormData({ ...formData, is_recurring: v })}
-              />
+            <div className="grid gap-2">
+              <Label htmlFor="call-kind">Call kind *</Label>
+              <Select
+                value={formData.call_kind}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, call_kind: value as ServiceType['call_kind'] })
+                }
+              >
+                <SelectTrigger id="call-kind">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CALL_KIND_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground text-pretty">
+                {CALL_KIND_OPTIONS.find((o) => o.value === formData.call_kind)?.description}
+              </p>
             </div>
-            {formData.is_recurring ? (
+            {isRecurring ? (
               <>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="grid gap-2">
@@ -230,48 +266,58 @@ export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[
                 />
               </>
             ) : (
-              <div className="grid gap-4 rounded-md border border-dashed p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="is-emergency" className="flex items-center gap-2">
-                      <Siren className="h-4 w-4 text-destructive" />
-                      Emergency call type
-                    </Label>
-                    <p className="text-xs text-muted-foreground text-pretty">
-                      Emergency calls show a pulsing marker on the map and send the assigned
-                      engineer an urgent notification.
-                    </p>
+              <>
+                {isReactive && (
+                  <div className="grid gap-4 rounded-md border border-dashed p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-0.5">
+                        <Label htmlFor="is-emergency" className="flex items-center gap-2">
+                          <Siren className="h-4 w-4 text-destructive" />
+                          Emergency call type
+                        </Label>
+                        <p className="text-xs text-muted-foreground text-pretty">
+                          Emergency calls show a pulsing marker on the map and send the assigned
+                          engineer an urgent notification.
+                        </p>
+                      </div>
+                      <Switch
+                        id="is-emergency"
+                        checked={formData.is_emergency}
+                        onCheckedChange={(v) =>
+                          setFormData({
+                            ...formData,
+                            is_emergency: v,
+                            // Sensible KPI default when flipping to emergency.
+                            default_kpi_hours: v && formData.default_kpi_hours > 8 ? 4 : formData.default_kpi_hours,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="kpi-hours">Attend within (hours)</Label>
+                      <Input
+                        id="kpi-hours"
+                        type="number"
+                        min={1}
+                        max={720}
+                        value={formData.default_kpi_hours}
+                        onChange={(e) =>
+                          setFormData({ ...formData, default_kpi_hours: parseInt(e.target.value) || 1 })
+                        }
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Default response KPI when logging this call. Editable per call at booking.
+                      </p>
+                    </div>
                   </div>
-                  <Switch
-                    id="is-emergency"
-                    checked={formData.is_emergency}
-                    onCheckedChange={(v) =>
-                      setFormData({
-                        ...formData,
-                        is_emergency: v,
-                        // Sensible KPI default when flipping to emergency.
-                        default_kpi_hours: v && formData.default_kpi_hours > 8 ? 4 : formData.default_kpi_hours,
-                      })
-                    }
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="kpi-hours">Attend within (hours)</Label>
-                  <Input
-                    id="kpi-hours"
-                    type="number"
-                    min={1}
-                    max={720}
-                    value={formData.default_kpi_hours}
-                    onChange={(e) =>
-                      setFormData({ ...formData, default_kpi_hours: parseInt(e.target.value) || 1 })
-                    }
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Default response KPI when logging this call. Editable per call at booking.
-                  </p>
-                </div>
-              </div>
+                )}
+                <ServiceTypeChecklistsField
+                  systemTypes={systemTypes}
+                  serviceName={formData.name}
+                  entries={checklists}
+                  onChange={setChecklists}
+                />
+              </>
             )}
             <div className="grid gap-2">
               <Label htmlFor="default-worker-type">Default delivered by</Label>

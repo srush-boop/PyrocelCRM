@@ -29,10 +29,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { MoreHorizontal, Pencil, Trash2, Wrench, Siren } from 'lucide-react'
+import { MoreHorizontal, Pencil, Trash2, Wrench, Siren, CalendarClock } from 'lucide-react'
 import { PrintButton } from '@/components/ui/print-button'
 import { EditServiceTypeDialog } from './edit-service-type-dialog'
 import { SystemBadge } from '@/lib/system-types'
+import { resolveCallKind as callKind } from '@/lib/call-kinds'
 import type { ServiceType, SystemType } from '@/lib/types/database'
 
 interface ServiceTypesTableProps {
@@ -97,7 +98,12 @@ export function ServiceTypesTable({ serviceTypes, systemTypes }: ServiceTypesTab
                       <Badge variant={(serviceType.status || 'live') === 'live' ? 'default' : 'destructive'}>
                         {serviceType.status || 'live'}
                       </Badge>
-                      {serviceType.is_recurring === false && (
+                      {callKind(serviceType) === 'planned' ? (
+                        <Badge variant="secondary" className="gap-1">
+                          <CalendarClock className="h-3 w-3" />
+                          Planned
+                        </Badge>
+                      ) : callKind(serviceType) === 'reactive' ? (
                         serviceType.is_emergency ? (
                           <Badge variant="destructive" className="gap-1">
                             <Siren className="h-3 w-3" />
@@ -106,14 +112,16 @@ export function ServiceTypesTable({ serviceTypes, systemTypes }: ServiceTypesTab
                         ) : (
                           <Badge variant="secondary">Reactive</Badge>
                         )
-                      )}
+                      ) : null}
                     </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {serviceType.description || '-'}
                   </TableCell>
                   <TableCell>
-                    {serviceType.is_recurring === false ? (
+                    {callKind(serviceType) === 'planned' ? (
+                      <span className="text-muted-foreground">Planned · no deadline</span>
+                    ) : callKind(serviceType) === 'reactive' ? (
                       <span className="text-muted-foreground">
                         On demand{serviceType.default_kpi_hours ? ` · attend in ${serviceType.default_kpi_hours}h` : ''}
                       </span>

@@ -271,10 +271,16 @@ export interface ServiceType {
   icon?: string | null
   defects_to_email: string | null
   default_worker_type: WorkerType
-  // Whether this service type schedules recurring PPM visits. When false it is a
-  // reactive / on-demand "call type" (e.g. Reactive, Emergency Callout) that is
-  // logged ad-hoc against a site + system with no recurring service, and is
-  // excluded from PPM auto-generation and the site recurring-service picker.
+  // The kind of call this service type represents:
+  // - 'recurring': schedules recurring PPM visits (deadline-driven).
+  // - 'reactive': ad-hoc on-demand call with an "attend within X hours" KPI
+  //   (e.g. Reactive, Emergency Callout).
+  // - 'planned': a scheduled one-off (e.g. Commissioning) with NO deadline/KPI
+  //   and never an emergency; can be assigned to multiple systems.
+  // `is_recurring`/`is_emergency` are kept in sync for backward compatibility.
+  call_kind: 'recurring' | 'reactive' | 'planned'
+  // Whether this service type schedules recurring PPM visits. Mirrors
+  // `call_kind === 'recurring'`. Kept for backward compatibility.
   is_recurring: boolean
   // Marks a non-recurring type as an emergency call type (pulsing map marker +
   // engineer emergency notification on assignment).
@@ -328,11 +334,17 @@ export interface ChecklistTemplate {
   // When set, this template applies only to the matching visit type. When null,
   // it is the service-wide fallback used by visits with no specific template.
   visit_type_id?: string | null
+  // When set, this template applies only when the booked call is for the
+  // matching system type. When null, it is the general/any-system fallback.
+  // Used by non-recurring (reactive/planned) call types that span multiple
+  // systems, each with its own checklist.
+  system_type_id?: string | null
   name: string
   items: ChecklistItem[]
   created_at: string
   updated_at: string
   service_type?: ServiceType
+  system_type?: SystemType | null
 }
 
 // Client-specific checklist items appended to the engineer's checklist. Scoped

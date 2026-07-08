@@ -51,7 +51,7 @@ export default async function SchedulePage({
       direct_site:sites!tasks_site_id_fkey(*, route:routes(*), branch:branches(*), client:clients(id, name)),
       direct_service_type:service_types!tasks_service_type_id_fkey(*, system_type:system_types(*)),
       direct_system_type:system_types!tasks_system_type_id_fkey(*),
-      assigned_engineer:profiles(*),
+      assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(*),
       visit_type:service_visit_types(*),
       client:clients(id, name)
     `)

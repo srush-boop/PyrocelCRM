@@ -29,6 +29,7 @@ import { TaskHeader } from '@/components/dashboard/tasks/task-header'
 import { PauseResumeControls } from '@/components/dashboard/tasks/pause-resume-controls'
 import { ReportNotesAssist } from '@/components/dashboard/reports/report-notes-assist'
 import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
+import { CallPartsPicker } from '@/components/dashboard/tasks/call-parts-picker'
 import { formatDateUK, cn } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import {
@@ -484,6 +485,11 @@ export function TaskExecution({
   const isEngineer = profile.role === 'engineer'
   // Paused inspections are read-only until resumed (see PauseResumeControls).
   const canEdit = isEngineer && status !== 'completed' && status !== 'cancelled' && status !== 'paused'
+
+  // Parts have a broader edit rule than the checklist: office/admin can correct
+  // parts at any status (incl. after completion), while the assigned engineer
+  // can edit while the call is actively in progress. RLS enforces this too.
+  const canManageParts = isAdminOrOffice || canEdit
 
   // Group checklist rows by panel for rendering. Preserves the order results
   // were built in (per panel, then per item). Legacy results with no panel_id
@@ -950,6 +956,9 @@ export function TaskExecution({
         {checklistResults.some((r) => r.type === 'pass_fail' && r.passed === false) && (
           <SuggestedPartsPicker taskId={task.id} canEdit={canEdit} />
         )}
+
+        {/* Parts used on this call (internal) — always available */}
+        <CallPartsPicker taskId={task.id} canEdit={canManageParts} />
         </>
       )}
 

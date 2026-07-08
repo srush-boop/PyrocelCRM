@@ -167,6 +167,9 @@ export function DamperTaskExecution({
   const isEngineer = profile.role === 'engineer'
   // Paused inspections are read-only until resumed (see PauseResumeControls).
   const canEdit = status !== 'completed' && status !== 'cancelled' && status !== 'paused' && (isEngineer || profile.role !== 'engineer')
+  // Office/admin can correct parts at any status (incl. completed); the engineer
+  // only while the call is active. RLS enforces this server-side too.
+  const canManageParts = profile.role === 'admin' || profile.role === 'office' || canEdit
 
   const summary = useMemo(() => {
     const values = Object.values(states)

@@ -1761,6 +1761,41 @@ export interface SuggestedPartLine {
   unit: string
 }
 
+// A catalogue part actually used/fitted on a call (task). Distinct from the
+// defect "suggested parts" flow: always available (no defect required) and
+// editable by the assigned engineer (while in progress) or office/admin (any
+// time). Money is stored in integer pence. The charge-related columns are
+// groundwork for a future charging pass and have no UI yet. Never shown to
+// clients.
+export interface CallPart {
+  id: string
+  task_id: string
+  part_id: string
+  quantity: number
+  // Our cost snapshot (pence) captured when the part was added.
+  unit_cost_pence: number | null
+  // Charge groundwork (no UI yet).
+  chargeable: boolean
+  sale_unit_price_pence: number | null
+  charge_status: 'pending' | 'quoted' | 'invoiced' | 'non_chargeable'
+  notes: string | null
+  added_by: string | null
+  created_at: string
+  updated_at: string
+  part?: Part | null
+}
+
+// Lightweight shape used by the call-parts picker (part joined in). Includes
+// the cost snapshot so the picker can show line/total cost (info only).
+export interface CallPartLine {
+  part_id: string
+  quantity: number
+  name: string
+  sku: string | null
+  unit: string
+  unit_cost_pence: number | null
+}
+
 // A part held at a location, with its own minimum re-order level and the
 // target (ideal) quantity that defines the location's stock profile.
 export interface StockItem {

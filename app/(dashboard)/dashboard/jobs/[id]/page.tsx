@@ -16,6 +16,7 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import { CreateDocumentButton } from '@/components/documents/create-document-dialog'
+import { BookJobCallButton } from '@/components/dashboard/jobs/book-job-call-button'
 import { JobStagePanel, JobContractReview } from '@/components/dashboard/jobs/job-controls'
 import { JobPurchasing } from '@/components/dashboard/jobs/job-purchasing'
 import { jobStageMeta, jobStatusMeta } from '@/lib/jobs/stages'
@@ -136,6 +137,16 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                 </Link>
               </Button>
             ) : null}
+            <BookJobCallButton
+              jobId={typedJob.id}
+              siteId={typedJob.site?.id ?? null}
+              siteName={typedJob.site?.name ?? null}
+              clientId={typedJob.client?.id ?? null}
+              jobNumber={typedJob.job_number ?? null}
+              jobTitle={typedJob.title ?? typedJob.quote?.title ?? null}
+              poNumber={typedJob.po_number ?? null}
+              jobNotes={typedJob.notes ?? null}
+            />
             <CreateDocumentButton
               ownerType="job"
               ownerId={typedJob.id}

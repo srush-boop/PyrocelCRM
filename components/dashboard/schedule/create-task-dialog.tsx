@@ -18,6 +18,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -27,7 +28,7 @@ import {
 } from '@/components/ui/select'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Plus, Loader2, CalendarIcon, Siren } from 'lucide-react'
+import { Plus, Loader2, CalendarIcon, Siren, Mail } from 'lucide-react'
 import { format } from 'date-fns'
 import type { Profile, SiteService, Site, ServiceType, SystemType } from '@/lib/types/database'
 import { cn } from '@/lib/utils'
@@ -108,6 +109,8 @@ export function CreateTaskDialog({
   const [visitTypes, setVisitTypes] = useState<{ id: string; name: string }[]>([])
   const [visitTypeId, setVisitTypeId] = useState<string>(ALL_VISITS)
   const [timeError, setTimeError] = useState<string | null>(null)
+  // Complimentary booking confirmation email to the client/site (opt-out).
+  const [sendConfirmation, setSendConfirmation] = useState(true)
   const router = useRouter()
   const supabase = createClient()
 
@@ -243,6 +246,7 @@ export function CreateTaskDialog({
     setReactiveSystemTypeId(defaultSystemTypeId ?? NO_SYSTEM)
     setKpiHours('')
     setDescription('')
+    setSendConfirmation(true)
     setError(null)
     setFormData({
       site_service_id: '',
@@ -289,6 +293,7 @@ export function CreateTaskDialog({
       scheduledDate: format(formData.scheduled_date, 'yyyy-MM-dd'),
       bookedStartTime: formData.booked_start_time || null,
       bookedEndTime: formData.booked_end_time || null,
+      sendConfirmation,
     }
 
     const result =
@@ -648,6 +653,28 @@ export function CreateTaskDialog({
                   Add a start and end time to book an appointment slot on the calendar.
                 </p>
               )}
+            </div>
+
+            <div className="flex items-start gap-3 rounded-md border p-3">
+              <Checkbox
+                id="send-confirmation"
+                checked={sendConfirmation}
+                onCheckedChange={(checked) => setSendConfirmation(checked === true)}
+                className="mt-0.5"
+              />
+              <div className="grid gap-1">
+                <Label
+                  htmlFor="send-confirmation"
+                  className="flex cursor-pointer items-center gap-1.5"
+                >
+                  <Mail className="h-4 w-4 text-muted-foreground" />
+                  Send booking confirmation
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Emails the site &amp; client a complimentary confirmation with an
+                  add-to-calendar invite. Uncheck to skip.
+                </p>
+              </div>
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}

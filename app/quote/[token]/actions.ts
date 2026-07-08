@@ -2,7 +2,8 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { loadQuoteCatalogue } from '@/lib/sales/equipment-spec'
-import { createRemedialCallsForQuote } from '@/lib/remedial'
+  import { createRemedialCallsForQuote } from '@/lib/remedial'
+  import { createJobForAcceptedQuote } from '@/lib/jobs/convert'
 import { computeQuoteTotals } from '@/lib/sales'
 import type { QuoteLineItem, QuoteMessage } from '@/lib/types/database'
 
@@ -151,10 +152,12 @@ export async function respondToPublicQuote(args: {
     return { ok: false, error: 'Could not record your response. Please try again.' }
   }
 
-  // When a remedial quote is approved by the client, raise the remedial call(s)
-  // automatically so the works are scheduled and the pre-attendance alert fires.
+  // When a quote is approved by the client, raise remedial call(s) for remedial
+  // quotes, or spawn a delivery Job for everything else (both idempotent and
+  // non-blocking). Uses the admin client so RLS never gets in the way.
   if (args.decision === 'accepted') {
     await createRemedialCallsForQuote(supabase, quote.id)
+    await createJobForAcceptedQuote(supabase, quote.id)
   }
 
   return { ok: true }

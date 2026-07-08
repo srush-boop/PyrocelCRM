@@ -155,6 +155,13 @@ export interface Profile {
   // role; an explicit true/false overrides the role default. Resolve with
   // `isTimesheetRequired()`.
   timesheet_required: boolean | null
+  // Engineer home location — the start/finish anchor for the calls-map route
+  // preview and closeness hints. `home_postcode` is user-entered; the lat/lng
+  // are geocoded from it (postcodes.io) on save, and re-tried on read if null.
+  home_postcode: string | null
+  home_latitude: number | null
+  home_longitude: number | null
+  home_geocoded_at: string | null
   created_at: string
   updated_at: string
   department?: Department | null
@@ -402,7 +409,9 @@ export interface Site {
   property_type_id: string | null
   // Default sub-contractor for sub-contracted services at this site.
   default_subcontractor_id: string | null
-  status: 'live' | 'dead'
+  // 'new' = auto-created from an accepted prospect quote; treated as off-contract
+  // for scheduling (like 'dead') until formally onboarded.
+  status: 'live' | 'dead' | 'new'
   notes: string | null
   // Pre-attendance flags engineers/office can set at site level. Individual
   // site_services may override these (see SiteService); null override = inherit.
@@ -1231,6 +1240,66 @@ export interface Quote {
 export interface QuoteWithDetails extends Quote {
   systems: QuoteSystem[]
   line_items: QuoteLineItem[]
+}
+
+// ---------------------------------------------------------------------------
+// Jobs — the operational record of a won (accepted) quote being delivered.
+// ---------------------------------------------------------------------------
+
+// Built-in delivery pipeline stage. Fixed set for now (see lib/jobs/stages.ts).
+export type JobStage =
+  | 'contract_review'
+  | 'ordering'
+  | 'in_progress'
+  | 'commissioning'
+  | 'handover'
+  | 'complete'
+
+export type JobStatus = 'open' | 'on_hold' | 'complete' | 'cancelled'
+
+export interface Job {
+  id: string
+  job_number: string | null
+  // Source won quote (nullable so jobs can outlive a deleted quote / be manual).
+  quote_id: string | null
+  client_id: string | null
+  site_id: string | null
+  branch_id: string | null
+  title: string | null
+  stage: JobStage
+  status: JobStatus
+  // Project manager / owner.
+  owner_id: string | null
+  department_id: string | null
+  // Financial snapshot captured at conversion (pence). Margin = value - cost.
+  quoted_total_pence: number
+  quoted_cost_pence: number
+  quoted_subtotal_pence: number
+  quoted_vat_pence: number
+  // Customer purchase-order reference (copied from the quote).
+  po_number: string | null
+  notes: string | null
+  contract_reviewed_at: string | null
+  contract_reviewed_by: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  // Optional joined relations.
+  client?: Client | null
+  site?: Site | null
+  branch?: Branch | null
+  owner?: { id: string; full_name: string | null } | null
+  quote?: Quote | null
+}
+
+export interface JobStatusHistory {
+  id: string
+  job_id: string
+  from_stage: string | null
+  to_stage: string | null
+  note: string | null
+  changed_by: string | null
+  changed_at: string
 }
 
 // One line of the client-request compliance matrix: a requirement extracted

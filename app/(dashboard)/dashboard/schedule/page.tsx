@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { CalendarClock } from 'lucide-react'
+import { CalendarClock, MapPinned } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScheduleView } from '@/components/dashboard/schedule/schedule-view'
 import { CreateTaskDialog } from '@/components/dashboard/schedule/create-task-dialog'
@@ -120,6 +120,12 @@ export default async function SchedulePage({
               <Link href="/dashboard/schedule/planning">
                 <CalendarClock className="h-4 w-4" />
                 Planning
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/schedule/map">
+                <MapPinned className="h-4 w-4" />
+                Map view
               </Link>
             </Button>
             <GenerateCallsButton />

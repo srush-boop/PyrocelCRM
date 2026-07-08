@@ -25,3 +25,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# v0 scratch / temporary debug scripts
+.v0tmp
+.v0tmp/
+.v0tmp*.mjs

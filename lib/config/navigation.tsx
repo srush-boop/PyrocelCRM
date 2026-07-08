@@ -42,6 +42,7 @@ import {
   MessageSquareText,
   History,
   Archive,
+  Hammer,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { UserRole } from '@/lib/types/database'
@@ -89,6 +90,7 @@ const adminCallsNavItem: NavItem = {
   icon: Calendar,
   children: [
     { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
+    { title: 'Map', href: '/dashboard/schedule/map', icon: MapPinned },
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
     { title: 'Reports', href: '/dashboard/reports', icon: FileText },
     { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
@@ -102,6 +104,7 @@ const officeCallsNavItem: NavItem = {
   icon: Calendar,
   children: [
     { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
+    { title: 'Map', href: '/dashboard/schedule/map', icon: MapPinned },
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
     { title: 'Reports', href: '/dashboard/reports', icon: FileText },
     { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
@@ -166,6 +169,19 @@ const salesNavItem: NavItem = {
         { title: 'Design Categories', href: '/dashboard/sales/design-categories', icon: PencilRuler },
       ],
     },
+  ],
+}
+
+// Jobs: the operational delivery of won quotes. A clickable group opening the
+// jobs dashboard and revealing the full jobs list. Shared by admin and office.
+const jobsNavItem: NavItem = {
+  key: 'jobs',
+  title: 'Jobs',
+  href: '/dashboard/jobs',
+  icon: Hammer,
+  children: [
+    { title: 'Dashboard', href: '/dashboard/jobs', icon: LayoutDashboard },
+    { title: 'All Jobs', href: '/dashboard/jobs/list', icon: LayoutList },
   ],
 }
 
@@ -280,6 +296,7 @@ const adminNavItems: NavItem[] = [
   { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   adminServiceManagementNavItem,
   salesNavItem,
+  jobsNavItem,
   managerStockNavItem,
   adminPeopleNavItem,
   documentsNavItem,
@@ -297,6 +314,7 @@ const officeNavItems: NavItem[] = [
   { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   officeServiceManagementNavItem,
   salesNavItem,
+  jobsNavItem,
   managerStockNavItem,
   officePeopleNavItem,
   documentsNavItem,

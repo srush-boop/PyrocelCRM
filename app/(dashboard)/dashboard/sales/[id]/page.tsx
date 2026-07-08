@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Hammer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { QuoteBuilder } from '@/components/dashboard/sales/quote-builder'
 import { QuoteStatusPanel } from '@/components/dashboard/sales/quote-status-panel'
@@ -60,6 +60,13 @@ export default async function QuoteDetailPage({
   const typedQuote = quote as Quote
   // The group is keyed by the master quote id (self if this is the master).
   const masterId = typedQuote.master_quote_id ?? typedQuote.id
+
+  // Once accepted, a delivery job is spawned — surface a link to it.
+  const { data: linkedJob } = await supabase
+    .from('jobs')
+    .select('id, job_number')
+    .eq('quote_id', id)
+    .maybeSingle()
 
   const [
     { data: systems },
@@ -193,12 +200,22 @@ export default async function QuoteDetailPage({
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2">
-        <Button variant="ghost" size="sm" className="w-fit -ml-2" asChild>
-          <Link href="/dashboard/sales/quotes">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Quotes
-          </Link>
-        </Button>
+        <div className="flex items-center justify-between gap-2">
+          <Button variant="ghost" size="sm" className="w-fit -ml-2" asChild>
+            <Link href="/dashboard/sales/quotes">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Quotes
+            </Link>
+          </Button>
+          {linkedJob ? (
+            <Button variant="outline" size="sm" className="w-fit" asChild>
+              <Link href={`/dashboard/jobs/${(linkedJob as { id: string }).id}`}>
+                <Hammer className="mr-2 h-4 w-4" />
+                View job {(linkedJob as { job_number: string | null }).job_number ?? ''}
+              </Link>
+            </Button>
+          ) : null}
+        </div>
         <h1 className="text-3xl font-bold tracking-tight">{typedQuote.title}</h1>
         <p className="text-muted-foreground">
           {typedQuote.reference ?? typedQuote.quote_number ?? 'Draft'}

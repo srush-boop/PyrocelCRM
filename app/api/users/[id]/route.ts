@@ -72,6 +72,7 @@ export async function PUT(
       role_id,
       job_title,
       timesheet_required,
+      home_postcode,
     } = body as {
       full_name?: string
       email?: string
@@ -86,6 +87,7 @@ export async function PUT(
       role_id?: string | null
       job_title?: string | null
       timesheet_required?: boolean | null
+      home_postcode?: string | null
     }
 
     // Verify the caller is an authenticated admin
@@ -170,6 +172,28 @@ export async function PUT(
     }
     if (holiday_entitlement_hours !== undefined) {
       profilePatch.holiday_entitlement_hours = parseEntitlement(holiday_entitlement_hours)
+    }
+    // Engineer home postcode: store it and (re)geocode to coordinates so the
+    // calls map can anchor the engineer's route. Clearing the postcode clears
+    // the cached coordinates too.
+    if (home_postcode !== undefined) {
+      const trimmed = typeof home_postcode === 'string' ? home_postcode.trim() : ''
+      if (!trimmed) {
+        profilePatch.home_postcode = null
+        profilePatch.home_latitude = null
+        profilePatch.home_longitude = null
+        profilePatch.home_geocoded_at = null
+      } else {
+        profilePatch.home_postcode = trimmed
+        const { geocodePostcodes, normalisePostcode } = await import('@/lib/geocode')
+        const geocoded = await geocodePostcodes([trimmed])
+        const hit = geocoded.get(normalisePostcode(trimmed))
+        // On a failed lookup we keep the postcode but null the coords; the map
+        // retries geocoding on read, so it can self-heal later.
+        profilePatch.home_latitude = hit?.latitude ?? null
+        profilePatch.home_longitude = hit?.longitude ?? null
+        profilePatch.home_geocoded_at = hit ? new Date().toISOString() : null
+      }
     }
 
     const { error: profileError } = await adminClient

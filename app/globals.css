@@ -203,3 +203,31 @@
 @page {
   margin: 14mm;
 }
+
+/* Emergency call markers on the calls map: an expanding halo that pulses until
+   the call is started, so unattended emergencies are impossible to miss. */
+@keyframes emergency-pulse {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.85;
+  }
+  70% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+.emergency-pulse-ring {
+  animation: emergency-pulse 1.6s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .emergency-pulse-ring {
+    animation: none;
+    opacity: 0.35;
+  }
+}

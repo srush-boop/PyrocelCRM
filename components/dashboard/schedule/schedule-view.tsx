@@ -228,6 +228,9 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
 
   const isEngineer = profile.role === 'engineer'
   const isAdminOrOffice = profile.role === 'admin' || profile.role === 'office'
+  // CDOs perform route-based work, so they keep the "By route" grouping in their
+  // engineer view; regular engineers do not.
+  const isCdo = profile.discipline === 'cdo'
   // Only engineers and admins can actually start/continue a call. Office staff
   // coordinate work (view + assign) but never run the on-site inspection, so the
   // "Start/Continue Call" action is hidden from them.
@@ -926,16 +929,24 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     )
   }
 
-  const viewToggle = (
+  // Engineers get a slimmed-down toggle: no Grid, no "By area", and "By route"
+  // only for CDOs (who do route-based work). Admin/office keep every option.
+  const viewModeOptions = isEngineer
+    ? [
+        { mode: 'list' as const, icon: ListIcon, label: 'List' },
+        ...(isCdo ? [{ mode: 'route' as const, icon: RouteIcon, label: 'By route' }] : []),
+      ]
+    : [
+        { mode: 'grid' as const, icon: LayoutGrid, label: 'Grid' },
+        { mode: 'list' as const, icon: ListIcon, label: 'List' },
+        { mode: 'route' as const, icon: RouteIcon, label: 'By route' },
+        { mode: 'area' as const, icon: MapPinned, label: 'By area' },
+      ]
+
+  // With a single option there is nothing to toggle, so hide the control.
+  const viewToggle = viewModeOptions.length < 2 ? null : (
     <div className="flex items-center rounded-md border p-0.5">
-      {(
-        [
-          { mode: 'grid' as const, icon: LayoutGrid, label: 'Grid' },
-          { mode: 'list' as const, icon: ListIcon, label: 'List' },
-          { mode: 'route' as const, icon: RouteIcon, label: 'By route' },
-          { mode: 'area' as const, icon: MapPinned, label: 'By area' },
-        ]
-      ).map(({ mode, icon: Icon, label }) => (
+      {viewModeOptions.map(({ mode, icon: Icon, label }) => (
         <Button
           key={mode}
           type="button"
@@ -975,7 +986,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
             className="gap-2 shrink-0"
           >
             <CalendarClock className="h-4 w-4" />
-            Needs booking
+            {isEngineer ? 'To book' : 'Needs booking'}
             <Badge
               variant={needsBookingOnly ? 'secondary' : 'outline'}
               className="ml-0.5 px-1.5"

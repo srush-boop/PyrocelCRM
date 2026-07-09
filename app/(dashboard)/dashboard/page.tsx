@@ -24,10 +24,18 @@ import Link from 'next/link'
 import { ScanQrButton } from '@/components/dashboard/dampers/scan-qr-button'
 import { ApprovalsWidget } from '@/components/dashboard/approvals/approvals-widget'
 import { EngineerHome } from '@/components/dashboard/home/engineer-home'
+import { DashboardDateFilter } from '@/components/dashboard/home/dashboard-date-filter'
 import { Suspense } from 'react'
-import { format } from 'date-fns'
+import { format, startOfMonth, endOfMonth, subDays, startOfDay, endOfDay } from 'date-fns'
+import { fetchKpiData } from '@/lib/kpi-data'
+import { buildKpiReport, type KpiTask } from '@/lib/kpi'
+import { formatGBP } from '@/lib/utils'
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string; to?: string }>
+}) {
   const supabase = await createClient()
 
   const {
@@ -92,6 +100,79 @@ export default async function DashboardPage() {
       .in('status', ['draft', 'sent']),
   ])
 
+  // ---------------------------------------------------------------------------
+  // Value + compliance metrics with an optional global date-range filter.
+  // When both `from` and `to` are supplied they override every card; otherwise
+  // PPM defaults to the current calendar month and values to the last 60 days.
+  // ---------------------------------------------------------------------------
+  const sp = await searchParams
+  const filterFrom = sp.from ? startOfDay(new Date(sp.from)) : null
+  const filterTo = sp.to ? endOfDay(new Date(sp.to)) : null
+  const hasFilter =
+    !!filterFrom &&
+    !!filterTo &&
+    !Number.isNaN(filterFrom.getTime()) &&
+    !Number.isNaN(filterTo.getTime())
+
+  // PPM regulatory KPI range (defaults to the current month).
+  const ppmFrom = hasFilter ? filterFrom! : startOfMonth(today)
+  const ppmTo = hasFilter ? filterTo! : endOfMonth(today)
+  // Sales/Defects value range (defaults to the last 60 days).
+  const valueFrom = hasFilter ? filterFrom! : startOfDay(subDays(today, 60))
+  const valueTo = hasFilter ? filterTo! : endOfDay(today)
+
+  const rangeLabel = (from: Date, to: Date) =>
+    `${format(from, 'd MMM')} – ${format(to, 'd MMM yyyy')}`
+
+  // Regulatory PPM compliance rate for calls due within the PPM range.
+  let ppmRate: number | null = null
+  try {
+    const { tasks, tolerances } = await fetchKpiData(supabase)
+    const inRange = tasks.filter((t: KpiTask) => {
+      if (!t.dueDate) return false
+      const d = new Date(t.dueDate as string)
+      return d >= ppmFrom && d <= ppmTo
+    })
+    ppmRate = buildKpiReport(inRange, tolerances, today).overall.regulatory.rate
+  } catch {
+    ppmRate = null
+  }
+
+  // Quoted value = every master quote created in range.
+  // Won value = master quotes accepted (by decision date) in range.
+  // Split by quote_type: 'remedial' → Defects card, everything else → Sales.
+  const [quotedRes, wonRes] = await Promise.all([
+    supabase
+      .from('quotes')
+      .select('total_pence, quote_type')
+      .eq('is_master', true)
+      .gte('created_at', valueFrom.toISOString())
+      .lte('created_at', valueTo.toISOString()),
+    supabase
+      .from('quotes')
+      .select('total_pence, quote_type')
+      .eq('is_master', true)
+      .eq('status', 'accepted')
+      .gte('decided_at', valueFrom.toISOString())
+      .lte('decided_at', valueTo.toISOString()),
+  ])
+
+  const sumValues = (rows: { total_pence: number | null; quote_type: string | null }[] | null) => {
+    let remedial = 0
+    let other = 0
+    for (const r of rows ?? []) {
+      const pence = r.total_pence || 0
+      if (r.quote_type === 'remedial') remedial += pence
+      else other += pence
+    }
+    return { remedial, other }
+  }
+
+  const quoted = sumValues(quotedRes.data as any)
+  const won = sumValues(wonRes.data as any)
+  const valueRangeLabel = hasFilter ? rangeLabel(valueFrom, valueTo) : 'Last 60 days'
+  const ppmRangeLabel = hasFilter ? rangeLabel(ppmFrom, ppmTo) : format(today, 'MMMM yyyy')
+
   const modules: ModuleCard[] = [
     {
       title: 'Service',
@@ -99,6 +180,12 @@ export default async function DashboardPage() {
       icon: Wrench,
       href: '/dashboard/service',
       metrics: [
+        {
+          label: 'PPM regulatory',
+          value: ppmRate ?? 0,
+          display: ppmRate == null ? '—' : `${ppmRate}%`,
+          caption: ppmRangeLabel,
+        },
         { label: 'Open calls', value: openCallsCount.count || 0 },
         {
           label: 'Emergencies',
@@ -125,7 +212,21 @@ export default async function DashboardPage() {
       description: 'Quotes in progress',
       icon: ReceiptText,
       href: '/dashboard/sales',
-      metrics: [{ label: 'Open quotes', value: openQuotesCount.count || 0 }],
+      metrics: [
+        { label: 'Open quotes', value: openQuotesCount.count || 0 },
+        {
+          label: 'Quoted',
+          value: quoted.other,
+          display: formatGBP(quoted.other / 100),
+          caption: valueRangeLabel,
+        },
+        {
+          label: 'Won',
+          value: won.other,
+          display: formatGBP(won.other / 100),
+          caption: valueRangeLabel,
+        },
+      ],
     },
     {
       title: 'Defects',
@@ -137,6 +238,18 @@ export default async function DashboardPage() {
           label: 'Open defects',
           value: openDefectsCount.count || 0,
           alert: (openDefectsCount.count || 0) > 0,
+        },
+        {
+          label: 'Quoted',
+          value: quoted.remedial,
+          display: formatGBP(quoted.remedial / 100),
+          caption: valueRangeLabel,
+        },
+        {
+          label: 'Won',
+          value: won.remedial,
+          display: formatGBP(won.remedial / 100),
+          caption: valueRangeLabel,
         },
       ],
     },
@@ -182,6 +295,14 @@ export default async function DashboardPage() {
         <ScanQrButton />
       </div>
 
+      {/* Global date-range filter — overrides every card's default period. */}
+      <Suspense fallback={null}>
+        <DashboardDateFilter
+          initialFrom={hasFilter ? format(ppmFrom, 'yyyy-MM-dd') : ''}
+          initialTo={hasFilter ? format(ppmTo, 'yyyy-MM-dd') : ''}
+        />
+      </Suspense>
+
       {/* Leave approvals waiting on this user (managers/accounts/admins only) */}
       <Suspense fallback={null}>
         <ApprovalsWidget />
@@ -219,9 +340,14 @@ export default async function DashboardPage() {
                           }`}
                         >
                           {metric.icon && <metric.icon className="h-5 w-5" />}
-                          {metric.value}
+                          {metric.display ?? metric.value}
                         </div>
                         <p className="text-xs text-muted-foreground">{metric.label}</p>
+                        {metric.caption && (
+                          <p className="text-[0.7rem] leading-tight text-muted-foreground/70">
+                            {metric.caption}
+                          </p>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -238,6 +364,10 @@ export default async function DashboardPage() {
 type ModuleMetric = {
   label: string
   value: number
+  // Optional string to render instead of the raw number (e.g. "£12,500.00", "92%").
+  display?: string
+  // Optional small caption under the metric, e.g. the active period.
+  caption?: string
   alert?: boolean
   icon?: typeof Siren
 }

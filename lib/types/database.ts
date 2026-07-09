@@ -155,6 +155,9 @@ export interface Profile {
   // Public Blob URL of the user's signature image, applied to reports, RAMS and
   // other documents they generate or sign off.
   signature_url: string | null
+  // Public Blob URL of the user's profile picture, shown in team chat and
+  // across the app. NULL = use initials fallback.
+  avatar_url: string | null
   // Per-user timesheet requirement override. NULL = inherit from the assigned
   // role; an explicit true/false overrides the role default. Resolve with
   // `isTimesheetRequired()`.

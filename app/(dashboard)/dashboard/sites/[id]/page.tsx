@@ -14,6 +14,7 @@ import { SiteDefaultSubcontractor } from '@/components/dashboard/sites/site-defa
 import { QuotesTable } from '@/components/dashboard/sales/quotes-table'
 import { SiteAssetsTab, type SiteAsset } from '@/components/dashboard/sites/site-assets-tab'
 import { SiteReports } from '@/components/dashboard/sites/site-reports'
+import { SiteOpenCalls, type OpenCall } from '@/components/dashboard/sites/site-open-calls'
 import { SiteLogbook } from '@/components/dashboard/sites/site-logbook'
 import { SiteDocuments } from '@/components/dashboard/sites/site-documents'
 import { SiteEngineerInfoTab } from '@/components/dashboard/sites/site-engineer-info-tab'
@@ -209,7 +210,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
     .select(`
       *,
       site_service:site_services(*, service_type:service_types(*)),
-      assigned_engineer:profiles(*),
+      assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(*),
       task_result:task_results(*)
     `)
     .or(completedFilter)
@@ -224,6 +225,23 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
     assigned_engineer: Profile | null
     task_result: TaskResult | null 
   })[]
+
+  // Open calls: anything not yet completed or cancelled. Uses the same site_id
+  // OR site_service_id filter as completed tasks so ad-hoc/reactive calls booked
+  // directly against the site (no site_service_id) are included too.
+  const { data: openCallsData } = await supabase
+    .from('tasks')
+    .select(`
+      *,
+      site_service:site_services(*, service_type:service_types(*)),
+      service_type:service_types(id, name),
+      assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(*)
+    `)
+    .or(completedFilter)
+    .in('status', ['pending', 'in_progress', 'paused'])
+    .order('scheduled_date', { ascending: true })
+
+  const openCalls = (openCallsData || []) as OpenCall[]
 
   // Filter out service types already added to this site. Reactive / emergency
   // (non-recurring) call types are excluded here — they aren't recurring
@@ -428,6 +446,14 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
       >
         <TabsList className="h-auto flex-wrap justify-start">
           <TabsTrigger value="overview" className="flex-none">Overview</TabsTrigger>
+          <TabsTrigger value="open-calls" className="flex-none">
+            Open Calls
+            {openCalls.length > 0 && (
+              <Badge variant="secondary" className="ml-2">
+                {openCalls.length}
+              </Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="systems" className="flex-none">Systems</TabsTrigger>
           {assetTabs.length > 0 && (
             <TabsTrigger value="assets" className="flex-none">Assets</TabsTrigger>
@@ -620,6 +646,10 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
                   systemDefaultsById={systemDefaultsById}
                 />
           </div>
+        </TabsContent>
+
+        <TabsContent value="open-calls" className="mt-0">
+          <SiteOpenCalls openCalls={openCalls} />
         </TabsContent>
 
         <TabsContent value="systems" className="mt-0">

@@ -37,7 +37,7 @@ export default async function PortalReportPage({ params }: PageProps) {
     .select(
       `*,
        site_service:site_services(*, site:sites(*), service_type:service_types(*)),
-       assigned_engineer:profiles(*, role_ref:roles(*)),
+       assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(*, role_ref:roles(*)),
        visit_type:service_visit_types(*)`,
     )
     .eq('id', taskId)

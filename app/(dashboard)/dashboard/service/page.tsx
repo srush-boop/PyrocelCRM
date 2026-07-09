@@ -119,7 +119,7 @@ export default async function ServiceDashboardPage() {
       service_type:service_types(*)
     ),
     direct_site:sites!tasks_site_id_fkey(*),
-    assigned_engineer:profiles(*)
+    assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(*)
   `
 
   const [

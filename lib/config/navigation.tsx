@@ -124,6 +124,7 @@ const adminCallsNavItem: NavItem = {
     { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
     { title: 'Map', href: '/dashboard/schedule/map', icon: MapPinned },
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
+    { title: 'On-call', href: '/dashboard/oncall', icon: LifeBuoy },
     { title: 'Reports', href: '/dashboard/reports', icon: FileText },
     { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
     { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
@@ -141,6 +142,7 @@ const officeCallsNavItem: NavItem = {
     { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
     { title: 'Map', href: '/dashboard/schedule/map', icon: MapPinned },
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
+    { title: 'On-call', href: '/dashboard/oncall', icon: LifeBuoy },
     { title: 'Reports', href: '/dashboard/reports', icon: FileText },
     { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
     { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
@@ -159,6 +161,7 @@ const engineerCallsNavItem: NavItem = {
     { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
     { title: 'Nearby Calls', href: '/dashboard/nearby', icon: Navigation },
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
+    { title: 'On-call', href: '/dashboard/oncall', icon: LifeBuoy },
     { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   ],
 }
@@ -355,16 +358,6 @@ const officeCompanyNavItem: NavItem = {
   ],
 }
 
-// On-call: out-of-hours emergency rota. Available to all roles — engineers use
-// it to see their shifts and request cover; managers build the rota and review
-// pay. It sits alongside Calendar as a time/scheduling concern.
-const oncallNavItem: NavItem = {
-  key: 'oncall',
-  title: 'On-call',
-  href: '/dashboard/oncall',
-  icon: LifeBuoy,
-}
-
 // Chat: internal team messaging (branch channels + direct messages). Available
 // to all active staff.
 const chatNavItem: NavItem = {
@@ -384,7 +377,6 @@ const adminNavItems: NavItem[] = [
   sitesNavItem,
   adminCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
-  oncallNavItem,
   chatNavItem,
   salesNavItem,
   jobsNavItem,
@@ -402,7 +394,6 @@ const officeNavItems: NavItem[] = [
   sitesNavItem,
   officeCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
-  oncallNavItem,
   chatNavItem,
   salesNavItem,
   jobsNavItem,
@@ -418,7 +409,6 @@ const engineerNavItems: NavItem[] = [
   { key: 'home', title: 'Home', href: '/dashboard', icon: LayoutDashboard, locked: true },
   engineerCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
-  oncallNavItem,
   chatNavItem,
   engineerPeopleNavItem,
   engineerStockNavItem,
@@ -459,6 +449,8 @@ const PERMISSION_KEY_MIGRATION: Record<string, string> = {
   'service-management': 'calls',
   // KPIs moved into the Service group.
   kpis: 'calls',
+  // On-call moved into the Service group.
+  oncall: 'calls',
   // Suppliers moved into the Purchasing group.
   suppliers: 'purchasing',
   // Users, Assets and Notifications moved into the new Company group.

@@ -199,8 +199,8 @@ export async function triageInboundRequest(requestId: string): Promise<TriageRes
       supabase.from('clients').select('id, name, contact_email, contact_name'),
       supabase
         .from('service_types')
-        .select('id, name, is_emergency, default_kpi_hours, system_type_id')
-        .eq('active', true)
+        .select('id, name, is_emergency, default_kpi_hours, system_type_id, status')
+        .neq('status', 'dead')
         .eq('is_recurring', false)
         .order('name'),
     ])

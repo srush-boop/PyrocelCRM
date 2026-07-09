@@ -211,6 +211,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   const [needsBookingOnly, setNeedsBookingOnly] = useState(false)
   const [selectedEngineer, setSelectedEngineer] = useState<string>('all')
   const [selectedSystem, setSelectedSystem] = useState<string>('all')
+  const [selectedService, setSelectedService] = useState<string>('all')
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined)
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined)
   const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null)
@@ -243,6 +244,18 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
       return map
     }, new Map<string, NonNullable<NonNullable<NonNullable<TaskWithDetails['site_service']>['service_type']>['system_type']>>()).values()
   ).sort((a, b) => (a?.name ?? '').localeCompare(b?.name ?? ''))
+  // Unique service types present across the current calls, for the service filter.
+  // Respects the selected system so the two filters narrow together.
+  const serviceOptions = Array.from(
+    tasks.reduce((map, task) => {
+      const svc = task.site_service?.service_type
+      const sysId = svc?.system_type?.id
+      if (svc?.id && !map.has(svc.id) && (selectedSystem === 'all' || sysId === selectedSystem)) {
+        map.set(svc.id, { id: svc.id, name: svc.name })
+      }
+      return map
+    }, new Map<string, { id: string; name: string }>()).values()
+  ).sort((a, b) => a.name.localeCompare(b.name))
   // Only admin/office can multi-select and reassign tasks
   const canAssign = isAdminOrOffice && engineers.length > 0
   // Once an engineer has closed (completed) a call it can no longer be
@@ -383,12 +396,13 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   }
 
   const hasActiveFilters =
-    search || selectedEngineer !== 'all' || selectedSystem !== 'all' || dateFrom || dateTo || needsBookingOnly
+    search || selectedEngineer !== 'all' || selectedSystem !== 'all' || selectedService !== 'all' || dateFrom || dateTo || needsBookingOnly
 
   const clearFilters = () => {
     setSearch('')
     setSelectedEngineer('all')
     setSelectedSystem('all')
+    setSelectedService('all')
     setDateFrom(undefined)
     setDateTo(undefined)
     setNeedsBookingOnly(false)
@@ -408,6 +422,10 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     // System type filter
     const matchesSystem = selectedSystem === 'all' ||
       task.site_service?.service_type?.system_type?.id === selectedSystem
+
+    // Service type filter
+    const matchesService = selectedService === 'all' ||
+      task.site_service?.service_type?.id === selectedService
     
     // Date range filter
     const taskDate = new Date(task.scheduled_date)
@@ -421,6 +439,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
       matchesSearch &&
       matchesEngineer &&
       matchesSystem &&
+      matchesService &&
       matchesDateFrom &&
       matchesDateTo &&
       matchesNeedsBooking
@@ -1043,10 +1062,18 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
         )}
       </div>
 
-      {/* Row 2: system filter, sort and view toggle — kept on a single line */}
+      {/* Row 2: system/service filters, sort and view toggle — kept on a single line */}
       <div className="flex items-center gap-2">
         {systemOptions.length > 0 && (
-          <Select value={selectedSystem} onValueChange={setSelectedSystem}>
+          <Select
+            value={selectedSystem}
+            onValueChange={(v) => {
+              setSelectedSystem(v)
+              // Service options depend on the selected system, so reset the
+              // service filter to avoid a stale selection that hides everything.
+              setSelectedService('all')
+            }}
+          >
             <SelectTrigger className="min-w-0 flex-1 sm:flex-none sm:w-[180px]">
               <SelectValue placeholder="System" />
             </SelectTrigger>
@@ -1058,6 +1085,22 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                     <SystemIcon system={sys} className="h-3.5 w-3.5" />
                     {sys.name}
                   </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {serviceOptions.length > 0 && (
+          <Select value={selectedService} onValueChange={setSelectedService}>
+            <SelectTrigger className="min-w-0 flex-1 sm:flex-none sm:w-[180px]">
+              <SelectValue placeholder="Service" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Services</SelectItem>
+              {serviceOptions.map((svc) => (
+                <SelectItem key={svc.id} value={svc.id}>
+                  {svc.name}
                 </SelectItem>
               ))}
             </SelectContent>

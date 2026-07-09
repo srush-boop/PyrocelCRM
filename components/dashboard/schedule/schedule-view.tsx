@@ -135,6 +135,13 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
 
   const isEngineer = profile.role === 'engineer'
   const isAdminOrOffice = profile.role === 'admin' || profile.role === 'office'
+  // Only engineers and admins can actually start/continue a call. Office staff
+  // coordinate work (view + assign) but never run the on-site inspection, so the
+  // "Start/Continue Call" action is hidden from them.
+  const canStartCall = isEngineer || profile.role === 'admin'
+  // Everyone who works the schedule (engineers, admins and office) can open the
+  // read-only call preview — office needs it to review and assign a call.
+  const canPreviewCall = isEngineer || isAdminOrOffice
 
   // Unique system types present across the current calls, for the system filter.
   const systemOptions = Array.from(
@@ -478,7 +485,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
             />
           </div>
           <AssignControl task={task} className="mt-4" />
-          {(isEngineer || profile.role === 'admin') && task.status !== 'completed' && task.status !== 'cancelled' && (
+          {canPreviewCall && task.status !== 'completed' && task.status !== 'cancelled' && (
             <div className="mt-4 flex gap-2">
               <Button
                 type="button"
@@ -490,11 +497,13 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                 <Eye className="mr-2 h-4 w-4" />
                 View Call
               </Button>
-              <Button asChild className="flex-1" size="sm">
-                <Link href={`/dashboard/tasks/${task.id}?from=/dashboard/schedule`}>
-                  {task.status === 'pending' ? 'Start Call' : 'Continue Call'}
-                </Link>
-              </Button>
+              {canStartCall && (
+                <Button asChild className="flex-1" size="sm">
+                  <Link href={`/dashboard/tasks/${task.id}?from=/dashboard/schedule`}>
+                    {task.status === 'pending' ? 'Start Call' : 'Continue Call'}
+                  </Link>
+                </Button>
+              )}
             </div>
           )}
           {task.status === 'completed' && (
@@ -514,7 +523,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     const taskDate = new Date(task.scheduled_date)
     const isOverdue = taskDate < today && task.status === 'pending'
     const actionable =
-      (isEngineer || profile.role === 'admin') &&
+      canPreviewCall &&
       task.status !== 'completed' &&
       task.status !== 'cancelled'
     const selected = selectedIds.has(task.id)
@@ -609,7 +618,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                 <Eye className="h-4 w-4 text-muted-foreground" />
               </Button>
             )}
-            {actionable && (
+            {actionable && canStartCall && (
               <Button
                 type="button"
                 size="sm"
@@ -1213,10 +1222,10 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                   <Button variant="outline" onClick={() => setViewTask(null)}>
                     Close
                   </Button>
-                  {(isEngineer || profile.role === 'admin') && canStart && (
+                  {canStartCall && canStart && (
                     <Button asChild>
-              <Link href={`/dashboard/tasks/${viewTask.id}?from=/dashboard/schedule`}>
-                {viewTask.status === 'pending' ? 'Start Call' : 'Continue Call'}
+                      <Link href={`/dashboard/tasks/${viewTask.id}?from=/dashboard/schedule`}>
+                        {viewTask.status === 'pending' ? 'Start Call' : 'Continue Call'}
                       </Link>
                     </Button>
                   )}

@@ -49,9 +49,9 @@ function NavChildren({ children }: { children: NavChild[] }) {
             <SidebarMenuSubItem>
               <CollapsibleTrigger asChild>
                 <SidebarMenuSubButton>
-                  <child.icon className="h-4 w-4" />
-                  <span>{child.title}</span>
-                  <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/subcollapsible:rotate-90" />
+                  <child.icon className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{child.title}</span>
+                  <ChevronRight className="ml-auto h-4 w-4 shrink-0 transition-transform group-data-[state=open]/subcollapsible:rotate-90" />
                 </SidebarMenuSubButton>
               </CollapsibleTrigger>
               <CollapsibleContent>
@@ -60,8 +60,8 @@ function NavChildren({ children }: { children: NavChild[] }) {
                     <SidebarMenuSubItem key={sub.href}>
                       <SidebarMenuSubButton asChild isActive={pathname === sub.href}>
                         <Link href={sub.href}>
-                          <sub.icon className="h-4 w-4" />
-                          <span>{sub.title}</span>
+                          <sub.icon className="h-4 w-4 shrink-0" />
+                          <span className="truncate">{sub.title}</span>
                         </Link>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>
@@ -74,8 +74,8 @@ function NavChildren({ children }: { children: NavChild[] }) {
           <SidebarMenuSubItem key={child.href}>
             <SidebarMenuSubButton asChild isActive={pathname === child.href}>
               <Link href={child.href!}>
-                <child.icon className="h-4 w-4" />
-                <span>{child.title}</span>
+                <child.icon className="h-4 w-4 shrink-0" />
+                <span className="truncate">{child.title}</span>
               </Link>
             </SidebarMenuSubButton>
           </SidebarMenuSubItem>

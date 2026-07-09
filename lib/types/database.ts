@@ -2079,3 +2079,93 @@ export interface VaultSection {
   created_at: string
   buttons?: VaultButton[]
 }
+
+// ============ Company Asset Management ============
+
+export type AssetStatus = 'active' | 'disposed'
+export type AssetCheckType = 'check' | 'inspection' | 'calibration' | 'test'
+export type AssetCheckResponsible = 'holder' | 'asset_manager'
+export type AssetCheckResult = 'pass' | 'fail' | 'advisory' | 'na'
+
+export interface AssetCategory {
+  id: string
+  name: string
+  is_test_equipment: boolean
+  sort_order: number
+  created_at: string
+}
+
+export interface Asset {
+  id: string
+  urn: string
+  sage_reference: string | null
+  name: string
+  category_id: string | null
+  manufacturer: string | null
+  model: string | null
+  serial_number: string | null
+  description: string | null
+  value: number | null
+  purchase_date: string | null
+  status: AssetStatus
+  assigned_to: string | null
+  storage_location: string | null
+  is_test_equipment: boolean
+  disposed_at: string | null
+  disposal_reason: string | null
+  disposal_value: number | null
+  created_at: string
+  updated_at: string
+  // Embedded relations
+  category?: AssetCategory | null
+  holder?: Pick<Profile, 'id' | 'full_name' | 'email'> | null
+  schedules?: AssetCheckSchedule[]
+  checks?: AssetCheck[]
+  assignments?: AssetAssignment[]
+}
+
+export interface AssetCheckSchedule {
+  id: string
+  asset_id: string
+  name: string
+  check_type: AssetCheckType
+  interval_months: number
+  responsible: AssetCheckResponsible
+  requires_certificate: boolean
+  last_completed_date: string | null
+  next_due_date: string | null
+  active: boolean
+  created_at: string
+  updated_at: string
+  asset?: Asset | null
+}
+
+export interface AssetCheck {
+  id: string
+  asset_id: string
+  schedule_id: string | null
+  check_date: string
+  performed_by: string | null
+  result: AssetCheckResult
+  is_transfer_inspection: boolean
+  notes: string | null
+  certificate_url: string | null
+  calibration_due_date: string | null
+  created_at: string
+  schedule?: AssetCheckSchedule | null
+  performer?: Pick<Profile, 'id' | 'full_name'> | null
+}
+
+export interface AssetAssignment {
+  id: string
+  asset_id: string
+  assigned_to: string | null
+  storage_location: string | null
+  assigned_by: string | null
+  assigned_at: string
+  returned_at: string | null
+  transfer_check_id: string | null
+  notes: string | null
+  holder?: Pick<Profile, 'id' | 'full_name'> | null
+  assigner?: Pick<Profile, 'id' | 'full_name'> | null
+}

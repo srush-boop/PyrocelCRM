@@ -35,8 +35,9 @@ export default async function RoutesPage() {
       .select(`
         id, name, route_id, route_position,
         services:site_services(
-          id, route_id,
-          service_type:service_types(name)
+          id, route_id, worker_type, active,
+          service_type:service_types(name),
+          site_system:site_systems(name)
         )
       `),
   ])
@@ -44,31 +45,47 @@ export default async function RoutesPage() {
   const routes = (routesResult.data || []) as (Route & { assigned_engineer: Profile | null })[]
   const engineers = (engineersResult.data || []) as Profile[]
 
-  type ServiceTypeRel = { name: string } | { name: string }[] | null
+  type NameRel = { name: string } | { name: string }[] | null
+  type RawService = {
+    id: string
+    route_id: string | null
+    worker_type: string | null
+    active: boolean | null
+    service_type: NameRel
+    site_system: NameRel
+  }
   type RawSite = {
     id: string
     name: string
     route_id: string | null
     route_position: number | null
-    services: { id: string; route_id: string | null; service_type: ServiceTypeRel }[] | null
+    services: RawService[] | null
   }
 
-  const serviceTypeName = (rel: ServiceTypeRel): string =>
-    (Array.isArray(rel) ? rel[0]?.name : rel?.name) ?? 'Service'
+  const relName = (rel: NameRel, fallback: string): string =>
+    (Array.isArray(rel) ? rel[0]?.name : rel?.name) ?? fallback
 
   // Normalise into the planner shape: each site carries its services so routing
-  // can be managed per service rather than per site.
-  const sites: PlannerSite[] = ((sitesResult.data || []) as unknown as RawSite[]).map((site) => ({
-    id: site.id,
-    name: site.name,
-    route_id: site.route_id,
-    route_position: site.route_position,
-    services: (site.services || []).map((svc) => ({
-      id: svc.id,
-      route_id: svc.route_id,
-      name: serviceTypeName(svc.service_type),
-    })),
-  }))
+  // can be managed per service (grouped by system). Only CDO-performed services
+  // are eligible to be added to a route, so filter to `worker_type === 'cdo'`
+  // (still include a service already on a route so it can be removed).
+  const sites: PlannerSite[] = ((sitesResult.data || []) as unknown as RawSite[])
+    .map((site) => ({
+      id: site.id,
+      name: site.name,
+      route_id: site.route_id,
+      route_position: site.route_position,
+      services: (site.services || [])
+        .filter((svc) => svc.active !== false && (svc.worker_type === 'cdo' || svc.route_id))
+        .map((svc) => ({
+          id: svc.id,
+          route_id: svc.route_id,
+          name: relName(svc.service_type, 'Service'),
+          system: relName(svc.site_system, 'General'),
+        })),
+    }))
+    // Drop sites with no eligible services so they don't clutter the planner.
+    .filter((site) => site.services.length > 0)
 
   // A site is "on" a route when at least one of its services is on that route.
   const routesWithSiteCounts = routes.map((route) => ({
@@ -82,7 +99,7 @@ export default async function RoutesPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Routes</h1>
           <p className="text-muted-foreground">
-            Manage geographic routes and engineer assignments
+            Assign sites, systems and CDO-performed services to routes and manage engineer assignments
           </p>
         </div>
         <AddRouteDialog engineers={engineers} />

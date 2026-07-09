@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ArrowUp, ArrowDown, Loader2, MapPin, Building2, Plus, X } from 'lucide-react'
+import { ArrowUp, ArrowDown, Loader2, MapPin, Building2, Plus, X, Layers } from 'lucide-react'
 import { resolveAssignedEngineerId } from '@/lib/assignment'
 import type { WorkerType } from '@/lib/types/database'
 
@@ -28,6 +28,9 @@ export interface PlannerService {
   id: string
   name: string
   route_id: string | null
+  // System this service belongs to (site_systems.name), or "General" when the
+  // service is not tied to a specific system. Used to group services by system.
+  system: string
 }
 
 export interface PlannerSite {
@@ -48,6 +51,18 @@ interface RawAffectedService {
   area_id: string | null
   route: EngineerRel
   area: EngineerRel
+}
+
+// Group a site's services by their system, sorted alphabetically. Services with
+// no system fall under the "General" bucket.
+function groupServicesBySystem(services: PlannerService[]): [string, PlannerService[]][] {
+  const map = new Map<string, PlannerService[]>()
+  for (const svc of services) {
+    const arr = map.get(svc.system) ?? []
+    arr.push(svc)
+    map.set(svc.system, arr)
+  }
+  return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]))
 }
 
 interface RoutePlannerDialogProps {
@@ -146,6 +161,18 @@ export function RoutePlannerDialog({
     }))
   }
 
+  // Toggle every service under one system (on/off together).
+  const toggleSystem = (siteId: string, serviceIds: string[], checked: boolean) => {
+    setSelected((prev) => {
+      const current = new Set(prev[siteId] ?? [])
+      for (const id of serviceIds) {
+        if (checked) current.add(id)
+        else current.delete(id)
+      }
+      return { ...prev, [siteId]: current }
+    })
+  }
+
   const handleSave = async () => {
     setSaving(true)
     const updatedAt = new Date().toISOString()
@@ -237,7 +264,7 @@ export function RoutePlannerDialog({
             Manage route services
           </DialogTitle>
           <DialogDescription>
-            {`Add sites to the ${routeName} route, choose which of their services are done on this route, and set the visit order. Only the selected services appear in the schedule's "By route" view.`}
+            {`Add sites to the ${routeName} route, then choose which of their CDO-performed services (grouped by system) are done on this route and set the visit order. Only the selected services appear in the schedule's "By route" view.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -326,9 +353,11 @@ export function RoutePlannerDialog({
                     </div>
                   </div>
 
-                  <div className="mt-3 space-y-2 border-t pt-3 pl-10">
+                  <div className="mt-3 space-y-3 border-t pt-3 pl-10">
                     {site.services.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">This site has no services.</p>
+                      <p className="text-xs text-muted-foreground">
+                        This site has no CDO-performed services.
+                      </p>
                     ) : (
                       <>
                         <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
@@ -339,25 +368,43 @@ export function RoutePlannerDialog({
                           />
                           Select all
                         </label>
-                        {site.services.map((svc) => {
-                          const onOtherRoute = svc.route_id && svc.route_id !== routeId && !sel.has(svc.id)
+                        {groupServicesBySystem(site.services).map(([system, svcs]) => {
+                          const systemAllSelected = svcs.every((s) => sel.has(s.id))
                           return (
-                            <label
-                              key={svc.id}
-                              className="flex items-center gap-2 text-sm"
-                            >
-                              <Checkbox
-                                checked={sel.has(svc.id)}
-                                onCheckedChange={() => toggleService(site.id, svc.id)}
-                                aria-label={svc.name}
-                              />
-                              <span>{svc.name}</span>
-                              {onOtherRoute && (
-                                <span className="text-xs text-muted-foreground">
-                                  (on another route)
-                                </span>
-                              )}
-                            </label>
+                            <div key={system} className="space-y-1.5">
+                              <label className="flex items-center gap-2 text-xs font-semibold">
+                                <Checkbox
+                                  checked={systemAllSelected}
+                                  onCheckedChange={(c) =>
+                                    toggleSystem(site.id, svcs.map((s) => s.id), c === true)
+                                  }
+                                  aria-label={`Select all ${system} services for ${site.name}`}
+                                />
+                                <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                                {system}
+                              </label>
+                              <div className="space-y-1.5 pl-6">
+                                {svcs.map((svc) => {
+                                  const onOtherRoute =
+                                    svc.route_id && svc.route_id !== routeId && !sel.has(svc.id)
+                                  return (
+                                    <label key={svc.id} className="flex items-center gap-2 text-sm">
+                                      <Checkbox
+                                        checked={sel.has(svc.id)}
+                                        onCheckedChange={() => toggleService(site.id, svc.id)}
+                                        aria-label={svc.name}
+                                      />
+                                      <span>{svc.name}</span>
+                                      {onOtherRoute && (
+                                        <span className="text-xs text-muted-foreground">
+                                          (on another route)
+                                        </span>
+                                      )}
+                                    </label>
+                                  )
+                                })}
+                              </div>
+                            </div>
                           )
                         })}
                       </>

@@ -88,6 +88,31 @@ const sitesNavItem: NavItem = {
 // Service is a clickable group: clicking it opens the Service Dashboard and
 // expands its children (Service Dashboard, All Calls, Map, Transfers, Reports,
 // Defects). The `key` stays `calls` so existing per-user permissions still map.
+// Service Management is now a nested sub-menu that sits at the BOTTOM of the
+// Service group (mirrors the Sales → Configure pattern). Routes lives here.
+const adminServiceManagementChild: NavChild = {
+  title: 'Service Management',
+  icon: SlidersHorizontal,
+  children: [
+    { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
+    { title: 'Routes', href: '/dashboard/routes', icon: Route },
+    { title: 'Service Types', href: '/dashboard/service-types', icon: Wrench },
+    { title: 'System Types', href: '/dashboard/sales/system-types', icon: Layers },
+    { title: 'Checklists', href: '/dashboard/checklists', icon: ClipboardList },
+    { title: 'Client Logins', href: '/dashboard/client-logins', icon: KeyRound },
+  ],
+}
+
+const officeServiceManagementChild: NavChild = {
+  title: 'Service Management',
+  icon: SlidersHorizontal,
+  children: [
+    { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
+    { title: 'Routes', href: '/dashboard/routes', icon: Route },
+    { title: 'System Types', href: '/dashboard/sales/system-types', icon: Layers },
+  ],
+}
+
 const adminCallsNavItem: NavItem = {
   key: 'calls',
   title: 'Service',
@@ -100,6 +125,7 @@ const adminCallsNavItem: NavItem = {
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
     { title: 'Reports', href: '/dashboard/reports', icon: FileText },
     { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
+    adminServiceManagementChild,
   ],
 }
 
@@ -115,6 +141,7 @@ const officeCallsNavItem: NavItem = {
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
     { title: 'Reports', href: '/dashboard/reports', icon: FileText },
     { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
+    officeServiceManagementChild,
   ],
 }
 
@@ -129,30 +156,6 @@ const engineerCallsNavItem: NavItem = {
     { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
     { title: 'Nearby Calls', href: '/dashboard/nearby', icon: Navigation },
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
-  ],
-}
-
-// Service Management now also contains Client Logins and Sub-contractors.
-const adminServiceManagementNavItem: NavItem = {
-  key: 'service-management',
-  title: 'Service Management',
-  icon: Wrench,
-  children: [
-    { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
-    { title: 'Service Types', href: '/dashboard/service-types', icon: Wrench },
-    { title: 'System Types', href: '/dashboard/sales/system-types', icon: Layers },
-    { title: 'Checklists', href: '/dashboard/checklists', icon: ClipboardList },
-    { title: 'Client Logins', href: '/dashboard/client-logins', icon: KeyRound },
-  ],
-}
-
-const officeServiceManagementNavItem: NavItem = {
-  key: 'service-management',
-  title: 'Service Management',
-  icon: Wrench,
-  children: [
-    { title: 'Areas', href: '/dashboard/areas', icon: MapPinned },
-    { title: 'System Types', href: '/dashboard/sales/system-types', icon: Layers },
   ],
 }
 
@@ -354,7 +357,6 @@ const adminNavItems: NavItem[] = [
   oncallNavItem,
   chatNavItem,
   { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
-  adminServiceManagementNavItem,
   salesNavItem,
   jobsNavItem,
   purchasingNavItem,
@@ -376,7 +378,6 @@ const officeNavItems: NavItem[] = [
   oncallNavItem,
   chatNavItem,
   { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
-  officeServiceManagementNavItem,
   salesNavItem,
   jobsNavItem,
   purchasingNavItem,
@@ -430,6 +431,9 @@ const PERMISSION_KEY_MIGRATION: Record<string, string> = {
   users: 'people',
   vault: 'people',
   rams: 'documents',
+  // Service Management is now nested inside the Service group, so it follows the
+  // `calls` permission rather than being individually toggleable.
+  'service-management': 'calls',
 }
 
 export function migratePermissionKeys(keys: string[]): string[] {

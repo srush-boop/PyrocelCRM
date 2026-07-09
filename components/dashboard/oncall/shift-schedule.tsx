@@ -6,11 +6,12 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
-import { CalendarClock, LifeBuoy } from 'lucide-react'
+import { CalendarClock, LifeBuoy, CalendarRange } from 'lucide-react'
 import { assignShift } from '@/lib/oncall/actions'
 import { BAND_META, deriveBand, type OncallBand, type OncallShift, type RotaMember } from '@/lib/oncall/types'
 import type { BranchRef } from '@/lib/oncall/queries'
 import { CoverRequestDialog } from './cover-request-dialog'
+import { CreateBlockDialog } from './create-block-dialog'
 
 interface ShiftScheduleProps {
   month: string // yyyy-mm
@@ -55,6 +56,7 @@ export function ShiftSchedule({
 }: ShiftScheduleProps) {
   const [pending, startTransition] = useTransition()
   const [coverShift, setCoverShift] = useState<OncallShift | null>(null)
+  const [blockOpen, setBlockOpen] = useState(false)
 
   // Lookup: `${branchId}|${date}` -> shift
   const shiftMap = useMemo(() => {
@@ -145,10 +147,24 @@ export function ShiftSchedule({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <CalendarClock className="h-5 w-5" />
-          {branchName} rota — {new Date(`${month}-01`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
-        </CardTitle>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <CalendarClock className="h-5 w-5" />
+            {branchName} rota — {new Date(`${month}-01`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+          </CardTitle>
+          {isManager && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => setBlockOpen(true)}
+              disabled={rotaMembers.length === 0}
+            >
+              <CalendarRange className="h-4 w-4" />
+              Create block
+            </Button>
+          )}
+        </div>
       </CardHeader>
       <CardContent>
         {isManager && rotaMembers.length === 0 && (
@@ -212,6 +228,15 @@ export function ShiftSchedule({
           onOpenChange={(o) => !o && setCoverShift(null)}
           shift={coverShift}
           myShifts={shifts.filter((s) => s.engineerId === currentUserId)}
+        />
+      )}
+      {isManager && (
+        <CreateBlockDialog
+          open={blockOpen}
+          onOpenChange={setBlockOpen}
+          branchId={branchId}
+          branchName={branchName}
+          members={rotaMembers}
         />
       )}
     </Card>

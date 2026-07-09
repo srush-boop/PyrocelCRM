@@ -143,14 +143,31 @@ function itemsForDay(items: CalendarItem[], day: Date): CalendarItem[] {
     })
 }
 
-function timeLabel(item: CalendarItem): string {
+function timeLabel(item: CalendarItem, day?: Date): string {
   if (item.allDay) return 'All day'
   const start = new Date(item.start)
   const end = new Date(item.end)
   const s = format(start, 'HH:mm')
   const e = format(end, 'HH:mm')
+  // Overnight items (e.g. on-call) span two days. When we know which day is
+  // being rendered, show whether this is the shift starting ("from 17:00") or
+  // the tail end finishing that morning ("until 08:30") so the two overlapping
+  // entries on a given day are easy to tell apart.
+  if (day && !isSameDay(start, end)) {
+    if (isSameDay(day, start)) return `From ${s}`
+    if (isSameDay(day, end)) return `Until ${e}`
+  }
   // Tasks with a single booked time may have start==end
   return s === e ? s : `${s}–${e}`
+}
+
+// Compact single time for dense month cells: the finish time on the morning an
+// overnight item hands over, otherwise its start time.
+function edgeTime(item: CalendarItem, day: Date): string {
+  const start = new Date(item.start)
+  const end = new Date(item.end)
+  if (!isSameDay(start, end) && isSameDay(day, end)) return format(end, 'HH:mm')
+  return format(start, 'HH:mm')
 }
 
 export function CalendarView({
@@ -633,7 +650,7 @@ function DayView({
                 className="flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-accent"
               >
                 <div className="w-20 shrink-0 text-xs font-medium text-muted-foreground">
-                  {timeLabel(it)}
+                  {timeLabel(it, cursor)}
                 </div>
                 <span
                   className="h-8 w-1 shrink-0 rounded-full"
@@ -735,7 +752,7 @@ function MonthGrid({
                       />
                       <span className="truncate">
                         {!it.allDay && (
-                          <span className="mr-1 font-medium">{format(new Date(it.start), 'HH:mm')}</span>
+                          <span className="mr-1 font-medium">{edgeTime(it, day)}</span>
                         )}
                         {it.title}
                       </span>
@@ -810,7 +827,7 @@ function WeekGrid({
                     style={{ borderLeftColor: it.color, backgroundColor: `${it.color}12` }}
                   >
                     <span className="font-medium leading-tight">{it.title}</span>
-                    <span className="text-[11px] text-muted-foreground">{timeLabel(it)}</span>
+                    <span className="text-[11px] text-muted-foreground">{timeLabel(it, day)}</span>
                     {it.ownerName && (
                       <span className="truncate text-[11px] text-muted-foreground">
                         {it.ownerName}
@@ -892,7 +909,7 @@ function AgendaList({
                     </p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="text-xs font-medium">{timeLabel(it)}</p>
+                    <p className="text-xs font-medium">{timeLabel(it, new Date(key))}</p>
                     <Badge variant="outline" className="mt-1 text-[10px]">
                       {it.kind === 'task'
                         ? 'Task'

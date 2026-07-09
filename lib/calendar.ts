@@ -469,29 +469,41 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
     }
   }
 
-  // On-call shifts as all-day calendar items. Each shift covers the evening /
-  // day, so it renders as an all-day block anchored to the shift date. The band
-  // is carried through for labelling and the branch name for the per-branch note.
+  // On-call shifts as timed, overnight calendar items. A weekday-evening shift
+  // runs 17:00 → 08:30 the next morning; weekend and bank-holiday shifts are a
+  // rolling 24 hours with an 08:30 handover. Because the block spans two days it
+  // shows on both — the calendar labels it "from 17:00" on the evening it starts
+  // and "until 08:30" the next morning, so the two overlapping entries each day
+  // are easy to tell apart. The band + branch are carried through for labelling.
   const bandLabel: Record<OncallShiftRow['band'], string> = {
     weekday_evening: 'Weekday evening',
     weekend: 'Weekend',
     bank_holiday: 'Bank holiday',
   }
+  // Time each band's shift starts; every band hands over at 08:30 the next day.
+  const bandStartTime: Record<OncallShiftRow['band'], string> = {
+    weekday_evening: '17:00:00',
+    weekend: '08:30:00',
+    bank_holiday: '08:30:00',
+  }
+  const ONCALL_HANDOVER = '08:30:00'
   for (const s of shiftRows) {
     if (!s.engineer) continue
     const engineerName = s.engineer.full_name || s.engineer.email
     const branchName = s.branch?.name ?? 'Branch'
+    const startTime = bandStartTime[s.band]
+    const windowLabel = `${startTime.slice(0, 5)}–${ONCALL_HANDOVER.slice(0, 5)}`
     items.push({
       id: `oncall-${s.id}`,
       kind: 'oncall',
       title: `On call: ${engineerName}`,
-      start: `${s.shift_date}T00:00:00`,
-      end: `${s.shift_date}T23:59:00`,
-      allDay: true,
+      start: `${s.shift_date}T${startTime}`,
+      end: `${addDays(s.shift_date, 1)}T${ONCALL_HANDOVER}`,
+      allDay: false,
       color: ONCALL_COLOR,
       ownerId: s.engineer.id,
       ownerName: engineerName,
-      subtitle: `${branchName} · ${bandLabel[s.band]}`,
+      subtitle: `${branchName} · ${bandLabel[s.band]} · ${windowLabel}`,
       oncallBranchName: branchName,
       oncallBand: s.band,
     })

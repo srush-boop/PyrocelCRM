@@ -179,6 +179,18 @@ export async function assignShift(input: {
     .select('id')
     .single()
   if (insErr || !created) return { ok: false, error: insErr?.message || 'Failed to create shift' }
+  // Record the initial assignment so the change log is a complete audit trail,
+  // not just swaps. Skip logging when creating an explicitly empty shift.
+  if (engineerId) {
+    await logChange(supabase, {
+      shiftId: (created as { id: string }).id,
+      branchId,
+      fromEngineerId: null,
+      toEngineerId: engineerId,
+      changedBy: auth.userId,
+      reason: 'Shift assigned',
+    })
+  }
   revalidateOncall()
   return { ok: true, id: (created as { id: string }).id }
 }

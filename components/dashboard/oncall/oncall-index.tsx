@@ -180,6 +180,7 @@ export function OncallIndex({
             isManager={isManager}
             currentUserId={currentUserId}
             currentUserBranchId={currentUserBranchId}
+            branches={branches}
           />
         </TabsContent>
 

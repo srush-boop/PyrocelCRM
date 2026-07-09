@@ -29,6 +29,7 @@ interface CoverBoardProps {
   isManager: boolean
   currentUserId: string
   currentUserBranchId: string | null
+  branches: { id: string; name: string }[]
 }
 
 const STATUS_VARIANT: Record<CoverStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
@@ -44,6 +45,7 @@ export function CoverBoard({
   isManager,
   currentUserId,
   currentUserBranchId,
+  branches,
 }: CoverBoardProps) {
   const [pending, startTransition] = useTransition()
   const [requestOpen, setRequestOpen] = useState(false)
@@ -199,7 +201,13 @@ export function CoverBoard({
         </Card>
       )}
 
-      <CoverRequestDialog open={requestOpen} onOpenChange={setRequestOpen} myShifts={myShifts} />
+      <CoverRequestDialog
+        open={requestOpen}
+        onOpenChange={setRequestOpen}
+        myShifts={myShifts}
+        needsBranch={isManager || !currentUserBranchId}
+        branches={branches}
+      />
     </div>
   )
 }

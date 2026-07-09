@@ -23,17 +23,33 @@ interface CoverRequestDialogProps {
   onOpenChange: (open: boolean) => void
   shift?: OncallShift | null // pre-selected shift when raised from the rota
   myShifts: OncallShift[]
+  // A manager (or a user without a home branch) must choose which branch rota
+  // the request is aimed at. Engineers use their own branch automatically.
+  needsBranch?: boolean
+  branches?: { id: string; name: string }[]
 }
 
-export function CoverRequestDialog({ open, onOpenChange, shift, myShifts }: CoverRequestDialogProps) {
+export function CoverRequestDialog({
+  open,
+  onOpenChange,
+  shift,
+  myShifts,
+  needsBranch = false,
+  branches = [],
+}: CoverRequestDialogProps) {
   const [pending, startTransition] = useTransition()
   const [kind, setKind] = useState<CoverKind>(shift ? 'shift_cover' : 'general')
   const [shiftId, setShiftId] = useState<string>(shift?.id ?? '')
+  const [branchId, setBranchId] = useState<string>(shift?.branchId ?? '')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [message, setMessage] = useState('')
 
   const submit = () => {
+    if (needsBranch && !shift && !branchId) {
+      toast.error('Choose which branch rota to ask')
+      return
+    }
     startTransition(async () => {
       const res = await createCoverRequest({
         kind,
@@ -41,7 +57,7 @@ export function CoverRequestDialog({ open, onOpenChange, shift, myShifts }: Cove
         dateFrom: kind !== 'shift_cover' ? dateFrom || null : null,
         dateTo: kind !== 'shift_cover' ? dateTo || null : null,
         message: message.trim() || null,
-        branchId: shift?.branchId ?? null,
+        branchId: shift?.branchId ?? (branchId || null),
       })
       if (res.ok) {
         toast.success('Cover request raised — your branch rota has been notified')
@@ -78,6 +94,24 @@ export function CoverRequestDialog({ open, onOpenChange, shift, myShifts }: Cove
               </SelectContent>
             </Select>
           </div>
+
+          {needsBranch && !shift && (
+            <div className="grid gap-2">
+              <Label>Branch rota</Label>
+              <Select value={branchId} onValueChange={setBranchId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Which branch should cover?" />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {kind === 'shift_cover' && (
             <div className="grid gap-2">

@@ -42,7 +42,7 @@ export default async function PublicReportPage({ params }: PageProps) {
     .select(
       `*,
        site_service:site_services(*, site:sites(*), service_type:service_types(*)),
-       assigned_engineer:profiles(*, role_ref:roles(*))`,
+       assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(*, role_ref:roles(*))`,
     )
     .eq('public_token', token)
     .maybeSingle()

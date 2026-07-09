@@ -73,6 +73,8 @@ export async function PUT(
       job_title,
       timesheet_required,
       home_postcode,
+      phone,
+      secondary_phone,
     } = body as {
       full_name?: string
       email?: string
@@ -88,6 +90,8 @@ export async function PUT(
       job_title?: string | null
       timesheet_required?: boolean | null
       home_postcode?: string | null
+      phone?: string | null
+      secondary_phone?: string | null
     }
 
     // Verify the caller is an authenticated admin
@@ -149,6 +153,17 @@ export async function PUT(
     if (employee_number !== undefined) {
       const trimmed = typeof employee_number === 'string' ? employee_number.trim() : ''
       profilePatch.employee_number = trimmed || null
+    }
+    // Contact numbers. `phone` is the primary mobile (documents + on-call rota);
+    // `secondary_phone` is an optional extra number shown only in the on-call
+    // rota / out-of-hours view. Empty string clears the value.
+    if (phone !== undefined) {
+      const trimmed = typeof phone === 'string' ? phone.trim() : ''
+      profilePatch.phone = trimmed || null
+    }
+    if (secondary_phone !== undefined) {
+      const trimmed = typeof secondary_phone === 'string' ? secondary_phone.trim() : ''
+      profilePatch.secondary_phone = trimmed || null
     }
     // Assigned descriptive role (managed in Settings > Roles). Empty = unassign.
     if (role_id !== undefined) profilePatch.role_id = role_id || null

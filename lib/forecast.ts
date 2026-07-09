@@ -104,7 +104,7 @@ export async function forecastCalls(
   // Existing tasks: used to anchor the cadence and to flag created occurrences.
   const { data: taskData } = await supabase
     .from('tasks')
-    .select('site_service_id, visit_type_id, scheduled_date, assigned_engineer:profiles(full_name)')
+    .select('site_service_id, visit_type_id, scheduled_date, assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(full_name)')
     .in('site_service_id', serviceIds)
   const tasks = (taskData || []) as unknown as TaskRow[]
 

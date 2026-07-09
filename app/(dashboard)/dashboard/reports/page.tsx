@@ -145,6 +145,7 @@ export default function ReportsPage() {
             completed_at,
             assigned_engineer_id,
             profiles:assigned_engineer_id(id, full_name, email),
+            direct_site:sites!tasks_site_id_fkey(id, name, contact_email, client_id, clients(id, name)),
             site_services(
               site_id,
               service_type_id,
@@ -158,26 +159,34 @@ export default function ReportsPage() {
 
       if (error) throw error
 
-      const formatted = data?.map((item: any) => ({
-        id: item.id,
-        taskId: item.task_id,
-        referenceNumber: item.reference_number || '-',
-        siteName: item.tasks?.site_services?.sites?.name || 'Unknown',
-        siteId: item.tasks?.site_services?.sites?.id || '',
-        clientName: item.tasks?.site_services?.sites?.clients?.name || '',
-        clientId: item.tasks?.site_services?.sites?.client_id || '',
-        serviceName: item.tasks?.site_services?.service_types?.name || 'Unknown',
-        serviceTypeId: item.tasks?.site_services?.service_types?.id || '',
-        systemTypeId: item.tasks?.site_services?.service_types?.system_type_id || '',
-        systemTypeName: item.tasks?.site_services?.service_types?.system_types?.name || '',
-        engineerName: item.tasks?.profiles?.full_name || item.tasks?.profiles?.email || 'Unassigned',
-        engineerId: item.tasks?.assigned_engineer_id || '',
-        clientEmail: item.tasks?.site_services?.sites?.contact_email || '',
-        overallStatus: item.overall_status,
-        emailSentAt: item.email_sent_at,
-        createdAt: item.created_at,
-        completedAt: item.tasks?.completed_at,
-      })) || []
+      const formatted = data?.map((item: any) => {
+        const siteService = item.tasks?.site_services
+        // Resolve the site either via the linked site_service or, for calls
+        // booked directly against a site (no site_service), via the task's
+        // direct site_id link — so those reports still appear in the grid.
+        const site = siteService?.sites || item.tasks?.direct_site
+        const serviceType = siteService?.service_types
+        return {
+          id: item.id,
+          taskId: item.task_id,
+          referenceNumber: item.reference_number || '-',
+          siteName: site?.name || 'Unknown',
+          siteId: site?.id || '',
+          clientName: site?.clients?.name || '',
+          clientId: site?.client_id || '',
+          serviceName: serviceType?.name || 'Ad-hoc / reactive',
+          serviceTypeId: serviceType?.id || '',
+          systemTypeId: serviceType?.system_type_id || '',
+          systemTypeName: serviceType?.system_types?.name || '',
+          engineerName: item.tasks?.profiles?.full_name || item.tasks?.profiles?.email || 'Unassigned',
+          engineerId: item.tasks?.assigned_engineer_id || '',
+          clientEmail: site?.contact_email || '',
+          overallStatus: item.overall_status,
+          emailSentAt: item.email_sent_at,
+          createdAt: item.created_at,
+          completedAt: item.tasks?.completed_at,
+        }
+      }) || []
 
       setReports(formatted)
     } catch (error) {

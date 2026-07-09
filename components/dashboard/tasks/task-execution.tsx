@@ -28,6 +28,7 @@ import { TaskAttachments } from '@/components/dashboard/tasks/task-attachments'
 import { TaskHeader } from '@/components/dashboard/tasks/task-header'
 import { PauseResumeControls } from '@/components/dashboard/tasks/pause-resume-controls'
 import { ReportNotesAssist } from '@/components/dashboard/reports/report-notes-assist'
+import { CompletedReportActions } from '@/components/dashboard/reports/completed-report-actions'
 import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
 import { CallPartsPicker } from '@/components/dashboard/tasks/call-parts-picker'
 import { formatDateUK, cn } from '@/lib/utils'
@@ -1048,11 +1049,20 @@ export function TaskExecution({
               Inspection Result: {existingResult.overall_status.toUpperCase()}
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
               Completed on {new Date(task.completed_at!).toLocaleDateString()} at{' '}
               {new Date(task.completed_at!).toLocaleTimeString()}
             </p>
+            <CompletedReportActions
+              taskId={task.id}
+              serviceName={serviceType?.name}
+              emailSentAt={existingResult.email_sent_at}
+              chargeable={task.chargeable}
+              chargeReviewStatus={task.charge_review_status}
+              chargeReason={task.charge_reason}
+              canReview={profile.role === 'admin' || profile.role === 'office'}
+            />
           </CardContent>
         </Card>
       )}

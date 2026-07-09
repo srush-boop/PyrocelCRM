@@ -294,7 +294,10 @@ export async function bookExistingCall(
     .eq('id', user.id)
     .single()
   const role = (profile as { role?: string } | null)?.role
-  if (role !== 'admin' && role !== 'office') {
+  // Any staff member (admin, office or engineer) may book an appointment slot for
+  // a call — only client portal users are excluded. The weekly-recurring
+  // exclusion below then applies uniformly regardless of who is booking.
+  if (role !== 'admin' && role !== 'office' && role !== 'engineer') {
     return { ok: false, error: 'You do not have permission to book calls.' }
   }
 

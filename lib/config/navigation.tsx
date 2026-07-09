@@ -48,6 +48,7 @@ import {
   QrCode,
   LifeBuoy,
   Briefcase,
+  Inbox,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { UserRole } from '@/lib/types/database'
@@ -121,11 +122,13 @@ const adminCallsNavItem: NavItem = {
   icon: Wrench,
   children: [
     { title: 'Service Dashboard', href: '/dashboard/service', icon: LayoutDashboard },
+    { title: 'Requests', href: '/dashboard/requests', icon: Inbox },
     { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
     { title: 'Map', href: '/dashboard/schedule/map', icon: MapPinned },
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
     { title: 'On-call', href: '/dashboard/oncall', icon: LifeBuoy },
     { title: 'Reports', href: '/dashboard/reports', icon: FileText },
+    { title: 'Chargeable Calls', href: '/dashboard/chargeable', icon: Coins },
     { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
     { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
     adminServiceManagementChild,
@@ -139,11 +142,13 @@ const officeCallsNavItem: NavItem = {
   icon: Wrench,
   children: [
     { title: 'Service Dashboard', href: '/dashboard/service', icon: LayoutDashboard },
+    { title: 'Requests', href: '/dashboard/requests', icon: Inbox },
     { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
     { title: 'Map', href: '/dashboard/schedule/map', icon: MapPinned },
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
     { title: 'On-call', href: '/dashboard/oncall', icon: LifeBuoy },
     { title: 'Reports', href: '/dashboard/reports', icon: FileText },
+    { title: 'Chargeable Calls', href: '/dashboard/chargeable', icon: Coins },
     { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
     { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
     officeServiceManagementChild,

@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
           site:sites(*),
           service_type:service_types(*)
         ),
-        assigned_engineer:profiles(*)
+        assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(*)
       `)
       .eq('id', taskId)
       .single()

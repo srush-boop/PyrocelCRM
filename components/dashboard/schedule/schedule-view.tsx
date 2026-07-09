@@ -211,6 +211,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   const [needsBookingOnly, setNeedsBookingOnly] = useState(false)
   const [selectedEngineer, setSelectedEngineer] = useState<string>('all')
   const [selectedSystem, setSelectedSystem] = useState<string>('all')
+  const [selectedService, setSelectedService] = useState<string>('all')
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined)
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined)
   const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null)
@@ -243,8 +244,25 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
       return map
     }, new Map<string, NonNullable<NonNullable<NonNullable<TaskWithDetails['site_service']>['service_type']>['system_type']>>()).values()
   ).sort((a, b) => (a?.name ?? '').localeCompare(b?.name ?? ''))
+  // Unique service types present across the current calls, for the service filter.
+  // Respects the selected system so the two filters narrow together.
+  const serviceOptions = Array.from(
+    tasks.reduce((map, task) => {
+      const svc = task.site_service?.service_type
+      const sysId = svc?.system_type?.id
+      if (svc?.id && !map.has(svc.id) && (selectedSystem === 'all' || sysId === selectedSystem)) {
+        map.set(svc.id, { id: svc.id, name: svc.name })
+      }
+      return map
+    }, new Map<string, { id: string; name: string }>()).values()
+  ).sort((a, b) => a.name.localeCompare(b.name))
   // Only admin/office can multi-select and reassign tasks
   const canAssign = isAdminOrOffice && engineers.length > 0
+  // Once an engineer has closed (completed) a call it can no longer be
+  // reassigned. Cancelled calls are also locked. This is enforced in the UI
+  // and by a database trigger.
+  const isReassignable = (task: TaskWithDetails) =>
+    task.status !== 'completed' && task.status !== 'cancelled'
 
   const toggleOne = (id: string) => {
     setSelectedIds((prev) => {
@@ -270,12 +288,21 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
 
   const handleBulkAssign = async () => {
     if (selectedIds.size === 0 || !assignTo) return
+    // Never reassign completed/cancelled calls, even if somehow selected.
+    const lockedIds = new Set(
+      tasks.filter((t) => !isReassignable(t)).map((t) => t.id),
+    )
+    const targetIds = Array.from(selectedIds).filter((id) => !lockedIds.has(id))
+    if (targetIds.length === 0) {
+      toast.error('Completed calls cannot be reassigned')
+      return
+    }
     setAssigning(true)
     const engineerId = assignTo === 'unassigned' ? null : assignTo
     const { error } = await supabase
       .from('tasks')
       .update({ assigned_engineer_id: engineerId })
-      .in('id', Array.from(selectedIds))
+      .in('id', targetIds)
     setAssigning(false)
     if (!error) {
       clearSelection()
@@ -299,6 +326,10 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   // dialog reflects the change immediately, then refreshes the list.
   const assignFromDialog = async (value: string) => {
     if (!viewTask) return
+    if (!isReassignable(viewTask)) {
+      toast.error('Completed calls cannot be reassigned')
+      return
+    }
     const engineerId = value === 'unassigned' ? null : value
     setAssigningTaskId(viewTask.id)
     await supabase
@@ -365,12 +396,13 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   }
 
   const hasActiveFilters =
-    search || selectedEngineer !== 'all' || selectedSystem !== 'all' || dateFrom || dateTo || needsBookingOnly
+    search || selectedEngineer !== 'all' || selectedSystem !== 'all' || selectedService !== 'all' || dateFrom || dateTo || needsBookingOnly
 
   const clearFilters = () => {
     setSearch('')
     setSelectedEngineer('all')
     setSelectedSystem('all')
+    setSelectedService('all')
     setDateFrom(undefined)
     setDateTo(undefined)
     setNeedsBookingOnly(false)
@@ -390,6 +422,10 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     // System type filter
     const matchesSystem = selectedSystem === 'all' ||
       task.site_service?.service_type?.system_type?.id === selectedSystem
+
+    // Service type filter
+    const matchesService = selectedService === 'all' ||
+      task.site_service?.service_type?.id === selectedService
     
     // Date range filter
     const taskDate = new Date(task.scheduled_date)
@@ -403,6 +439,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
       matchesSearch &&
       matchesEngineer &&
       matchesSystem &&
+      matchesService &&
       matchesDateFrom &&
       matchesDateTo &&
       matchesNeedsBooking
@@ -640,7 +677,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
         )}
         style={!isOverdue && !selected ? { borderLeftColor: sysColors.solid } : undefined}
       >
-        {canAssign && (
+        {canAssign && isReassignable(task) && (
           <div className="pl-2">
             <Checkbox
               checked={selected}
@@ -809,7 +846,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
       return <EmptyState icon={activeTab === 'completed' ? CheckCircle2 : ClipboardCheck} label={emptyLabel} />
     }
     if (viewMode === 'list') {
-      const ids = list.map((t) => t.id)
+      const ids = list.filter(isReassignable).map((t) => t.id)
       const allSelected = ids.length > 0 && ids.every((id) => selectedIds.has(id))
       return (
         <div className="space-y-2">
@@ -842,7 +879,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
       return (
         <div className="space-y-6">
           {groups.map((group) => {
-            const groupIds = group.tasks.map((t) => t.id)
+            const groupIds = group.tasks.filter(isReassignable).map((t) => t.id)
             const allGroupSelected =
               groupIds.length > 0 && groupIds.every((id) => selectedIds.has(id))
             return (
@@ -1025,10 +1062,18 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
         )}
       </div>
 
-      {/* Row 2: system filter, sort and view toggle — kept on a single line */}
+      {/* Row 2: system/service filters, sort and view toggle — kept on a single line */}
       <div className="flex items-center gap-2">
         {systemOptions.length > 0 && (
-          <Select value={selectedSystem} onValueChange={setSelectedSystem}>
+          <Select
+            value={selectedSystem}
+            onValueChange={(v) => {
+              setSelectedSystem(v)
+              // Service options depend on the selected system, so reset the
+              // service filter to avoid a stale selection that hides everything.
+              setSelectedService('all')
+            }}
+          >
             <SelectTrigger className="min-w-0 flex-1 sm:flex-none sm:w-[180px]">
               <SelectValue placeholder="System" />
             </SelectTrigger>
@@ -1040,6 +1085,22 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                     <SystemIcon system={sys} className="h-3.5 w-3.5" />
                     {sys.name}
                   </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {serviceOptions.length > 0 && (
+          <Select value={selectedService} onValueChange={setSelectedService}>
+            <SelectTrigger className="min-w-0 flex-1 sm:flex-none sm:w-[180px]">
+              <SelectValue placeholder="Service" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Services</SelectItem>
+              {serviceOptions.map((svc) => (
+                <SelectItem key={svc.id} value={svc.id}>
+                  {svc.name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -1232,7 +1293,16 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                     )}
                   </div>
 
-                  {isAdminOrOffice && engineers.length > 0 && (
+                  {isAdminOrOffice && engineers.length > 0 && !isReassignable(viewTask) && (
+                    <p className="flex items-center gap-1.5 rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                      <UserPlus className="h-3.5 w-3.5 shrink-0" />
+                      {viewTask.status === 'completed'
+                        ? 'This call has been completed and can no longer be reassigned.'
+                        : 'Cancelled calls can no longer be reassigned.'}
+                    </p>
+                  )}
+
+                  {isAdminOrOffice && engineers.length > 0 && isReassignable(viewTask) && (
                     <div className="space-y-1.5">
                       <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                         <UserPlus className="h-3.5 w-3.5" />
@@ -1264,7 +1334,11 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                     </div>
                   )}
 
-                  {isAdminOrOffice &&
+                  {/* Every schedule user (engineers included) can book an
+                      appointment slot for a call — the only exception is weekly
+                      recurring PPM calls, which are too routine to book
+                      individually and show a notice instead. */}
+                  {canPreviewCall &&
                     (isWeeklyRecurring(viewTask) ? (
                       <p className="flex items-center gap-1.5 rounded-md border border-dashed p-3 text-xs text-muted-foreground">
                         <CalendarClock className="h-3.5 w-3.5 shrink-0" />

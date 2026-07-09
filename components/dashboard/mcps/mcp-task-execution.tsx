@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { TaskHeader } from '@/components/dashboard/tasks/task-header'
 import { PauseResumeControls } from '@/components/dashboard/tasks/pause-resume-controls'
+import { CompletedReportActions } from '@/components/dashboard/reports/completed-report-actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -479,6 +480,19 @@ export function McpTaskExecution({
       <TaskHeader task={task} status={status} canCreateDocument={profile.role === 'admin' || profile.role === 'office'} />
 
       <PauseResumeControls task={task} status={status} onStatusChange={setStatus} />
+
+      {status === 'completed' && (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <CompletedReportActions
+            taskId={task.id}
+            serviceName={serviceType?.name}
+            chargeable={task.chargeable}
+            chargeReviewStatus={task.charge_review_status}
+            chargeReason={task.charge_reason}
+            canReview={profile.role === 'admin' || profile.role === 'office'}
+          />
+        </div>
+      )}
 
       {preAttendance}
 

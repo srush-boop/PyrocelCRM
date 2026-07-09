@@ -211,7 +211,7 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
     .from('tasks')
     .select(
       `id, scheduled_date, booked_start_time, booked_end_time, booked_duration_minutes, status, started_at, assigned_engineer_id,
-       assigned_engineer:profiles(id, full_name, email, branch_id),
+       assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(id, full_name, email, branch_id),
        site_service:site_services(
          site:sites(name, branch_id),
          service_type:service_types(name)

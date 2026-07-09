@@ -83,10 +83,13 @@ interface RawEngineer {
   id: string
   full_name: string | null
   phone: string | null
+  secondary_phone: string | null
 }
 
 function engRef(e: RawEngineer | null) {
-  return e ? { id: e.id, fullName: e.full_name, phone: e.phone } : null
+  return e
+    ? { id: e.id, fullName: e.full_name, phone: e.phone, secondaryPhone: e.secondary_phone }
+    : null
 }
 
 /** Rota members for a branch (or all branches when branchId omitted). */
@@ -94,7 +97,7 @@ export async function listRota(branchId?: string): Promise<RotaMember[]> {
   const supabase = await createClient()
   let q = supabase
     .from('oncall_rota_members')
-    .select('id, branch_id, engineer_id, active, engineer:profiles(id, full_name, phone)')
+    .select('id, branch_id, engineer_id, active, engineer:profiles(id, full_name, phone, secondary_phone)')
     .order('created_at')
   if (branchId) q = q.eq('branch_id', branchId)
   const { data } = await q
@@ -149,7 +152,7 @@ export async function listShifts(
   let q = supabase
     .from('oncall_shifts')
     .select(
-      'id, branch_id, shift_date, band, engineer_id, original_engineer_id, notes, engineer:profiles!oncall_shifts_engineer_id_fkey(id, full_name, phone), branch:branches(name)',
+      'id, branch_id, shift_date, band, engineer_id, original_engineer_id, notes, engineer:profiles!oncall_shifts_engineer_id_fkey(id, full_name, phone, secondary_phone), branch:branches(name)',
     )
     .gte('shift_date', fromISO)
     .lte('shift_date', toISO)
@@ -320,7 +323,7 @@ export async function getMyUpcomingOncall(engineerId: string, days = 14): Promis
   const { data } = await supabase
     .from('oncall_shifts')
     .select(
-      'id, branch_id, shift_date, band, engineer_id, original_engineer_id, notes, engineer:profiles!oncall_shifts_engineer_id_fkey(id, full_name, phone), branch:branches(name)',
+      'id, branch_id, shift_date, band, engineer_id, original_engineer_id, notes, engineer:profiles!oncall_shifts_engineer_id_fkey(id, full_name, phone, secondary_phone), branch:branches(name)',
     )
     .eq('engineer_id', engineerId)
     .gte('shift_date', fromISO)
@@ -332,11 +335,17 @@ export async function getMyUpcomingOncall(engineerId: string, days = 14): Promis
 export interface ExternalRotaBranch {
   branchId: string
   branchName: string
-  today: { engineerName: string | null; phone: string | null; band: OncallBand } | null
+  today: {
+    engineerName: string | null
+    phone: string | null
+    secondaryPhone: string | null
+    band: OncallBand
+  } | null
   upcoming: {
     shiftDate: string
     engineerName: string | null
     phone: string | null
+    secondaryPhone: string | null
     band: OncallBand
   }[]
 }
@@ -369,7 +378,7 @@ export async function getExternalRota(token: string): Promise<ExternalRotaBranch
     admin
       .from('oncall_shifts')
       .select(
-        'branch_id, shift_date, band, engineer:profiles!oncall_shifts_engineer_id_fkey(full_name, phone)',
+        'branch_id, shift_date, band, engineer:profiles!oncall_shifts_engineer_id_fkey(full_name, phone, secondary_phone)',
       )
       .gte('shift_date', fromISO)
       .lte('shift_date', toISO)
@@ -380,7 +389,7 @@ export async function getExternalRota(token: string): Promise<ExternalRotaBranch
     branch_id: string
     shift_date: string
     band: OncallBand
-    engineer: { full_name: string | null; phone: string | null } | null
+    engineer: { full_name: string | null; phone: string | null; secondary_phone: string | null } | null
   }[]
 
   return ((branches ?? []) as BranchRef[]).map((b) => {
@@ -393,6 +402,7 @@ export async function getExternalRota(token: string): Promise<ExternalRotaBranch
         ? {
             engineerName: todayRow.engineer?.full_name ?? null,
             phone: todayRow.engineer?.phone ?? null,
+            secondaryPhone: todayRow.engineer?.secondary_phone ?? null,
             band: todayRow.band,
           }
         : null,
@@ -400,6 +410,7 @@ export async function getExternalRota(token: string): Promise<ExternalRotaBranch
         shiftDate: r.shift_date,
         engineerName: r.engineer?.full_name ?? null,
         phone: r.engineer?.phone ?? null,
+        secondaryPhone: r.engineer?.secondary_phone ?? null,
         band: r.band,
       })),
     }

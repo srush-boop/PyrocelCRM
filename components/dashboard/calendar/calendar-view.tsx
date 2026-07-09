@@ -42,6 +42,7 @@ import {
   Globe,
   Pencil,
   ExternalLink,
+  Siren,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDateUK } from '@/lib/utils'
@@ -370,6 +371,15 @@ export function CalendarView({
               <TabsTrigger value="list">List</TabsTrigger>
             </TabsList>
           </Tabs>
+          <Button
+            asChild
+            className="bg-amber-500 text-white shadow-sm hover:bg-amber-600 focus-visible:ring-amber-500"
+          >
+            <Link href="/dashboard/oncall">
+              <Siren className="mr-2 h-4 w-4" />
+              On-Call Rota
+            </Link>
+          </Button>
           <Button onClick={() => openNewEntry()}>
             <Plus className="mr-2 h-4 w-4" />
             New Entry

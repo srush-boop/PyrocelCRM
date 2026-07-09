@@ -5,7 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { notifyUsers } from '@/lib/notifications'
 import { revalidatePath } from 'next/cache'
 import { randomBytes } from 'crypto'
-import { deriveBand, type OncallBand } from './types'
+import { deriveBand, formatShiftDate, type OncallBand } from './types'
 
 type Result = { ok: boolean; error?: string; id?: string }
 
@@ -219,6 +219,96 @@ export async function clearShift(shiftId: string): Promise<Result> {
   }
   revalidateOncall()
   return { ok: true }
+}
+
+/** Adds whole days to a yyyy-mm-dd string, returning the same format. */
+function addDaysISO(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00`)
+  d.setDate(d.getDate() + days)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+/**
+ * Generate a repeating on-call "block" for a branch. Given an ordered list of
+ * engineers and a rotation unit (per day or per week), this fills every shift
+ * from `startDate` to `endDate` (inclusive) by cycling through the order,
+ * OVERWRITING any existing assignments in that window. Used to lay down a fresh
+ * long-term schedule when an engineer joins or leaves the rota.
+ */
+export async function generateRotaBlock(input: {
+  branchId: string
+  startDate: string // yyyy-mm-dd
+  endDate: string // yyyy-mm-dd
+  unit: 'day' | 'week'
+  order: string[] // ordered engineer ids
+}): Promise<Result & { created?: number }> {
+  const { supabase, auth, error } = await requireManager()
+  if (error || !supabase || !auth) return { ok: false, error: error! }
+  const { branchId, startDate, endDate, unit } = input
+  const order = (input.order ?? []).filter(Boolean)
+  if (!branchId) return { ok: false, error: 'Select a branch' }
+  if (!startDate || !endDate) return { ok: false, error: 'Enter a start and end date' }
+  if (startDate > endDate) return { ok: false, error: 'The end date must be on or after the start date' }
+  if (order.length === 0) return { ok: false, error: 'Add at least one engineer to the rotation order' }
+
+  // Enumerate every date in the range (inclusive), capped to avoid runaway inserts.
+  const dates: string[] = []
+  let cur = startDate
+  while (cur <= endDate) {
+    dates.push(cur)
+    if (dates.length > 732) return { ok: false, error: 'Block is too long — keep it under two years' }
+    cur = addDaysISO(cur, 1)
+  }
+
+  // Bank-holiday set for the range so each generated shift gets the right band.
+  const admin = createAdminClient()
+  const { data: bhRows } = await admin
+    .from('calendar_entries')
+    .select('start_at')
+    .eq('source', 'uk-bank-holiday')
+    .gte('start_at', `${startDate}T00:00:00Z`)
+    .lte('start_at', `${endDate}T23:59:59Z`)
+  const bankHolidays = new Set<string>(
+    ((bhRows ?? []) as { start_at: string }[]).map((r) => r.start_at.slice(0, 10)),
+  )
+
+  // Cycle the order by day or by whole week (7-day chunks anchored to the start).
+  const rows = dates.map((date, i) => {
+    const rotationIndex = unit === 'week' ? Math.floor(i / 7) : i
+    const engineerId = order[rotationIndex % order.length]
+    return {
+      branch_id: branchId,
+      shift_date: date,
+      engineer_id: engineerId,
+      original_engineer_id: engineerId,
+      band: deriveBand(date, bankHolidays),
+      notes: null,
+      updated_at: new Date().toISOString(),
+    }
+  })
+
+  // Upsert on the (branch_id, shift_date) unique key so existing entries in the
+  // window are replaced rather than duplicated.
+  const { error: upErr } = await supabase
+    .from('oncall_shifts')
+    .upsert(rows, { onConflict: 'branch_id,shift_date' })
+  if (upErr) return { ok: false, error: upErr.message }
+
+  // Record a single audit marker for the whole block rather than one row per shift.
+  await logChange(supabase, {
+    shiftId: null,
+    branchId,
+    fromEngineerId: null,
+    toEngineerId: null,
+    changedBy: auth.userId,
+    reason: `Rota block generated — ${rows.length} shifts, ${formatShiftDate(startDate)} to ${formatShiftDate(endDate)} (rotates every ${unit === 'week' ? 'week' : 'day'})`,
+  })
+
+  revalidateOncall()
+  return { ok: true, created: rows.length }
 }
 
 // --------------------------------------------------------------------------

@@ -90,17 +90,34 @@ function emergencyIcon(color: string): L.DivIcon {
   })
 }
 
-/** Imperatively pan/zoom when the user picks a site, or fit route/dispatch bounds. */
+// Zoom the map to a radius (miles) around a point without drawing anything —
+// used to frame the selected branch's area as a helpful default view.
+const BRANCH_FOCUS_RADIUS_MILES = 20
+
+/** Imperatively pan/zoom when the user picks a site, or fit route/dispatch/branch bounds. */
 function MapController({
   focusSite,
   route,
   dispatchBounds,
+  branchCenter,
 }: {
   focusSite: MapSite | null
   route: EngineerRoute | null
   dispatchBounds: [number, number][] | null
+  branchCenter: { latitude: number; longitude: number } | null
 }) {
   const map = useMap()
+
+  // On load / branch change, frame a ~20-mile area around the branch. Runs only
+  // when the branch centre changes, so later user interactions (picking a site,
+  // viewing a route, dispatching) take over without being overridden.
+  useEffect(() => {
+    if (!branchCenter) return
+    const bounds = L.latLng(branchCenter.latitude, branchCenter.longitude).toBounds(
+      BRANCH_FOCUS_RADIUS_MILES * 1609.34 * 2,
+    )
+    map.flyToBounds(bounds, { padding: [24, 24], duration: 0.6 })
+  }, [branchCenter, map])
 
   useEffect(() => {
     if (focusSite) {
@@ -275,6 +292,7 @@ export const CallsMapCanvas = memo(function CallsMapCanvas({
   engineers,
   route,
   focusSite,
+  branchCenter = null,
   dispatchCall,
   dispatchRadiusMiles = 10,
   candidates,
@@ -285,6 +303,8 @@ export const CallsMapCanvas = memo(function CallsMapCanvas({
   engineers: MapEngineer[]
   route: EngineerRoute | null
   focusSite: MapSite | null
+  // Geocoded centre of the active branch; frames a ~20-mile area on load.
+  branchCenter?: { latitude: number; longitude: number } | null
   // When dispatching from the map, the call being dispatched + its candidates.
   dispatchCall?: MapCall | null
   // Radius (miles) of the dispatch search area, drawn as a circle.
@@ -328,7 +348,7 @@ export const CallsMapCanvas = memo(function CallsMapCanvas({
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
-      <MapController focusSite={focusSite} route={route} dispatchBounds={dispatchBounds} />
+      <MapController focusSite={focusSite} route={route} dispatchBounds={dispatchBounds} branchCenter={branchCenter} />
 
       {/* Dispatch search radius around the call being dispatched. */}
       {dispatchCall && (

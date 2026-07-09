@@ -74,6 +74,8 @@ interface CallsMapProps {
   initialData: CallsMapData
   branches: Branch[]
   activeBranchId: string | null
+  // Geocoded centre of the active branch, used to zoom the map to that area.
+  branchCenter?: { latitude: number; longitude: number } | null
   canSwitchBranch: boolean
   loadError: string | null
   // Data for the header "Book Call" dialog (reactive / emergency calls).
@@ -107,6 +109,7 @@ export function CallsMap({
   initialData,
   branches,
   activeBranchId,
+  branchCenter = null,
   canSwitchBranch,
   loadError,
   reactiveServiceTypes = [],
@@ -977,12 +980,13 @@ export function CallsMap({
                 {loadError}
               </div>
             ) : (
-              <CallsMapCanvas
-                calls={visibleCalls}
-                engineers={canvasEngineers}
-                route={route}
-                focusSite={selectedSite}
-              dispatchCall={dispatchCall}
+          <CallsMapCanvas
+            calls={visibleCalls}
+            engineers={canvasEngineers}
+            route={route}
+            focusSite={selectedSite}
+            branchCenter={branchCenter}
+            dispatchCall={dispatchCall}
               dispatchRadiusMiles={radiusMiles}
               candidates={candidates}
               highlightCandidateId={highlightCandidateId}

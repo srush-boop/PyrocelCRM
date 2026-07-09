@@ -118,6 +118,9 @@ export function CallsMap({
   const { calls, engineers, sites } = initialData
   const [showCalls, setShowCalls] = useState(true)
   const [overdueOnly, setOverdueOnly] = useState(false)
+  // "Active (started) only": show just calls an engineer has started working
+  // (status in_progress/paused). Emergencies still always render.
+  const [startedOnly, setStartedOnly] = useState(false)
   const [showEngineers, setShowEngineers] = useState(true)
   // Emergency-call filters (assigned status + specific engineer).
   const [emergencyAssignedFilter, setEmergencyAssignedFilter] = useState<'all' | 'assigned' | 'unassigned'>('all')
@@ -302,6 +305,8 @@ export function CallsMap({
   }
 
   const overdueCount = calls.filter((c) => c.urgency === 'overdue').length
+  const isStarted = (c: MapCall) => c.status === 'in_progress' || c.status === 'paused'
+  const startedCount = calls.filter(isStarted).length
   const emergencyCalls = useMemo(() => calls.filter((c) => c.isEmergency), [calls])
 
   // Engineers currently assigned to emergency calls — options for the
@@ -335,10 +340,16 @@ export function CallsMap({
       return [dispatchCall, ...others]
     }
     if (!showCalls) return emergencyCalls
-    if (!overdueOnly) return calls
-    // Overdue-only: show overdue calls, plus emergencies (which always render).
-    return calls.filter((c) => c.urgency === 'overdue' || c.isEmergency)
-  }, [dispatchCall, showCalls, overdueOnly, calls, emergencyCalls])
+    // Apply the layer filters. Emergencies always render regardless of filter.
+    let result = calls
+    if (startedOnly) {
+      result = result.filter((c) => isStarted(c) || c.isEmergency)
+    }
+    if (overdueOnly) {
+      result = result.filter((c) => c.urgency === 'overdue' || c.isEmergency)
+    }
+    return result
+  }, [dispatchCall, showCalls, overdueOnly, startedOnly, calls, emergencyCalls])
 
   // Manual engineer picker — assign any engineer directly, bypassing the
   // radius/skill ranking. Rendered in the dispatch panel as a fallback when no
@@ -469,35 +480,45 @@ export function CallsMap({
                 </p>
               ) : null}
 
-              {filteredEmergencyCalls.map((c) => (
-                <div key={c.taskId} className="rounded-md border border-destructive/30 bg-background p-2 text-xs">
-                  <p className="font-semibold">{c.siteName}</p>
-                  <p className="text-muted-foreground">
-                    {c.callTypeName ?? c.serviceTypeName ?? 'Emergency'}
-                    {c.assignedEngineerName ? ` · ${c.assignedEngineerName}` : ' · unassigned'}
-                  </p>
-                  {c.respondBy && (
-                    <p className="text-destructive">
-                      Attend by{' '}
-                      {new Date(c.respondBy).toLocaleString('en-GB', {
-                        day: '2-digit',
-                        month: 'short',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+              {/* The list can grow long during a busy shift; cap it and let it
+                  scroll once there are more than 3 notices so the filters/header
+                  above stay in view. */}
+              <div
+                className={cn(
+                  'space-y-2',
+                  filteredEmergencyCalls.length > 3 && 'max-h-[21rem] overflow-y-auto pr-1',
+                )}
+              >
+                {filteredEmergencyCalls.map((c) => (
+                  <div key={c.taskId} className="rounded-md border border-destructive/30 bg-background p-2 text-xs">
+                    <p className="font-semibold">{c.siteName}</p>
+                    <p className="text-muted-foreground">
+                      {c.callTypeName ?? c.serviceTypeName ?? 'Emergency'}
+                      {c.assignedEngineerName ? ` · ${c.assignedEngineerName}` : ' · unassigned'}
                     </p>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    className="mt-1 h-7 w-full gap-1 text-xs"
-                    onClick={() => startDispatchForCall(c)}
-                  >
-                    <Truck className="h-3 w-3" />
-                    Dispatch
-                  </Button>
-                </div>
-              ))}
+                    {c.respondBy && (
+                      <p className="text-destructive">
+                        Attend by{' '}
+                        {new Date(c.respondBy).toLocaleString('en-GB', {
+                          day: '2-digit',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </p>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="mt-1 h-7 w-full gap-1 text-xs"
+                      onClick={() => startDispatchForCall(c)}
+                    >
+                      <Truck className="h-3 w-3" />
+                      Dispatch
+                    </Button>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         )}
@@ -764,6 +785,26 @@ export function CallsMap({
                   id="overdue-only"
                   checked={overdueOnly}
                   onCheckedChange={setOverdueOnly}
+                  disabled={!showCalls}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="started-only"
+                    className={cn('flex items-center gap-1.5', !showCalls && 'text-muted-foreground')}
+                  >
+                    <span className="h-2.5 w-2.5 rounded-full bg-primary" aria-hidden />
+                    Active (started) only
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    {startedCount} started call{startedCount === 1 ? '' : 's'}
+                  </p>
+                </div>
+                <Switch
+                  id="started-only"
+                  checked={startedOnly}
+                  onCheckedChange={setStartedOnly}
                   disabled={!showCalls}
                 />
               </div>

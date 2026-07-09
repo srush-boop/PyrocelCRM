@@ -245,6 +245,11 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   ).sort((a, b) => (a?.name ?? '').localeCompare(b?.name ?? ''))
   // Only admin/office can multi-select and reassign tasks
   const canAssign = isAdminOrOffice && engineers.length > 0
+  // Once an engineer has closed (completed) a call it can no longer be
+  // reassigned. Cancelled calls are also locked. This is enforced in the UI
+  // and by a database trigger.
+  const isReassignable = (task: TaskWithDetails) =>
+    task.status !== 'completed' && task.status !== 'cancelled'
 
   const toggleOne = (id: string) => {
     setSelectedIds((prev) => {
@@ -270,12 +275,21 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
 
   const handleBulkAssign = async () => {
     if (selectedIds.size === 0 || !assignTo) return
+    // Never reassign completed/cancelled calls, even if somehow selected.
+    const lockedIds = new Set(
+      tasks.filter((t) => !isReassignable(t)).map((t) => t.id),
+    )
+    const targetIds = Array.from(selectedIds).filter((id) => !lockedIds.has(id))
+    if (targetIds.length === 0) {
+      toast.error('Completed calls cannot be reassigned')
+      return
+    }
     setAssigning(true)
     const engineerId = assignTo === 'unassigned' ? null : assignTo
     const { error } = await supabase
       .from('tasks')
       .update({ assigned_engineer_id: engineerId })
-      .in('id', Array.from(selectedIds))
+      .in('id', targetIds)
     setAssigning(false)
     if (!error) {
       clearSelection()
@@ -299,6 +313,10 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   // dialog reflects the change immediately, then refreshes the list.
   const assignFromDialog = async (value: string) => {
     if (!viewTask) return
+    if (!isReassignable(viewTask)) {
+      toast.error('Completed calls cannot be reassigned')
+      return
+    }
     const engineerId = value === 'unassigned' ? null : value
     setAssigningTaskId(viewTask.id)
     await supabase
@@ -640,7 +658,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
         )}
         style={!isOverdue && !selected ? { borderLeftColor: sysColors.solid } : undefined}
       >
-        {canAssign && (
+        {canAssign && isReassignable(task) && (
           <div className="pl-2">
             <Checkbox
               checked={selected}
@@ -809,7 +827,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
       return <EmptyState icon={activeTab === 'completed' ? CheckCircle2 : ClipboardCheck} label={emptyLabel} />
     }
     if (viewMode === 'list') {
-      const ids = list.map((t) => t.id)
+      const ids = list.filter(isReassignable).map((t) => t.id)
       const allSelected = ids.length > 0 && ids.every((id) => selectedIds.has(id))
       return (
         <div className="space-y-2">
@@ -842,7 +860,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
       return (
         <div className="space-y-6">
           {groups.map((group) => {
-            const groupIds = group.tasks.map((t) => t.id)
+            const groupIds = group.tasks.filter(isReassignable).map((t) => t.id)
             const allGroupSelected =
               groupIds.length > 0 && groupIds.every((id) => selectedIds.has(id))
             return (
@@ -1232,7 +1250,16 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                     )}
                   </div>
 
-                  {isAdminOrOffice && engineers.length > 0 && (
+                  {isAdminOrOffice && engineers.length > 0 && !isReassignable(viewTask) && (
+                    <p className="flex items-center gap-1.5 rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                      <UserPlus className="h-3.5 w-3.5 shrink-0" />
+                      {viewTask.status === 'completed'
+                        ? 'This call has been completed and can no longer be reassigned.'
+                        : 'Cancelled calls can no longer be reassigned.'}
+                    </p>
+                  )}
+
+                  {isAdminOrOffice && engineers.length > 0 && isReassignable(viewTask) && (
                     <div className="space-y-1.5">
                       <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                         <UserPlus className="h-3.5 w-3.5" />

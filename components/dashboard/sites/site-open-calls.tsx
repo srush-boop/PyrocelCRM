@@ -150,8 +150,20 @@ export function SiteOpenCalls({ openCalls }: { openCalls: OpenCall[] }) {
                 const StatusIcon = meta.icon
                 const scheduled = call.scheduled_date ? new Date(call.scheduled_date) : null
                 const isOverdue = scheduled ? scheduled < today && call.status === 'pending' : false
+                // A call is "started" once work has begun. `started_at` is preserved
+                // across a pause, so this covers both actively in-progress and paused
+                // (started-then-paused) calls.
+                const isStarted = Boolean(call.started_at)
+                const isActive = call.status === 'in_progress'
                 return (
-                  <TableRow key={call.id}>
+                  <TableRow
+                    key={call.id}
+                    className={
+                      isStarted
+                        ? 'border-l-2 border-l-primary bg-primary/[0.04] hover:bg-primary/[0.07]'
+                        : undefined
+                    }
+                  >
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
                         {call.is_emergency && <Flame className="h-4 w-4 text-destructive" aria-label="Emergency" />}
@@ -170,11 +182,23 @@ export function SiteOpenCalls({ openCalls }: { openCalls: OpenCall[] }) {
                       {isOverdue && (
                         <span className="ml-2 text-xs font-medium text-destructive">Overdue</span>
                       )}
+                      {isStarted && call.started_at && (
+                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                          Started {formatDateUK(call.started_at)}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell>{call.assigned_engineer?.full_name || 'Unassigned'}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className={meta.className}>
-                        <StatusIcon className="mr-1 h-3 w-3" />
+                        {isActive ? (
+                          <span
+                            className="mr-1.5 inline-block h-2 w-2 animate-pulse rounded-full bg-primary"
+                            aria-hidden
+                          />
+                        ) : (
+                          <StatusIcon className="mr-1 h-3 w-3" />
+                        )}
                         {meta.label}
                       </Badge>
                     </TableCell>

@@ -2010,7 +2010,7 @@ export interface CalendarFilterState {
 
 // A normalised item the calendar can render, derived from a booked task, a
 // general entry, or a recurring route. `start`/`end` are ISO datetime strings.
-export type CalendarItemKind = 'task' | 'entry' | 'route'
+export type CalendarItemKind = 'task' | 'entry' | 'route' | 'oncall'
 
 export interface CalendarItem {
   id: string
@@ -2034,7 +2034,11 @@ export interface CalendarItem {
   // Leave approval state for leave-type entries; drives calendar styling
   // (e.g. pending requests render muted/hatched).
   approvalStatus?: LeaveApprovalStatus | null
-}
+  // For on-call shift items: the branch whose rota this shift belongs to, and
+  // the pay-rate band, so the calendar can label them per branch.
+  oncallBranchName?: string
+  oncallBand?: 'weekday_evening' | 'weekend' | 'bank_holiday'
+  }
 
 // A route that recurs weekly on the calendar. The weekday is derived from the
 // route's name (e.g. "Friday 01" recurs every Friday). `weekday` follows the

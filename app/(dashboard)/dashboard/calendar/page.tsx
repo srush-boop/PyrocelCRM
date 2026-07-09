@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Settings2 } from 'lucide-react'
+import { Settings2, LifeBuoy } from 'lucide-react'
 import { getCalendarData } from '@/lib/calendar'
 import { CalendarView } from '@/components/dashboard/calendar/calendar-view'
 import { BranchFilter } from '@/components/dashboard/branch-filter'
@@ -17,8 +17,17 @@ export default async function CalendarPage({
   const data = await getCalendarData(branch)
   if (!data) redirect('/auth/login')
 
-  const { items, routes, entryTypes, people, departments, profile, canManageOthers, branchScope } =
-    data
+  const {
+    items,
+    routes,
+    entryTypes,
+    people,
+    departments,
+    profile,
+    canManageOthers,
+    branchScope,
+    oncallTonight,
+  } = data
   const isAdmin = profile.role === 'admin'
 
   // The current user's saved calendar filter templates (RLS scopes to them).
@@ -39,15 +48,29 @@ export default async function CalendarPage({
               : 'Your booked tasks and entries shared with you'}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <BranchFilter branches={branchScope.branches} activeBranchId={branchScope.activeBranchId} />
-          {isAdmin && (
-            <Button asChild variant="outline">
-              <Link href="/dashboard/calendar/types">
-                <Settings2 className="mr-2 h-4 w-4" />
-                Entry Types
-              </Link>
-            </Button>
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <BranchFilter
+              branches={branchScope.branches}
+              activeBranchId={branchScope.activeBranchId}
+            />
+            {isAdmin && (
+              <Button asChild variant="outline">
+                <Link href="/dashboard/calendar/types">
+                  <Settings2 className="mr-2 h-4 w-4" />
+                  Entry Types
+                </Link>
+              </Button>
+            )}
+          </div>
+          {oncallTonight.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              <LifeBuoy className="mr-1 inline h-3 w-3 text-[color:var(--oncall,#0d9488)]" aria-hidden />
+              <span className="font-medium">On call tonight:</span>{' '}
+              {oncallTonight
+                .map((o) => `${o.branchName} — ${o.engineerName}`)
+                .join(' · ')}
+            </p>
           )}
         </div>
       </div>

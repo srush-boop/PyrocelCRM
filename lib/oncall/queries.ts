@@ -64,6 +64,21 @@ export async function getOncallRates(): Promise<OncallRates> {
   }
 }
 
+/**
+ * The current external call-handler token (for managers to reveal/copy the
+ * public link). Returns null when none has been generated yet. RLS restricts
+ * company_info reads to staff.
+ */
+export async function getExternalToken(): Promise<string | null> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('company_info')
+    .select('oncall_external_token')
+    .limit(1)
+    .maybeSingle()
+  return (data as { oncall_external_token: string | null } | null)?.oncall_external_token ?? null
+}
+
 interface RawEngineer {
   id: string
   full_name: string | null
@@ -389,6 +404,41 @@ export async function getExternalRota(token: string): Promise<ExternalRotaBranch
       })),
     }
   })
+}
+
+/**
+ * Whether the signed-in user is on call for the current out-of-hours shift.
+ * The evening shift runs into the next morning, so before 09:00 the relevant
+ * shift date is still yesterday's. Returns the branch + band when on call, else
+ * null. Used for the persistent dashboard reminder banner.
+ */
+export async function getMyCurrentOncall(): Promise<{
+  branchName: string
+  band: OncallBand
+  shiftDate: string
+} | null> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return null
+
+  const now = new Date()
+  const ymd = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const ref = new Date(now)
+  if (now.getHours() < 9) ref.setDate(ref.getDate() - 1)
+  const shiftDate = ymd(ref)
+
+  const { data } = await supabase
+    .from('oncall_shifts')
+    .select('band, shift_date, branch:branches(name)')
+    .eq('engineer_id', user.id)
+    .eq('shift_date', shiftDate)
+    .maybeSingle()
+  if (!data) return null
+  const row = data as unknown as { band: OncallBand; shift_date: string; branch: { name: string } | null }
+  return { branchName: row.branch?.name ?? 'your branch', band: row.band, shiftDate: row.shift_date }
 }
 
 /** Re-export a couple of pure helpers for server consumers' convenience. */

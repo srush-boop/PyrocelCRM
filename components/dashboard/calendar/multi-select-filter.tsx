@@ -67,8 +67,12 @@ export function MultiSelectFilter({
           <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-56 p-0" align="start">
-        <div className="flex items-center justify-between px-3 py-2">
+      <PopoverContent
+        className="flex max-h-[min(24rem,var(--radix-popover-content-available-height))] w-56 flex-col overflow-hidden p-0"
+        align="start"
+        collisionPadding={8}
+      >
+        <div className="flex shrink-0 items-center justify-between px-3 py-2">
           <span className="text-sm font-medium">{allLabel}</span>
           {selected.length > 0 && (
             <Button
@@ -81,8 +85,8 @@ export function MultiSelectFilter({
             </Button>
           )}
         </div>
-        <Separator />
-        <ScrollArea className="max-h-64">
+        <Separator className="shrink-0" />
+        <ScrollArea className="min-h-0 flex-1">
           <div className="p-1">
             {options.length === 0 ? (
               <p className="px-2 py-3 text-sm text-muted-foreground">No options</p>

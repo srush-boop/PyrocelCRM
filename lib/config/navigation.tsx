@@ -331,6 +331,15 @@ const oncallNavItem: NavItem = {
   icon: LifeBuoy,
 }
 
+// Chat: internal team messaging (branch channels + direct messages). Available
+// to all active staff.
+const chatNavItem: NavItem = {
+  key: 'chat',
+  title: 'Chat',
+  href: '/dashboard/chat',
+  icon: MessageSquareText,
+}
+
 // ---------------------------------------------------------------------------
 // Role default menus
 // ---------------------------------------------------------------------------
@@ -343,6 +352,7 @@ const adminNavItems: NavItem[] = [
   adminCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   oncallNavItem,
+  chatNavItem,
   { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   adminServiceManagementNavItem,
   salesNavItem,
@@ -364,6 +374,7 @@ const officeNavItems: NavItem[] = [
   officeCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   oncallNavItem,
+  chatNavItem,
   { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   officeServiceManagementNavItem,
   salesNavItem,
@@ -382,6 +393,7 @@ const engineerNavItems: NavItem[] = [
   engineerCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   oncallNavItem,
+  chatNavItem,
   { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   engineerPeopleNavItem,
   engineerStockNavItem,

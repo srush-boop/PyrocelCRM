@@ -6,12 +6,22 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { ChevronLeft, ChevronRight, CalendarClock, Users, History, PoundSterling, LifeBuoy } from 'lucide-react'
+import {
+  ChevronLeft,
+  ChevronRight,
+  CalendarClock,
+  Users,
+  History,
+  PoundSterling,
+  LifeBuoy,
+  Settings2,
+} from 'lucide-react'
 import { ShiftSchedule } from './shift-schedule'
 import { RotaMembersCard } from './rota-members-card'
 import { CoverBoard } from './cover-board'
 import { ChangeLogTable } from './change-log-table'
 import { OncallSummary } from './oncall-summary'
+import { OncallSettings } from './oncall-settings'
 import type { BranchRef } from '@/lib/oncall/queries'
 import type {
   RotaMember,
@@ -42,6 +52,7 @@ interface OncallIndexProps {
   summary: OncallSummaryRow[]
   rates: OncallRates
   engineers: OncallEngineer[]
+  externalToken: string | null
 }
 
 function shiftMonth(month: string, delta: number): string {
@@ -68,6 +79,7 @@ export function OncallIndex({
   summary,
   rates,
   engineers,
+  externalToken,
 }: OncallIndexProps) {
   const router = useRouter()
   // Default the branch filter to the user's own branch when they have one.
@@ -150,6 +162,12 @@ export function OncallIndex({
               Summary
             </TabsTrigger>
           )}
+          {isManager && (
+            <TabsTrigger value="settings" className="gap-1.5">
+              <Settings2 className="h-4 w-4" />
+              Settings
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="rota" className="space-y-4">
@@ -202,6 +220,12 @@ export function OncallIndex({
         {isManager && (
           <TabsContent value="summary">
             <OncallSummary summary={summary} rates={rates} monthLabel={monthLabel(month)} />
+          </TabsContent>
+        )}
+
+        {isManager && (
+          <TabsContent value="settings">
+            <OncallSettings rates={rates} externalToken={externalToken} />
           </TabsContent>
         )}
       </Tabs>

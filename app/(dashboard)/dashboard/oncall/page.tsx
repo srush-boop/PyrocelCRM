@@ -9,6 +9,7 @@ import {
   getOncallSummary,
   getOncallRates,
   getBranches,
+  getExternalToken,
 } from '@/lib/oncall/queries'
 import { OncallIndex } from '@/components/dashboard/oncall/oncall-index'
 
@@ -83,6 +84,9 @@ export default async function OncallPage(props: {
     phone: string | null
   }[]
 
+  // Only managers manage the external call-handler link, so only fetch it then.
+  const externalToken = isManager ? await getExternalToken() : null
+
   return (
     <OncallIndex
       isManager={isManager}
@@ -97,6 +101,7 @@ export default async function OncallPage(props: {
       summary={summary}
       rates={rates}
       engineers={engineers}
+      externalToken={externalToken}
     />
   )
 }

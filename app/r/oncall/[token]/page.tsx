@@ -34,6 +34,8 @@ export default async function ExternalOncallPage({ params }: PageProps) {
   const branches = await getExternalRota(token)
   if (!branches) notFound()
 
+  const todayISO = new Date().toISOString().slice(0, 10)
+
   return (
     <div className="min-h-svh bg-muted/30">
       <div className="mx-auto max-w-3xl p-4 sm:p-6">
@@ -52,7 +54,9 @@ export default async function ExternalOncallPage({ params }: PageProps) {
         </header>
 
         <div className="space-y-4">
-          {branches.map((b) => (
+          {branches.map((b) => {
+            const upcoming = b.upcoming.filter((s) => s.shiftDate > todayISO)
+            return (
             <section
               key={b.branchId}
               className="overflow-hidden rounded-lg border bg-background"
@@ -91,13 +95,13 @@ export default async function ExternalOncallPage({ params }: PageProps) {
                   </p>
                 )}
 
-                {b.upcoming.length > 0 && (
+                {upcoming.length > 0 && (
                   <div className="mt-4 border-t pt-3">
                     <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       Upcoming
                     </p>
                     <ul className="divide-y">
-                      {b.upcoming.map((s) => (
+                      {upcoming.map((s) => (
                         <li
                           key={`${b.branchId}-${s.shiftDate}`}
                           className="flex items-center justify-between gap-3 py-1.5 text-sm"
@@ -112,7 +116,8 @@ export default async function ExternalOncallPage({ params }: PageProps) {
                 )}
               </div>
             </section>
-          ))}
+            )
+          })}
         </div>
       </div>
     </div>

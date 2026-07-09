@@ -11,6 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { formatDateUK, formatBookedSlot } from '@/lib/utils'
+import { bookExistingCall } from '@/app/(dashboard)/dashboard/schedule/book-call-actions'
 import {
   Select,
   SelectContent,
@@ -103,6 +104,97 @@ const statusConfig = {
   paused: { label: 'Paused', icon: PauseCircle, variant: 'outline' as const },
   completed: { label: 'Completed', icon: CheckCircle2, variant: 'outline' as const },
   cancelled: { label: 'Cancelled', icon: XCircle, variant: 'destructive' as const },
+}
+
+/**
+ * Inline booking control shown in the call-detail preview for admin/office.
+ * Sets/updates the booked appointment slot on an existing call and can email the
+ * site/client a confirmation. Defined at module scope so its form state survives
+ * parent re-renders (an inline component would remount and drop input focus).
+ */
+function BookingEditor({
+  task,
+  onSaved,
+}: {
+  task: TaskWithDetails
+  onSaved: (fields: { booked_start_time: string | null; booked_end_time: string | null }) => void
+}) {
+  const alreadyBooked = !!task.booked_start_time
+  const [start, setStart] = useState((task.booked_start_time ?? '').slice(0, 5))
+  const [end, setEnd] = useState((task.booked_end_time ?? '').slice(0, 5))
+  const [sendConfirmation, setSendConfirmation] = useState(!alreadyBooked)
+  const [saving, setSaving] = useState(false)
+
+  const save = async (clear = false) => {
+    setSaving(true)
+    const res = await bookExistingCall({
+      taskId: task.id,
+      bookedStartTime: clear ? null : start || null,
+      bookedEndTime: clear ? null : end || null,
+      sendConfirmation: !clear && sendConfirmation,
+    })
+    setSaving(false)
+    if (res.ok) {
+      toast.success(clear ? 'Booking cleared' : 'Call booked')
+      onSaved({
+        booked_start_time: clear ? null : start ? `${start}:00` : null,
+        booked_end_time: clear ? null : end ? `${end}:00` : null,
+      })
+    } else {
+      toast.error(res.error ?? 'Could not save the booking.')
+    }
+  }
+
+  return (
+    <div className="space-y-2.5 rounded-md border p-3">
+      <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <CalendarClock className="h-3.5 w-3.5" />
+        {alreadyBooked ? 'Update booking' : 'Book appointment'}
+      </p>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-1">
+          <label htmlFor="book-start" className="text-xs text-muted-foreground">
+            Start time
+          </label>
+          <Input
+            id="book-start"
+            type="time"
+            value={start}
+            onChange={(e) => setStart(e.target.value)}
+          />
+        </div>
+        <div className="grid gap-1">
+          <label htmlFor="book-end" className="text-xs text-muted-foreground">
+            End time
+          </label>
+          <Input
+            id="book-end"
+            type="time"
+            value={end}
+            onChange={(e) => setEnd(e.target.value)}
+          />
+        </div>
+      </div>
+      <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+        <Checkbox
+          checked={sendConfirmation}
+          onCheckedChange={(checked) => setSendConfirmation(checked === true)}
+        />
+        Email the site &amp; client a booking confirmation
+      </label>
+      <div className="flex gap-2">
+        <Button type="button" size="sm" className="flex-1" disabled={saving || !start} onClick={() => save(false)}>
+          {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+          {alreadyBooked ? 'Update booking' : 'Book call'}
+        </Button>
+        {alreadyBooked && (
+          <Button type="button" size="sm" variant="outline" disabled={saving} onClick={() => save(true)}>
+            Clear
+          </Button>
+        )}
+      </div>
+    </div>
+  )
 }
 
 export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewProps) {
@@ -263,6 +355,14 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   }
 
   const needsBookingCount = tasks.filter(taskNeedsBooking).length
+
+  // Weekly recurring calls (a recurring service repeating every 1 week, e.g.
+  // weekly fire-alarm tests) are too routine to book an individual appointment
+  // for, so the booking option is hidden for them.
+  const isWeeklyRecurring = (task: TaskWithDetails) => {
+    const ss = task.site_service
+    return !!ss && ss.frequency_unit === 'weeks' && (ss.frequency_value ?? 1) === 1
+  }
 
   const hasActiveFilters =
     search || selectedEngineer !== 'all' || selectedSystem !== 'all' || dateFrom || dateTo || needsBookingOnly
@@ -1163,6 +1263,23 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                       </Select>
                     </div>
                   )}
+
+                  {isAdminOrOffice &&
+                    (isWeeklyRecurring(viewTask) ? (
+                      <p className="flex items-center gap-1.5 rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                        <CalendarClock className="h-3.5 w-3.5 shrink-0" />
+                        Weekly recurring calls don&apos;t require an individual booking.
+                      </p>
+                    ) : (
+                      <BookingEditor
+                        key={viewTask.id}
+                        task={viewTask}
+                        onSaved={(fields) => {
+                          setViewTask({ ...viewTask, ...fields })
+                          router.refresh()
+                        }}
+                      />
+                    ))}
 
                   {site?.address && (
                     <div className="flex items-start gap-2">

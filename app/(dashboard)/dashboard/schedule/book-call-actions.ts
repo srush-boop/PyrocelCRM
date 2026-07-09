@@ -261,6 +261,139 @@ export async function bookCall(input: BookCallInput): Promise<BookCallResult> {
   return { ok: true, taskId }
 }
 
+export interface BookExistingCallInput {
+  taskId: string
+  /** yyyy-MM-dd — optionally move the call to this date while booking a slot. */
+  scheduledDate?: string | null
+  /** 24h "HH:MM". Pass null/empty for both to clear the booking. */
+  bookedStartTime?: string | null
+  bookedEndTime?: string | null
+  /** Email the site/client a booking confirmation with calendar invite. */
+  sendConfirmation?: boolean
+}
+
+/**
+ * Set (or clear) the booked appointment slot on an existing call, and optionally
+ * email the site/client a booking confirmation. Available for every call EXCEPT
+ * weekly recurring PPM calls (e.g. weekly fire-alarm tests), which are too
+ * routine to book an individual appointment for.
+ */
+export async function bookExistingCall(
+  input: BookExistingCallInput,
+): Promise<BookCallResult> {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: 'Not authenticated.' }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+  const role = (profile as { role?: string } | null)?.role
+  if (role !== 'admin' && role !== 'office') {
+    return { ok: false, error: 'You do not have permission to book calls.' }
+  }
+
+  const start = input.bookedStartTime || null
+  const end = input.bookedEndTime || null
+  if (start && end && end <= start) {
+    return { ok: false, error: 'End time must be after the start time.' }
+  }
+  if (end && !start) {
+    return { ok: false, error: 'Enter a start time before an end time.' }
+  }
+
+  // Load the call with just enough to enforce the weekly-recurring exclusion and
+  // to build a confirmation email.
+  const { data: task } = await supabase
+    .from('tasks')
+    .select(
+      `id, site_id, client_id, scheduled_date, status,
+       service_type:service_types!tasks_service_type_id_fkey(name),
+       site_service:site_services(
+         frequency_value, frequency_unit,
+         service_type:service_types(name)
+       )`,
+    )
+    .eq('id', input.taskId)
+    .single()
+  const t = task as
+    | {
+        site_id: string | null
+        client_id: string | null
+        scheduled_date: string
+        status: string
+        service_type: { name: string | null } | null
+        site_service: {
+          frequency_value: number | null
+          frequency_unit: 'weeks' | 'months' | null
+          service_type: { name: string | null } | null
+        } | null
+      }
+    | null
+  if (!t) return { ok: false, error: 'Call not found.' }
+  if (t.status === 'completed' || t.status === 'cancelled') {
+    return { ok: false, error: 'This call can no longer be booked.' }
+  }
+
+  // Exclude weekly recurring calls (recurring service repeating every 1 week).
+  const ss = t.site_service
+  const isWeeklyRecurring =
+    !!ss && ss.frequency_unit === 'weeks' && (ss.frequency_value ?? 1) === 1
+  if (isWeeklyRecurring) {
+    return {
+      ok: false,
+      error: 'Weekly recurring calls cannot be booked individually.',
+    }
+  }
+
+  const scheduledDate = input.scheduledDate || t.scheduled_date
+  const { error } = await supabase
+    .from('tasks')
+    .update({
+      scheduled_date: scheduledDate,
+      booked_start_time: start,
+      booked_end_time: end,
+    })
+    .eq('id', input.taskId)
+
+  if (error) {
+    console.log('[v0] bookExistingCall update failed:', error.message)
+    return { ok: false, error: 'Failed to save the booking. Please try again.' }
+  }
+
+  const callTypeName =
+    t.service_type?.name ?? ss?.service_type?.name ?? 'Service visit'
+
+  // Only send a confirmation when a real slot was set (not when clearing).
+  if (input.sendConfirmation && start) {
+    try {
+      await dispatchBookingConfirmation(supabase, {
+        taskId: input.taskId,
+        siteId: t.site_id,
+        clientId: t.client_id,
+        callTypeName,
+        scheduledDate,
+        startTime: start,
+        endTime: end,
+        notes: null,
+      })
+    } catch (err) {
+      console.log('[v0] Booking confirmation dispatch failed:', (err as Error).message)
+    }
+  }
+
+  revalidatePath('/dashboard/schedule')
+  revalidatePath('/dashboard/schedule/map')
+  if (t.site_id) revalidatePath(`/dashboard/sites/${t.site_id}`)
+
+  return { ok: true, taskId: input.taskId }
+}
+
 /** Format a yyyy-MM-dd date as e.g. "Tuesday, 14 July 2026" (UK). */
 function formatDateLabel(date: string): string {
   const d = new Date(`${date}T12:00:00Z`)

@@ -47,6 +47,7 @@ import {
   Package,
   QrCode,
   LifeBuoy,
+  Briefcase,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { UserRole } from '@/lib/types/database'
@@ -125,6 +126,7 @@ const adminCallsNavItem: NavItem = {
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
     { title: 'Reports', href: '/dashboard/reports', icon: FileText },
     { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
+    { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
     adminServiceManagementChild,
   ],
 }
@@ -141,6 +143,7 @@ const officeCallsNavItem: NavItem = {
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
     { title: 'Reports', href: '/dashboard/reports', icon: FileText },
     { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
+    { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
     officeServiceManagementChild,
   ],
 }
@@ -156,6 +159,7 @@ const engineerCallsNavItem: NavItem = {
     { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
     { title: 'Nearby Calls', href: '/dashboard/nearby', icon: Navigation },
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
+    { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   ],
 }
 
@@ -197,13 +201,18 @@ const jobsNavItem: NavItem = {
   ],
 }
 
-// Purchasing: purchase orders raised against jobs. Top-level so buyers can reach
-// it directly; also surfaced within each job's detail page.
+// Purchasing: purchase orders raised against jobs. A clickable group opening the
+// purchasing dashboard and revealing Suppliers (the supplier directory now lives
+// here rather than as a separate top-level item).
 const purchasingNavItem: NavItem = {
   key: 'purchasing',
   title: 'Purchasing',
   href: '/dashboard/purchasing',
   icon: ShoppingCart,
+  children: [
+    { title: 'Purchase Orders', href: '/dashboard/purchasing', icon: ShoppingCart },
+    { title: 'Suppliers', href: '/dashboard/suppliers', icon: Truck },
+  ],
 }
 
 const managerStockNavItem: NavItem = {
@@ -250,16 +259,13 @@ const tenderAiNavItem: NavItem = {
   ],
 }
 
-// People: consolidates staff/HR concerns into one group. The admin variant
-// includes Users and is `locked` so an admin can never hide their own access to
-// user/menu management and lock everyone out.
+// People: consolidates staff/HR concerns into one group. Users now lives in the
+// Company group (which carries the lockout protection instead).
 const adminPeopleNavItem: NavItem = {
   key: 'people',
   title: 'People',
   icon: Users,
-  locked: true,
   children: [
-    { title: 'Users', href: '/dashboard/engineers', icon: Users },
     { title: 'Approvals', href: '/dashboard/approvals', icon: ClipboardCheck },
     { title: 'Training', href: '/dashboard/training', icon: GraduationCap },
     { title: 'My Leave', href: '/dashboard/my-leave', icon: CalendarClock },
@@ -304,12 +310,19 @@ const documentsNavItem: NavItem = {
 }
 
 // Assets: company asset register (tools, vehicles, access & test equipment, IT).
-// Managers (admin/office) get the full register plus a QR label print sheet;
-// engineers get a simple link showing only the assets assigned to them.
-const managerAssetsNavItem: NavItem = {
+// Managers (admin/office) get the full register via the Company group (see
+// `companyAssetsChild`); engineers get a simple link showing only their assets.
+const engineerAssetsNavItem: NavItem = {
   key: 'assets',
-  title: 'Assets',
+  title: 'My Assets',
   href: '/dashboard/assets',
+  icon: Package,
+}
+
+// Assets as a nested sub-menu (used inside the Company group for managers): the
+// full register plus a QR label print sheet.
+const companyAssetsChild: NavChild = {
+  title: 'Assets',
   icon: Package,
   children: [
     { title: 'Register', href: '/dashboard/assets', icon: Package },
@@ -317,11 +330,29 @@ const managerAssetsNavItem: NavItem = {
   ],
 }
 
-const engineerAssetsNavItem: NavItem = {
-  key: 'assets',
-  title: 'My Assets',
-  href: '/dashboard/assets',
-  icon: Package,
+// Company: internal company administration. Groups Users, the Assets register and
+// Notifications. The admin variant includes Users and is `locked` so an admin can
+// never hide their own access to user/menu management and lock everyone out.
+const adminCompanyNavItem: NavItem = {
+  key: 'company',
+  title: 'Company',
+  icon: Briefcase,
+  locked: true,
+  children: [
+    { title: 'Users', href: '/dashboard/engineers', icon: Users },
+    companyAssetsChild,
+    { title: 'Notifications', href: '/dashboard/notifications', icon: Bell },
+  ],
+}
+
+const officeCompanyNavItem: NavItem = {
+  key: 'company',
+  title: 'Company',
+  icon: Briefcase,
+  children: [
+    companyAssetsChild,
+    { title: 'Notifications', href: '/dashboard/notifications', icon: Bell },
+  ],
 }
 
 // On-call: out-of-hours emergency rota. Available to all roles — engineers use
@@ -350,43 +381,37 @@ const chatNavItem: NavItem = {
 const adminNavItems: NavItem[] = [
   { key: 'dashboard', title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { key: 'clients', title: 'Clients', href: '/dashboard/clients', icon: Building },
-  { key: 'suppliers', title: 'Suppliers', href: '/dashboard/suppliers', icon: Truck },
   sitesNavItem,
   adminCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   oncallNavItem,
   chatNavItem,
-  { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   salesNavItem,
   jobsNavItem,
   purchasingNavItem,
   managerStockNavItem,
-  managerAssetsNavItem,
   adminPeopleNavItem,
   documentsNavItem,
   tenderAiNavItem,
-  { key: 'notifications', title: 'Notifications', href: '/dashboard/notifications', icon: Bell },
+  adminCompanyNavItem,
 ]
 
 const officeNavItems: NavItem[] = [
   { key: 'dashboard', title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { key: 'clients', title: 'Clients', href: '/dashboard/clients', icon: Building },
-  { key: 'suppliers', title: 'Suppliers', href: '/dashboard/suppliers', icon: Truck },
   sitesNavItem,
   officeCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   oncallNavItem,
   chatNavItem,
-  { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   salesNavItem,
   jobsNavItem,
   purchasingNavItem,
   managerStockNavItem,
-  managerAssetsNavItem,
   officePeopleNavItem,
   documentsNavItem,
   tenderAiNavItem,
-  { key: 'notifications', title: 'Notifications', href: '/dashboard/notifications', icon: Bell },
+  officeCompanyNavItem,
 ]
 
 const engineerNavItems: NavItem[] = [
@@ -395,7 +420,6 @@ const engineerNavItems: NavItem[] = [
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   oncallNavItem,
   chatNavItem,
-  { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   engineerPeopleNavItem,
   engineerStockNavItem,
   engineerAssetsNavItem,
@@ -428,12 +452,19 @@ const PERMISSION_KEY_MIGRATION: Record<string, string> = {
   'leave-summary': 'people',
   approvals: 'people',
   training: 'people',
-  users: 'people',
   vault: 'people',
   rams: 'documents',
   // Service Management is now nested inside the Service group, so it follows the
   // `calls` permission rather than being individually toggleable.
   'service-management': 'calls',
+  // KPIs moved into the Service group.
+  kpis: 'calls',
+  // Suppliers moved into the Purchasing group.
+  suppliers: 'purchasing',
+  // Users, Assets and Notifications moved into the new Company group.
+  users: 'company',
+  assets: 'company',
+  notifications: 'company',
 }
 
 export function migratePermissionKeys(keys: string[]): string[] {

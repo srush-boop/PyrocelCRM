@@ -3,9 +3,9 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
 /**
- * Upload the current user's profile picture. Stored as a PUBLIC blob with an
- * unguessable random suffix (consistent with signatures) so it can be rendered
- * in <img> tags across the chat and app. Each user manages only their own.
+ * Upload the current user's profile picture. The Blob store is private, so we
+ * store the object *pathname* in profiles.avatar_url and serve the bytes via the
+ * authenticated /api/blob route. Each user manages only their own.
  */
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
@@ -29,17 +29,20 @@ export async function POST(request: NextRequest) {
 
     const safeName = file.name.replace(/[^\w.\-]+/g, '_') || 'avatar.png'
     const blob = await put(`avatars/${user.id}/${safeName}`, file, {
-      access: 'public',
+      access: 'private',
       addRandomSuffix: true,
     })
 
     const { error } = await supabase
       .from('profiles')
-      .update({ avatar_url: blob.url, updated_at: new Date().toISOString() })
+      .update({ avatar_url: blob.pathname, updated_at: new Date().toISOString() })
       .eq('id', user.id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    return NextResponse.json({ avatar_url: blob.url })
+    // Return the delivery URL so the client can render it immediately.
+    return NextResponse.json({
+      avatar_url: `/api/blob?pathname=${encodeURIComponent(blob.pathname)}`,
+    })
   } catch (err) {
     console.error('[v0] avatar upload error:', err)
     return NextResponse.json({ error: 'Avatar upload failed.' }, { status: 500 })

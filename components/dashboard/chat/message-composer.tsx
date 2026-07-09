@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { sendMessage } from '@/lib/chat/actions'
+import { blobSrc } from '@/lib/blob'
 
 interface MessageComposerProps {
   channelId: string
@@ -57,7 +58,8 @@ export function MessageComposer({ channelId, onSent }: MessageComposerProps) {
       const res = await fetch('/api/chat/upload', { method: 'POST', body: fd })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Upload failed')
-      setImageUrl(json.url)
+      // Store the pathname (persisted with the message); preview resolves it via blobSrc.
+      setImageUrl(json.pathname)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Upload failed')
     } finally {
@@ -71,7 +73,7 @@ export function MessageComposer({ channelId, onSent }: MessageComposerProps) {
       {imageUrl && (
         <div className="relative mb-2 inline-block">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={imageUrl || '/placeholder.svg'} alt="Attachment preview" className="max-h-32 rounded-lg" />
+          <img src={blobSrc(imageUrl) || '/placeholder.svg'} alt="Attachment preview" className="max-h-32 rounded-lg" />
           <button
             type="button"
             onClick={() => setImageUrl(null)}
@@ -85,6 +87,7 @@ export function MessageComposer({ channelId, onSent }: MessageComposerProps) {
       <div className="flex items-end gap-2">
         <input
           ref={fileRef}
+          id="chat-image-input"
           type="file"
           accept="image/*"
           className="hidden"

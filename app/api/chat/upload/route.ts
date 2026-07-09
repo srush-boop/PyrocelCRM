@@ -3,10 +3,10 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
 /**
- * Upload an image to attach to a chat message. Returns the blob URL, which the
- * client then passes to the sendMessage server action. Public blob with a
- * random suffix so it renders inline; membership is enforced when the message
- * itself is inserted.
+ * Upload an image to attach to a chat message. The Blob store is private, so we
+ * return the object *pathname*; the client passes it to the sendMessage action,
+ * which stores it in chat_messages.image_url. Bytes are served via /api/blob.
+ * Membership is enforced when the message itself is inserted.
  */
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
@@ -30,10 +30,14 @@ export async function POST(request: NextRequest) {
 
     const safeName = file.name.replace(/[^\w.\-]+/g, '_') || 'image.png'
     const blob = await put(`chat/${user.id}/${safeName}`, file, {
-      access: 'public',
+      access: 'private',
       addRandomSuffix: true,
     })
-    return NextResponse.json({ url: blob.url })
+    // Store the pathname; the delivery URL is built when rendering.
+    return NextResponse.json({
+      pathname: blob.pathname,
+      url: `/api/blob?pathname=${encodeURIComponent(blob.pathname)}`,
+    })
   } catch (err) {
     console.error('[v0] chat image upload error:', err)
     return NextResponse.json({ error: 'Image upload failed.' }, { status: 500 })

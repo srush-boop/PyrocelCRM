@@ -2,6 +2,7 @@ import 'server-only'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { ChatChannelSummary, ChatMessage, ChatReactionGroup, ChatUser } from './types'
+import { blobSrc } from '@/lib/blob'
 
 /**
  * Idempotently provision the per-branch channels and make sure the given user
@@ -131,7 +132,7 @@ export async function listChannels(userId: string): Promise<ChatChannelSummary[]
       const otherId = memberIds.find((id) => id !== userId)
       const other = otherId ? profileMap.get(otherId) : null
       name = other?.full_name ?? 'Direct message'
-      avatarUrl = other?.avatar_url ?? null
+      avatarUrl = blobSrc(other?.avatar_url)
     }
 
     const preview = last
@@ -206,9 +207,9 @@ export async function listMessages(channelId: string, userId: string): Promise<C
       channelId: m.channel_id,
       senderId: m.sender_id,
       senderName: m.sender?.full_name ?? null,
-      senderAvatar: m.sender?.avatar_url ?? null,
+      senderAvatar: blobSrc(m.sender?.avatar_url),
       body: m.body,
-      imageUrl: m.image_url,
+      imageUrl: blobSrc(m.image_url),
       kind: m.kind,
       createdAt: m.created_at,
       reactions: Array.from(groups.values()),
@@ -229,7 +230,7 @@ export async function listDmCandidates(userId: string): Promise<ChatUser[]> {
   return ((data ?? []) as Record<string, unknown>[]).map((p) => ({
     id: p.id as string,
     fullName: (p.full_name as string) ?? null,
-    avatarUrl: (p.avatar_url as string) ?? null,
+    avatarUrl: blobSrc(p.avatar_url as string | null),
     role: (p.role as string) ?? null,
     branchId: (p.branch_id as string) ?? null,
   }))

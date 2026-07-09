@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { Loader2, Upload, Trash2 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
+import { blobSrc } from '@/lib/blob'
 
 interface AvatarManagerProps {
   avatarUrl: string | null
@@ -31,7 +32,7 @@ export function AvatarManager({ avatarUrl, fullName }: AvatarManagerProps) {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
-  const [preview, setPreview] = useState<string | null>(avatarUrl)
+  const [preview, setPreview] = useState<string | null>(blobSrc(avatarUrl))
 
   const upload = async (file: File) => {
     if (!file.type.startsWith('image/')) {

@@ -1264,7 +1264,11 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                     </div>
                   )}
 
-                  {isAdminOrOffice &&
+                  {/* Every schedule user (engineers included) can book an
+                      appointment slot for a call — the only exception is weekly
+                      recurring PPM calls, which are too routine to book
+                      individually and show a notice instead. */}
+                  {canPreviewCall &&
                     (isWeeklyRecurring(viewTask) ? (
                       <p className="flex items-center gap-1.5 rounded-md border border-dashed p-3 text-xs text-muted-foreground">
                         <CalendarClock className="h-3.5 w-3.5 shrink-0" />

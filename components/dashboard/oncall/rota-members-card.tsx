@@ -151,7 +151,17 @@ export function RotaMembersCard({ branches, rota, engineers, branchFilter }: Rot
                 <ul className="divide-y">
                   {members.map((m) => (
                     <li key={m.id} className="flex items-center justify-between gap-2 py-2">
-                      <span className="text-sm font-medium">{m.engineer?.fullName ?? 'Engineer'}</span>
+                      <div className="min-w-0">
+                        <span className="text-sm font-medium">{m.engineer?.fullName ?? 'Engineer'}</span>
+                        {(m.engineer?.phone || m.engineer?.secondaryPhone) && (
+                          <p className="text-xs text-muted-foreground">
+                            {m.engineer?.phone ?? '—'}
+                            {m.engineer?.secondaryPhone && (
+                              <span> · {m.engineer.secondaryPhone} (secondary)</span>
+                            )}
+                          </p>
+                        )}
+                      </div>
                       <div className="flex items-center gap-3">
                         <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                           <Switch

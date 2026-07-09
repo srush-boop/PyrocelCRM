@@ -70,21 +70,44 @@ export default async function ExternalOncallPage({ params }: PageProps) {
                   On call now
                 </p>
                 {b.today && b.today.engineerName ? (
-                  <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+                  <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="text-lg font-semibold">{b.today.engineerName}</p>
                       <p className="text-xs text-muted-foreground">
                         {BAND_META[b.today.band].label} · {BAND_META[b.today.band].hint}
                       </p>
                     </div>
-                    {b.today.phone ? (
-                      <a
-                        href={`tel:${b.today.phone.replace(/\s+/g, '')}`}
-                        className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-                      >
-                        <PhoneCall className="h-4 w-4" aria-hidden />
-                        {b.today.phone}
-                      </a>
+                    {b.today.phone || b.today.secondaryPhone ? (
+                      <div className="flex flex-col items-stretch gap-1.5">
+                        {b.today.phone && (
+                          <a
+                            href={`tel:${b.today.phone.replace(/\s+/g, '')}`}
+                            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+                          >
+                            <PhoneCall className="h-4 w-4" aria-hidden />
+                            <span>
+                              <span className="text-[10px] font-normal uppercase tracking-wide opacity-80">
+                                Mobile
+                              </span>{' '}
+                              {b.today.phone}
+                            </span>
+                          </a>
+                        )}
+                        {b.today.secondaryPhone && (
+                          <a
+                            href={`tel:${b.today.secondaryPhone.replace(/\s+/g, '')}`}
+                            className="inline-flex items-center gap-2 rounded-md border border-primary/40 px-4 py-2 text-sm font-medium text-primary"
+                          >
+                            <PhoneCall className="h-4 w-4" aria-hidden />
+                            <span>
+                              <span className="text-[10px] font-normal uppercase tracking-wide opacity-70">
+                                Secondary
+                              </span>{' '}
+                              {b.today.secondaryPhone}
+                            </span>
+                          </a>
+                        )}
+                      </div>
                     ) : (
                       <span className="text-sm text-muted-foreground">No number on file</span>
                     )}
@@ -106,9 +129,16 @@ export default async function ExternalOncallPage({ params }: PageProps) {
                           key={`${b.branchId}-${s.shiftDate}`}
                           className="flex items-center justify-between gap-3 py-1.5 text-sm"
                         >
-                          <span className="text-muted-foreground">{formatDate(s.shiftDate)}</span>
-                          <span className="font-medium">{s.engineerName ?? 'Unassigned'}</span>
-                          <span className="text-muted-foreground">{s.phone ?? '—'}</span>
+                          <span className="shrink-0 text-muted-foreground">{formatDate(s.shiftDate)}</span>
+                          <span className="min-w-0 flex-1 truncate font-medium">
+                            {s.engineerName ?? 'Unassigned'}
+                          </span>
+                          <span className="shrink-0 text-right text-muted-foreground">
+                            {s.phone ?? '—'}
+                            {s.secondaryPhone && (
+                              <span className="block text-xs">{s.secondaryPhone}</span>
+                            )}
+                          </span>
                         </li>
                       ))}
                     </ul>

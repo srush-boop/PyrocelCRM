@@ -10,6 +10,7 @@ export interface RotaEngineerRef {
   id: string
   fullName: string | null
   phone: string | null
+  secondaryPhone: string | null
 }
 
 export interface RotaMember {

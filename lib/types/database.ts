@@ -172,6 +172,12 @@ export interface Profile {
   // Engineer discipline / trade. Drives map colour-coding, iconography and the
   // skill match when dispatching a call. NULL for non-engineers.
   discipline: Discipline | null
+  // Primary mobile contact number. Used on documents at times and shown in the
+  // on-call rota / out-of-hours call-handling view.
+  phone: string | null
+  // Optional secondary contact number, shown ONLY in the on-call rota and the
+  // out-of-hours call-handling view.
+  secondary_phone: string | null
   created_at: string
   updated_at: string
   department?: Department | null

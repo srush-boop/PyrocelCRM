@@ -203,6 +203,8 @@ export function EngineersTable({
     holiday_entitlement_days: '',
     holiday_entitlement_hours: '',
     home_postcode: '',
+    phone: '',
+    secondary_phone: '',
   })
   const [editError, setEditError] = useState<string | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
@@ -341,9 +343,11 @@ export function EngineersTable({
       employee_number: user.employee_number ?? '',
       holiday_entitlement_days:
         user.holiday_entitlement_days != null ? String(user.holiday_entitlement_days) : '',
-      holiday_entitlement_hours:
+        holiday_entitlement_hours:
         user.holiday_entitlement_hours != null ? String(user.holiday_entitlement_hours) : '',
       home_postcode: user.home_postcode ?? '',
+      phone: user.phone ?? '',
+      secondary_phone: user.secondary_phone ?? '',
     })
     setEditError(null)
   }
@@ -392,6 +396,8 @@ export function EngineersTable({
           holiday_entitlement_days: days === '' ? null : Number(days),
           holiday_entitlement_hours: hours === '' ? null : Number(hours),
           home_postcode: editForm.home_postcode.trim() || null,
+          phone: editForm.phone.trim() || null,
+          secondary_phone: editForm.secondary_phone.trim() || null,
         }),
       })
       const data = await res.json()
@@ -898,6 +904,34 @@ export function EngineersTable({
                 />
                 <p className="text-xs text-muted-foreground">
                   Start/finish point for the calls map route. Geocoded on save.
+                </p>
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-phone">Mobile phone</Label>
+                <Input
+                  id="edit-phone"
+                  type="tel"
+                  value={editForm.phone}
+                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                  placeholder="e.g. 07700 900123"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Used on documents at times and shown in the on-call rota.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-secondary-phone">Secondary phone (optional)</Label>
+                <Input
+                  id="edit-secondary-phone"
+                  type="tel"
+                  value={editForm.secondary_phone}
+                  onChange={(e) => setEditForm({ ...editForm, secondary_phone: e.target.value })}
+                  placeholder="e.g. 0115 496 0000"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Shown only in the on-call rota and out-of-hours view.
                 </p>
               </div>
             </div>

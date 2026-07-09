@@ -218,7 +218,7 @@ export function AssetFormDialog({ open, onOpenChange, categories, staff, asset }
                 id="asset-storage"
                 value={storage}
                 onChange={(e) => setStorage(e.target.value)}
-                placeholder="e.g. Main store \u2013 Rack B3"
+                placeholder="e.g. Main store - Rack B3"
               />
             </div>
           )}

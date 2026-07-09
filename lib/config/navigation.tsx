@@ -44,6 +44,8 @@ import {
   Archive,
   Hammer,
   ShoppingCart,
+  Package,
+  QrCode,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { UserRole } from '@/lib/types/database'
@@ -297,6 +299,27 @@ const documentsNavItem: NavItem = {
   ],
 }
 
+// Assets: company asset register (tools, vehicles, access & test equipment, IT).
+// Managers (admin/office) get the full register plus a QR label print sheet;
+// engineers get a simple link showing only the assets assigned to them.
+const managerAssetsNavItem: NavItem = {
+  key: 'assets',
+  title: 'Assets',
+  href: '/dashboard/assets',
+  icon: Package,
+  children: [
+    { title: 'Register', href: '/dashboard/assets', icon: Package },
+    { title: 'Print QR Labels', href: '/dashboard/assets/labels', icon: QrCode },
+  ],
+}
+
+const engineerAssetsNavItem: NavItem = {
+  key: 'assets',
+  title: 'My Assets',
+  href: '/dashboard/assets',
+  icon: Package,
+}
+
 // ---------------------------------------------------------------------------
 // Role default menus
 // ---------------------------------------------------------------------------
@@ -314,6 +337,7 @@ const adminNavItems: NavItem[] = [
   jobsNavItem,
   purchasingNavItem,
   managerStockNavItem,
+  managerAssetsNavItem,
   adminPeopleNavItem,
   documentsNavItem,
   tenderAiNavItem,
@@ -333,6 +357,7 @@ const officeNavItems: NavItem[] = [
   jobsNavItem,
   purchasingNavItem,
   managerStockNavItem,
+  managerAssetsNavItem,
   officePeopleNavItem,
   documentsNavItem,
   tenderAiNavItem,
@@ -346,6 +371,7 @@ const engineerNavItems: NavItem[] = [
   { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   engineerPeopleNavItem,
   engineerStockNavItem,
+  engineerAssetsNavItem,
 ]
 
 // Returns the full default top-level menu for a role (before applying any

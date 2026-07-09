@@ -74,12 +74,16 @@ export async function GET(req: Request) {
       ? `${s.name} for ${asset.name} was due ${Math.abs(diff ?? 0)} day(s) ago.`
       : `${s.name} for ${asset.name} is due in ${diff} day(s).`
 
-    // Idempotency: skip recipients already notified for this asset today.
+    // Idempotency: skip recipients already reminded about THIS schedule today.
+    // Keyed on the schedule id in `data` (not the url) so distinct schedules on
+    // the same asset — and unrelated asset notifications like assignment alerts
+    // that share the asset url — don't suppress this reminder.
     const { data: existing } = await admin
       .from('notifications')
       .select('user_id')
-      .eq('url', url)
       .eq('category', 'asset')
+      .eq('data->>kind', 'asset_check_due')
+      .eq('data->>scheduleId', s.id)
       .gte('created_at', todayStart.toISOString())
       .in('user_id', recipients)
 
@@ -93,6 +97,7 @@ export async function GET(req: Request) {
       body,
       url,
       category: 'asset',
+      data: { kind: 'asset_check_due', scheduleId: s.id },
     })
     notified += toNotify.length
   }

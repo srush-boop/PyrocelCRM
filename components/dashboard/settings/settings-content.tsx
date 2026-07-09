@@ -19,6 +19,7 @@ import { MaintenanceSettings } from './maintenance-settings'
 import { InstallationSettings } from './installation-settings'
 import { DocumentTemplatesSettings } from './document-templates'
 import { SignatureManager } from './signature-manager'
+import { AvatarManager } from './avatar-manager'
 
 interface SettingsContentProps {
   user: AuthUser
@@ -160,6 +161,18 @@ export function SettingsContent({ user, profile, company, branches, departments,
       </TabsList>
 
       <TabsContent value="account" className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Profile Picture</CardTitle>
+            <CardDescription>
+              Shown on your messages in team chat and across the app.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AvatarManager avatarUrl={profile.avatar_url ?? null} fullName={profile.full_name} />
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Account Information</CardTitle>

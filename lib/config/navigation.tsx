@@ -46,6 +46,7 @@ import {
   ShoppingCart,
   Package,
   QrCode,
+  LifeBuoy,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { UserRole } from '@/lib/types/database'
@@ -320,6 +321,25 @@ const engineerAssetsNavItem: NavItem = {
   icon: Package,
 }
 
+// On-call: out-of-hours emergency rota. Available to all roles — engineers use
+// it to see their shifts and request cover; managers build the rota and review
+// pay. It sits alongside Calendar as a time/scheduling concern.
+const oncallNavItem: NavItem = {
+  key: 'oncall',
+  title: 'On-call',
+  href: '/dashboard/oncall',
+  icon: LifeBuoy,
+}
+
+// Chat: internal team messaging (branch channels + direct messages). Available
+// to all active staff.
+const chatNavItem: NavItem = {
+  key: 'chat',
+  title: 'Chat',
+  href: '/dashboard/chat',
+  icon: MessageSquareText,
+}
+
 // ---------------------------------------------------------------------------
 // Role default menus
 // ---------------------------------------------------------------------------
@@ -331,6 +351,8 @@ const adminNavItems: NavItem[] = [
   sitesNavItem,
   adminCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
+  oncallNavItem,
+  chatNavItem,
   { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   adminServiceManagementNavItem,
   salesNavItem,
@@ -351,6 +373,8 @@ const officeNavItems: NavItem[] = [
   sitesNavItem,
   officeCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
+  oncallNavItem,
+  chatNavItem,
   { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   officeServiceManagementNavItem,
   salesNavItem,
@@ -368,6 +392,8 @@ const engineerNavItems: NavItem[] = [
   { key: 'home', title: 'Home', href: '/dashboard', icon: LayoutDashboard, locked: true },
   engineerCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
+  oncallNavItem,
+  chatNavItem,
   { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   engineerPeopleNavItem,
   engineerStockNavItem,

@@ -372,6 +372,7 @@ export function CalendarView({
             { value: 'task', label: 'Booked tasks' },
             { value: 'route', label: 'Routes' },
             { value: 'entry', label: 'General entries' },
+            { value: 'oncall', label: 'On call' },
           ]}
         />
 
@@ -460,7 +461,9 @@ export function CalendarView({
                     ? 'Booked service task'
                     : selected.kind === 'route'
                       ? 'Recurring route'
-                      : selected.entryTypeName}
+                      : selected.kind === 'oncall'
+                        ? 'Out-of-hours on-call shift'
+                        : selected.entryTypeName}
                 </SheetDescription>
               </SheetHeader>
 

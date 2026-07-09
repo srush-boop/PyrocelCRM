@@ -26,6 +26,7 @@ import {
 import { ChevronRight, Settings, BookOpen, HelpCircle } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 import { getVisibleMenu, type NavItem, type NavChild } from '@/lib/config/navigation'
+import { ChatNavBadge } from '@/components/dashboard/chat/chat-nav-badge'
 
 interface DashboardSidebarProps {
   profile: Profile
@@ -181,6 +182,7 @@ export function DashboardSidebar({ profile }: DashboardSidebarProps) {
                         <span>{item.title}</span>
                       </Link>
                     </SidebarMenuButton>
+                    {item.key === 'chat' && <ChatNavBadge />}
                   </SidebarMenuItem>
                 ),
               )}

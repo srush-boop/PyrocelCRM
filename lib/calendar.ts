@@ -16,6 +16,8 @@ import type {
 export const TASK_COLOR = '#2563eb'
 // Accent colour for jobs that are currently underway (commenced, in progress).
 export const COMMENCED_COLOR = '#f59e0b'
+// Colour for out-of-hours on-call shifts on the calendar.
+export const ONCALL_COLOR = '#0d9488'
 
 // A working day is treated as 8 hours when converting a booked duration (which
 // the engineer enters as days + hours) into a calendar span. Keep in sync with
@@ -129,6 +131,15 @@ type AttendeeProfile = {
   branch_id: string | null
 }
 
+interface OncallShiftRow {
+  id: string
+  shift_date: string
+  band: 'weekday_evening' | 'weekend' | 'bank_holiday'
+  branch_id: string
+  branch: { name: string } | null
+  engineer: { id: string; full_name: string | null; email: string } | null
+}
+
 interface EntryRow {
   id: string
   entry_type_id: string
@@ -163,6 +174,9 @@ export interface CalendarData {
   profile: Profile
   canManageOthers: boolean
   branchScope: BranchScope
+  // Tonight's on-call engineer per branch (for the note under the branch filter).
+  // "Tonight" means the current out-of-hours shift date.
+  oncallTonight: { branchId: string; branchName: string; engineerName: string; band: string }[]
 }
 
 // Fetches everything the master calendar needs, scoped by the viewer's role.
@@ -256,6 +270,24 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
   const entries = (entryData || []) as unknown as EntryRow[]
   const entryTypes = (typeData || []) as CalendarEntryType[]
   let routeRows = (routeData || []) as unknown as RouteRow[]
+
+  // --- On-call shifts (out-of-hours rota) ---
+  // Only assigned shifts within a sensible window are shown. Engineers see the
+  // whole branch rota (they need to know who is on call), so no per-user scope.
+  let shiftQuery = supabase
+    .from('oncall_shifts')
+    .select(
+      `id, shift_date, band, branch_id,
+       branch:branches(name),
+       engineer:profiles!oncall_shifts_engineer_id_fkey(id, full_name, email)`,
+    )
+    .not('engineer_id', 'is', null)
+    .order('shift_date', { ascending: true })
+  if (activeBranchId) {
+    shiftQuery = shiftQuery.eq('branch_id', activeBranchId)
+  }
+  const { data: shiftData } = await shiftQuery
+  const shiftRows = (shiftData || []) as unknown as OncallShiftRow[]
 
   // When a branch is active, scope each source by its branch:
   // - tasks: by the task's site branch
@@ -437,6 +469,34 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
     }
   }
 
+  // On-call shifts as all-day calendar items. Each shift covers the evening /
+  // day, so it renders as an all-day block anchored to the shift date. The band
+  // is carried through for labelling and the branch name for the per-branch note.
+  const bandLabel: Record<OncallShiftRow['band'], string> = {
+    weekday_evening: 'Weekday evening',
+    weekend: 'Weekend',
+    bank_holiday: 'Bank holiday',
+  }
+  for (const s of shiftRows) {
+    if (!s.engineer) continue
+    const engineerName = s.engineer.full_name || s.engineer.email
+    const branchName = s.branch?.name ?? 'Branch'
+    items.push({
+      id: `oncall-${s.id}`,
+      kind: 'oncall',
+      title: `On call: ${engineerName}`,
+      start: `${s.shift_date}T00:00:00`,
+      end: `${s.shift_date}T23:59:00`,
+      allDay: true,
+      color: ONCALL_COLOR,
+      ownerId: s.engineer.id,
+      ownerName: engineerName,
+      subtitle: `${branchName} · ${bandLabel[s.band]}`,
+      oncallBranchName: branchName,
+      oncallBand: s.band,
+    })
+  }
+
   // People + departments lists for the user filter and the invite picker
   // (managers only).
   let people: CalendarData['people'] = []
@@ -457,5 +517,37 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
     departments = (deptData || []) as CalendarData['departments']
   }
 
-  return { items, routes, entryTypes, people, departments, profile, canManageOthers, branchScope }
+  // Determine "tonight's" on-call engineer per branch. The out-of-hours shift
+  // runs into the next morning (weekday evening 17:00–08:30), so before ~08:30
+  // the relevant shift is still yesterday's date; otherwise it is today's.
+  const now = new Date()
+  const shiftDateForNow = now.getHours() < 9 ? addDays(todayYmd(now), -1) : todayYmd(now)
+  const oncallTonight = shiftRows
+    .filter((s) => s.shift_date === shiftDateForNow && s.engineer)
+    .map((s) => ({
+      branchId: s.branch_id,
+      branchName: s.branch?.name ?? 'Branch',
+      engineerName: s.engineer!.full_name || s.engineer!.email,
+      band: bandLabel[s.band],
+    }))
+
+  return {
+    items,
+    routes,
+    entryTypes,
+    people,
+    departments,
+    profile,
+    canManageOthers,
+    branchScope,
+    oncallTonight,
+  }
+}
+
+// Today's date as yyyy-mm-dd in local time.
+function todayYmd(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }

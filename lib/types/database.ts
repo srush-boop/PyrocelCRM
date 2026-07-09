@@ -2197,3 +2197,76 @@ export interface AssetAssignment {
   holder?: Pick<Profile, 'id' | 'full_name'> | null
   assigner?: Pick<Profile, 'id' | 'full_name'> | null
 }
+
+// ── Inbound request inbox ────────────────────────────────────────────────────
+// A request that arrived by email (forwarded to the system address) or was added
+// manually by a staff member. AI triages it, matching it to an existing
+// client/site/service and proposing actions that a human approves.
+export type InboundRequestSource = 'email' | 'manual'
+export type InboundRequestStatus = 'new' | 'triaged' | 'actioned' | 'dismissed'
+export type InboundRequestIntent =
+  | 'new_call'
+  | 'chase_up'
+  | 'complaint'
+  | 'quote_request'
+  | 'general'
+  | 'unknown'
+export type InboundRequestUrgency = 'emergency' | 'high' | 'normal' | 'low'
+
+// One AI-proposed action. `kind` drives which control the inbox renders; the
+// human always confirms before anything is created.
+export interface SuggestedAction {
+  kind: 'create_call' | 'chase_up' | 'reply' | 'dismiss'
+  label: string
+  // Loose bag of hints for the action (e.g. suggested notes, KPI hours). The UI
+  // treats these as prefill defaults only.
+  payload?: Record<string, unknown>
+}
+
+// A stored attachment (in private Blob) carried on the request.
+export interface InboundAttachment {
+  name: string
+  pathname: string
+  mimeType: string | null
+}
+
+export interface InboundRequest {
+  id: string
+  source: InboundRequestSource
+  received_at: string
+  from_email: string | null
+  from_name: string | null
+  to_email: string | null
+  subject: string | null
+  body_text: string | null
+  body_html: string | null
+  attachments: InboundAttachment[]
+  forwarded_by: string | null
+  status: InboundRequestStatus
+  // Triage output (populated once triaged).
+  ai_summary: string | null
+  ai_intent: InboundRequestIntent | null
+  ai_urgency: InboundRequestUrgency | null
+  ai_reply_draft: string | null
+  ai_confidence: number | null
+  matched_client_id: string | null
+  matched_site_id: string | null
+  matched_service_type_id: string | null
+  matched_system_type_id: string | null
+  suggested_actions: SuggestedAction[]
+  ai_raw: unknown | null
+  triaged_at: string | null
+  triage_error: string | null
+  // Outcome.
+  created_task_id: string | null
+  actioned_at: string | null
+  actioned_by: string | null
+  created_at: string
+  updated_at: string
+  // Embeds (optional, populated by list queries).
+  matched_client?: Pick<Client, 'id' | 'name'> | null
+  matched_site?: Pick<Site, 'id' | 'name' | 'postcode'> | null
+  matched_service_type?: Pick<ServiceType, 'id' | 'name'> | null
+  matched_system_type?: Pick<SystemType, 'id' | 'name'> | null
+  forwarded_by_profile?: Pick<Profile, 'id' | 'full_name' | 'email'> | null
+}

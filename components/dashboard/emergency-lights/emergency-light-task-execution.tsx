@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { TaskHeader } from '@/components/dashboard/tasks/task-header'
 import { PauseResumeControls } from '@/components/dashboard/tasks/pause-resume-controls'
+import { CompletedReportActions } from '@/components/dashboard/reports/completed-report-actions'
 import { Progress } from '@/components/ui/progress'
 import {
   AlertDialog,
@@ -367,6 +368,12 @@ export function EmergencyLightTaskExecution({
       <TaskHeader task={task} status={status} canCreateDocument={profile.role === 'admin' || profile.role === 'office'} />
 
       <PauseResumeControls task={task} status={status} onStatusChange={setStatus} />
+
+      {status === 'completed' && (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <CompletedReportActions taskId={task.id} serviceName={serviceType?.name} />
+        </div>
+      )}
 
       {preAttendance}
 

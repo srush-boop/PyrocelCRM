@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
+import { CompletedReportActions } from '@/components/dashboard/reports/completed-report-actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -447,12 +447,7 @@ export function ExtinguisherTaskExecution({
 
       <div className="flex flex-wrap items-center justify-end gap-2">
         {status === 'completed' && (
-          <Button variant="outline" size="sm" asChild>
-            <Link href={`/dashboard/extinguishers/report/${task.id}`}>
-              <FileText className="mr-2 h-4 w-4" />
-              View Report
-            </Link>
-          </Button>
+          <CompletedReportActions taskId={task.id} serviceName={serviceType?.name} />
         )}
         <ScanQrButton onScan={handleScanToExtinguisher} />
       </div>

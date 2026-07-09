@@ -196,20 +196,25 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
   
   const tasks = (tasksData || []) as Task[]
 
-  // Get completed tasks with their results for reporting
-  const { data: completedTasksData } = siteServiceIds.length > 0 
-    ? await supabase
-        .from('tasks')
-        .select(`
-          *,
-          site_service:site_services(*, service_type:service_types(*)),
-          assigned_engineer:profiles(*),
-          task_result:task_results(*)
-        `)
-        .in('site_service_id', siteServiceIds)
-        .eq('status', 'completed')
-        .order('completed_at', { ascending: false })
-    : { data: [] }
+  // Get completed tasks with their results for reporting. Match both tasks
+  // linked via one of this site's services AND ad-hoc/reactive calls booked
+  // directly against the site (site_id set, no site_service_id) — otherwise
+  // those completed reports never appear in the site's Reports grid.
+  const completedFilter =
+    siteServiceIds.length > 0
+      ? `site_id.eq.${id},site_service_id.in.(${siteServiceIds.join(',')})`
+      : `site_id.eq.${id}`
+  const { data: completedTasksData } = await supabase
+    .from('tasks')
+    .select(`
+      *,
+      site_service:site_services(*, service_type:service_types(*)),
+      assigned_engineer:profiles(*),
+      task_result:task_results(*)
+    `)
+    .or(completedFilter)
+    .eq('status', 'completed')
+    .order('completed_at', { ascending: false })
   
   const completedTasks = (completedTasksData || []).map((task: Record<string, unknown>) => ({
     ...task,

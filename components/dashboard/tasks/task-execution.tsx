@@ -1049,11 +1049,16 @@ export function TaskExecution({
               Inspection Result: {existingResult.overall_status.toUpperCase()}
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
               Completed on {new Date(task.completed_at!).toLocaleDateString()} at{' '}
               {new Date(task.completed_at!).toLocaleTimeString()}
             </p>
+            <CompletedReportActions
+              taskId={task.id}
+              serviceName={serviceType?.name}
+              emailSentAt={existingResult.email_sent_at}
+            />
           </CardContent>
         </Card>
       )}

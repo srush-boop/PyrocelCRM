@@ -250,6 +250,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     if (task.booked_start_time) return false
     if (task.status === 'completed' || task.status === 'cancelled') return false
     return resolveSiteFlags(task.site_service?.site, task.site_service, {
+      system: task.site_service?.site_system,
       remedialOpen: task.is_remedial,
     }).booking_required
   }
@@ -469,6 +470,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
             )}
             <SiteFlagBadges
               flags={resolveSiteFlags(task.site_service?.site, task.site_service, {
+                system: task.site_service?.site_system,
                 remedialOpen: task.is_remedial,
               })}
               variant="full"
@@ -568,6 +570,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
           <div className="flex shrink-0 items-center gap-2">
             <SiteFlagBadges
               flags={resolveSiteFlags(task.site_service?.site, task.site_service, {
+                system: task.site_service?.site_system,
                 remedialOpen: task.is_remedial,
               })}
               variant="compact"

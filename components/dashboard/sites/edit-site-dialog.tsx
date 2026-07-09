@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -25,6 +25,8 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Loader2, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { PostcodeLookup } from '@/components/dashboard/shared/postcode-lookup'
+import { SiteClassificationFields } from '@/components/dashboard/sites/site-classification-fields'
 import type { Site, Route, Client, Branch, PropertyType } from '@/lib/types/database'
 
 interface EditSiteDialogProps {
@@ -84,6 +86,35 @@ export function EditSiteDialog({
   const handleRemoveReportingEmail = (email: string) => {
     setReportingEmails(reportingEmails.filter((e) => e !== email))
   }
+
+  // Fill the postcode and, when the address doesn't already mention the locality,
+  // append it so only the street line needs editing.
+  // Stable identity so the memoized PostcodeLookup doesn't re-render each keystroke.
+  const applyPostcode = useCallback((r: { postcode: string; locality: string }) => {
+    setFormData((prev) => {
+      const current = prev.address ?? ''
+      const hasLocality =
+        r.locality && current.toLowerCase().includes(r.locality.toLowerCase())
+      const address =
+        r.locality && !hasLocality
+          ? [current.trim(), r.locality].filter(Boolean).join('\n')
+          : current
+      return { ...prev, postcode: r.postcode, address }
+    })
+  }, [])
+
+  // Stable handlers so the memoized SiteClassificationFields (with its Radix
+  // Selects) only re-renders when a selected value changes, not on every keystroke.
+  const handleClientChange = useCallback((value: string) => {
+    setFormData((prev) => ({ ...prev, client_id: value }))
+    setError(null)
+  }, [])
+  const handleBranchChange = useCallback((value: string) => {
+    setFormData((prev) => ({ ...prev, branch_id: value }))
+  }, [])
+  const handlePropertyTypeChange = useCallback((value: string) => {
+    setFormData((prev) => ({ ...prev, property_type_id: value }))
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -149,6 +180,11 @@ export function EditSiteDialog({
                 required
               />
             </div>
+            <PostcodeLookup
+              id="edit-site-postcode-lookup"
+              initialValue={formData.postcode}
+              onResolved={applyPostcode}
+            />
             <div className="grid gap-2">
               <Label htmlFor="address">Address *</Label>
               <Textarea
@@ -208,75 +244,18 @@ export function EditSiteDialog({
                 required
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="client">
-                Client {formData.status === 'live' && <span className="text-destructive">*</span>}
-              </Label>
-              <Select
-                value={formData.client_id}
-                onValueChange={(value) => {
-                  setFormData({ ...formData, client_id: value })
-                  setError(null)
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select client (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {clients.map((client) => (
-                    <SelectItem key={client.id} value={client.id}>
-                      {client.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {branches.length > 0 && (
-              <div className="grid gap-2">
-                <Label htmlFor="branch">Branch</Label>
-                <Select
-                  value={formData.branch_id || 'none'}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, branch_id: value === 'none' ? '' : value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="No branch" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No branch</SelectItem>
-                    {branches.map((branch) => (
-                      <SelectItem key={branch.id} value={branch.id}>
-                        {branch.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {propertyTypes.length > 0 && (
-              <div className="grid gap-2">
-                <Label htmlFor="property_type">Property Type</Label>
-                <Select
-                  value={formData.property_type_id || 'none'}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, property_type_id: value === 'none' ? '' : value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="No property type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No property type</SelectItem>
-                    {propertyTypes.map((pt) => (
-                      <SelectItem key={pt.id} value={pt.id}>
-                        {pt.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            <SiteClassificationFields
+              clientId={formData.client_id}
+              branchId={formData.branch_id}
+              propertyTypeId={formData.property_type_id}
+              status={formData.status}
+              clients={clients}
+              branches={branches}
+              propertyTypes={propertyTypes}
+              onClientChange={handleClientChange}
+              onBranchChange={handleBranchChange}
+              onPropertyTypeChange={handlePropertyTypeChange}
+            />
             <div className="grid gap-2">
               <Label htmlFor="status">Site Status</Label>
               <Select

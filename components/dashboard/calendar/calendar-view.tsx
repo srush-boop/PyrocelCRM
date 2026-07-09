@@ -24,13 +24,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { MultiSelectFilter } from '@/components/dashboard/calendar/multi-select-filter'
 import {
   Sheet,
   SheetContent,
@@ -69,6 +63,7 @@ interface PersonOption {
   full_name: string | null
   email: string
   role: string
+  department_id: string | null
 }
 
 interface DepartmentOption {
@@ -173,23 +168,36 @@ export function CalendarView({
   const [cursor, setCursor] = useState<Date>(new Date())
   const [selected, setSelected] = useState<CalendarItem | null>(null)
 
-  // Filters
-  const [personFilter, setPersonFilter] = useState<string>(ALL)
-  const [typeFilter, setTypeFilter] = useState<string>(ALL)
-  const [kindFilter, setKindFilter] = useState<string>(ALL)
+  // Filters. Each is a list of selected values; an empty list means "no filter"
+  // (show everything). This drives the multi-select checklists in the toolbar.
+  const [personFilter, setPersonFilter] = useState<string[]>([])
+  const [typeFilter, setTypeFilter] = useState<string[]>([])
+  const [kindFilter, setKindFilter] = useState<string[]>([])
+  const [departmentFilter, setDepartmentFilter] = useState<string[]>([])
 
   // Snapshot of the toolbar filters, used when saving a template.
   const currentFilters = useMemo<CalendarFilterState>(
-    () => ({ kindFilter, personFilter, typeFilter, view }),
-    [kindFilter, personFilter, typeFilter, view],
+    () => ({
+      kinds: kindFilter,
+      personIds: personFilter,
+      types: typeFilter,
+      departmentIds: departmentFilter,
+      view,
+    }),
+    [kindFilter, personFilter, typeFilter, departmentFilter, view],
   )
 
-  // Apply a saved template's filters to the toolbar. Missing keys fall back to
-  // "all" so older templates stay valid as the filter set evolves.
+  // Apply a saved template's filters to the toolbar. Supports both the new
+  // multi-select arrays and legacy single-value fields: a legacy value of
+  // ALL/absent maps to "no filter" (empty array), any other value to a
+  // single-element selection.
   const applyFilters = (f: CalendarFilterState) => {
-    setKindFilter(f.kindFilter ?? ALL)
-    setPersonFilter(f.personFilter ?? ALL)
-    setTypeFilter(f.typeFilter ?? ALL)
+    const legacy = (single: string | undefined) =>
+      !single || single === ALL || single === 'all' ? [] : [single]
+    setKindFilter(f.kinds ?? legacy(f.kindFilter))
+    setPersonFilter(f.personIds ?? legacy(f.personFilter))
+    setTypeFilter(f.types ?? legacy(f.typeFilter))
+    setDepartmentFilter(f.departmentIds ?? [])
     if (f.view) setView(f.view)
   }
 
@@ -235,19 +243,45 @@ export function CalendarView({
     return [...items, ...buildRouteItems(routes, rangeStart, rangeEnd)]
   }, [items, routes, rangeStart, rangeEnd])
 
+  // Map every person to their department so items (which only carry an ownerId)
+  // can be filtered by department.
+  const personDepartment = useMemo(() => {
+    const m = new Map<string, string | null>()
+    for (const p of people) m.set(p.id, p.department_id)
+    return m
+  }, [people])
+
   const filtered = useMemo(() => {
     return allItems.filter((it) => {
-      if (kindFilter !== ALL && it.kind !== kindFilter) return false
-      if (personFilter !== ALL) {
-        if (personFilter === 'company' ? it.ownerId !== null : it.ownerId !== personFilter)
-          return false
+      // Kind: empty = all, else the item's kind must be one of the selected.
+      if (kindFilter.length > 0 && !kindFilter.includes(it.kind)) return false
+
+      // Person: 'company' matches unassigned/company-wide items (ownerId null);
+      // any other value matches that person's id.
+      if (personFilter.length > 0) {
+        const matchesPerson = it.ownerId === null
+          ? personFilter.includes('company')
+          : personFilter.includes(it.ownerId)
+        if (!matchesPerson) return false
       }
-      if (typeFilter !== ALL) {
-        if (it.kind !== 'entry' || it.entryTypeName !== typeFilter) return false
+
+      // Department: only items owned by someone in a selected department pass.
+      // Company-wide items (no owner) have no department, so they are excluded
+      // whenever a department filter is active.
+      if (departmentFilter.length > 0) {
+        const dept = it.ownerId ? personDepartment.get(it.ownerId) ?? null : null
+        if (!dept || !departmentFilter.includes(dept)) return false
+      }
+
+      // Entry type: only general entries carry a type; a type filter therefore
+      // implicitly hides tasks and routes.
+      if (typeFilter.length > 0) {
+        if (it.kind !== 'entry' || !it.entryTypeName || !typeFilter.includes(it.entryTypeName))
+          return false
       }
       return true
     })
-  }, [allItems, kindFilter, personFilter, typeFilter])
+  }, [allItems, kindFilter, personFilter, typeFilter, departmentFilter, personDepartment])
 
   // Selecting a task opens it directly; routes and entries open the detail sheet.
   const handleSelect = (it: CalendarItem) => {
@@ -328,49 +362,56 @@ export function CalendarView({
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
-        <Select value={kindFilter} onValueChange={setKindFilter}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="All items" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All items</SelectItem>
-            <SelectItem value="task">Booked tasks</SelectItem>
-            <SelectItem value="route">Routes</SelectItem>
-            <SelectItem value="entry">General entries</SelectItem>
-          </SelectContent>
-        </Select>
+        <MultiSelectFilter
+          allLabel="All items"
+          noun="kinds"
+          selected={kindFilter}
+          onChange={setKindFilter}
+          className="w-[160px]"
+          options={[
+            { value: 'task', label: 'Booked tasks' },
+            { value: 'route', label: 'Routes' },
+            { value: 'entry', label: 'General entries' },
+          ]}
+        />
 
         {canManageOthers && (
-          <Select value={personFilter} onValueChange={setPersonFilter}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Everyone" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>Everyone</SelectItem>
-              <SelectItem value="company">Company-wide</SelectItem>
-              {people.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.full_name || p.email}
-                  <span className="ml-1 text-xs text-muted-foreground">({p.role})</span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <>
+            <MultiSelectFilter
+              allLabel="Everyone"
+              noun="people"
+              selected={personFilter}
+              onChange={setPersonFilter}
+              className="w-[180px]"
+              options={[
+                { value: 'company', label: 'Company-wide' },
+                ...people.map((p) => ({
+                  value: p.id,
+                  label: p.full_name || p.email,
+                  hint: p.role,
+                })),
+              ]}
+            />
+
+            <MultiSelectFilter
+              allLabel="All departments"
+              noun="departments"
+              selected={departmentFilter}
+              onChange={setDepartmentFilter}
+              className="w-[180px]"
+              options={departments.map((d) => ({ value: d.id, label: d.name }))}
+            />
+          </>
         )}
 
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-[170px]">
-            <SelectValue placeholder="All types" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All entry types</SelectItem>
-            {entryTypes.map((t) => (
-              <SelectItem key={t.id} value={t.name}>
-                {t.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <MultiSelectFilter
+          allLabel="All entry types"
+          noun="types"
+          selected={typeFilter}
+          onChange={setTypeFilter}
+          className="w-[170px]"
+          options={entryTypes.map((t) => ({ value: t.name, label: t.name }))}
+        />
 
         <div className="ml-auto">
           <CalendarTemplateControls

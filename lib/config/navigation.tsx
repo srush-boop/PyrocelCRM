@@ -44,6 +44,8 @@ import {
   Archive,
   Hammer,
   ShoppingCart,
+  Package,
+  QrCode,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { UserRole } from '@/lib/types/database'
@@ -82,14 +84,16 @@ const sitesNavItem: NavItem = {
   icon: Building2,
 }
 
-// Calls is a clickable group: clicking it opens the calls list (All Calls) and
-// expands its children (All Calls, Transfers, Reports, Defects).
+// Service is a clickable group: clicking it opens the Service Dashboard and
+// expands its children (Service Dashboard, All Calls, Map, Transfers, Reports,
+// Defects). The `key` stays `calls` so existing per-user permissions still map.
 const adminCallsNavItem: NavItem = {
   key: 'calls',
-  title: 'Calls',
-  href: '/dashboard/schedule',
-  icon: Calendar,
+  title: 'Service',
+  href: '/dashboard/service',
+  icon: Wrench,
   children: [
+    { title: 'Service Dashboard', href: '/dashboard/service', icon: LayoutDashboard },
     { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
     { title: 'Map', href: '/dashboard/schedule/map', icon: MapPinned },
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
@@ -100,10 +104,11 @@ const adminCallsNavItem: NavItem = {
 
 const officeCallsNavItem: NavItem = {
   key: 'calls',
-  title: 'Calls',
-  href: '/dashboard/schedule',
-  icon: Calendar,
+  title: 'Service',
+  href: '/dashboard/service',
+  icon: Wrench,
   children: [
+    { title: 'Service Dashboard', href: '/dashboard/service', icon: LayoutDashboard },
     { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
     { title: 'Map', href: '/dashboard/schedule/map', icon: MapPinned },
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
@@ -112,11 +117,13 @@ const officeCallsNavItem: NavItem = {
   ],
 }
 
+// Engineers don't have the management Service Dashboard, so their Service group
+// opens the Schedule directly and keeps their field-focused children.
 const engineerCallsNavItem: NavItem = {
   key: 'calls',
-  title: 'Calls',
+  title: 'Service',
   href: '/dashboard/schedule',
-  icon: Calendar,
+  icon: Wrench,
   children: [
     { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
     { title: 'Nearby Calls', href: '/dashboard/nearby', icon: Navigation },
@@ -292,6 +299,27 @@ const documentsNavItem: NavItem = {
   ],
 }
 
+// Assets: company asset register (tools, vehicles, access & test equipment, IT).
+// Managers (admin/office) get the full register plus a QR label print sheet;
+// engineers get a simple link showing only the assets assigned to them.
+const managerAssetsNavItem: NavItem = {
+  key: 'assets',
+  title: 'Assets',
+  href: '/dashboard/assets',
+  icon: Package,
+  children: [
+    { title: 'Register', href: '/dashboard/assets', icon: Package },
+    { title: 'Print QR Labels', href: '/dashboard/assets/labels', icon: QrCode },
+  ],
+}
+
+const engineerAssetsNavItem: NavItem = {
+  key: 'assets',
+  title: 'My Assets',
+  href: '/dashboard/assets',
+  icon: Package,
+}
+
 // ---------------------------------------------------------------------------
 // Role default menus
 // ---------------------------------------------------------------------------
@@ -309,6 +337,7 @@ const adminNavItems: NavItem[] = [
   jobsNavItem,
   purchasingNavItem,
   managerStockNavItem,
+  managerAssetsNavItem,
   adminPeopleNavItem,
   documentsNavItem,
   tenderAiNavItem,
@@ -328,6 +357,7 @@ const officeNavItems: NavItem[] = [
   jobsNavItem,
   purchasingNavItem,
   managerStockNavItem,
+  managerAssetsNavItem,
   officePeopleNavItem,
   documentsNavItem,
   tenderAiNavItem,
@@ -335,11 +365,13 @@ const officeNavItems: NavItem[] = [
 ]
 
 const engineerNavItems: NavItem[] = [
+  { key: 'home', title: 'Home', href: '/dashboard', icon: LayoutDashboard, locked: true },
   engineerCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   { key: 'kpis', title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
   engineerPeopleNavItem,
   engineerStockNavItem,
+  engineerAssetsNavItem,
 ]
 
 // Returns the full default top-level menu for a role (before applying any

@@ -34,27 +34,31 @@ async function requireStaff() {
 }
 
 /**
- * Update the pre-attendance flags for a site (`target: 'site'`) or a specific
- * service (`target: 'service'`). For services, a flag value of `null` means
- * "inherit from site". All staff (including engineers) may contribute.
+ * Update the pre-attendance flags for a site (`target: 'site'`), a system
+ * (`target: 'system'`) or a specific service (`target: 'service'`). For systems
+ * and services, a flag value of `null` means "inherit from the parent". All
+ * staff (including engineers) may contribute.
  */
 export async function PATCH(request: NextRequest) {
   const { error, supabase } = await requireStaff()
   if (error || !supabase) return error
 
   const body = await request.json().catch(() => ({}))
-  const target = body.target as 'site' | 'service'
+  const target = body.target as 'site' | 'system' | 'service'
   const id = body.id as string
-  if (!id || (target !== 'site' && target !== 'service')) {
+  if (!id || (target !== 'site' && target !== 'system' && target !== 'service')) {
     return NextResponse.json({ error: 'Invalid target' }, { status: 400 })
   }
+
+  // Systems and services are tri-state (can inherit); a site is the base default.
+  const triState = target === 'service' || target === 'system'
 
   const update: Record<string, boolean | string | null> = {}
   for (const key of BOOL_FLAGS) {
     if (key in body) {
       const val = body[key]
-      if (target === 'service') {
-        // Services allow tri-state: true / false / null (inherit).
+      if (triState) {
+        // Allow tri-state: true / false / null (inherit).
         update[key] = val === null ? null : Boolean(val)
       } else {
         update[key] = Boolean(val)
@@ -70,7 +74,8 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
   }
 
-  const table = target === 'site' ? 'sites' : 'site_services'
+  const table =
+    target === 'site' ? 'sites' : target === 'system' ? 'site_systems' : 'site_services'
   const { error: dbError } = await supabase.from(table).update(update).eq('id', id)
   if (dbError) {
     return NextResponse.json({ error: dbError.message }, { status: 500 })

@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Loader2 } from 'lucide-react'
+import { PostcodeLookup } from '@/components/dashboard/shared/postcode-lookup'
 import type { Client } from '@/lib/types/database'
 
 interface EditClientDialogProps {
@@ -36,6 +37,19 @@ export function EditClientDialog({ client, open, onOpenChange }: EditClientDialo
   })
   const router = useRouter()
   const supabase = createClient()
+
+  // Merge the resolved locality + postcode into the single address field.
+  const applyPostcode = (r: { postcode: string; locality: string }) => {
+    setFormData((prev) => {
+      const line = [r.locality, r.postcode].filter(Boolean).join(', ')
+      if (!line) return prev
+      const hasIt = prev.address.toLowerCase().includes(r.postcode.toLowerCase())
+      const address = hasIt
+        ? prev.address
+        : [prev.address.trim(), line].filter(Boolean).join(', ')
+      return { ...prev, address }
+    })
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -112,6 +126,7 @@ export function EditClientDialog({ client, open, onOpenChange }: EditClientDialo
                 onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
               />
             </div>
+            <PostcodeLookup id="edit-client-postcode-lookup" onResolved={applyPostcode} />
             <div className="grid gap-2">
               <Label htmlFor="address">Address</Label>
               <Input

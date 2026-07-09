@@ -156,7 +156,8 @@ export interface CalendarData {
   routes: RouteCalendarSource[]
   entryTypes: CalendarEntryType[]
   // Staff who can own items (for the user filter). Engineers get an empty list.
-  people: Pick<Profile, 'id' | 'full_name' | 'email' | 'role'>[]
+  // `department_id` lets the calendar filter people by their department.
+  people: Pick<Profile, 'id' | 'full_name' | 'email' | 'role' | 'department_id'>[]
   // Active departments, used to invite a whole team at once. Managers only.
   departments: { id: string; name: string }[]
   profile: Profile
@@ -444,7 +445,7 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
     const [{ data: peopleData }, { data: deptData }] = await Promise.all([
       supabase
         .from('profiles')
-        .select('id, full_name, email, role')
+        .select('id, full_name, email, role, department_id')
         .order('full_name', { ascending: true }),
       supabase
         .from('departments')

@@ -1,0 +1,273 @@
+import { createClient } from '@/lib/supabase/server'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Calendar,
+  Clock,
+  Lightbulb,
+  MapPin,
+  Siren,
+  CheckCircle2,
+  ChevronRight,
+  Sun,
+} from 'lucide-react'
+import Link from 'next/link'
+import { format } from 'date-fns'
+import type { Profile } from '@/lib/types/database'
+import { getDailyFact } from '@/lib/system-facts'
+
+// Greeting that reflects the time of day, so the home feels alive.
+function greeting(d: Date): string {
+  const h = d.getHours()
+  if (h < 12) return 'Good morning'
+  if (h < 18) return 'Good afternoon'
+  return 'Good evening'
+}
+
+// "09:00" from a "HH:mm:ss" DB time string, or null when unbooked.
+function shortTime(t: string | null): string | null {
+  if (!t) return null
+  return t.slice(0, 5)
+}
+
+type EngineerTask = {
+  id: string
+  scheduled_date: string
+  status: string
+  is_emergency: boolean | null
+  booked_start_time: string | null
+  booked_end_time: string | null
+  site_service: {
+    site: { name: string | null; address: string | null; postcode: string | null } | null
+    service_type: { name: string | null } | null
+  } | null
+}
+
+export async function EngineerHome({ profile }: { profile: Profile }) {
+  const supabase = await createClient()
+
+  const now = new Date()
+  const todayStr = format(now, 'yyyy-MM-dd')
+  const firstName = (profile.full_name || 'there').split(' ')[0]
+  const fact = getDailyFact(now)
+
+  const taskSelect = `
+    id,
+    scheduled_date,
+    status,
+    is_emergency,
+    booked_start_time,
+    booked_end_time,
+    site_service:site_services(
+      site:sites(name, address, postcode),
+      service_type:service_types(name)
+    )
+  `
+
+  const [{ data: todayRows }, weekAheadCount] = await Promise.all([
+    supabase
+      .from('tasks')
+      .select(taskSelect)
+      .eq('assigned_engineer_id', profile.id)
+      .eq('scheduled_date', todayStr)
+      .in('status', ['pending', 'in_progress', 'completed'])
+      .order('booked_start_time', { ascending: true, nullsFirst: false }),
+    supabase
+      .from('tasks')
+      .select('id', { count: 'exact', head: true })
+      .eq('assigned_engineer_id', profile.id)
+      .in('status', ['pending', 'in_progress'])
+      .gt('scheduled_date', todayStr),
+  ])
+
+  const todayTasks = (todayRows as unknown as EngineerTask[]) ?? []
+  const remaining = todayTasks.filter((t) => t.status !== 'completed')
+  const doneToday = todayTasks.length - remaining.length
+
+  return (
+    <div className="space-y-6">
+      {/* Welcome */}
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight text-balance">
+          {greeting(now)}, {firstName}
+        </h1>
+        <p className="text-muted-foreground">
+          {format(now, 'EEEE, d MMMM yyyy')}
+        </p>
+      </div>
+
+      {/* Daily fact */}
+      <Card className="border-primary/30 bg-primary/5">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Lightbulb className="h-5 w-5 text-primary" />
+            Did you know?
+          </CardTitle>
+          <CardDescription>A daily fact about the systems we service</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-pretty leading-relaxed">{fact}</p>
+        </CardContent>
+      </Card>
+
+      {/* Day ahead summary */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <SummaryTile
+          icon={Calendar}
+          label="Calls today"
+          value={todayTasks.length}
+        />
+        <SummaryTile
+          icon={Clock}
+          label="Still to do"
+          value={remaining.length}
+          alert={remaining.length > 0}
+        />
+        <SummaryTile
+          icon={CheckCircle2}
+          label="Completed today"
+          value={doneToday}
+        />
+      </div>
+
+      {/* Today's schedule */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Sun className="h-5 w-5" />
+              Your day ahead
+            </CardTitle>
+            <CardDescription>
+              {todayTasks.length > 0
+                ? `${todayTasks.length} call${todayTasks.length === 1 ? '' : 's'} scheduled for today`
+                : 'Nothing booked for today'}
+            </CardDescription>
+          </div>
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/dashboard/schedule">
+              Open schedule
+              <ChevronRight className="ml-1 h-4 w-4" />
+            </Link>
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {todayTasks.length > 0 ? (
+            <div className="space-y-3">
+              {todayTasks.map((task) => {
+                const start = shortTime(task.booked_start_time)
+                const end = shortTime(task.booked_end_time)
+                const site = task.site_service?.site
+                const done = task.status === 'completed'
+                return (
+                  <Link
+                    key={task.id}
+                    href={`/dashboard/tasks/${task.id}?from=/dashboard`}
+                    className={`flex items-center gap-4 rounded-lg border p-3 transition-colors hover:border-primary/50 hover:bg-accent/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                      task.is_emergency ? 'border-destructive/40' : ''
+                    }`}
+                  >
+                    <div className="flex w-16 shrink-0 flex-col items-center rounded-md bg-muted px-2 py-1.5 text-center">
+                      <span className="text-sm font-semibold tabular-nums">
+                        {start ?? '--:--'}
+                      </span>
+                      {end && (
+                        <span className="text-[11px] text-muted-foreground tabular-nums">
+                          {end}
+                        </span>
+                      )}
+                    </div>
+                    <div className={`min-w-0 flex-1 space-y-0.5 ${done ? 'opacity-60' : ''}`}>
+                      <div className="flex items-center gap-2">
+                        <p className="truncate font-medium">{site?.name || 'Unknown site'}</p>
+                        {task.is_emergency && (
+                          <Badge variant="destructive" className="shrink-0 gap-1">
+                            <Siren className="h-3 w-3" />
+                            Emergency
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="truncate text-sm text-muted-foreground">
+                        {task.site_service?.service_type?.name || 'Call'}
+                      </p>
+                      {(site?.address || site?.postcode) && (
+                        <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
+                          <MapPin className="h-3 w-3 shrink-0" />
+                          {[site?.address, site?.postcode].filter(Boolean).join(', ')}
+                        </p>
+                      )}
+                    </div>
+                    {done ? (
+                      <Badge className="shrink-0 bg-green-600 text-white hover:bg-green-600/90">
+                        Done
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="shrink-0">
+                        {task.status === 'in_progress' ? 'in progress' : 'to do'}
+                      </Badge>
+                    )}
+                  </Link>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <Calendar className="mb-3 h-10 w-10 text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">
+                You have no calls booked for today.
+              </p>
+              <Button asChild variant="outline" className="mt-4">
+                <Link href="/dashboard/schedule">View your schedule</Link>
+              </Button>
+            </div>
+          )}
+
+          {(weekAheadCount.count || 0) > 0 && (
+            <p className="mt-4 text-center text-sm text-muted-foreground">
+              Plus{' '}
+              <span className="font-medium text-foreground">{weekAheadCount.count}</span>{' '}
+              more upcoming call{weekAheadCount.count === 1 ? '' : 's'} after today.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+function SummaryTile({
+  icon: Icon,
+  label,
+  value,
+  alert,
+}: {
+  icon: typeof Calendar
+  label: string
+  value: number
+  alert?: boolean
+}) {
+  return (
+    <Card className={alert ? 'border-primary/40' : ''}>
+      <CardContent className="flex items-center gap-3 py-4">
+        <span
+          className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+            alert ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+          }`}
+        >
+          <Icon className="h-5 w-5" />
+        </span>
+        <div>
+          <div className="text-2xl font-bold">{value}</div>
+          <p className="text-xs text-muted-foreground">{label}</p>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}

@@ -18,11 +18,13 @@ import {
   ChevronRight,
   Wrench,
   Siren,
+  ClipboardCheck,
 } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 import Link from 'next/link'
 import { ScanQrButton } from '@/components/dashboard/dampers/scan-qr-button'
 import { ApprovalsWidget } from '@/components/dashboard/approvals/approvals-widget'
+import { getVisibleLeaveRequests } from '@/lib/leave-approvals'
 import { EngineerHome } from '@/components/dashboard/home/engineer-home'
 import { DashboardDateFilter } from '@/components/dashboard/home/dashboard-date-filter'
 import { Suspense } from 'react'
@@ -173,7 +175,26 @@ export default async function DashboardPage({
   const valueRangeLabel = hasFilter ? rangeLabel(valueFrom, valueTo) : 'Last 60 days'
   const ppmRangeLabel = hasFilter ? rangeLabel(ppmFrom, ppmTo) : format(today, 'MMMM yyyy')
 
+  // Leave requests awaiting this user's decision (RLS-scoped: managers see their
+  // reports, accounts/admins see all). Surfaced as an always-visible card so the
+  // count is discoverable even when the detailed widget above is hidden.
+  const { pending: pendingApprovals } = await getVisibleLeaveRequests()
+  const pendingApprovalsCount = pendingApprovals.length
+
   const modules: ModuleCard[] = [
+    {
+      title: 'Approvals',
+      description: 'Leave requests to action',
+      icon: ClipboardCheck,
+      href: '/dashboard/approvals',
+      metrics: [
+        {
+          label: 'Awaiting approval',
+          value: pendingApprovalsCount,
+          alert: pendingApprovalsCount > 0,
+        },
+      ],
+    },
     {
       title: 'Service',
       description: 'Calls, reports & defects',

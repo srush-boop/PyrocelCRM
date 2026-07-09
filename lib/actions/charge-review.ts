@@ -39,7 +39,7 @@ export async function setChargeReview(
   action: ChargeReviewAction,
 ): Promise<{ error: string | null }> {
   const ctx = await requireManager()
-  if ('error' in ctx) return { error: ctx.error }
+  if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
   const { supabase, userId } = ctx
 
   const update: Record<string, unknown> = {}

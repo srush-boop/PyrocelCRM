@@ -32,12 +32,12 @@ export default async function ChargeableCallsPage() {
     .select(
       `
       id,
-      reference_number,
       completed_at,
       chargeable,
       charge_review_status,
       charge_reason,
       charge_reviewed_at,
+      task_result:task_results(reference_number),
       assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(id, full_name, email),
       reviewer:profiles!tasks_charge_reviewed_by_fkey(id, full_name, email),
       direct_site:sites!tasks_site_id_fkey(id, name, client_id, clients(id, name)),
@@ -63,7 +63,9 @@ export default async function ChargeableCallsPage() {
     )
     return {
       id: t.id,
-      referenceNumber: t.reference_number || '-',
+      referenceNumber:
+        (Array.isArray(t.task_result) ? t.task_result[0]?.reference_number : t.task_result?.reference_number) ||
+        '-',
       completedAt: t.completed_at,
       chargeReviewStatus: t.charge_review_status,
       chargeReason: t.charge_reason,

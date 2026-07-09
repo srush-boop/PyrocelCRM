@@ -406,7 +406,7 @@ export function SiteSystemsManager({
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-3">
+        <div className="grid gap-2">
           {siteSystems.map((system) => {
             const services = servicesBySystem.get(system.id) ?? []
             const addableForSystem = serviceTypesForSystem(system)
@@ -422,7 +422,7 @@ export function SiteSystemsManager({
                 className={st ? 'border-l-4' : undefined}
                 style={st ? systemAccentStyle(st.color) : undefined}
               >
-                <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 py-3">
+                <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 py-2">
                   <div className="space-y-0.5">
                     <CardTitle className="flex items-center gap-2 text-sm">
                       {st ? (
@@ -480,7 +480,7 @@ export function SiteSystemsManager({
                     </Button>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-2 py-3">
+                <CardContent className="space-y-2 pb-2 pt-0">
                   {services.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No services attached.</p>
                   ) : (
@@ -488,7 +488,7 @@ export function SiteSystemsManager({
                       {services.map((svc) => (
                         <li
                           key={svc.id}
-                          className="flex items-center justify-between gap-3 px-3 py-1.5"
+                          className="flex items-center justify-between gap-3 px-3 py-1"
                         >
                           <button
                             type="button"
@@ -505,6 +505,7 @@ export function SiteSystemsManager({
                           <Button
                             variant="ghost"
                             size="sm"
+                            className="h-7 px-2 text-xs"
                             onClick={() => assignService(svc.id, null)}
                           >
                             Detach
@@ -516,6 +517,7 @@ export function SiteSystemsManager({
                   <Button
                     variant="outline"
                     size="sm"
+                    className="h-7 px-2 text-xs"
                     onClick={() => openAddServices(system.id)}
                     disabled={addableForSystem.length === 0}
                     title={
@@ -524,7 +526,7 @@ export function SiteSystemsManager({
                         : undefined
                     }
                   >
-                    <Plus className="h-4 w-4" />
+                    <Plus className="h-3.5 w-3.5" />
                     Add service
                   </Button>
                   {systemPanelDefs.length > 0 && (

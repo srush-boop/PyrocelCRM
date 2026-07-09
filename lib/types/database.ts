@@ -291,6 +291,10 @@ export interface ServiceType {
   // Default "attend within X hours" KPI applied when logging a call of this
   // type (editable at booking). NULL = no default KPI.
   default_kpi_hours: number | null
+  // When true, completed calls of this service type are deemed chargeable and
+  // automatically sent to the Chargeable Calls review queue on completion
+  // (feeds future invoicing). Parts used on a call always force chargeable too.
+  default_chargeable: boolean
   status: 'live' | 'dead'
   created_at: string
   system_type?: SystemType | null
@@ -818,6 +822,17 @@ export interface Task {
   // info into the notes and expose the job's documents folder to the engineer.
   source_job_id: string | null
   is_commissioning: boolean
+  // Charge review (feeds the Chargeable Calls queue + future invoicing). Set
+  // automatically on completion: chargeable when the service type defaults to
+  // chargeable OR any parts were used. Adding parts to a completed call always
+  // forces chargeable + re-opens review.
+  //  - charge_review_status: 'none' (not chargeable / N/A) | 'pending' | 'reviewed'
+  //  - charge_reason: 'service_default' | 'parts_added' | 'manual' | null
+  chargeable: boolean
+  charge_review_status: 'none' | 'pending' | 'reviewed'
+  charge_reason: string | null
+  charge_reviewed_at: string | null
+  charge_reviewed_by: string | null
   site_service?: SiteService
   // Direct joins for reactive/emergency calls (and available on recurring calls
   // via the backfilled ids).

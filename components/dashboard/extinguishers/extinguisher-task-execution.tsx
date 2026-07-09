@@ -447,7 +447,14 @@ export function ExtinguisherTaskExecution({
 
       <div className="flex flex-wrap items-center justify-end gap-2">
         {status === 'completed' && (
-          <CompletedReportActions taskId={task.id} serviceName={serviceType?.name} />
+          <CompletedReportActions
+            taskId={task.id}
+            serviceName={serviceType?.name}
+            chargeable={task.chargeable}
+            chargeReviewStatus={task.charge_review_status}
+            chargeReason={task.charge_reason}
+            canReview={profile.role === 'admin' || profile.role === 'office'}
+          />
         )}
         <ScanQrButton onScan={handleScanToExtinguisher} />
       </div>

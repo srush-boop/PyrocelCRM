@@ -16,9 +16,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Printer, Send, Mail, X, CheckCircle } from 'lucide-react'
+import { Printer, Send, Mail, X, CheckCircle, Coins, Loader2, Wrench } from 'lucide-react'
 import { isDamperService } from '@/lib/dampers'
 import { isExtinguisherService } from '@/lib/extinguishers'
+import { setChargeReview } from '@/lib/actions/charge-review'
+import { useRouter } from 'next/navigation'
+import { cn } from '@/lib/utils'
 
 /** Resolve the correct printable report viewer path for a service type. */
 function reportPath(serviceName: string | undefined, taskId: string): string {
@@ -32,6 +35,18 @@ interface CompletedReportActionsProps {
   serviceName?: string
   /** ISO timestamp of the last time the report email was sent, if any. */
   emailSentAt?: string | null
+  /** Charge-review state for this completed call (feeds the Chargeable Calls queue). */
+  chargeable?: boolean
+  chargeReviewStatus?: 'none' | 'pending' | 'reviewed'
+  chargeReason?: string | null
+  /** True for office/admin, who may change the charge/review state. */
+  canReview?: boolean
+}
+
+const CHARGE_REASON_LABELS: Record<string, string> = {
+  service_default: 'Chargeable service type',
+  parts_added: 'Parts used on call',
+  manual: 'Marked chargeable manually',
 }
 
 /**
@@ -39,13 +54,42 @@ interface CompletedReportActionsProps {
  * open the printable report (Print / Save PDF) and (re)send it to the client's
  * configured recipients or an alternate address.
  */
-export function CompletedReportActions({ taskId, serviceName, emailSentAt }: CompletedReportActionsProps) {
+export function CompletedReportActions({
+  taskId,
+  serviceName,
+  emailSentAt,
+  chargeable,
+  chargeReviewStatus = 'none',
+  chargeReason,
+  canReview = false,
+}: CompletedReportActionsProps) {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [recipientMode, setRecipientMode] = useState<'default' | 'alternate'>('default')
   const [alternateEmails, setAlternateEmails] = useState<string[]>([])
   const [newEmail, setNewEmail] = useState('')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  const [reviewBusy, setReviewBusy] = useState(false)
+
+  const showChargeSection = chargeable || chargeReviewStatus !== 'none' || canReview
+
+  const runChargeAction = async (
+    action:
+      | { kind: 'reviewed' }
+      | { kind: 'reopen' }
+      | { kind: 'set_chargeable'; chargeable: boolean },
+  ) => {
+    setReviewBusy(true)
+    const { error } = await setChargeReview(taskId, action)
+    setReviewBusy(false)
+    if (error) {
+      toast.error(error)
+    } else {
+      toast.success('Charge status updated')
+      router.refresh()
+    }
+  }
 
   const addEmail = () => {
     const email = newEmail.trim()
@@ -94,7 +138,78 @@ export function CompletedReportActions({ taskId, serviceName, emailSentAt }: Com
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="space-y-3">
+      {showChargeSection && (
+        <div
+          className={cn(
+            'rounded-md border p-3',
+            chargeable && chargeReviewStatus === 'pending'
+              ? 'border-amber-300 bg-amber-50'
+              : chargeReviewStatus === 'reviewed'
+                ? 'border-green-300 bg-green-50'
+                : 'border-border bg-muted/40',
+          )}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              {chargeReason === 'parts_added' ? (
+                <Wrench className="h-4 w-4 text-amber-600" />
+              ) : (
+                <Coins className="h-4 w-4 text-amber-600" />
+              )}
+              <div className="text-sm">
+                <span className="font-medium">
+                  {chargeable
+                    ? chargeReviewStatus === 'reviewed'
+                      ? 'Chargeable — reviewed'
+                      : 'Chargeable — awaiting review'
+                    : 'Not chargeable'}
+                </span>
+                {chargeable && chargeReason && CHARGE_REASON_LABELS[chargeReason] && (
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    {CHARGE_REASON_LABELS[chargeReason]}
+                  </span>
+                )}
+              </div>
+            </div>
+            {canReview && (
+              <div className="flex flex-wrap items-center gap-2">
+                {reviewBusy && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                {chargeable && chargeReviewStatus === 'pending' && (
+                  <Button
+                    size="sm"
+                    disabled={reviewBusy}
+                    onClick={() => runChargeAction({ kind: 'reviewed' })}
+                    className="gap-2"
+                  >
+                    <CheckCircle className="h-4 w-4" />
+                    Mark reviewed
+                  </Button>
+                )}
+                {chargeable && chargeReviewStatus === 'reviewed' && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={reviewBusy}
+                    onClick={() => runChargeAction({ kind: 'reopen' })}
+                  >
+                    Re-open review
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={reviewBusy}
+                  onClick={() => runChargeAction({ kind: 'set_chargeable', chargeable: !chargeable })}
+                >
+                  {chargeable ? 'Mark not chargeable' : 'Mark chargeable'}
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
       <Button variant="outline" size="sm" asChild className="gap-2">
         <Link href={reportPath(serviceName, taskId)} target="_blank">
           <Printer className="h-4 w-4" />
@@ -111,6 +226,7 @@ export function CompletedReportActions({ taskId, serviceName, emailSentAt }: Com
           Last sent {new Date(emailSentAt).toLocaleDateString('en-GB')}
         </span>
       )}
+      </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>

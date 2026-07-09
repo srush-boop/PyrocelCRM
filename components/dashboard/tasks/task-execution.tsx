@@ -1058,6 +1058,10 @@ export function TaskExecution({
               taskId={task.id}
               serviceName={serviceType?.name}
               emailSentAt={existingResult.email_sent_at}
+              chargeable={task.chargeable}
+              chargeReviewStatus={task.charge_review_status}
+              chargeReason={task.charge_reason}
+              canReview={profile.role === 'admin' || profile.role === 'office'}
             />
           </CardContent>
         </Card>

@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { Plus, Loader2, Siren } from 'lucide-react'
+import { Plus, Loader2, Siren, Coins } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -56,6 +56,7 @@ export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[
     call_kind: 'recurring' as ServiceType['call_kind'],
     is_emergency: false,
     default_kpi_hours: 24,
+    default_chargeable: false,
   })
   // Per-system checklists for non-recurring call types (reactive/planned).
   const [checklists, setChecklists] = useState<ServiceTypeChecklistEntry[]>([])
@@ -97,6 +98,7 @@ export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[
         ...callKindFlags(formData.call_kind, formData.is_emergency),
         // KPI only applies to reactive call types (planned has no deadline/KPI).
         default_kpi_hours: isReactive ? formData.default_kpi_hours : null,
+        default_chargeable: formData.default_chargeable,
       })
       .select('id')
       .single()
@@ -135,6 +137,7 @@ export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[
         call_kind: 'recurring',
         is_emergency: false,
         default_kpi_hours: 24,
+        default_chargeable: false,
       })
       setChecklists([])
       router.refresh()
@@ -319,6 +322,23 @@ export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[
                 />
               </>
             )}
+            <div className="flex items-start justify-between gap-3 rounded-md border border-dashed p-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="default-chargeable" className="flex items-center gap-2">
+                  <Coins className="h-4 w-4 text-amber-600" />
+                  Default chargeable
+                </Label>
+                <p className="text-xs text-muted-foreground text-pretty">
+                  Completed calls of this type are deemed chargeable and sent to the Chargeable Calls
+                  review queue. Any call returned with parts added is always chargeable regardless.
+                </p>
+              </div>
+              <Switch
+                id="default-chargeable"
+                checked={formData.default_chargeable}
+                onCheckedChange={(v) => setFormData({ ...formData, default_chargeable: v })}
+              />
+            </div>
             <div className="grid gap-2">
               <Label htmlFor="default-worker-type">Default delivered by</Label>
               <Select

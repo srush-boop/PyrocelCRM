@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
@@ -14,6 +14,7 @@ import {
   CornerUpLeft,
   Clock,
   AlertTriangle,
+  MailPlus,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -92,6 +93,38 @@ export function RequestsInbox({
   const [busyId, setBusyId] = useState<string | null>(null)
   const [replyOpen, setReplyOpen] = useState(false)
   const [replyText, setReplyText] = useState('')
+  const [droppedFile, setDroppedFile] = useState<File | null>(null)
+  const [pageDragOver, setPageDragOver] = useState(false)
+  const dragDepth = useRef(0)
+
+  // Only react to drags that carry files (ignore text selections, etc.).
+  function dragHasFiles(e: React.DragEvent) {
+    return Array.from(e.dataTransfer.types).includes('Files')
+  }
+
+  function handlePageDragEnter(e: React.DragEvent) {
+    if (!dragHasFiles(e)) return
+    dragDepth.current += 1
+    setPageDragOver(true)
+  }
+
+  function handlePageDragLeave(e: React.DragEvent) {
+    if (!dragHasFiles(e)) return
+    dragDepth.current -= 1
+    if (dragDepth.current <= 0) {
+      dragDepth.current = 0
+      setPageDragOver(false)
+    }
+  }
+
+  function handlePageDrop(e: React.DragEvent) {
+    if (!dragHasFiles(e)) return
+    e.preventDefault()
+    dragDepth.current = 0
+    setPageDragOver(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) setDroppedFile(file)
+  }
 
   const siteById = useMemo(() => new Map(sites.map((s) => [s.id, s])), [sites])
   const clientById = useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients])
@@ -186,7 +219,22 @@ export function RequestsInbox({
   }
 
   return (
-    <div className="space-y-4">
+    <div
+      className="relative space-y-4"
+      onDragEnter={handlePageDragEnter}
+      onDragOver={(e) => {
+        if (dragHasFiles(e)) e.preventDefault()
+      }}
+      onDragLeave={handlePageDragLeave}
+      onDrop={handlePageDrop}
+    >
+      {pageDragOver && (
+        <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary bg-background/85 backdrop-blur-sm">
+          <MailPlus className="h-10 w-10 text-primary" />
+          <p className="text-lg font-medium">Drop the email to triage it</p>
+          <p className="text-sm text-muted-foreground">.eml or .msg files</p>
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
           <TabsList>
@@ -202,7 +250,10 @@ export function RequestsInbox({
             <TabsTrigger value="dismissed">Dismissed</TabsTrigger>
           </TabsList>
         </Tabs>
-        <AddRequestDialog />
+        <AddRequestDialog
+          fileToLoad={droppedFile}
+          onFileConsumed={() => setDroppedFile(null)}
+        />
       </div>
 
       {list.length === 0 ? (
@@ -211,7 +262,7 @@ export function RequestsInbox({
           <p className="font-medium">No requests here</p>
           <p className="text-sm text-muted-foreground text-pretty">
             {tab === 'review'
-              ? 'Forwarded emails will appear here once triaged. You can also add one manually.'
+              ? 'Forwarded emails will appear here once triaged. You can also drag an email file onto this page, or add one manually.'
               : 'Nothing in this list yet.'}
           </p>
         </Card>

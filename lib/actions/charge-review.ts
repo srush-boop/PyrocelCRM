@@ -13,6 +13,10 @@ type ChargeReviewAction =
   | { kind: 'reviewed' }
   | { kind: 'reopen' }
   | { kind: 'set_chargeable'; chargeable: boolean }
+  | { kind: 'invoiced' }
+  | { kind: 'uninvoiced' }
+  | { kind: 'set_client_ref'; clientRef: string | null }
+  | { kind: 'set_deadline_failed'; reason: string; note: string | null }
 
 async function requireManager() {
   const supabase = await createClient()
@@ -67,6 +71,17 @@ export async function setChargeReview(
       update.charge_reviewed_at = null
       update.charge_reviewed_by = null
     }
+  } else if (action.kind === 'invoiced') {
+    update.charge_invoiced_at = new Date().toISOString()
+    update.charge_invoiced_by = userId
+  } else if (action.kind === 'uninvoiced') {
+    update.charge_invoiced_at = null
+    update.charge_invoiced_by = null
+  } else if (action.kind === 'set_client_ref') {
+    update.client_ref = action.clientRef
+  } else if (action.kind === 'set_deadline_failed') {
+    update.deadline_failed_reason = action.reason
+    update.deadline_failed_note = action.note
   }
 
   const { error } = await supabase.from('tasks').update(update).eq('id', taskId)

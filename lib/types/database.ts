@@ -848,6 +848,14 @@ export interface Task {
   charge_reason: string | null
   charge_reviewed_at: string | null
   charge_reviewed_by: string | null
+  // Optional client PO reference, entered at review/logging time
+  client_ref: string | null
+  // Invoiced status — set after the call has been sent for invoicing
+  charge_invoiced_at: string | null
+  charge_invoiced_by: string | null
+  // Deadline-missed logging: reason + free-text note when respond_by was missed
+  deadline_failed_reason: string | null
+  deadline_failed_note: string | null
   site_service?: SiteService
   // Direct joins for reactive/emergency calls (and available on recurring calls
   // via the backfilled ids).
@@ -877,6 +885,33 @@ export interface Task {
   panel_id?: string | null
   panel_name?: string | null
   }
+
+// PO request log: one row per request sent to the client for a PO number.
+export interface PurchaseOrderRequest {
+  id: string
+  task_id: string
+  requested_by: string
+  note: string | null
+  email_sent_at: string | null
+  email_sent_to: string[] | null
+  special_note: string | null
+  po_number: string | null
+  authorised_by_name: string | null
+  authorised_at: string | null
+  authorisation_token: string | null
+  created_at: string
+  updated_at: string
+  // Joined fields
+  requester?: { full_name: string | null; email: string }
+}
+
+// Key/value config for global application settings.
+export interface GlobalConfig {
+  key: string
+  value: unknown
+  updated_at: string
+  updated_by: string | null
+}
 
 // Defect tracking: one row per failed report (task_result with overall_status='fail').
 // Auto-maintained by a DB trigger; lifecycle open -> quoted -> resolved/dismissed.

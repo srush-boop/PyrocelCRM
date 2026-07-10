@@ -79,7 +79,11 @@ export function CreateTaskDialog({
   trigger,
   onBooked,
 }: CreateTaskDialogProps) {
-  const reactiveEnabled = reactiveServiceTypes.length > 0
+  // Emergency call types are dispatched via the map / dispatch flow, not the
+  // standard "Book Call" dialog. Filter them out so the dropdown only offers
+  // non-emergency reactive types (remedial, planned reactive, etc.).
+  const nonEmergencyReactiveTypes = reactiveServiceTypes.filter((t) => !t.is_emergency)
+  const reactiveEnabled = nonEmergencyReactiveTypes.length > 0
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -154,7 +158,7 @@ export function CreateTaskDialog({
         )
       : []
 
-  const selectedReactiveType = reactiveServiceTypes.find((t) => t.id === reactiveTypeId)
+  const selectedReactiveType = nonEmergencyReactiveTypes.find((t) => t.id === reactiveTypeId)
 
   // Load the systems this call type has been configured for (via its per-system
   // checklists). When present, the system picker is scoped to just these; a
@@ -224,7 +228,7 @@ export function CreateTaskDialog({
 
   const handleReactiveTypeChange = (value: string) => {
     setReactiveTypeId(value)
-    const t = reactiveServiceTypes.find((st) => st.id === value)
+    const t = nonEmergencyReactiveTypes.find((st) => st.id === value)
     // Only emergency calls carry an "attend within" KPI. Non-emergency
     // reactive work (remedial, commissioning, etc.) has no response target.
     setKpiHours(t?.is_emergency ? t?.default_kpi_hours ?? '' : '')
@@ -460,22 +464,13 @@ export function CreateTaskDialog({
                       <SelectValue placeholder="Select a call type" />
                     </SelectTrigger>
                     <SelectContent>
-                      {reactiveServiceTypes.map((t) => (
+                      {nonEmergencyReactiveTypes.map((t) => (
                         <SelectItem key={t.id} value={t.id}>
-                          <span className="flex items-center gap-2">
-                            {t.name}
-                            {t.is_emergency && <Siren className="h-3.5 w-3.5 text-destructive" />}
-                          </span>
+                          {t.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  {selectedReactiveType?.is_emergency && (
-                    <Badge variant="destructive" className="w-fit gap-1">
-                      <Siren className="h-3 w-3" />
-                      Emergency call — engineer is notified on assignment
-                    </Badge>
-                  )}
                 </div>
 
                 <div className="grid gap-2">
@@ -519,23 +514,7 @@ export function CreateTaskDialog({
                   </div>
                 )}
 
-                {selectedReactiveType?.is_emergency && (
-                  <div className="grid gap-2">
-                    <Label htmlFor="kpi-hours">Attend within (hours)</Label>
-                    <Input
-                      id="kpi-hours"
-                      type="number"
-                      min={1}
-                      max={720}
-                      value={kpiHours}
-                      onChange={(e) => setKpiHours(e.target.value === '' ? '' : parseInt(e.target.value) || 1)}
-                      placeholder="e.g. 4"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Response KPI for this emergency. Prefilled from the call type; leave blank for none.
-                    </p>
-                  </div>
-                )}
+
 
                 <div className="grid gap-2">
                   <Label htmlFor="call-description">Call description</Label>

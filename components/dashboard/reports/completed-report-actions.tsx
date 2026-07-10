@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Printer, Send, Mail, X, CheckCircle, Coins, Loader2, Wrench } from 'lucide-react'
+import { Printer, Send, Mail, X, CheckCircle, Coins, Loader2, Wrench, Pencil } from 'lucide-react'
 import { isDamperService } from '@/lib/dampers'
 import { isExtinguisherService } from '@/lib/extinguishers'
 import { setChargeReview } from '@/lib/actions/charge-review'

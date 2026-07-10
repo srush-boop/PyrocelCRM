@@ -16,6 +16,8 @@ import { EntityRequestsCard } from '@/components/dashboard/requests/entity-reque
 import { CommissioningJobPanel } from '@/components/dashboard/tasks/commissioning-job-panel'
 import { resolveSiteFlags } from '@/lib/site-flags'
 import { getOpenRemedialForSite } from '@/lib/remedial'
+import { DeadlineFailedPanel } from '@/components/dashboard/tasks/deadline-failed-panel'
+import { getGlobalConfig } from '@/lib/actions/global-config'
 import type { DocumentFile, DocumentFolder, SiteInternalNote } from '@/lib/types/database'
 import type {
   Profile,
@@ -208,6 +210,37 @@ export default async function TaskPage({ params }: PageProps) {
         </>
       )
     }
+  }
+
+  // Respond-by countdown + deadline-failed panel. Shown to all users when the
+  // call has a KPI deadline. The logging panel (for office/admin) is injected
+  // before the pre-attendance panel so it's visible at the top of the flow.
+  if (task.respond_by) {
+    const deadlineReasons = await getGlobalConfig<string[]>('deadline_failed_reasons')
+    const defaultReasons = [
+      'Engineer attended but unable to gain access',
+      'Insufficient information provided',
+      'Parts required — awaiting delivery',
+      'Awaiting client authorisation',
+      'Weather conditions',
+      'Other',
+    ]
+    const deadlinePanelNode = (
+      <DeadlineFailedPanel
+        taskId={id}
+        respondBy={task.respond_by as string}
+        currentReason={(task as any).deadline_failed_reason ?? null}
+        currentNote={(task as any).deadline_failed_note ?? null}
+        reasons={deadlineReasons ?? defaultReasons}
+        canLog={canModerateNotes}
+      />
+    )
+    preAttendancePanel = (
+      <>
+        {deadlinePanelNode}
+        {preAttendancePanel}
+      </>
+    )
   }
 
   // Office/admin can raise a client request against this call (engineers can't).

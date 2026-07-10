@@ -250,7 +250,9 @@ export function TaskExecution({
   const calculateOverallStatus = (): TaskResultStatus => {
     if (checklistResults.length === 0) return 'pass'
     
-    const passFailItems = checklistResults.filter((r) => r.type === 'pass_fail')
+    // Advisory items are observations, not pass/fail outcomes, so they never
+    // affect the overall result (a report of all passes + advisories is a pass).
+    const passFailItems = checklistResults.filter((r) => r.type === 'pass_fail' && !r.advisory)
     if (passFailItems.length === 0) return 'pass'
     
     const allPassed = passFailItems.every((r) => r.passed === true)
@@ -331,8 +333,10 @@ export function TaskExecution({
       prev.map((result) => {
         if (result.item_id === itemId) {
           const updated = { ...result, ...updates }
-          // If it's a pass/fail type and value changed, update passed status
-          if (updated.type === 'pass_fail' && 'value' in updates) {
+          // If it's a pass/fail type and value changed, derive passed from it —
+          // unless the caller set `passed` explicitly (e.g. the Advisory action,
+          // which sends value:true but passed:null).
+          if (updated.type === 'pass_fail' && 'value' in updates && !('passed' in updates)) {
             updated.passed = updates.value as boolean
           }
           return updated
@@ -847,25 +851,36 @@ export function TaskExecution({
                         <Label className="text-base font-medium">{result.label}</Label>
 
                         {result.type === 'pass_fail' && (
-                          <div className="flex gap-2 mt-2">
+                          <div className="flex flex-wrap gap-2 mt-2">
                             <Button
                               type="button"
-                              variant={result.passed === true ? 'default' : 'outline'}
+                              variant={result.passed === true && !result.advisory ? 'default' : 'outline'}
                               size="sm"
-                              onClick={() => updateChecklistResult(result.item_id, { value: true, passed: true })}
+                              onClick={() => updateChecklistResult(result.item_id, { value: true, passed: true, advisory: false })}
                               disabled={!canEdit}
-                              className={result.passed === true ? 'bg-green-600 hover:bg-green-700' : ''}
+                              className={result.passed === true && !result.advisory ? 'bg-green-600 hover:bg-green-700' : ''}
                             >
                               <CheckCircle2 className="mr-2 h-4 w-4" />
                               Pass
                             </Button>
                             <Button
                               type="button"
-                              variant={result.passed === false ? 'default' : 'outline'}
+                              variant={result.advisory ? 'default' : 'outline'}
                               size="sm"
-                              onClick={() => updateChecklistResult(result.item_id, { value: false, passed: false })}
+                              onClick={() => updateChecklistResult(result.item_id, { value: true, passed: null, advisory: true })}
                               disabled={!canEdit}
-                              className={result.passed === false ? 'bg-destructive hover:bg-destructive/90' : ''}
+                              className={result.advisory ? 'bg-amber-500 text-white hover:bg-amber-600' : ''}
+                            >
+                              <AlertTriangle className="mr-2 h-4 w-4" />
+                              Advisory
+                            </Button>
+                            <Button
+                              type="button"
+                              variant={result.passed === false && !result.advisory ? 'default' : 'outline'}
+                              size="sm"
+                              onClick={() => updateChecklistResult(result.item_id, { value: false, passed: false, advisory: false })}
+                              disabled={!canEdit}
+                              className={result.passed === false && !result.advisory ? 'bg-destructive hover:bg-destructive/90' : ''}
                             >
                               <XCircle className="mr-2 h-4 w-4" />
                               Fail
@@ -907,12 +922,12 @@ export function TaskExecution({
                           />
                         )}
 
-                        {/* Notes for failed items */}
-                        {result.type === 'pass_fail' && result.passed === false && (
+                        {/* Notes for failed and advisory items */}
+                        {result.type === 'pass_fail' && (result.passed === false || result.advisory) && (
                           <div className="mt-2 space-y-2">
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-xs font-medium text-muted-foreground">
-                                Defect description
+                                {result.advisory ? 'Advisory note' : 'Defect description'}
                               </span>
                               {canEdit && (
                                 <ReportNotesAssist
@@ -939,7 +954,7 @@ export function TaskExecution({
                             <Textarea
                               value={result.notes || ''}
                               onChange={(e) => updateChecklistResult(result.item_id, { notes: e.target.value })}
-                              placeholder="Describe the issue..."
+                              placeholder={result.advisory ? 'Describe the observation...' : 'Describe the issue...'}
                               disabled={!canEdit}
                             />
                           </div>

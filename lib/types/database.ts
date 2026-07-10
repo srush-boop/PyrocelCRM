@@ -856,6 +856,11 @@ export interface Task {
   type: 'pass_fail' | 'text' | 'number' | 'checkbox'
   value: boolean | string | number
   passed: boolean | null
+  // Third state for pass/fail items: neither a pass nor a fail, but an
+  // observation worth noting (e.g. wear, minor issue, recommendation).
+  // When true, `passed` is null and the item is excluded from the pass/fail
+  // outcome, but it is still surfaced in the defects log for review.
+  advisory?: boolean
   notes?: string
   // When a system has configured panels, the general checklist is repeated once
   // per panel. These tag each result with the panel it belongs to. Absent on

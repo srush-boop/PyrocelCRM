@@ -759,10 +759,10 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
               </Button>
             )}
             {actionable && canStartCall && (
-              <Button
+                <Button
                 type="button"
                 size="sm"
-                className="h-8 shrink-0 gap-1.5 font-semibold"
+                className="h-9 shrink-0 gap-1.5 font-semibold"
                 aria-label={`${task.status === 'pending' ? 'Start' : 'Continue'} call at ${task.site_service?.site?.name}`}
                 onClick={(e) => {
                   e.preventDefault()
@@ -771,9 +771,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                 }}
               >
                 <Wrench className="h-4 w-4" />
-                <span className="hidden sm:inline">
-                  {task.status === 'pending' ? 'Start Call' : 'Continue'}
-                </span>
+                {task.status === 'pending' ? 'Start' : 'Continue'}
               </Button>
             )}
           </div>
@@ -1073,8 +1071,10 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
         )}
       </div>
 
-      {/* Row 2: system/service filters, sort and view toggle — kept on a single line */}
-      <div className="flex items-center gap-2">
+      {/* Row 2: system/service filters, sort and view toggle.
+          On mobile the filters + sort/toggle sit in a single horizontally-scrollable
+          strip so nothing wraps and no content is ever clipped. */}
+      <div className="flex items-center gap-2 overflow-x-auto scrollbar-none [-webkit-overflow-scrolling:touch] [scrollbar-width:none]">
         {systemOptions.length > 0 && (
           <Select
             value={selectedSystem}
@@ -1085,7 +1085,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
               setSelectedService('all')
             }}
           >
-            <SelectTrigger className="min-w-0 flex-1 sm:flex-none sm:w-[180px]">
+            <SelectTrigger className="w-[160px] shrink-0">
               <SelectValue placeholder="System" />
             </SelectTrigger>
             <SelectContent>
@@ -1104,7 +1104,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
 
         {serviceOptions.length > 0 && (
           <Select value={selectedService} onValueChange={setSelectedService}>
-            <SelectTrigger className="min-w-0 flex-1 sm:flex-none sm:w-[180px]">
+            <SelectTrigger className="w-[160px] shrink-0">
               <SelectValue placeholder="Service" />
             </SelectTrigger>
             <SelectContent>
@@ -1120,7 +1120,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <Select value={sortBy} onValueChange={(v) => handleSortChange(v as SortKey)}>
-            <SelectTrigger className="w-[120px] sm:w-[150px]">
+            <SelectTrigger className="w-[150px] sm:w-[160px]">
               {locating ? (
                 <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
               ) : (
@@ -1163,11 +1163,17 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="upcoming">
-            Upcoming ({upcomingTasks.length})
+          <TabsTrigger value="upcoming" className="gap-1.5">
+            Upcoming
+            <span className="rounded-full bg-background/60 px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums">
+              {upcomingTasks.length}
+            </span>
           </TabsTrigger>
-          <TabsTrigger value="completed">
-            Completed ({completedTasks.length})
+          <TabsTrigger value="completed" className="gap-1.5">
+            Completed
+            <span className="rounded-full bg-background/60 px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums">
+              {completedTasks.length}
+            </span>
           </TabsTrigger>
         </TabsList>
 

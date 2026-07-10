@@ -644,7 +644,7 @@ export function TaskExecution({
       {/* Start Task — the primary action, kept prominent and above the
           optional booking panel so engineers can begin in one tap. */}
       {status === 'pending' && canEdit && (
-        <Button onClick={handleStartTask} size="lg" className="w-full">
+        <Button onClick={handleStartTask} size="lg" className="h-14 w-full text-base font-bold">
           <Play className="mr-2 h-5 w-5" />
           Start Inspection
         </Button>
@@ -763,7 +763,7 @@ export function TaskExecution({
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
+                  <div className="space-y-2">
                   <Label>Start Time</Label>
                   <div className="flex gap-2">
                     <Input
@@ -771,16 +771,19 @@ export function TaskExecution({
                       value={testingStartTime?.toISOString().slice(0, 16) || ''}
                       onChange={(e) => setTestingStartTime(e.target.value ? new Date(e.target.value) : null)}
                       disabled={!canEdit}
+                      className="min-w-0 flex-1"
                     />
-                    {!testingStartTime && canEdit && (
+                    {canEdit && (
                       <Button
                         type="button"
-                        variant="outline"
-                        size="icon"
+                        variant={testingStartTime ? 'outline' : 'default'}
+                        size="sm"
                         onClick={() => setTestingStartTime(new Date())}
-                        title="Set current time"
+                        title="Set to now"
+                        className="h-10 shrink-0 gap-1.5 px-3 text-xs"
                       >
-                        <Play className="h-4 w-4" />
+                        <Play className="h-3.5 w-3.5" />
+                        Now
                       </Button>
                     )}
                   </div>
@@ -793,16 +796,19 @@ export function TaskExecution({
                       value={testingEndTime?.toISOString().slice(0, 16) || ''}
                       onChange={(e) => setTestingEndTime(e.target.value ? new Date(e.target.value) : null)}
                       disabled={!canEdit}
+                      className="min-w-0 flex-1"
                     />
-                    {!testingEndTime && canEdit && (
+                    {canEdit && (
                       <Button
                         type="button"
-                        variant="outline"
-                        size="icon"
+                        variant={testingEndTime ? 'outline' : 'default'}
+                        size="sm"
                         onClick={() => setTestingEndTime(new Date())}
-                        title="Set current time"
+                        title="Set to now"
+                        className="h-10 shrink-0 gap-1.5 px-3 text-xs"
                       >
-                        <StopCircle className="h-4 w-4" />
+                        <StopCircle className="h-3.5 w-3.5" />
+                        Now
                       </Button>
                     )}
                   </div>
@@ -851,38 +857,50 @@ export function TaskExecution({
                         <Label className="text-base font-medium">{result.label}</Label>
 
                         {result.type === 'pass_fail' && (
-                          <div className="flex flex-wrap gap-2 mt-2">
+                          <div className="grid grid-cols-3 gap-2 mt-3">
                             <Button
                               type="button"
                               variant={result.passed === true && !result.advisory ? 'default' : 'outline'}
-                              size="sm"
                               onClick={() => updateChecklistResult(result.item_id, { value: true, passed: true, advisory: false })}
                               disabled={!canEdit}
-                              className={result.passed === true && !result.advisory ? 'bg-green-600 hover:bg-green-700' : ''}
+                              className={cn(
+                                'h-12 flex-col gap-0.5 text-xs font-semibold',
+                                result.passed === true && !result.advisory
+                                  ? 'bg-green-600 hover:bg-green-700 border-green-600'
+                                  : 'hover:border-green-600 hover:text-green-700',
+                              )}
                             >
-                              <CheckCircle2 className="mr-2 h-4 w-4" />
+                              <CheckCircle2 className="h-5 w-5" />
                               Pass
                             </Button>
                             <Button
                               type="button"
                               variant={result.advisory ? 'default' : 'outline'}
-                              size="sm"
                               onClick={() => updateChecklistResult(result.item_id, { value: true, passed: null, advisory: true })}
                               disabled={!canEdit}
-                              className={result.advisory ? 'bg-amber-500 text-white hover:bg-amber-600' : ''}
+                              className={cn(
+                                'h-12 flex-col gap-0.5 text-xs font-semibold',
+                                result.advisory
+                                  ? 'bg-amber-500 text-white hover:bg-amber-600 border-amber-500'
+                                  : 'hover:border-amber-500 hover:text-amber-600',
+                              )}
                             >
-                              <AlertTriangle className="mr-2 h-4 w-4" />
+                              <AlertTriangle className="h-5 w-5" />
                               Advisory
                             </Button>
                             <Button
                               type="button"
                               variant={result.passed === false && !result.advisory ? 'default' : 'outline'}
-                              size="sm"
                               onClick={() => updateChecklistResult(result.item_id, { value: false, passed: false, advisory: false })}
                               disabled={!canEdit}
-                              className={result.passed === false && !result.advisory ? 'bg-destructive hover:bg-destructive/90' : ''}
+                              className={cn(
+                                'h-12 flex-col gap-0.5 text-xs font-semibold',
+                                result.passed === false && !result.advisory
+                                  ? 'bg-destructive hover:bg-destructive/90 border-destructive'
+                                  : 'hover:border-destructive hover:text-destructive',
+                              )}
                             >
-                              <XCircle className="mr-2 h-4 w-4" />
+                              <XCircle className="h-5 w-5" />
                               Fail
                             </Button>
                           </div>
@@ -1029,8 +1047,8 @@ export function TaskExecution({
 
       {/* Action Buttons */}
       {status === 'in_progress' && canEdit && (
-        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-50 flex gap-2 border-t bg-background p-4 lg:relative lg:inset-x-auto lg:bottom-auto lg:z-auto lg:border-0 lg:p-0">
-          <Button variant="outline" onClick={handleSave} disabled={saving} className="flex-1">
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-50 flex gap-2 border-t bg-background px-4 py-3 lg:relative lg:inset-x-auto lg:bottom-auto lg:z-auto lg:border-0 lg:p-0">
+          <Button variant="outline" onClick={handleSave} disabled={saving} className="h-12 flex-1">
             {saving ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1043,7 +1061,7 @@ export function TaskExecution({
               </>
             )}
           </Button>
-          <Button onClick={() => setShowSubmitDialog(true)} className="flex-1">
+          <Button onClick={() => setShowSubmitDialog(true)} className="h-12 flex-1">
             <Send className="mr-2 h-4 w-4" />
             Complete & Submit
           </Button>

@@ -263,9 +263,9 @@ export function NearbyCalls({ serviceTypes }: { serviceTypes: ServiceType[] }) {
           </p>
           {calls.map((call) => (
             <Card key={call.taskId}>
-              <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <CardContent className="space-y-3 p-4">
                 <div className="min-w-0 space-y-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <span className="font-medium">{call.siteName}</span>
                     {call.systemTypeName && (
@@ -298,33 +298,29 @@ export function NearbyCalls({ serviceTypes }: { serviceTypes: ServiceType[] }) {
                     </span>
                   </div>
                 </div>
-                <div className="shrink-0">
-                  {call.pendingRequestId ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleCancel(call)}
-                      disabled={isPending}
-                      className="gap-2"
-                    >
-                      <CheckCircle2 className="h-4 w-4" />
-                      Requested — cancel
-                    </Button>
-                  ) : (
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        setTransferTarget(call)
-                        setMessage('')
-                      }}
-                      disabled={isPending}
-                      className="gap-2"
-                    >
-                      <ArrowLeftRight className="h-4 w-4" />
-                      Request transfer
-                    </Button>
-                  )}
-                </div>
+                {call.pendingRequestId ? (
+                  <Button
+                    variant="outline"
+                    className="h-11 w-full gap-2"
+                    onClick={() => handleCancel(call)}
+                    disabled={isPending}
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    Transfer requested — tap to cancel
+                  </Button>
+                ) : (
+                  <Button
+                    className="h-11 w-full gap-2"
+                    onClick={() => {
+                      setTransferTarget(call)
+                      setMessage('')
+                    }}
+                    disabled={isPending}
+                  >
+                    <ArrowLeftRight className="h-4 w-4" />
+                    Request transfer
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ))}

@@ -2285,14 +2285,43 @@ export type InboundRequestIntent =
   | 'unknown'
 export type InboundRequestUrgency = 'emergency' | 'high' | 'normal' | 'low'
 
-// One AI-proposed action. `kind` drives which control the inbox renders; the
-// human always confirms before anything is created.
+export type SuggestedActionKind =
+  | 'create_call'
+  | 'chase_up'
+  | 'reply'
+  | 'send_report'
+  | 'create_quote'
+  | 'dismiss'
+
+// Fully-parameterised payload produced by triage so the action can be executed
+// deterministically (no second AI pass). All fields optional — only those
+// relevant to the action's `kind` are populated.
+export interface SuggestedActionPayload {
+  // Shared match context.
+  siteId?: string | null
+  clientId?: string | null
+  serviceTypeId?: string | null
+  systemTypeId?: string | null
+  // create_call.
+  urgency?: InboundRequestUrgency
+  suggestedDate?: string | null // yyyy-MM-dd
+  notes?: string | null
+  respondByHours?: number | null
+  // chase_up.
+  note?: string | null
+  // create_quote.
+  quoteType?: string | null
+  title?: string | null
+  summary?: string | null
+}
+
+// One AI-proposed action. `kind` drives which control the inbox renders. The
+// first entry is the primary, fully-parameterised recommendation; the human
+// always confirms before anything is created (calls in particular).
 export interface SuggestedAction {
-  kind: 'create_call' | 'chase_up' | 'reply' | 'send_report' | 'dismiss'
+  kind: SuggestedActionKind
   label: string
-  // Loose bag of hints for the action (e.g. suggested notes, KPI hours). The UI
-  // treats these as prefill defaults only.
-  payload?: Record<string, unknown>
+  payload?: SuggestedActionPayload
 }
 
 // A stored attachment (in private Blob) carried on the request.

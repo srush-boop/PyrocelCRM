@@ -53,6 +53,8 @@ export function ApproveCallDialog({
   reactiveServiceTypes,
   systemTypes,
   engineers,
+  prefillDate,
+  prefillNotes,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -62,20 +64,26 @@ export function ApproveCallDialog({
   reactiveServiceTypes: ServiceType[]
   systemTypes: SystemType[]
   engineers: Profile[]
+  // Structured plan prefill from triage (the AI's recommended date + engineer brief).
+  prefillDate?: string
+  prefillNotes?: string
 }) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
 
-  // Prefill from the AI match.
+  // Prefill from the AI match + structured plan.
   const [siteId, setSiteId] = useState<string>(request.matched_site_id ?? '')
   const [serviceTypeId, setServiceTypeId] = useState<string>(request.matched_service_type_id ?? '')
   const [systemTypeId, setSystemTypeId] = useState<string>(request.matched_system_type_id ?? NO_SYSTEM)
   const [clientId, setClientId] = useState<string>(request.matched_client_id ?? NO_CLIENT)
   const [engineerId, setEngineerId] = useState<string>(NO_ENGINEER)
-  const [scheduledDate, setScheduledDate] = useState<string>(todayISO())
+  const [scheduledDate, setScheduledDate] = useState<string>(
+    prefillDate && /^\d{4}-\d{2}-\d{2}$/.test(prefillDate) ? prefillDate : todayISO(),
+  )
   const [kpiHours, setKpiHours] = useState<string>('')
   const [notes, setNotes] = useState<string>(
-    request.ai_summary ? `${request.ai_summary}` : request.body_text?.slice(0, 500) ?? '',
+    prefillNotes?.trim() ||
+      (request.ai_summary ? `${request.ai_summary}` : request.body_text?.slice(0, 500) ?? ''),
   )
   const [sendConfirmation, setSendConfirmation] = useState(false)
 

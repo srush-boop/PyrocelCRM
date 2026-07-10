@@ -152,6 +152,36 @@ const triageSchema = z.object({
     .describe(
       'A short, professional British-English acknowledgement reply to the sender confirming we have received the request and will action it. Do not promise specific dates, prices, or facts not stated.',
     ),
+  // ── Executable parameters for the PRIMARY action ──────────────────────────
+  // These let the recommended action run in one click without a second AI pass.
+  suggested_date: z
+    .string()
+    .nullable()
+    .describe(
+      'For a call/attendance: the recommended date as yyyy-MM-dd. Resolve relative wording ("tomorrow", "next Monday", "asap") against today. Use today for emergencies. Null if not booking a call.',
+    ),
+  call_notes: z
+    .string()
+    .nullable()
+    .describe(
+      'For a call: a concise brief for the engineer capturing the key details from the request (what is wrong, access notes, contact). Null if not booking a call.',
+    ),
+  quote_type: z
+    .enum([
+      'supply_only', 'supply_commission', 'supply_install_commission', 'supply_install',
+      'design_supply_install_commission', 'commission_only', 'takeover', 'remedial',
+      'upgrade', 'additions', 'service_contract', 'monitoring', 'call_out', 'other',
+    ])
+    .nullable()
+    .describe('For a quote request: the most appropriate quote type. Null if not a quote request.'),
+  quote_title: z
+    .string()
+    .nullable()
+    .describe('For a quote request: a short title for the draft quote (e.g. "Fire alarm upgrade — The Crown Hotel"). Null otherwise.'),
+  chase_up_note: z
+    .string()
+    .nullable()
+    .describe('For a chase-up: one line summarising what the client is chasing, for the internal log. Null otherwise.'),
   reasoning: z
     .string()
     .describe('One short sentence explaining the site/service match (or why no match was possible).'),
@@ -283,6 +313,15 @@ export async function triageInboundRequest(
 
     const companyName = process.env.COMPANY_NAME || 'Pyrocel'
 
+    const now = new Date()
+    const todayStr = now.toISOString().slice(0, 10)
+    const todayLong = now.toLocaleDateString('en-GB', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    })
+
     // When raised from an entity, tell the model what the request is already known
     // to be about so its summary/intent reflect that context. The matched ids are
     // still locked to the anchor after generation regardless of what it returns.
@@ -300,14 +339,22 @@ export async function triageInboundRequest(
 
     const systemPrompt = [
       `You are an operations coordinator at ${companyName}, a UK fire and security systems company.`,
+      `Today is ${todayStr} (${todayLong}).`,
       'Office staff forward you client emails (service requests, chase-ups, complaints, quote enquiries, report/certificate requests).',
-      'Your job is to: (1) identify what the client WANTS us to do, (2) propose a specific concrete action to take in our system, (3) classify intent + urgency, (4) match to an existing SITE/CLIENT from the candidate list, (5) choose the right reactive call type, and (6) draft a brief acknowledgement reply.',
+      'Your job is to: (1) identify what the client WANTS us to do, (2) propose a specific concrete action to take in our system, (3) classify intent + urgency, (4) match to an existing SITE/CLIENT from the candidate list, (5) choose the right reactive call type, (6) draft a brief acknowledgement reply, and (7) fully parameterise the recommended action so it can be executed in one click.',
       '',
       'SUMMARY FIELD: Do not summarise the email. Instead, answer "what does this client want from us?" in 1-2 sentences. Focus on their need, not the words they used.',
       'PROPOSED_ACTION FIELD: Write one specific, actionable sentence describing exactly what you recommend doing right now. Name the site, call type or report type, and any date if inferable. This will be shown directly to staff as the AI recommendation.',
       '',
+      'EXECUTABLE PARAMETERS — fill in the fields for the action you recommend so it can run without asking again:',
+      '- Booking a call/attendance (intent new_call/complaint/general): set suggested_date (yyyy-MM-dd, resolved from the wording; today for emergencies) and call_notes (a brief for the engineer).',
+      '- Quote request (intent quote_request): set quote_type (best match) and quote_title.',
+      '- Chase-up (intent chase_up): set chase_up_note.',
+      '- Report/certificate request (intent send_report): no extra params needed.',
+      '',
       'Use British English. Never invent facts, dates, prices, or reference numbers. If you cannot confidently match a site/client/service, return null for that field rather than guessing.',
       'IMPORTANT: If the email is asking for inspection reports, service reports, test certificates, or compliance documents for a site, classify intent as "send_report". Do NOT classify these as new_call.',
+      'IMPORTANT: If the email is asking for pricing, an estimate, or a quotation for works, classify intent as "quote_request".',
       'Only ever return ids that appear in the lists below.',
       ...anchorLines,
       '',
@@ -358,36 +405,65 @@ export async function triageInboundRequest(
       matchedClientId ??
       (matchedSiteId ? sites.find((s) => s.id === matchedSiteId)?.client_id ?? null : null)
 
-    // Build suggested actions from the classification.
+    // Build the fully-parameterised suggested actions. The FIRST entry is the
+    // primary recommendation the inbox executes in one click.
     const intent = object.intent as InboundRequestIntent
     const urgency = object.urgency as InboundRequestUrgency
+    const svc = matchedServiceTypeId ? serviceById.get(matchedServiceTypeId) : undefined
+    // Resolve the suggested date, falling back to today for a call.
+    const rawDate = object.suggested_date
+    const suggestedDate =
+      rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : todayStr
+
     const suggested: SuggestedAction[] = []
+
     if (intent === 'send_report') {
       suggested.push({
         kind: 'send_report',
         label: 'Send most recent inspection reports for this site',
+        payload: { siteId: matchedSiteId, clientId: derivedClientId },
+      })
+    } else if (intent === 'quote_request') {
+      suggested.push({
+        kind: 'create_quote',
+        label: object.quote_title ? `Create draft quote · ${object.quote_title}` : 'Create draft quote',
         payload: {
           siteId: matchedSiteId,
           clientId: derivedClientId,
+          quoteType: object.quote_type ?? 'other',
+          title: object.quote_title ?? object.summary ?? 'New quote',
+          summary: object.summary,
         },
       })
-    } else if (intent === 'new_call' || intent === 'complaint' || intent === 'general') {
-      const svc = matchedServiceTypeId ? serviceById.get(matchedServiceTypeId) : undefined
+    } else if (intent === 'chase_up') {
+      suggested.push({
+        kind: 'chase_up',
+        label: 'Log chase-up',
+        payload: {
+          siteId: matchedSiteId,
+          clientId: derivedClientId,
+          note: object.chase_up_note ?? object.summary ?? null,
+        },
+      })
+    } else {
+      // new_call / complaint / general → book a call.
       suggested.push({
         kind: 'create_call',
-        label: svc ? `Create call · ${svc.name}` : 'Create call',
+        label: svc ? `Book call · ${svc.name}` : 'Book call',
         payload: {
           siteId: matchedSiteId,
           clientId: derivedClientId,
           serviceTypeId: matchedServiceTypeId,
           systemTypeId: matchedSystemTypeId,
           urgency,
+          suggestedDate,
+          notes: object.call_notes ?? object.summary ?? null,
+          respondByHours: svc?.default_kpi_hours ?? null,
         },
       })
     }
-    if (intent === 'chase_up') {
-      suggested.push({ kind: 'chase_up', label: 'Log chase-up', payload: { siteId: matchedSiteId } })
-    }
+
+    // Secondary actions available on every request.
     if (object.reply_draft) {
       suggested.push({ kind: 'reply', label: 'Send acknowledgement', payload: {} })
     }

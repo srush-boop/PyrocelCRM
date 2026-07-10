@@ -1,7 +1,7 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import {
   Mail,
@@ -14,6 +14,7 @@ import {
   CornerUpLeft,
   Clock,
   AlertTriangle,
+  MailPlus,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -48,6 +49,11 @@ import type {
 } from '@/lib/types/database'
 
 const NO_MATCH = '__none__'
+
+// Email intake/reply is parked for now — the team triages via drag/drop (.eml/.msg)
+// and manual paste instead. The inbound webhook + sendAcknowledgement action remain
+// in the codebase; flip this to `true` to re-surface the outbound "Reply" UI.
+const EMAIL_FEATURES_ENABLED: boolean = false
 
 const URGENCY_META: Record<
   InboundRequestUrgency,
@@ -86,12 +92,45 @@ export function RequestsInbox({
   engineers: Profile[]
 }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [tab, setTab] = useState<TabKey>('review')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [approveOpen, setApproveOpen] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [replyOpen, setReplyOpen] = useState(false)
   const [replyText, setReplyText] = useState('')
+  const [droppedFile, setDroppedFile] = useState<File | null>(null)
+  const [pageDragOver, setPageDragOver] = useState(false)
+  const dragDepth = useRef(0)
+
+  // Only react to drags that carry files (ignore text selections, etc.).
+  function dragHasFiles(e: React.DragEvent) {
+    return Array.from(e.dataTransfer.types).includes('Files')
+  }
+
+  function handlePageDragEnter(e: React.DragEvent) {
+    if (!dragHasFiles(e)) return
+    dragDepth.current += 1
+    setPageDragOver(true)
+  }
+
+  function handlePageDragLeave(e: React.DragEvent) {
+    if (!dragHasFiles(e)) return
+    dragDepth.current -= 1
+    if (dragDepth.current <= 0) {
+      dragDepth.current = 0
+      setPageDragOver(false)
+    }
+  }
+
+  function handlePageDrop(e: React.DragEvent) {
+    if (!dragHasFiles(e)) return
+    e.preventDefault()
+    dragDepth.current = 0
+    setPageDragOver(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) setDroppedFile(file)
+  }
 
   const siteById = useMemo(() => new Map(sites.map((s) => [s.id, s])), [sites])
   const clientById = useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients])
@@ -118,6 +157,17 @@ export function RequestsInbox({
     () => requests.find((r) => r.id === selectedId) ?? null,
     [requests, selectedId],
   )
+
+  // Deep-link support: /dashboard/requests?request=<id> (used by the per-entity
+  // "linked requests" cards) preselects that request and opens its correct tab.
+  useEffect(() => {
+    const requested = searchParams.get('request')
+    if (!requested) return
+    const match = requests.find((r) => r.id === requested)
+    if (!match) return
+    setSelectedId(requested)
+    setTab(match.status === 'actioned' ? 'actioned' : match.status === 'dismissed' ? 'dismissed' : 'review')
+  }, [searchParams, requests])
 
   async function withBusy(id: string, fn: () => Promise<void>) {
     setBusyId(id)
@@ -186,7 +236,22 @@ export function RequestsInbox({
   }
 
   return (
-    <div className="space-y-4">
+    <div
+      className="relative space-y-4"
+      onDragEnter={handlePageDragEnter}
+      onDragOver={(e) => {
+        if (dragHasFiles(e)) e.preventDefault()
+      }}
+      onDragLeave={handlePageDragLeave}
+      onDrop={handlePageDrop}
+    >
+      {pageDragOver && (
+        <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary bg-background/85 backdrop-blur-sm">
+          <MailPlus className="h-10 w-10 text-primary" />
+          <p className="text-lg font-medium">Drop the email to triage it</p>
+          <p className="text-sm text-muted-foreground">.eml or .msg files</p>
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
           <TabsList>
@@ -202,7 +267,10 @@ export function RequestsInbox({
             <TabsTrigger value="dismissed">Dismissed</TabsTrigger>
           </TabsList>
         </Tabs>
-        <AddRequestDialog />
+        <AddRequestDialog
+          fileToLoad={droppedFile}
+          onFileConsumed={() => setDroppedFile(null)}
+        />
       </div>
 
       {list.length === 0 ? (
@@ -211,7 +279,7 @@ export function RequestsInbox({
           <p className="font-medium">No requests here</p>
           <p className="text-sm text-muted-foreground text-pretty">
             {tab === 'review'
-              ? 'Forwarded emails will appear here once triaged. You can also add one manually.'
+              ? 'Drag an email file (.eml or .msg) onto this page to triage it, or add one manually.'
               : 'Nothing in this list yet.'}
           </p>
         </Card>
@@ -505,7 +573,7 @@ function RequestDetail({
       </details>
 
       {/* Reply editor */}
-      {replyOpen && (
+      {EMAIL_FEATURES_ENABLED && replyOpen && (
         <div className="mt-4 grid gap-2 rounded-md border p-3">
           <Label htmlFor="reply-text" className="text-sm font-medium">
             Reply to sender
@@ -535,7 +603,7 @@ function RequestDetail({
               <Check className="h-4 w-4" />
               Create call
             </Button>
-            {r.from_email && !replyOpen && (
+            {EMAIL_FEATURES_ENABLED && r.from_email && !replyOpen && (
               <Button variant="outline" onClick={onOpenReply} disabled={busy}>
                 <CornerUpLeft className="h-4 w-4" />
                 Reply

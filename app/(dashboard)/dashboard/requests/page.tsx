@@ -59,8 +59,8 @@ export default async function RequestsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Requests</h1>
         <p className="text-sm text-muted-foreground text-pretty">
-          Forwarded and pasted client emails, read by AI and matched to a site so you can action them
-          in one click. Nothing is created until you approve it.
+          Drop in a client email (.eml or .msg) or paste one, and AI reads it and matches it to a site
+          so you can action it in one click. Nothing is created until you approve it.
         </p>
       </div>
 

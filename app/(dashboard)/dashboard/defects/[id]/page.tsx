@@ -17,6 +17,8 @@ import { isDamperService } from '@/lib/dampers'
 import { isExtinguisherService } from '@/lib/extinguishers'
 import { DefectStatusActions } from '@/components/dashboard/defects/defect-status-actions'
 import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
+import { AddRequestButton } from '@/components/dashboard/requests/add-request-button'
+import { EntityRequestsCard } from '@/components/dashboard/requests/entity-requests-card'
 import type { ChecklistResult, DefectStatus } from '@/lib/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -112,6 +114,16 @@ export default async function DefectDetailPage({
                 </Link>
               </Button>
             )}
+            <AddRequestButton
+              entityType="defect"
+              entityId={d.id}
+              context={{
+                siteId: d.site?.id ?? null,
+                clientId: d.client?.id ?? null,
+                label: `Defect ${d.reference_number ?? ''}`.trim(),
+              }}
+              revalidate={`/dashboard/defects/${d.id}`}
+            />
             <DefectStatusActions defectId={d.id} status={status} />
           </div>
         </div>
@@ -207,6 +219,10 @@ export default async function DefectDetailPage({
             )}
           </CardContent>
         </Card>
+
+        <div className="lg:col-span-3">
+          <EntityRequestsCard entityType="defect" entityId={d.id} />
+        </div>
       </div>
 
       {/* Internal suggested parts recorded by the engineer for this defect */}

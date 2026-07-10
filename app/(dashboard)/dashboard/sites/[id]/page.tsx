@@ -20,6 +20,8 @@ import { SiteDocuments } from '@/components/dashboard/sites/site-documents'
 import { SiteEngineerInfoTab } from '@/components/dashboard/sites/site-engineer-info-tab'
 import { getOwnerDocuments } from '@/lib/documents/data'
 import { CreateDocumentButton } from '@/components/documents/create-document-dialog'
+import { AddRequestButton } from '@/components/dashboard/requests/add-request-button'
+import { EntityRequestsCard } from '@/components/dashboard/requests/entity-requests-card'
 import type { ReportTimelineItem } from '@/components/logbook/logbook-timeline'
 import { DamperRegister } from '@/components/dashboard/dampers/damper-register'
 import { McpRegister } from '@/components/dashboard/mcps/mcp-register'
@@ -427,6 +429,16 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
               defaultMode="reactive"
             />
           )}
+          <AddRequestButton
+            entityType="site"
+            entityId={id}
+            context={{
+              siteId: id,
+              clientId: (site as Site).client_id ?? null,
+              label: site.name,
+            }}
+            revalidate={`/dashboard/sites/${id}`}
+          />
           {canManageDocuments && (
             <CreateDocumentButton
               ownerType="site"
@@ -438,6 +450,8 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
           <EditSiteButton site={site as Site & { route: Route | null }} clients={clients} />
         </div>
       </div>
+
+      <EntityRequestsCard entityType="site" entityId={id} />
 
       <Tabs
         key={editServiceParam ? `edit-${editServiceParam}` : tabParam ?? 'overview'}

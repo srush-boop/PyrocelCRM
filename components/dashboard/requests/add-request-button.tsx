@@ -1,9 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Plus, Paperclip, Loader2, FileText } from 'lucide-react'
+import { Plus, Paperclip, Loader2, FileText, Link2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -18,20 +18,48 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
-import { addManualRequest } from '@/lib/actions/inbound-requests'
+import {
+  addContextualRequest,
+  type RequestEntityType,
+} from '@/lib/actions/inbound-requests'
 import { parseEmailFile } from '@/lib/email/parse-email-file'
 
-// Phase-1 manual entry: drag in a .eml/.msg email (or paste one) so it's triaged
-// immediately. Once the inbound address is live (Phase 2) most requests arrive
-// automatically, but drag-and-drop remains the quickest way to file one by hand.
-export function AddRequestDialog({
-  fileToLoad,
-  onFileConsumed,
-}: {
-  // When set by a parent (e.g. a page-level drop), the dialog opens and parses it.
-  fileToLoad?: File | null
-  onFileConsumed?: () => void
-} = {}) {
+export interface AddRequestButtonProps {
+  entityType: RequestEntityType
+  entityId: string
+  /** Known context from the entity — locks the AI match instead of guessing. */
+  context?: {
+    siteId?: string | null
+    clientId?: string | null
+    serviceTypeId?: string | null
+    /** Human label shown in the dialog + fed to the model, e.g. "Quote Q-1042 · Acme HQ". */
+    label?: string | null
+  }
+  /** Entity page path to revalidate so the linked-requests card refreshes. */
+  revalidate?: string
+  /** Button appearance overrides for different page headers. */
+  variant?: 'default' | 'outline' | 'secondary' | 'ghost'
+  size?: 'default' | 'sm' | 'lg' | 'icon'
+  buttonLabel?: string
+  className?: string
+}
+
+/**
+ * Contextual "Add request" button for entity pages (quote, job, site, call,
+ * defect). Files a client request that is hard-linked to the current record and
+ * AI-triaged anchored to its site/client, then shows in both the central Requests
+ * inbox and on the entity's own linked-requests card.
+ */
+export function AddRequestButton({
+  entityType,
+  entityId,
+  context,
+  revalidate,
+  variant = 'outline',
+  size = 'sm',
+  buttonLabel = 'Add request',
+  className,
+}: AddRequestButtonProps) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -69,15 +97,6 @@ export function AddRequestDialog({
     }
   }, [])
 
-  // A parent dropped a file onto the page — open and parse it.
-  useEffect(() => {
-    if (fileToLoad) {
-      setOpen(true)
-      void loadFile(fileToLoad)
-      onFileConsumed?.()
-    }
-  }, [fileToLoad, loadFile, onFileConsumed])
-
   function handleDrop(e: React.DragEvent) {
     e.preventDefault()
     setDragOver(false)
@@ -92,7 +111,11 @@ export function AddRequestDialog({
     }
     setSaving(true)
     try {
-      const res = await addManualRequest({
+      const res = await addContextualRequest({
+        entityType,
+        entityId,
+        context,
+        revalidate,
         fromName: fromName.trim() || undefined,
         fromEmail: fromEmail.trim() || undefined,
         subject: subject.trim() || undefined,
@@ -102,7 +125,7 @@ export function AddRequestDialog({
         toast.error(res.error ?? 'Could not add the request.')
         return
       }
-      toast.success('Request added and triaged.')
+      toast.success('Request added, linked and triaged.')
       resetFields()
       setOpen(false)
       router.refresh()
@@ -120,19 +143,28 @@ export function AddRequestDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button>
+        <Button variant={variant} size={size} className={className}>
           <Plus className="h-4 w-4" />
-          Add request
+          {buttonLabel}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Add a request</DialogTitle>
           <DialogDescription className="text-pretty">
-            Drag in an email file, or paste its content. AI reads the sender and content, matches it
-            to a site, and suggests an action for you to approve.
+            Drag in an email file, or paste its content. AI reads it and drafts a suggested action
+            for you to approve.
           </DialogDescription>
         </DialogHeader>
+
+        {context?.label && (
+          <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/[0.04] px-3 py-2 text-sm">
+            <Link2 className="h-4 w-4 shrink-0 text-primary" />
+            <span className="text-pretty">
+              This request will be linked to <span className="font-medium">{context.label}</span>.
+            </span>
+          </div>
+        )}
 
         <div className="grid gap-4 py-2">
           {/* Drop zone */}
@@ -192,18 +224,18 @@ export function AddRequestDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
-              <Label htmlFor="from-name">Sender name</Label>
+              <Label htmlFor="ctx-from-name">Sender name</Label>
               <Input
-                id="from-name"
+                id="ctx-from-name"
                 value={fromName}
                 onChange={(e) => setFromName(e.target.value)}
                 placeholder="e.g. Jane Smith"
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="from-email">Sender email</Label>
+              <Label htmlFor="ctx-from-email">Sender email</Label>
               <Input
-                id="from-email"
+                id="ctx-from-email"
                 type="email"
                 value={fromEmail}
                 onChange={(e) => setFromEmail(e.target.value)}
@@ -213,9 +245,9 @@ export function AddRequestDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="subject">Subject</Label>
+            <Label htmlFor="ctx-subject">Subject</Label>
             <Input
-              id="subject"
+              id="ctx-subject"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               placeholder="e.g. Fire alarm fault at Acme HQ"
@@ -223,9 +255,9 @@ export function AddRequestDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="body">Email content *</Label>
+            <Label htmlFor="ctx-body">Email content *</Label>
             <Textarea
-              id="body"
+              id="ctx-body"
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={10}

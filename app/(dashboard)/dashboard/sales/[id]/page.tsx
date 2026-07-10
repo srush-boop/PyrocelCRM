@@ -8,6 +8,8 @@ import { QuoteStatusPanel } from '@/components/dashboard/sales/quote-status-pane
 import { QuoteGroupPanel } from '@/components/dashboard/sales/quote-group-panel'
 import { QuoteQueriesPanel } from '@/components/dashboard/sales/quote-queries-panel'
 import { CreateDocumentButton } from '@/components/documents/create-document-dialog'
+import { AddRequestButton } from '@/components/dashboard/requests/add-request-button'
+import { EntityRequestsCard } from '@/components/dashboard/requests/entity-requests-card'
 import { resolveDefaultMargin } from '@/lib/sales'
 import { isRequirementStatus } from '@/lib/sales-requirements'
 import type {
@@ -217,6 +219,16 @@ export default async function QuoteDetailPage({
                 </Link>
               </Button>
             ) : null}
+            <AddRequestButton
+              entityType="quote"
+              entityId={typedQuote.id}
+              context={{
+                siteId: typedQuote.site_id ?? null,
+                clientId: typedQuote.client_id ?? null,
+                label: `Quote ${typedQuote.reference ?? typedQuote.quote_number ?? typedQuote.title}`,
+              }}
+              revalidate={`/dashboard/sales/${typedQuote.id}`}
+            />
             <CreateDocumentButton
               ownerType="quote"
               ownerId={typedQuote.id}
@@ -235,6 +247,8 @@ export default async function QuoteDetailPage({
       </div>
 
       <QuoteStatusPanel quote={typedQuote} />
+
+      <EntityRequestsCard entityType="quote" entityId={typedQuote.id} />
 
       <QuoteQueriesPanel
         quoteId={typedQuote.id}

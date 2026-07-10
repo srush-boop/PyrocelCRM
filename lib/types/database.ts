@@ -2257,6 +2257,12 @@ export interface InboundRequest {
   ai_raw: unknown | null
   triaged_at: string | null
   triage_error: string | null
+  // Hard-links to the entity a request was raised from (nullable).
+  related_quote_id: string | null
+  related_job_id: string | null
+  related_site_id: string | null
+  related_task_id: string | null
+  related_defect_id: string | null
   // Outcome.
   created_task_id: string | null
   actioned_at: string | null

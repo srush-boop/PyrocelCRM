@@ -152,13 +152,30 @@ export interface TriageResult {
 }
 
 /**
+ * Optional context when a request is raised from a specific entity (a quote, job,
+ * site, call or defect). Any id provided here is treated as authoritative: the
+ * matched site/client/service is LOCKED to these values rather than left to the
+ * model, which still handles the summary/intent/urgency/reply.
+ */
+export interface TriageAnchor {
+  siteId?: string | null
+  clientId?: string | null
+  serviceTypeId?: string | null
+  /** Short human label describing what the request is about, fed to the model. */
+  contextLabel?: string | null
+}
+
+/**
  * AI-triage a stored inbound request: match it to an existing site/client/service
  * type, classify intent + urgency, and draft an acknowledgement reply. Writes the
  * results back onto the row and flips status to 'triaged'. Safe to call from the
  * inbound webhook (no user session) or from a server action — it uses the
  * service-role client and only touches the single request row + read-only lookups.
  */
-export async function triageInboundRequest(requestId: string): Promise<TriageResult> {
+export async function triageInboundRequest(
+  requestId: string,
+  anchor?: TriageAnchor,
+): Promise<TriageResult> {
   const supabase = createAdminClient()
 
   const { data: reqRow, error: reqErr } = await supabase
@@ -255,12 +272,28 @@ export async function triageInboundRequest(requestId: string): Promise<TriageRes
 
     const companyName = process.env.COMPANY_NAME || 'Pyrocel'
 
+    // When raised from an entity, tell the model what the request is already known
+    // to be about so its summary/intent reflect that context. The matched ids are
+    // still locked to the anchor after generation regardless of what it returns.
+    const anchorLines =
+      anchor && (anchor.siteId || anchor.clientId || anchor.contextLabel)
+        ? [
+            '',
+            'IMPORTANT CONTEXT: This request was raised from within an existing record, so the site/client are already known:',
+            anchor.contextLabel ? `- Raised from: ${anchor.contextLabel}` : null,
+            anchor.siteId ? `- Known SITE id: ${anchor.siteId}` : null,
+            anchor.clientId ? `- Known CLIENT id: ${anchor.clientId}` : null,
+            'Treat that site/client as correct. Focus on summarising the request, classifying intent and urgency, and drafting the reply.',
+          ].filter(Boolean)
+        : []
+
     const systemPrompt = [
       `You are an operations coordinator at ${companyName}, a UK fire and security systems company.`,
       'Office staff forward you client emails (service requests, chase-ups, complaints, quote enquiries).',
       'Read the email and its sender, then: (1) summarise it, (2) classify intent and urgency, (3) match it to an existing SITE and CLIENT from the candidate list, (4) choose the most appropriate reactive call type from the allowed list, and (5) draft a brief acknowledgement reply.',
       'Use British English. Never invent facts, dates, prices, or reference numbers. If you cannot confidently match a site/client/service, return null for that field rather than guessing.',
       'Only ever return ids that appear in the lists below.',
+      ...anchorLines,
       '',
       'Candidate SITES (id :: name, postcode (client)):',
       siteList,
@@ -283,17 +316,21 @@ export async function triageInboundRequest(requestId: string): Promise<TriageRes
       messages: [{ role: 'user', content: userContent }],
     })
 
-    // Validate model-chosen ids against the real vocabulary.
+    // Validate model-chosen ids against the real vocabulary. When an anchor is
+    // supplied, its ids win outright (the entity is authoritative).
     const matchedSiteId =
-      object.matched_site_id && allowedSiteIds.has(object.matched_site_id) ? object.matched_site_id : null
+      anchor?.siteId ??
+      (object.matched_site_id && allowedSiteIds.has(object.matched_site_id) ? object.matched_site_id : null)
     const matchedClientId =
-      object.matched_client_id && allowedClientIds.has(object.matched_client_id)
+      anchor?.clientId ??
+      (object.matched_client_id && allowedClientIds.has(object.matched_client_id)
         ? object.matched_client_id
-        : null
+        : null)
     const matchedServiceTypeId =
-      object.matched_service_type_id && allowedServiceIds.has(object.matched_service_type_id)
+      anchor?.serviceTypeId ??
+      (object.matched_service_type_id && allowedServiceIds.has(object.matched_service_type_id)
         ? object.matched_service_type_id
-        : null
+        : null)
     // System follows from the chosen service type (kept consistent with bookCall).
     const matchedSystemTypeId = matchedServiceTypeId
       ? serviceById.get(matchedServiceTypeId)?.system_type_id ?? null
@@ -339,7 +376,13 @@ export async function triageInboundRequest(requestId: string): Promise<TriageRes
         ai_intent: intent,
         ai_urgency: urgency,
         ai_reply_draft: object.reply_draft,
-        ai_confidence: matchedSiteId ? (scored[0]?.score ?? 0) >= 40 ? 0.9 : 0.6 : 0.3,
+        ai_confidence: anchor?.siteId
+          ? 1
+          : matchedSiteId
+            ? (scored[0]?.score ?? 0) >= 40
+              ? 0.9
+              : 0.6
+            : 0.3,
         matched_site_id: matchedSiteId,
         matched_client_id: derivedClientId,
         matched_service_type_id: matchedServiceTypeId,

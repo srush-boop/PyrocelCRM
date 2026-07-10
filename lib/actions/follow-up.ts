@@ -527,9 +527,11 @@ export async function resolveEscalation(requestId: string): Promise<ActionResult
   }
   if (!allowed) return { ok: false, error: 'Only the Service Manager can clear escalations.' }
 
+  // Clear only the escalation flag — the request itself stays pending until it is
+  // approved into a call or rejected.
   await ctx.supabase
     .from('follow_up_requests')
-    .update({ escalated: false, resolved_at: new Date().toISOString() })
+    .update({ escalated: false, escalated_at: null })
     .eq('id', requestId)
   revalidatePath('/dashboard/service')
   revalidatePath('/dashboard/follow-ups')

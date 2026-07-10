@@ -255,15 +255,27 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
       system_type:system_types(id, name),
       assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(*),
       task_result:task_results(reference_number, overall_status, email_sent_at),
-      call_parts(unit_cost_pence, quantity)
+      call_parts(unit_cost_pence, quantity),
+      follow_up_to:tasks!tasks_follow_up_to_id_fkey(id, is_emergency, task_result:task_results(reference_number))
     `)
     .or(completedFilter)
     .order('scheduled_date', { ascending: false })
 
-  const allCalls = ((allCallsData || []) as any[]).map((t) => ({
-    ...t,
-    task_result: Array.isArray(t.task_result) ? t.task_result[0] ?? null : t.task_result,
-  })) as SiteCall[]
+  const allCalls = ((allCallsData || []) as any[]).map((t) => {
+    const followUpToRaw = Array.isArray(t.follow_up_to) ? t.follow_up_to[0] ?? null : t.follow_up_to
+    return {
+      ...t,
+      task_result: Array.isArray(t.task_result) ? t.task_result[0] ?? null : t.task_result,
+      follow_up_to: followUpToRaw
+        ? {
+            ...followUpToRaw,
+            task_result: Array.isArray(followUpToRaw.task_result)
+              ? followUpToRaw.task_result[0] ?? null
+              : followUpToRaw.task_result,
+          }
+        : null,
+    }
+  }) as SiteCall[]
 
   // Unique engineers + service types from all calls for the filter dropdowns.
   const allCallEngineers = Array.from(

@@ -19,6 +19,7 @@ import {
   Wrench,
   Siren,
   ClipboardCheck,
+  Inbox,
 } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 import Link from 'next/link'
@@ -76,6 +77,7 @@ export default async function DashboardPage({
     openDefectsCount,
     openJobsCount,
     openQuotesCount,
+    pendingRequestsCount,
   ] = await Promise.all([
     supabase.from('sites').select('id', { count: 'exact', head: true }),
     supabase.from('clients').select('id', { count: 'exact', head: true }),
@@ -103,6 +105,12 @@ export default async function DashboardPage({
       .from('quotes')
       .select('id', { count: 'exact', head: true })
       .in('status', ['draft', 'sent']),
+    // Requests visible only to admin/office (RLS enforced). Engineers are
+    // already redirected above so this always runs for admin/office.
+    supabase
+      .from('inbound_requests')
+      .select('id', { count: 'exact', head: true })
+      .in('status', ['new', 'triaged']),
   ])
 
   // ---------------------------------------------------------------------------
@@ -300,6 +308,19 @@ export default async function DashboardPage({
       icon: Users,
       href: '/dashboard/engineers',
       metrics: [{ label: 'Engineers', value: engineersCount.count || 0 }],
+    },
+    {
+      title: 'Requests',
+      description: 'Client requests to action',
+      icon: Inbox,
+      href: '/dashboard/requests',
+      metrics: [
+        {
+          label: 'To review',
+          value: pendingRequestsCount?.count ?? 0,
+          alert: (pendingRequestsCount?.count ?? 0) > 0,
+        },
+      ],
     },
     {
       title: 'Calendar',

@@ -15,6 +15,7 @@ import {
   Clock,
   AlertTriangle,
   MailPlus,
+  FileText,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -70,6 +71,7 @@ const INTENT_LABEL: Record<string, string> = {
   chase_up: 'Chase-up',
   complaint: 'Complaint',
   quote_request: 'Quote request',
+  send_report: 'Send reports',
   general: 'General',
   unknown: 'Unknown',
 }
@@ -599,10 +601,19 @@ function RequestDetail({
       <div className="mt-5 flex flex-wrap gap-2 border-t pt-4">
         {!isClosed ? (
           <>
-            <Button onClick={onApprove} disabled={busy}>
-              <Check className="h-4 w-4" />
-              Create call
-            </Button>
+            {r.ai_intent === 'send_report' && r.matched_site_id ? (
+              <Button asChild>
+                <a href={`/dashboard/sites/${r.matched_site_id}?tab=reports`}>
+                  <FileText className="h-4 w-4" />
+                  View &amp; send reports for this site
+                </a>
+              </Button>
+            ) : (
+              <Button onClick={onApprove} disabled={busy}>
+                <Check className="h-4 w-4" />
+                Create call
+              </Button>
+            )}
             {EMAIL_FEATURES_ENABLED && r.from_email && !replyOpen && (
               <Button variant="outline" onClick={onOpenReply} disabled={busy}>
                 <CornerUpLeft className="h-4 w-4" />

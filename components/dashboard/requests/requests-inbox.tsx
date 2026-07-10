@@ -50,6 +50,11 @@ import type {
 
 const NO_MATCH = '__none__'
 
+// Email intake/reply is parked for now — the team triages via drag/drop (.eml/.msg)
+// and manual paste instead. The inbound webhook + sendAcknowledgement action remain
+// in the codebase; flip this to `true` to re-surface the outbound "Reply" UI.
+const EMAIL_FEATURES_ENABLED: boolean = false
+
 const URGENCY_META: Record<
   InboundRequestUrgency,
   { label: string; className: string }
@@ -262,7 +267,7 @@ export function RequestsInbox({
           <p className="font-medium">No requests here</p>
           <p className="text-sm text-muted-foreground text-pretty">
             {tab === 'review'
-              ? 'Forwarded emails will appear here once triaged. You can also drag an email file onto this page, or add one manually.'
+              ? 'Drag an email file (.eml or .msg) onto this page to triage it, or add one manually.'
               : 'Nothing in this list yet.'}
           </p>
         </Card>
@@ -556,7 +561,7 @@ function RequestDetail({
       </details>
 
       {/* Reply editor */}
-      {replyOpen && (
+      {EMAIL_FEATURES_ENABLED && replyOpen && (
         <div className="mt-4 grid gap-2 rounded-md border p-3">
           <Label htmlFor="reply-text" className="text-sm font-medium">
             Reply to sender
@@ -586,7 +591,7 @@ function RequestDetail({
               <Check className="h-4 w-4" />
               Create call
             </Button>
-            {r.from_email && !replyOpen && (
+            {EMAIL_FEATURES_ENABLED && r.from_email && !replyOpen && (
               <Button variant="outline" onClick={onOpenReply} disabled={busy}>
                 <CornerUpLeft className="h-4 w-4" />
                 Reply

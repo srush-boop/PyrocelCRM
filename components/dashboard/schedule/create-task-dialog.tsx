@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/select'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Plus, Loader2, CalendarIcon, Siren, Mail } from 'lucide-react'
+import { Plus, Loader2, CalendarIcon, Siren, Mail, MapPin } from 'lucide-react'
 import { format } from 'date-fns'
 import type { Profile, SiteService, Site, ServiceType, SystemType } from '@/lib/types/database'
 import { cn } from '@/lib/utils'
@@ -79,11 +79,11 @@ export function CreateTaskDialog({
   trigger,
   onBooked,
 }: CreateTaskDialogProps) {
-  // Emergency call types are dispatched via the map / dispatch flow, not the
-  // standard "Book Call" dialog. Filter them out so the dropdown only offers
-  // non-emergency reactive types (remedial, planned reactive, etc.).
-  const nonEmergencyReactiveTypes = reactiveServiceTypes.filter((t) => !t.is_emergency)
-  const reactiveEnabled = nonEmergencyReactiveTypes.length > 0
+  // All reactive call types are bookable here, including emergency types. When an
+  // emergency type is selected we surface a "Go to map" shortcut so it can also be
+  // dispatched from the live map, but booking it directly is allowed.
+  const bookableReactiveTypes = reactiveServiceTypes
+  const reactiveEnabled = bookableReactiveTypes.length > 0
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -158,7 +158,8 @@ export function CreateTaskDialog({
         )
       : []
 
-  const selectedReactiveType = nonEmergencyReactiveTypes.find((t) => t.id === reactiveTypeId)
+  const selectedReactiveType = bookableReactiveTypes.find((t) => t.id === reactiveTypeId)
+  const selectedReactiveIsEmergency = selectedReactiveType?.is_emergency === true
 
   // Load the systems this call type has been configured for (via its per-system
   // checklists). When present, the system picker is scoped to just these; a
@@ -228,7 +229,7 @@ export function CreateTaskDialog({
 
   const handleReactiveTypeChange = (value: string) => {
     setReactiveTypeId(value)
-    const t = nonEmergencyReactiveTypes.find((st) => st.id === value)
+    const t = bookableReactiveTypes.find((st) => st.id === value)
     // Only emergency calls carry an "attend within" KPI. Non-emergency
     // reactive work (remedial, commissioning, etc.) has no response target.
     setKpiHours(t?.is_emergency ? t?.default_kpi_hours ?? '' : '')
@@ -464,13 +465,58 @@ export function CreateTaskDialog({
                       <SelectValue placeholder="Select a call type" />
                     </SelectTrigger>
                     <SelectContent>
-                      {nonEmergencyReactiveTypes.map((t) => (
+                      {bookableReactiveTypes.map((t) => (
                         <SelectItem key={t.id} value={t.id}>
-                          {t.name}
+                          <span className="flex items-center gap-2">
+                            {t.is_emergency && <Siren className="h-3.5 w-3.5 text-destructive" />}
+                            {t.name}
+                          </span>
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {selectedReactiveIsEmergency && (
+                    <div className="flex items-center justify-between gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
+                      <p className="flex items-center gap-1.5 text-xs text-destructive">
+                        <Siren className="h-3.5 w-3.5 shrink-0" />
+                        Emergency call — set the &ldquo;attend within&rdquo; target below, or dispatch it live from the map.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 shrink-0 gap-1 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => {
+                          setOpen(false)
+                          router.push('/dashboard/schedule/map')
+                        }}
+                      >
+                        <MapPin className="h-3.5 w-3.5" />
+                        Go to map
+                      </Button>
+                    </div>
+                  )}
+                  {selectedReactiveIsEmergency && (
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="kpi-hours" className="text-sm">
+                        Attend within (hours)
+                      </Label>
+                      <Input
+                        id="kpi-hours"
+                        type="number"
+                        min={0}
+                        step={0.5}
+                        value={kpiHours}
+                        onChange={(e) =>
+                          setKpiHours(e.target.value === '' ? '' : Number(e.target.value))
+                        }
+                        placeholder="e.g. 4"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Response target for this emergency. Leave blank for none.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid gap-2">

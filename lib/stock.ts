@@ -200,6 +200,19 @@ export interface PartLocationResult {
     location_name: string
     kind: StockLocationKind
     quantity: number
+    /** Profile id of the engineer who owns this location (van/other), if any. */
+    engineer_id: string | null
+    engineer_name: string | null
+    /**
+     * Best-available coordinates for this location:
+     * 1. Engineer's live GPS (location_lat/lng when location_sharing_enabled)
+     * 2. Engineer's home geocoded postcode (home_latitude/home_longitude)
+     * Both may be null for warehouse/unassigned locations.
+     */
+    lat: number | null
+    lng: number | null
+    /** Whether the coordinates came from the engineer's active live GPS share. */
+    is_live_gps: boolean
   }[]
 }
 
@@ -230,26 +243,75 @@ export async function searchPartLocations(query: string): Promise<PartLocationRe
   const partIds = partList.map((p) => p.id)
   const { data: items } = await supabase
     .from('stock_items')
-    .select('part_id, quantity, location:stock_locations(id, name, kind)')
+    .select(
+      `part_id, quantity,
+       location:stock_locations(
+         id, name, kind, engineer_id,
+         engineer:profiles!stock_locations_engineer_id_fkey(
+           id, full_name,
+           location_sharing_enabled, location_lat, location_lng,
+           home_latitude, home_longitude
+         )
+       )`,
+    )
     .in('part_id', partIds)
     .gt('quantity', 0)
 
+  type EngineerRow = {
+    id: string
+    full_name: string | null
+    location_sharing_enabled: boolean | null
+    location_lat: number | null
+    location_lng: number | null
+    home_latitude: number | null
+    home_longitude: number | null
+  }
+  type LocationRow = {
+    id: string
+    name: string
+    kind: StockLocationKind
+    engineer_id: string | null
+    engineer: EngineerRow | null
+  }
   type ItemRow = {
     part_id: string
     quantity: number
-    location: { id: string; name: string; kind: StockLocationKind } | null
+    location: LocationRow | null
   }
   const itemRows = (items || []) as unknown as ItemRow[]
 
   return partList.map((p) => {
     const locations = itemRows
       .filter((i) => i.part_id === p.id && i.location)
-      .map((i) => ({
-        location_id: i.location!.id,
-        location_name: i.location!.name,
-        kind: i.location!.kind,
-        quantity: i.quantity,
-      }))
+      .map((i) => {
+        const loc = i.location!
+        const eng = loc.engineer
+
+        // Priority: live GPS share > home geocoded postcode
+        const isLiveGps = Boolean(
+          eng?.location_sharing_enabled &&
+            eng.location_lat != null &&
+            eng.location_lng != null,
+        )
+        const lat = isLiveGps
+          ? eng!.location_lat!
+          : (eng?.home_latitude ?? null)
+        const lng = isLiveGps
+          ? eng!.location_lng!
+          : (eng?.home_longitude ?? null)
+
+        return {
+          location_id: loc.id,
+          location_name: loc.name,
+          kind: loc.kind,
+          quantity: i.quantity,
+          engineer_id: loc.engineer_id,
+          engineer_name: eng?.full_name ?? null,
+          lat,
+          lng,
+          is_live_gps: isLiveGps,
+        }
+      })
       .sort((a, b) => b.quantity - a.quantity)
 
     return {

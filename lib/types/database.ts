@@ -172,6 +172,12 @@ export interface Profile {
   home_latitude: number | null
   home_longitude: number | null
   home_geocoded_at: string | null
+  // Engineer live location sharing. When enabled the app stores the engineer's
+  // current GPS coordinates so colleagues can see distance to their van/location.
+  location_sharing_enabled: boolean
+  location_lat: number | null
+  location_lng: number | null
+  location_updated_at: string | null
   // Engineer discipline / trade. Drives map colour-coding, iconography and the
   // skill match when dispatching a call. NULL for non-engineers.
   discipline: Discipline | null
@@ -1927,6 +1933,28 @@ export interface StockLocationSummary extends StockLocation {
   totalQuantity: number
   heldValue: number
   lowStockCount: number
+}
+
+// A request from one engineer to borrow/transfer a part from another's location.
+export type PartRequestStatus = 'pending' | 'approved' | 'declined' | 'cancelled'
+
+export interface PartRequest {
+  id: string
+  part_id: string
+  location_id: string
+  requested_by: string
+  quantity: number
+  message: string | null
+  status: PartRequestStatus
+  resolved_by: string | null
+  resolved_at: string | null
+  created_at: string
+  updated_at: string
+  // Joined relations
+  part?: Part | null
+  location?: StockLocation | null
+  requester?: Profile | null
+  resolver?: Profile | null
 }
 
 // A low-stock alert row (a stock_item at or below its min level).

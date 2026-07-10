@@ -6,6 +6,125 @@ import { geocodePostcodes, distanceMiles, type LatLng } from '@/lib/geocode'
 import { notifyUsers } from '@/lib/notifications'
 import { revalidatePath } from 'next/cache'
 
+/**
+ * An engineer requests a part from a specific stock location. The owner of
+ * that location (the assigned engineer) receives a notification; if the
+ * location has no assigned engineer, office/admin are notified instead.
+ */
+export async function requestPart(input: {
+  partId: string
+  locationId: string
+  quantity: number
+  message?: string
+}): Promise<{ ok: boolean; requestId?: string; error?: string }> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: 'Not authenticated' }
+
+  const { data: requester } = await supabase
+    .from('profiles')
+    .select('id, full_name, role')
+    .eq('id', user.id)
+    .single()
+  if (!requester || (requester as { role: string }).role === 'client') {
+    return { ok: false, error: 'Not authorised' }
+  }
+
+  // Load part + location details for the notification body.
+  const [{ data: part }, { data: location }] = await Promise.all([
+    supabase.from('parts').select('id, name').eq('id', input.partId).single(),
+    supabase
+      .from('stock_locations')
+      .select('id, name, engineer_id')
+      .eq('id', input.locationId)
+      .single(),
+  ])
+  if (!part || !location) return { ok: false, error: 'Part or location not found' }
+
+  const { data: created, error: insertError } = await supabase
+    .from('part_requests')
+    .insert({
+      part_id: input.partId,
+      location_id: input.locationId,
+      requested_by: user.id,
+      quantity: input.quantity,
+      message: input.message?.trim() || null,
+      status: 'pending',
+    })
+    .select('id')
+    .single()
+
+  if (insertError) return { ok: false, error: insertError.message }
+
+  // Notify the location owner; fall back to office/admin if no owner.
+  const admin = createAdminClient()
+  const ownerEngineerId = (location as { engineer_id: string | null }).engineer_id
+  const recipientIds = new Set<string>()
+
+  if (ownerEngineerId && ownerEngineerId !== user.id) {
+    recipientIds.add(ownerEngineerId)
+  } else {
+    const { data: officeAdmins } = await admin
+      .from('profiles')
+      .select('id')
+      .in('role', ['office', 'admin'])
+    for (const p of officeAdmins || []) recipientIds.add(p.id as string)
+  }
+  recipientIds.delete(user.id)
+
+  const requesterName = (requester as { full_name: string | null }).full_name || 'An engineer'
+  await notifyUsers({
+    userIds: Array.from(recipientIds),
+    title: 'Part request received',
+    body: `${requesterName} is requesting ${input.quantity}× ${(part as { name: string }).name} from ${(location as { name: string }).name}.`,
+    url: '/dashboard/stock',
+    category: 'part_request',
+    data: { partRequestId: created.id, locationId: input.locationId },
+    createdBy: user.id,
+  })
+
+  revalidatePath('/dashboard/nearby')
+  return { ok: true, requestId: created.id }
+}
+
+/**
+ * Update the current engineer's live location sharing preference and optionally
+ * store their current GPS coordinates.
+ */
+export async function updateLocationSharing(input: {
+  enabled: boolean
+  latitude?: number
+  longitude?: number
+}): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: 'Not authenticated' }
+
+  const update: Record<string, unknown> = {
+    location_sharing_enabled: input.enabled,
+  }
+  if (input.enabled && input.latitude != null && input.longitude != null) {
+    update.location_lat = input.latitude
+    update.location_lng = input.longitude
+    update.location_updated_at = new Date().toISOString()
+  } else if (!input.enabled) {
+    // Clear coordinates when sharing is disabled for privacy.
+    update.location_lat = null
+    update.location_lng = null
+    update.location_updated_at = null
+  }
+
+  const { error } = await supabase.from('profiles').update(update).eq('id', user.id)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/dashboard')
+  return { ok: true }
+}
+
 export interface NearbyCall {
   taskId: string
   status: string

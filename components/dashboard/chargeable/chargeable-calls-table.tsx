@@ -35,6 +35,9 @@ import {
   AlertCircle,
   FileText,
   Clock,
+  Pencil,
+  Check,
+  X,
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { setChargeReview } from '@/lib/actions/charge-review'
@@ -80,6 +83,63 @@ function isPoOverdue(call: ChargeableCall, overdueAfterDays: number): boolean {
   )
   const days = Math.floor((Date.now() - new Date(oldest.email_sent_at!).getTime()) / 86_400_000)
   return days >= overdueAfterDays
+}
+
+/** Small inline editor for the client reference field. */
+function InlineClientRef({ taskId, value }: { taskId: string; value: string | null }) {
+  const router = useRouter()
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value ?? '')
+  const [saving, setSaving] = useState(false)
+
+  const save = async () => {
+    setSaving(true)
+    const { error } = await setChargeReview(taskId, { kind: 'set_client_ref', clientRef: draft.trim() || null })
+    setSaving(false)
+    if (error) {
+      toast.error(error)
+    } else {
+      toast.success('Client ref updated')
+      setEditing(false)
+      router.refresh()
+    }
+  }
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => { setDraft(value ?? ''); setEditing(true) }}
+        className="group inline-flex items-center gap-1.5 text-sm hover:underline"
+      >
+        <span className={value ? 'font-medium' : 'text-muted-foreground italic'}>
+          {value || 'Add client ref…'}
+        </span>
+        <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <Input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.nativeEvent.isComposing) save()
+          if (e.key === 'Escape') setEditing(false)
+        }}
+        className="h-7 w-40 text-sm"
+        placeholder="PO / quote ref"
+      />
+      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={save} disabled={saving}>
+        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5 text-emerald-600" />}
+      </Button>
+      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditing(false)} disabled={saving}>
+        <X className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  )
 }
 
 type StatusFilter = 'pending' | 'reviewed' | 'invoiced' | 'all'
@@ -407,16 +467,22 @@ export function ChargeableCallsTable({
                         </TableCell>
                       </TableRow>
 
-                      {/* Expanded PO request log row */}
+                      {/* Expanded detail: client ref edit + PO log */}
                       {isExpanded && (
                         <TableRow key={`${c.id}-po`} className="bg-muted/10 hover:bg-muted/10">
                           <TableCell colSpan={11} className="px-4 pb-4 pt-2">
-                            <PoRequestLog
-                              taskId={c.id}
-                              requests={c.poRequests}
-                              hasContactEmail={c.hasContactEmail}
-                              overdueAfterDays={overdueAfterDays}
-                            />
+                            <div className="flex flex-col gap-3">
+                              <div className="flex items-center gap-3 text-sm">
+                                <span className="text-muted-foreground">Client ref / PO:</span>
+                                <InlineClientRef taskId={c.id} value={c.clientRef} />
+                              </div>
+                              <PoRequestLog
+                                taskId={c.id}
+                                requests={c.poRequests}
+                                hasContactEmail={c.hasContactEmail}
+                                overdueAfterDays={overdueAfterDays}
+                              />
+                            </div>
                           </TableCell>
                         </TableRow>
                       )}

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { SalesStatusChart, type SalesStatusDatum } from '@/components/dashboard/sales/sales-status-chart'
 import { BranchFilter } from '@/components/dashboard/branch-filter'
+import { AddRequestDialog } from '@/components/dashboard/requests/add-request-dialog'
 import { getBranchScope } from '@/lib/branches'
 import { formatPence, QUOTE_STATUS_META, quoteTypeLabel } from '@/lib/sales'
 import { cn, formatDateUK } from '@/lib/utils'
@@ -172,6 +173,7 @@ export default async function SalesDashboardPage({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <BranchFilter branches={scope.branches} activeBranchId={scope.activeBranchId} />
+          <AddRequestDialog triggerVariant="outline" />
           <Button asChild>
             <Link href="/dashboard/sales/new">
               <Plus className="mr-2 h-4 w-4" />

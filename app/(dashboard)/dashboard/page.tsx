@@ -23,6 +23,7 @@ import {
 import type { Profile } from '@/lib/types/database'
 import Link from 'next/link'
 import { ScanQrButton } from '@/components/dashboard/dampers/scan-qr-button'
+import { AddRequestDialog } from '@/components/dashboard/requests/add-request-dialog'
 import { ApprovalsWidget } from '@/components/dashboard/approvals/approvals-widget'
 import { getVisibleLeaveRequests } from '@/lib/leave-approvals'
 import { EngineerHome } from '@/components/dashboard/home/engineer-home'
@@ -313,7 +314,10 @@ export default async function DashboardPage({
             Welcome back, {(profile as Profile).full_name || 'User'}
           </p>
         </div>
-        <ScanQrButton />
+        <div className="flex items-center gap-2">
+          <AddRequestDialog triggerVariant="outline" />
+          <ScanQrButton />
+        </div>
       </div>
 
       {/* Global date-range filter — overrides every card's default period. */}

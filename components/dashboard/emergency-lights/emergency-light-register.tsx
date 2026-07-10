@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { PrintButton } from '@/components/ui/print-button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { FloorInput } from '@/components/ui/floor-input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -318,11 +319,10 @@ export function EmergencyLightRegister({ siteId, lights }: EmergencyLightRegiste
             </div>
             <div className="grid gap-2">
               <Label htmlFor="floor">Floor / Level</Label>
-              <Input
+              <FloorInput
                 id="floor"
                 value={form.floor}
-                onChange={(e) => setForm({ ...form, floor: e.target.value })}
-                placeholder="e.g. Ground"
+                onChange={(v) => setForm({ ...form, floor: v })}
               />
             </div>
             <div className="grid gap-2 sm:col-span-2">

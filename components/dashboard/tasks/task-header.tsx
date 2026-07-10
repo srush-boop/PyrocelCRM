@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import type { TaskWithDetails, TaskStatus } from '@/lib/types/database'
 import { CreateDocumentButton } from '@/components/documents/create-document-dialog'
+import { RespondByCountdown } from '@/components/dashboard/tasks/respond-by-countdown'
 
 // Visual treatment for each task status so the banner is scannable at a glance.
 const STATUS_STYLES: Record<TaskStatus, { label: string; className: string }> = {
@@ -176,6 +177,15 @@ export function TaskHeader({
           </span>
         )}
       </div>
+
+      {/* Respond-by countdown — shown for all users when the call has a KPI deadline */}
+      {task.respond_by && (
+        <RespondByCountdown
+          respondBy={task.respond_by}
+          isCompleted={isClosed}
+          deadlineFailedReason={task.deadline_failed_reason ?? null}
+        />
+      )}
     </div>
   )
 }

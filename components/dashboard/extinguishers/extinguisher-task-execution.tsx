@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { CompletedReportActions } from '@/components/dashboard/reports/completed-report-actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { FloorInput } from '@/components/ui/floor-input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { TaskHeader } from '@/components/dashboard/tasks/task-header'
@@ -49,7 +50,7 @@ import {
 } from 'lucide-react'
 import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
 import { CallPartsPicker } from '@/components/dashboard/tasks/call-parts-picker'
-import { emptyPhotoCategories, generateUrn, EXTINGUISHER_TYPE_LABELS } from '@/lib/extinguishers'
+import { emptyPhotoCategories, generateUrn, EXTINGUISHER_TYPE_LABELS, CAPACITY_SUGGESTIONS } from '@/lib/extinguishers'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import { ExtinguisherInspectionCard, type InspectionState } from './extinguisher-inspection-card'
 import { ScanQrButton } from './scan-qr-button'
@@ -453,6 +454,8 @@ export function ExtinguisherTaskExecution({
             chargeable={task.chargeable}
             chargeReviewStatus={task.charge_review_status}
             chargeReason={task.charge_reason}
+            clientRef={(task as any).client_ref ?? null}
+            chargeInvoicedAt={(task as any).charge_invoiced_at ?? null}
             canReview={profile.role === 'admin' || profile.role === 'office'}
           />
         )}
@@ -652,10 +655,16 @@ export function ExtinguisherTaskExecution({
               <Label htmlFor="add-capacity">Capacity</Label>
               <Input
                 id="add-capacity"
+                list="add-capacity-suggestions"
                 value={addForm.capacity}
                 onChange={(e) => setAddForm({ ...addForm, capacity: e.target.value })}
                 placeholder="e.g. 6 litre / 2 kg"
               />
+              <datalist id="add-capacity-suggestions">
+                {(CAPACITY_SUGGESTIONS[addForm.extinguisher_type] ?? []).map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="add-serial">Serial Number</Label>
@@ -668,11 +677,10 @@ export function ExtinguisherTaskExecution({
             </div>
             <div className="grid gap-2">
               <Label htmlFor="add-floor">Floor / Level</Label>
-              <Input
+              <FloorInput
                 id="add-floor"
                 value={addForm.floor}
-                onChange={(e) => setAddForm({ ...addForm, floor: e.target.value })}
-                placeholder="e.g. Ground"
+                onChange={(v) => setAddForm({ ...addForm, floor: v })}
               />
             </div>
             <div className="grid gap-2">

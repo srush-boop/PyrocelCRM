@@ -215,9 +215,12 @@ export function NearbyCalls({ serviceTypes }: { serviceTypes: ServiceType[] }) {
         </CardContent>
       </Card>
 
-      {/* Find stock nearby — an exact replica of the Stock view's "Find a Part"
-          search, so engineers can locate a part across all stock locations. */}
-      <PartLocator />
+      {/* Find stock nearby — engineers can locate a part across all locations
+          and request it directly. Distance uses active GPS when available. */}
+      <PartLocator
+        currentLat={coords?.latitude ?? null}
+        currentLng={coords?.longitude ?? null}
+      />
 
       <Card>
         <CardHeader className="pb-3">

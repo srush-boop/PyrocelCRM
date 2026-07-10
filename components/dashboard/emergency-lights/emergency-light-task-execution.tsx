@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { FloorInput } from '@/components/ui/floor-input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { TaskHeader } from '@/components/dashboard/tasks/task-header'
 import { PauseResumeControls } from '@/components/dashboard/tasks/pause-resume-controls'
@@ -377,6 +378,8 @@ export function EmergencyLightTaskExecution({
             chargeable={task.chargeable}
             chargeReviewStatus={task.charge_review_status}
             chargeReason={task.charge_reason}
+            clientRef={(task as any).client_ref ?? null}
+            chargeInvoicedAt={(task as any).charge_invoiced_at ?? null}
             canReview={profile.role === 'admin' || profile.role === 'office'}
           />
         </div>
@@ -551,11 +554,10 @@ export function EmergencyLightTaskExecution({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="add-floor">Floor</Label>
-                <Input
+                <FloorInput
                   id="add-floor"
                   value={addForm.floor}
-                  onChange={(e) => setAddForm({ ...addForm, floor: e.target.value })}
-                  placeholder="e.g. Ground"
+                  onChange={(v) => setAddForm({ ...addForm, floor: v })}
                 />
               </div>
             </div>

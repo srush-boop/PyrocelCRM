@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { PrintButton } from '@/components/ui/print-button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { FloorInput } from '@/components/ui/floor-input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -68,7 +69,7 @@ import {
 } from 'lucide-react'
 import { ImportExtinguishersDialog } from './import-extinguishers-dialog'
 import { ScanQrButton } from './scan-qr-button'
-import { EXTINGUISHER_TYPE_LABELS, generateUrn } from '@/lib/extinguishers'
+import { EXTINGUISHER_TYPE_LABELS, CAPACITY_SUGGESTIONS, generateUrn } from '@/lib/extinguishers'
 import type { Extinguisher, ExtinguisherType, ExtinguisherResult } from '@/lib/types/database'
 
 interface ExtinguisherRegisterProps {
@@ -385,10 +386,16 @@ export function ExtinguisherRegister({ siteId, siteName, extinguishers }: Exting
               <Label htmlFor="capacity">Capacity</Label>
               <Input
                 id="capacity"
+                list="capacity-suggestions"
                 value={form.capacity}
                 onChange={(e) => setForm({ ...form, capacity: e.target.value })}
                 placeholder="e.g. 6 litre / 2 kg"
               />
+              <datalist id="capacity-suggestions">
+                {(CAPACITY_SUGGESTIONS[form.extinguisher_type] ?? []).map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="serial">Serial Number</Label>
@@ -401,11 +408,10 @@ export function ExtinguisherRegister({ siteId, siteName, extinguishers }: Exting
             </div>
             <div className="grid gap-2">
               <Label htmlFor="floor">Floor / Level</Label>
-              <Input
+              <FloorInput
                 id="floor"
                 value={form.floor}
-                onChange={(e) => setForm({ ...form, floor: e.target.value })}
-                placeholder="e.g. Ground"
+                onChange={(v) => setForm({ ...form, floor: v })}
               />
             </div>
             <div className="grid gap-2">

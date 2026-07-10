@@ -8,6 +8,7 @@ import { PauseResumeControls } from '@/components/dashboard/tasks/pause-resume-c
 import { CompletedReportActions } from '@/components/dashboard/reports/completed-report-actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { FloorInput } from '@/components/ui/floor-input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -489,6 +490,8 @@ export function McpTaskExecution({
             chargeable={task.chargeable}
             chargeReviewStatus={task.charge_review_status}
             chargeReason={task.charge_reason}
+            clientRef={(task as any).client_ref ?? null}
+            chargeInvoicedAt={(task as any).charge_invoiced_at ?? null}
             canReview={profile.role === 'admin' || profile.role === 'office'}
           />
         </div>
@@ -735,11 +738,10 @@ export function McpTaskExecution({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="add-floor">Floor</Label>
-                <Input
+                <FloorInput
                   id="add-floor"
                   value={addForm.floor}
-                  onChange={(e) => setAddForm({ ...addForm, floor: e.target.value })}
-                  placeholder="e.g. Ground"
+                  onChange={(v) => setAddForm({ ...addForm, floor: v })}
                 />
               </div>
             </div>

@@ -172,6 +172,12 @@ export interface Profile {
   home_latitude: number | null
   home_longitude: number | null
   home_geocoded_at: string | null
+  // Engineer live location sharing. When enabled the app stores the engineer's
+  // current GPS coordinates so colleagues can see distance to their van/location.
+  location_sharing_enabled: boolean
+  location_lat: number | null
+  location_lng: number | null
+  location_updated_at: string | null
   // Engineer discipline / trade. Drives map colour-coding, iconography and the
   // skill match when dispatching a call. NULL for non-engineers.
   discipline: Discipline | null
@@ -842,6 +848,14 @@ export interface Task {
   charge_reason: string | null
   charge_reviewed_at: string | null
   charge_reviewed_by: string | null
+  // Optional client PO reference, entered at review/logging time
+  client_ref: string | null
+  // Invoiced status — set after the call has been sent for invoicing
+  charge_invoiced_at: string | null
+  charge_invoiced_by: string | null
+  // Deadline-missed logging: reason + free-text note when respond_by was missed
+  deadline_failed_reason: string | null
+  deadline_failed_note: string | null
   site_service?: SiteService
   // Direct joins for reactive/emergency calls (and available on recurring calls
   // via the backfilled ids).
@@ -871,6 +885,33 @@ export interface Task {
   panel_id?: string | null
   panel_name?: string | null
   }
+
+// PO request log: one row per request sent to the client for a PO number.
+export interface PurchaseOrderRequest {
+  id: string
+  task_id: string
+  requested_by: string
+  note: string | null
+  email_sent_at: string | null
+  email_sent_to: string[] | null
+  special_note: string | null
+  po_number: string | null
+  authorised_by_name: string | null
+  authorised_at: string | null
+  authorisation_token: string | null
+  created_at: string
+  updated_at: string
+  // Joined fields
+  requester?: { full_name: string | null; email: string }
+}
+
+// Key/value config for global application settings.
+export interface GlobalConfig {
+  key: string
+  value: unknown
+  updated_at: string
+  updated_by: string | null
+}
 
 // Defect tracking: one row per failed report (task_result with overall_status='fail').
 // Auto-maintained by a DB trigger; lifecycle open -> quoted -> resolved/dismissed.
@@ -1927,6 +1968,28 @@ export interface StockLocationSummary extends StockLocation {
   totalQuantity: number
   heldValue: number
   lowStockCount: number
+}
+
+// A request from one engineer to borrow/transfer a part from another's location.
+export type PartRequestStatus = 'pending' | 'approved' | 'declined' | 'cancelled'
+
+export interface PartRequest {
+  id: string
+  part_id: string
+  location_id: string
+  requested_by: string
+  quantity: number
+  message: string | null
+  status: PartRequestStatus
+  resolved_by: string | null
+  resolved_at: string | null
+  created_at: string
+  updated_at: string
+  // Joined relations
+  part?: Part | null
+  location?: StockLocation | null
+  requester?: Profile | null
+  resolver?: Profile | null
 }
 
 // A low-stock alert row (a stock_item at or below its min level).

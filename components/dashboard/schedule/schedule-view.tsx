@@ -211,6 +211,8 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   const [locating, setLocating] = useState(false)
   // Quick filter: only show calls that must be booked but aren't booked yet.
   const [needsBookingOnly, setNeedsBookingOnly] = useState(false)
+  // Quick filter: only show overdue (past scheduled_date, still pending) calls.
+  const [showOverdueOnly, setShowOverdueOnly] = useState(false)
   const [selectedEngineer, setSelectedEngineer] = useState<string>('all')
   const [selectedSystem, setSelectedSystem] = useState<string>('all')
   const [selectedService, setSelectedService] = useState<string>('all')
@@ -251,15 +253,23 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   ).sort((a, b) => (a?.name ?? '').localeCompare(b?.name ?? ''))
   // Unique service types present across the current calls, for the service filter.
   // Respects the selected system so the two filters narrow together.
+  // NOTE: after normalizeTasks all tasks have site_service?.service_type populated,
+  // including reactive/emergency calls synthesised from direct_service_type.
+  // When filtering by a specific system we must also include service types whose
+  // system_type is null/undefined (reactive types with no system classification)
+  // so they always appear rather than disappearing when a system is selected.
   const serviceOptions = Array.from(
     tasks.reduce((map, task) => {
       const svc = task.site_service?.service_type
-      const sysId = svc?.system_type?.id
-      if (svc?.id && !map.has(svc.id) && (selectedSystem === 'all' || sysId === selectedSystem)) {
-        map.set(svc.id, { id: svc.id, name: svc.name })
-      }
+      const sysId = svc?.system_type?.id ?? null
+      if (!svc?.id) return map
+      if (map.has(svc.id)) return map
+      // When a system is selected, show only services belonging to that system.
+      // Services with no system_type are always shown (they can't be narrowed by system).
+      if (selectedSystem !== 'all' && sysId !== null && sysId !== selectedSystem) return map
+      map.set(svc.id, { id: svc.id, name: svc.name, sysId })
       return map
-    }, new Map<string, { id: string; name: string }>()).values()
+    }, new Map<string, { id: string; name: string; sysId: string | null }>()).values()
   ).sort((a, b) => a.name.localeCompare(b.name))
   // Only admin/office can multi-select and reassign tasks
   const canAssign = isAdminOrOffice && engineers.length > 0
@@ -401,7 +411,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   }
 
   const hasActiveFilters =
-    search || selectedEngineer !== 'all' || selectedSystem !== 'all' || selectedService !== 'all' || dateFrom || dateTo || needsBookingOnly
+    search || selectedEngineer !== 'all' || selectedSystem !== 'all' || selectedService !== 'all' || dateFrom || dateTo || needsBookingOnly || showOverdueOnly
 
   const clearFilters = () => {
     setSearch('')
@@ -411,6 +421,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     setDateFrom(undefined)
     setDateTo(undefined)
     setNeedsBookingOnly(false)
+    setShowOverdueOnly(false)
   }
 
   const filteredTasks = tasks.filter((task) => {
@@ -440,6 +451,11 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     // Needs-booking quick filter
     const matchesNeedsBooking = !needsBookingOnly || taskNeedsBooking(task)
 
+    // Overdue quick filter — only pending tasks past their scheduled date.
+    const matchesOverdue = !showOverdueOnly || (
+      task.status === 'pending' && new Date(task.scheduled_date) < today
+    )
+
     return (
       matchesSearch &&
       matchesEngineer &&
@@ -447,7 +463,8 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
       matchesService &&
       matchesDateFrom &&
       matchesDateTo &&
-      matchesNeedsBooking
+      matchesNeedsBooking &&
+      matchesOverdue
     )
   })
 
@@ -964,11 +981,11 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   )
 
   return (
-    <div className="space-y-3">
-      {/* Row 1: search + quick filters */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[180px] sm:max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+    <div className="space-y-2">
+      {/* Row 1: search | quick-filter pill buttons | engineer select | dates | clear */}
+      <div className="flex items-center gap-2 overflow-x-auto scrollbar-none [-webkit-overflow-scrolling:touch] [scrollbar-width:none]">
+        <div className="relative shrink-0 w-[200px] sm:w-[240px]">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
             placeholder="Search calls..."
             value={search}
@@ -983,23 +1000,42 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
             variant={needsBookingOnly ? 'default' : 'outline'}
             onClick={() => setNeedsBookingOnly((v) => !v)}
             aria-pressed={needsBookingOnly}
-            className="gap-2 shrink-0"
+            className="gap-1.5 shrink-0"
           >
             <CalendarClock className="h-4 w-4" />
             {isEngineer ? 'To book' : 'Needs booking'}
             <Badge
               variant={needsBookingOnly ? 'secondary' : 'outline'}
-              className="ml-0.5 px-1.5"
+              className="ml-0.5 px-1.5 py-0"
             >
               {needsBookingCount}
             </Badge>
           </Button>
         )}
 
+        {(overdueTasks.length > 0 || showOverdueOnly) && (
+          <Button
+            type="button"
+            variant={showOverdueOnly ? 'destructive' : 'outline'}
+            onClick={() => setShowOverdueOnly((v) => !v)}
+            aria-pressed={showOverdueOnly}
+            className="gap-1.5 shrink-0"
+          >
+            <Clock className="h-4 w-4" />
+            Overdue
+            <Badge
+              variant={showOverdueOnly ? 'secondary' : 'destructive'}
+              className="ml-0.5 px-1.5 py-0"
+            >
+              {overdueTasks.length}
+            </Badge>
+          </Button>
+        )}
+
         {isAdminOrOffice && engineers.length > 0 && (
           <Select value={selectedEngineer} onValueChange={setSelectedEngineer}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Engineer" />
+            <SelectTrigger className="w-[160px] shrink-0">
+              <SelectValue placeholder="All Engineers" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Engineers</SelectItem>
@@ -1013,8 +1049,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
           </Select>
         )}
 
-        {/* Date range filtering is for admin/office planning only; engineers just
-            see their own upcoming/overdue/completed lists without date pickers. */}
+        {/* Date range — admin/office only */}
         {!isEngineer && (
           <>
             <Popover>
@@ -1022,21 +1057,16 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                 <Button
                   variant="outline"
                   className={cn(
-                    "w-[140px] justify-start text-left font-normal",
-                    !dateFrom && "text-muted-foreground"
+                    'w-[120px] shrink-0 justify-start text-left font-normal',
+                    !dateFrom && 'text-muted-foreground',
                   )}
                 >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dateFrom ? format(dateFrom, "dd/MM/yy") : "From"}
+                  <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                  {dateFrom ? format(dateFrom, 'dd/MM/yy') : 'From'}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
-                <CalendarComponent
-                  mode="single"
-                  selected={dateFrom}
-                  onSelect={setDateFrom}
-                  initialFocus
-                />
+                <CalendarComponent mode="single" selected={dateFrom} onSelect={setDateFrom} initialFocus />
               </PopoverContent>
             </Popover>
 
@@ -1045,50 +1075,41 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                 <Button
                   variant="outline"
                   className={cn(
-                    "w-[140px] justify-start text-left font-normal",
-                    !dateTo && "text-muted-foreground"
+                    'w-[120px] shrink-0 justify-start text-left font-normal',
+                    !dateTo && 'text-muted-foreground',
                   )}
                 >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dateTo ? format(dateTo, "dd/MM/yy") : "To"}
+                  <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                  {dateTo ? format(dateTo, 'dd/MM/yy') : 'To'}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
-                <CalendarComponent
-                  mode="single"
-                  selected={dateTo}
-                  onSelect={setDateTo}
-                  initialFocus
-                />
+                <CalendarComponent mode="single" selected={dateTo} onSelect={setDateTo} initialFocus />
               </PopoverContent>
             </Popover>
           </>
         )}
 
         {hasActiveFilters && (
-          <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-2 shrink-0">
+          <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1.5 shrink-0 text-muted-foreground hover:text-foreground">
             <X className="h-4 w-4" />
             Clear
           </Button>
         )}
       </div>
 
-      {/* Row 2: system/service filters, sort and view toggle.
-          On mobile the filters + sort/toggle sit in a single horizontally-scrollable
-          strip so nothing wraps and no content is ever clipped. */}
+      {/* Row 2: system/service selects | → sort + view toggle */}
       <div className="flex items-center gap-2 overflow-x-auto scrollbar-none [-webkit-overflow-scrolling:touch] [scrollbar-width:none]">
         {systemOptions.length > 0 && (
           <Select
             value={selectedSystem}
             onValueChange={(v) => {
               setSelectedSystem(v)
-              // Service options depend on the selected system, so reset the
-              // service filter to avoid a stale selection that hides everything.
               setSelectedService('all')
             }}
           >
-            <SelectTrigger className="w-[160px] shrink-0">
-              <SelectValue placeholder="System" />
+            <SelectTrigger className="w-[148px] shrink-0">
+              <SelectValue placeholder="All Systems" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Systems</SelectItem>
@@ -1104,10 +1125,10 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
           </Select>
         )}
 
-        {serviceOptions.length > 0 && (
+        {serviceOptions.length > 1 && (
           <Select value={selectedService} onValueChange={setSelectedService}>
-            <SelectTrigger className="w-[160px] shrink-0">
-              <SelectValue placeholder="Service" />
+            <SelectTrigger className="w-[148px] shrink-0">
+              <SelectValue placeholder="All Services" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Services</SelectItem>
@@ -1120,9 +1141,9 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
           </Select>
         )}
 
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
           <Select value={sortBy} onValueChange={(v) => handleSortChange(v as SortKey)}>
-            <SelectTrigger className="w-[150px] sm:w-[160px]">
+            <SelectTrigger className="w-[140px]">
               {locating ? (
                 <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
               ) : (
@@ -1145,23 +1166,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
         </div>
       </div>
 
-      {viewMode === 'grid' && overdueTasks.length > 0 && (
-        <Card className="border-destructive bg-destructive/5">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-destructive flex items-center gap-2">
-              <Clock className="h-5 w-5" />
-              Overdue Calls ({overdueTasks.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {overdueTasks.map((task) => (
-                <TaskCard key={task.id} task={task} />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
@@ -1171,6 +1176,14 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
               {upcomingTasks.length}
             </span>
           </TabsTrigger>
+          {overdueTasks.length > 0 && (
+            <TabsTrigger value="overdue" className="gap-1.5 text-destructive data-[state=active]:text-destructive">
+              Overdue
+              <span className="rounded-full bg-destructive/20 px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums text-destructive">
+                {overdueTasks.length}
+              </span>
+            </TabsTrigger>
+          )}
           <TabsTrigger value="completed" className="gap-1.5">
             Completed
             <span className="rounded-full bg-background/60 px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums">
@@ -1180,12 +1193,11 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
         </TabsList>
 
         <TabsContent value="upcoming" className="mt-4">
-          {renderTasks(
-            viewMode === 'grid'
-              ? upcomingTasks.filter((t) => !overdueTasks.includes(t))
-              : upcomingTasks,
-            'No upcoming calls',
-          )}
+          {renderTasks(upcomingTasks, 'No upcoming calls')}
+        </TabsContent>
+
+        <TabsContent value="overdue" className="mt-4">
+          {renderTasks(overdueTasks, 'No overdue calls')}
         </TabsContent>
 
         <TabsContent value="completed" className="mt-4">

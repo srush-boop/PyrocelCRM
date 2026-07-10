@@ -17,11 +17,13 @@ import {
   CheckCircle2,
   ChevronRight,
   Sun,
+  Signal,
 } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import type { Profile } from '@/lib/types/database'
 import { getDailyFact } from '@/lib/system-facts'
+import { LocationSharingToggle } from '@/components/dashboard/home/location-sharing-toggle'
 
 // Greeting that reflects the time of day, so the home feels alive.
 function greeting(d: Date): string {
@@ -236,6 +238,24 @@ export async function EngineerHome({ profile }: { profile: Profile }) {
               more upcoming call{weekAheadCount.count === 1 ? '' : 's'} after today.
             </p>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Location sharing — engineers only */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Signal className="h-4 w-4" />
+            Location sharing
+          </CardTitle>
+          <CardDescription>
+            Promotes efficiency and teamwork when out on the road
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <LocationSharingToggle
+            initialEnabled={profile.location_sharing_enabled ?? false}
+          />
         </CardContent>
       </Card>
     </div>

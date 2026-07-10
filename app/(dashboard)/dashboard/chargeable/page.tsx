@@ -1,13 +1,14 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { ChargeableCallsTable, type ChargeableCall } from '@/components/dashboard/chargeable/chargeable-calls-table'
-import type { Profile } from '@/lib/types/database'
+import { getGlobalConfig } from '@/lib/actions/global-config'
+import type { Profile, PurchaseOrderRequest } from '@/lib/types/database'
 
 export const dynamic = 'force-dynamic'
 
 // The Chargeable Calls review queue. Completed calls become chargeable
 // automatically (service-type default OR parts used) and land here for office/
-// admin to review before they feed future invoicing. Managers only.
+// admin to review before they are passed for invoicing. Managers only.
 export default async function ChargeableCallsPage() {
   const supabase = await createClient()
 
@@ -27,6 +28,10 @@ export default async function ChargeableCallsPage() {
     redirect('/dashboard')
   }
 
+  // Load the configurable overdue threshold (default 14 days).
+  const overdueAfterDays =
+    (await getGlobalConfig<number>('po_request_overdue_days')) ?? 14
+
   const { data } = await supabase
     .from('tasks')
     .select(
@@ -37,16 +42,24 @@ export default async function ChargeableCallsPage() {
       charge_review_status,
       charge_reason,
       charge_reviewed_at,
+      charge_invoiced_at,
+      client_ref,
       task_result:task_results(reference_number),
       assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(id, full_name, email),
       reviewer:profiles!tasks_charge_reviewed_by_fkey(id, full_name, email),
-      direct_site:sites!tasks_site_id_fkey(id, name, client_id, clients(id, name)),
+      direct_site:sites!tasks_site_id_fkey(id, name, contact_email, client_id, clients(id, name, contact_email)),
       site_service:site_services(
         id,
-        sites(id, name, client_id, clients(id, name)),
+        sites(id, name, contact_email, client_id, clients(id, name, contact_email)),
         service_type:service_types(id, name)
       ),
-      call_parts(quantity, unit_cost_pence)
+      call_parts(quantity, unit_cost_pence),
+      po_requests(
+        id, task_id, requested_by, note, email_sent_at, email_sent_to,
+        special_note, po_number, authorised_by_name, authorised_at,
+        authorisation_token, created_at, updated_at,
+        requester:profiles!po_requests_requested_by_fkey(full_name, email)
+      )
     `,
     )
     .eq('status', 'completed')
@@ -56,27 +69,47 @@ export default async function ChargeableCallsPage() {
 
   const rows: ChargeableCall[] = (data ?? []).map((t: any) => {
     const site = t.site_service?.sites || t.direct_site
+    const client = site?.clients
     const partsTotalPence = (t.call_parts ?? []).reduce(
       (sum: number, p: { quantity: number | null; unit_cost_pence: number | null }) =>
         sum + (p.quantity ?? 0) * (p.unit_cost_pence ?? 0),
       0,
     )
+
+    const hasContactEmail = !!(site?.contact_email || client?.contact_email)
+
+    // Sort PO requests oldest → newest for display
+    const poRequests: PurchaseOrderRequest[] = (t.po_requests ?? []).sort(
+      (a: PurchaseOrderRequest, b: PurchaseOrderRequest) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    )
+
     return {
       id: t.id,
       referenceNumber:
-        (Array.isArray(t.task_result) ? t.task_result[0]?.reference_number : t.task_result?.reference_number) ||
-        '-',
+        (Array.isArray(t.task_result)
+          ? t.task_result[0]?.reference_number
+          : t.task_result?.reference_number) || '-',
       completedAt: t.completed_at,
       chargeReviewStatus: t.charge_review_status,
       chargeReason: t.charge_reason,
       chargeReviewedAt: t.charge_reviewed_at,
+      chargeInvoicedAt: t.charge_invoiced_at ?? null,
+      clientRef: t.client_ref ?? null,
       siteName: site?.name || 'Unknown site',
-      clientName: site?.clients?.name || '',
+      clientName: client?.name || '',
       serviceName: t.site_service?.service_type?.name || 'Ad-hoc / reactive',
-      engineerName: t.assigned_engineer?.full_name || t.assigned_engineer?.email || 'Unassigned',
-      reviewerName: t.reviewer?.full_name || t.reviewer?.email || null,
+      engineerName:
+        t.assigned_engineer?.full_name ||
+        t.assigned_engineer?.email ||
+        'Unassigned',
+      reviewerName:
+        t.reviewer?.full_name || t.reviewer?.email || null,
       partsCount: (t.call_parts ?? []).length,
       partsTotalPence,
+      poRequests,
+      hasContactEmail,
+      overdueAfterDays,
     }
   })
 
@@ -85,12 +118,11 @@ export default async function ChargeableCallsPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Chargeable Calls</h1>
         <p className="text-muted-foreground">
-          Completed calls deemed chargeable (from the service type or parts used). Review each before
-          it&apos;s passed for invoicing.
+          Completed calls deemed chargeable. Review, log PO requests, then mark invoiced once raised.
         </p>
       </div>
 
-      <ChargeableCallsTable calls={rows} />
+      <ChargeableCallsTable calls={rows} overdueAfterDays={overdueAfterDays} />
     </div>
   )
 }

@@ -3,9 +3,18 @@ import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function POST(req: NextRequest) {
   try {
+    // Kill switch: this bootstrap endpoint stays fully disabled unless it is
+    // explicitly turned on via env. Once your admins exist, leave this unset
+    // (or "false") so the route cannot be used at all. We return 404 rather
+    // than 403 so a disabled endpoint doesn't advertise its own existence.
+    if (process.env.ENABLE_ADMIN_SETUP !== 'true') {
+      return NextResponse.json({ error: 'Not found.' }, { status: 404 })
+    }
+
     const { email, password, fullName, setupKey } = await req.json()
 
-    // Guard: require a setup key so this endpoint can't be called freely
+    // Guard: require a setup key so this endpoint can't be called freely.
+    // The key must be set AND match; a missing/blank env var fails closed.
     const validSetupKey = process.env.ADMIN_SETUP_KEY
     if (!validSetupKey || setupKey !== validSetupKey) {
       return NextResponse.json(

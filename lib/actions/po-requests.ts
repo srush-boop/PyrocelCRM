@@ -63,15 +63,17 @@ export async function sendPoRequestEmail(
   if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
   const { supabase } = ctx
 
-  // Gather task info needed to build the email
-  const { data: task } = await supabase
+  // Gather task info needed to build the email.
+  // site_service is a one-to-many embed so Supabase returns an array — we take [0].
+  // Use maybeSingle() so a missing row returns { data: null } rather than an error.
+  const { data: task, error: taskError } = await supabase
     .from('tasks')
     .select(`
       id,
       client_ref,
       completed_at,
       charge_reason,
-      task_result:task_results(reference_number, engineer_notes, overall_status),
+      task_results(reference_number, engineer_notes, overall_status),
       direct_site:sites!tasks_site_id_fkey(id, name, contact_email, contact_name, clients(id, name, contact_email, contact_name)),
       site_service:site_services(
         sites(id, name, contact_email, contact_name, clients(id, name, contact_email, contact_name)),
@@ -80,12 +82,18 @@ export async function sendPoRequestEmail(
       call_parts(name, quantity, unit_cost_pence)
     `)
     .eq('id', taskId)
-    .single()
+    .maybeSingle()
 
+  if (taskError) {
+    console.error('[po-requests] task query error:', taskError.message, 'taskId:', taskId)
+    return { error: `Call not found (${taskError.message})` }
+  }
   if (!task) return { error: 'Call not found' }
   const t = task as any
 
-  const site = t.site_service?.sites || t.direct_site
+  // site_service comes back as an array; grab the first element
+  const siteServiceRow = Array.isArray(t.site_service) ? t.site_service[0] : t.site_service
+  const site = siteServiceRow?.sites || t.direct_site
   const client = site?.clients
 
   // Gather recipient emails
@@ -106,9 +114,10 @@ export async function sendPoRequestEmail(
     .eq('task_id', taskId)
     .order('created_at', { ascending: true })
 
-  const serviceName = t.site_service?.service_type?.name || 'Service visit'
-  const refNum = Array.isArray(t.task_result) ? t.task_result[0]?.reference_number : t.task_result?.reference_number
-  const notes = Array.isArray(t.task_result) ? t.task_result[0]?.engineer_notes : t.task_result?.engineer_notes
+  const serviceName = siteServiceRow?.service_type?.name || 'Service visit'
+  const taskResults = Array.isArray(t.task_results) ? t.task_results : (t.task_results ? [t.task_results] : [])
+  const refNum = taskResults[0]?.reference_number ?? null
+  const notes = taskResults[0]?.engineer_notes ?? null
 
   const partsList = ((t.call_parts ?? []) as any[]).map((p: any) => ({
     name: p.name || 'Part',

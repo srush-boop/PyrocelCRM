@@ -107,10 +107,12 @@ const statusConfig = {
 }
 
 /**
- * Inline booking control shown in the call-detail preview for admin/office.
- * Sets/updates the booked appointment slot on an existing call and can email the
- * site/client a confirmation. Defined at module scope so its form state survives
- * parent re-renders (an inline component would remount and drop input focus).
+ * Inline booking control shown in the call-detail preview for every schedule
+ * user (engineers, office and admin) — only weekly recurring PPM calls are
+ * excluded. Sets/updates the booked appointment slot on an existing call and can
+ * email the site/client a confirmation. Defined at module scope so its form
+ * state survives parent re-renders (an inline component would remount and drop
+ * input focus).
  */
 function BookingEditor({
   task,

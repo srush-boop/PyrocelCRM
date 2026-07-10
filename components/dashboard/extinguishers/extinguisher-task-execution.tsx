@@ -50,7 +50,7 @@ import {
 } from 'lucide-react'
 import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
 import { CallPartsPicker } from '@/components/dashboard/tasks/call-parts-picker'
-import { emptyPhotoCategories, generateUrn, EXTINGUISHER_TYPE_LABELS } from '@/lib/extinguishers'
+import { emptyPhotoCategories, generateUrn, EXTINGUISHER_TYPE_LABELS, CAPACITY_SUGGESTIONS } from '@/lib/extinguishers'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import { ExtinguisherInspectionCard, type InspectionState } from './extinguisher-inspection-card'
 import { ScanQrButton } from './scan-qr-button'
@@ -655,10 +655,16 @@ export function ExtinguisherTaskExecution({
               <Label htmlFor="add-capacity">Capacity</Label>
               <Input
                 id="add-capacity"
+                list="add-capacity-suggestions"
                 value={addForm.capacity}
                 onChange={(e) => setAddForm({ ...addForm, capacity: e.target.value })}
                 placeholder="e.g. 6 litre / 2 kg"
               />
+              <datalist id="add-capacity-suggestions">
+                {(CAPACITY_SUGGESTIONS[addForm.extinguisher_type] ?? []).map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="add-serial">Serial Number</Label>

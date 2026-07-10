@@ -47,6 +47,20 @@ export const EXTINGUISHER_TYPE_COLORS: Record<ExtinguisherType, string> = {
   water_mist: '#ffffff', // white band
 }
 
+/**
+ * Standard UK capacities for each extinguisher type.
+ * Used to populate datalist suggestions on the capacity field.
+ * Free-text entry is still allowed.
+ */
+export const CAPACITY_SUGGESTIONS: Record<ExtinguisherType, string[]> = {
+  water:        ['3 litre', '6 litre', '9 litre'],
+  foam:         ['2 litre', '6 litre', '9 litre'],
+  co2:          ['1 kg', '2 kg', '3 kg', '5 kg'],
+  powder:       ['1 kg', '2 kg', '4 kg', '6 kg', '9 kg', '12 kg'],
+  wet_chemical: ['2 litre', '3 litre', '6 litre'],
+  water_mist:   ['1 litre', '3 litre', '6 litre', '9 litre'],
+}
+
 export const SERVICE_LEVEL_LABELS: Record<ExtinguisherServiceLevel, string> = {
   basic: 'Basic (annual)',
   extended: 'Extended (5 yr)',

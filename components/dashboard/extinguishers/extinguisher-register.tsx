@@ -69,7 +69,7 @@ import {
 } from 'lucide-react'
 import { ImportExtinguishersDialog } from './import-extinguishers-dialog'
 import { ScanQrButton } from './scan-qr-button'
-import { EXTINGUISHER_TYPE_LABELS, generateUrn } from '@/lib/extinguishers'
+import { EXTINGUISHER_TYPE_LABELS, CAPACITY_SUGGESTIONS, generateUrn } from '@/lib/extinguishers'
 import type { Extinguisher, ExtinguisherType, ExtinguisherResult } from '@/lib/types/database'
 
 interface ExtinguisherRegisterProps {
@@ -386,10 +386,16 @@ export function ExtinguisherRegister({ siteId, siteName, extinguishers }: Exting
               <Label htmlFor="capacity">Capacity</Label>
               <Input
                 id="capacity"
+                list="capacity-suggestions"
                 value={form.capacity}
                 onChange={(e) => setForm({ ...form, capacity: e.target.value })}
                 placeholder="e.g. 6 litre / 2 kg"
               />
+              <datalist id="capacity-suggestions">
+                {(CAPACITY_SUGGESTIONS[form.extinguisher_type] ?? []).map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="serial">Serial Number</Label>

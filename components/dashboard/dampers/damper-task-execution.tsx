@@ -423,7 +423,7 @@ export function DamperTaskExecution({
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 pb-28">
+    <div className="mx-auto max-w-3xl space-y-6 pb-44 lg:pb-6">
       <TaskHeader task={task} status={status} canCreateDocument={profile.role === 'admin' || profile.role === 'office'} />
 
       <PauseResumeControls task={task} status={status} onStatusChange={setStatus} />
@@ -545,7 +545,7 @@ export function DamperTaskExecution({
       )}
 
       {status === 'in_progress' && canEdit && dampers.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 flex gap-2 border-t bg-background p-4 md:relative md:border-0 md:p-0">
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-50 flex gap-2 border-t bg-background p-4 lg:relative lg:inset-x-auto lg:bottom-auto lg:z-auto lg:border-0 lg:p-0">
           <Button variant="outline" onClick={handleSave} disabled={saving} className="flex-1">
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             Save Progress

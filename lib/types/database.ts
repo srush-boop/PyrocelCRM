@@ -2317,6 +2317,7 @@ export interface InboundRequest {
   status: InboundRequestStatus
   // Triage output (populated once triaged).
   ai_summary: string | null
+  ai_proposed_action: string | null
   ai_intent: InboundRequestIntent | null
   ai_urgency: InboundRequestUrgency | null
   ai_reply_draft: string | null

@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { triageInboundRequest } from '@/lib/ai/triage-inbound-request'
+import { executeRequestInstructionAI, type ExecuteInstructionResult } from '@/lib/ai/execute-request-instruction'
+import { bookCall } from '@/app/(dashboard)/dashboard/schedule/book-call-actions'
 import { sendEmail } from '@/lib/email/send-email'
 
 interface StaffContext {
@@ -299,6 +301,81 @@ export async function sendAcknowledgement(id: string, body: string): Promise<Act
   }
   revalidatePath('/dashboard/requests')
   return { ok: true, id }
+}
+
+/**
+ * Let AI read the request and a staff instruction, then immediately execute the
+ * determined action (e.g. book a call). Returns a result the UI can react to
+ * (show success, navigate, or show the error inline).
+ */
+export async function executeRequestInstruction(
+  id: string,
+  instruction: string,
+): Promise<ExecuteInstructionResult> {
+  const { ctx, error } = await requireStaff()
+  if (error || !ctx) return { ok: false, error: error ?? 'Not authorised.' }
+
+  const inst = instruction?.trim()
+  if (!inst) return { ok: false, error: 'Enter an instruction first.' }
+
+  // Ask AI to plan and parameterise the action.
+  const aiResult = await executeRequestInstructionAI(id, inst)
+
+  if (!aiResult.ok) return aiResult
+
+  // send_report: just return the navigation URL — client handles the redirect.
+  if (aiResult.action === 'send_report') {
+    return aiResult
+  }
+
+  // create_call: execute bookCall directly.
+  if (aiResult.action === 'create_call') {
+    const params = (aiResult as any)._callParams
+    if (!params?.siteId || !params?.serviceTypeId) {
+      return { ok: false, error: 'AI did not return enough detail to book the call.' }
+    }
+
+    // bookCall uses the session client (needs staff role), which requireStaff has
+    // already confirmed. Call it server-side without going via the client.
+    const bookResult = await bookCall({
+      mode: 'reactive',
+      siteId: params.siteId,
+      serviceTypeId: params.serviceTypeId,
+      systemTypeId: params.systemTypeId ?? null,
+      clientId: params.clientId ?? null,
+      scheduledDate: params.scheduledDate,
+      respondByHours: params.respondByHours ?? null,
+      notes: params.notes ?? null,
+    })
+
+    if (!bookResult.ok || !bookResult.taskId) {
+      return { ok: false, error: bookResult.error ?? 'Could not book the call.' }
+    }
+
+    // Mark request as actioned.
+    await ctx.supabase
+      .from('inbound_requests')
+      .update({
+        status: 'actioned',
+        created_task_id: bookResult.taskId,
+        actioned_at: new Date().toISOString(),
+        actioned_by: ctx.userId,
+      })
+      .eq('id', id)
+
+    revalidatePath('/dashboard/requests')
+    revalidatePath('/dashboard/schedule')
+
+    return {
+      ok: true,
+      action: 'create_call',
+      taskId: bookResult.taskId,
+      summary: aiResult.summary,
+      navigateTo: `/dashboard/tasks/${bookResult.taskId}`,
+    }
+  }
+
+  return { ok: false, error: 'Unexpected AI action result.' }
 }
 
 function escapeHtml(s: string): string {

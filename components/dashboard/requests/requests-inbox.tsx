@@ -16,6 +16,9 @@ import {
   AlertTriangle,
   MailPlus,
   FileText,
+  Loader2,
+  SendHorizonal,
+  ExternalLink,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -39,6 +42,7 @@ import {
   reopenRequest,
   updateRequestMatch,
   sendAcknowledgement,
+  executeRequestInstruction,
 } from '@/lib/actions/inbound-requests'
 import type {
   InboundRequest,
@@ -101,6 +105,8 @@ export function RequestsInbox({
   const [busyId, setBusyId] = useState<string | null>(null)
   const [replyOpen, setReplyOpen] = useState(false)
   const [replyText, setReplyText] = useState('')
+  const [instruction, setInstruction] = useState('')
+  const [executingId, setExecutingId] = useState<string | null>(null)
   const [droppedFile, setDroppedFile] = useState<File | null>(null)
   const [pageDragOver, setPageDragOver] = useState(false)
   const dragDepth = useRef(0)
@@ -237,6 +243,35 @@ export function RequestsInbox({
     setReplyOpen(true)
   }
 
+  async function handleExecuteInstruction(r: InboundRequest) {
+    if (!instruction.trim()) {
+      toast.error('Enter an instruction first.')
+      return
+    }
+    setExecutingId(r.id)
+    try {
+      const res = await executeRequestInstruction(r.id, instruction)
+      if (!res.ok) {
+        toast.error(res.error ?? 'Could not execute the instruction.')
+        return
+      }
+      if (res.action === 'create_call') {
+        toast.success('Call created by AI.')
+        setInstruction('')
+        if (res.navigateTo) router.push(res.navigateTo)
+        else router.refresh()
+      } else if (res.action === 'send_report') {
+        toast.success('Navigating to site reports…')
+        setInstruction('')
+        if (res.navigateTo) router.push(res.navigateTo)
+      } else {
+        toast.info(res.summary ?? 'No action taken.')
+      }
+    } finally {
+      setExecutingId(null)
+    }
+  }
+
   return (
     <div
       className="relative space-y-4"
@@ -343,13 +378,17 @@ export function RequestsInbox({
                 key={selected.id}
                 request={selected}
                 busy={busyId === selected.id}
+                executing={executingId === selected.id}
                 sites={sites}
                 clients={clients}
                 reactiveServiceTypes={reactiveServiceTypes}
                 systemTypes={systemTypes}
                 replyOpen={replyOpen}
                 replyText={replyText}
+                instruction={instruction}
                 onReplyTextChange={setReplyText}
+                onInstructionChange={setInstruction}
+                onExecuteInstruction={() => handleExecuteInstruction(selected)}
                 onOpenReply={() => openReply(selected)}
                 onCancelReply={() => setReplyOpen(false)}
                 onSendReply={() => handleSendReply(selected)}
@@ -387,13 +426,17 @@ export function RequestsInbox({
 function RequestDetail({
   request: r,
   busy,
+  executing,
   sites,
   clients,
   reactiveServiceTypes,
   systemTypes,
   replyOpen,
   replyText,
+  instruction,
   onReplyTextChange,
+  onInstructionChange,
+  onExecuteInstruction,
   onOpenReply,
   onCancelReply,
   onSendReply,
@@ -405,13 +448,17 @@ function RequestDetail({
 }: {
   request: InboundRequest
   busy: boolean
+  executing: boolean
   sites: Site[]
   clients: { id: string; name: string }[]
   reactiveServiceTypes: ServiceType[]
   systemTypes: SystemType[]
   replyOpen: boolean
   replyText: string
+  instruction: string
   onReplyTextChange: (v: string) => void
+  onInstructionChange: (v: string) => void
+  onExecuteInstruction: () => void
   onOpenReply: () => void
   onCancelReply: () => void
   onSendReply: () => void
@@ -464,15 +511,63 @@ function RequestDetail({
         </div>
       )}
 
-      {/* AI summary */}
-      {r.ai_summary && (
-        <div className="mt-4 rounded-md border bg-muted/40 p-3">
-          <p className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+      {/* AI recommendation card */}
+      {(r.ai_summary || r.ai_proposed_action) && (
+        <div className="mt-4 rounded-lg border border-primary/25 bg-primary/[0.04] p-4">
+          <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-primary">
             <Sparkles className="h-3.5 w-3.5" />
-            AI summary
-            {r.ai_intent && <span>· {INTENT_LABEL[r.ai_intent] ?? r.ai_intent}</span>}
+            AI recommendation
+            {r.ai_intent && (
+              <span className="ml-auto font-normal normal-case tracking-normal text-muted-foreground">
+                {INTENT_LABEL[r.ai_intent] ?? r.ai_intent}
+              </span>
+            )}
           </p>
-          <p className="text-sm text-pretty">{r.ai_summary}</p>
+
+          {/* What the client wants */}
+          {r.ai_summary && (
+            <div className="mb-3">
+              <p className="mb-0.5 text-xs font-medium text-muted-foreground">What they want</p>
+              <p className="text-sm text-pretty">{r.ai_summary}</p>
+            </div>
+          )}
+
+          {/* What AI proposes to do */}
+          {r.ai_proposed_action && !isClosed && (
+            <div className="flex items-start justify-between gap-3 rounded-md border border-primary/20 bg-background px-3 py-2.5">
+              <div className="flex items-start gap-2 min-w-0">
+                <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <p className="text-sm font-medium text-pretty">{r.ai_proposed_action}</p>
+              </div>
+              <Button
+                size="sm"
+                className="shrink-0"
+                disabled={executing || busy}
+                onClick={() => {
+                  onInstructionChange(r.ai_proposed_action!)
+                  // Small delay so state settles before executing
+                  setTimeout(() => onExecuteInstruction(), 50)
+                }}
+              >
+                {executing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <>
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Do it
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+
+          {/* Actioned state: show what was done */}
+          {r.ai_proposed_action && isClosed && (
+            <div className="flex items-start gap-2 rounded-md border bg-muted/40 px-3 py-2.5">
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground text-pretty">{r.ai_proposed_action}</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -597,8 +692,57 @@ function RequestDetail({
         </div>
       )}
 
+      {/* AI instruction override — collapsed by default, shown for open requests */}
+      {!isClosed && (
+        <details className="mt-3 rounded-lg border">
+          <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+            Give AI a different instruction…
+          </summary>
+          <div className="px-3 pb-3 pt-1">
+            <p className="mb-2 text-xs text-muted-foreground text-pretty">
+              Override AI&apos;s suggestion — tell it exactly what to do instead. For example: &ldquo;Book an emergency call for next Friday&rdquo; or &ldquo;Schedule a routine inspection for next month&rdquo;.
+            </p>
+            <Textarea
+              placeholder="e.g. Book an emergency fire alarm call for Friday 18th…"
+              value={instruction}
+              onChange={(e) => onInstructionChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.nativeEvent.isComposing) {
+                  e.preventDefault()
+                  onExecuteInstruction()
+                }
+              }}
+              rows={2}
+              disabled={executing || busy}
+              className="mb-2 resize-none"
+            />
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">Ctrl+Enter to run</p>
+              <Button
+                onClick={onExecuteInstruction}
+                disabled={executing || busy || !instruction.trim()}
+                size="sm"
+                variant="outline"
+              >
+                {executing ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    AI is working…
+                  </>
+                ) : (
+                  <>
+                    <SendHorizonal className="h-3.5 w-3.5" />
+                    Run instruction
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </details>
+      )}
+
       {/* Actions */}
-      <div className="mt-5 flex flex-wrap gap-2 border-t pt-4">
+      <div className="mt-4 flex flex-wrap gap-2 border-t pt-4">
         {!isClosed ? (
           <>
             {r.ai_intent === 'send_report' && r.matched_site_id ? (
@@ -609,22 +753,22 @@ function RequestDetail({
                 </a>
               </Button>
             ) : (
-              <Button onClick={onApprove} disabled={busy}>
+              <Button onClick={onApprove} disabled={busy || executing}>
                 <Check className="h-4 w-4" />
                 Create call
               </Button>
             )}
             {EMAIL_FEATURES_ENABLED && r.from_email && !replyOpen && (
-              <Button variant="outline" onClick={onOpenReply} disabled={busy}>
+              <Button variant="outline" onClick={onOpenReply} disabled={busy || executing}>
                 <CornerUpLeft className="h-4 w-4" />
                 Reply
               </Button>
             )}
-            <Button variant="outline" onClick={onRetriage} disabled={busy}>
+            <Button variant="outline" onClick={onRetriage} disabled={busy || executing}>
               <RefreshCw className={cn('h-4 w-4', busy && 'animate-spin')} />
               Re-triage
             </Button>
-            <Button variant="ghost" onClick={onDismiss} disabled={busy}>
+            <Button variant="ghost" onClick={onDismiss} disabled={busy || executing}>
               <X className="h-4 w-4" />
               Dismiss
             </Button>
@@ -634,7 +778,7 @@ function RequestDetail({
             {r.created_task_id && (
               <Button variant="outline" asChild>
                 <a href={`/dashboard/tasks/${r.created_task_id}`}>
-                  <Clock className="h-4 w-4" />
+                  <ExternalLink className="h-4 w-4" />
                   View call
                 </a>
               </Button>

@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home, Wrench, HardHat, FileText } from 'lucide-react'
+import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home, Wrench, HardHat, FileText, Database } from 'lucide-react'
 import type { User as AuthUser } from '@supabase/supabase-js'
 import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType, DocumentTemplate } from '@/lib/types/database'
 import { CompanySettings } from './company-settings'
@@ -20,6 +20,7 @@ import { InstallationSettings } from './installation-settings'
 import { DocumentTemplatesSettings } from './document-templates'
 import { SignatureManager } from './signature-manager'
 import { AvatarManager } from './avatar-manager'
+import { BulkDataSettings } from './bulk-data-settings'
 
 interface SettingsContentProps {
   user: AuthUser
@@ -156,6 +157,12 @@ export function SettingsContent({ user, profile, company, branches, departments,
           <TabsTrigger value="templates" className="gap-2">
             <FileText className="h-4 w-4" />
             Documents
+          </TabsTrigger>
+        )}
+        {isAdmin && (
+          <TabsTrigger value="data" className="gap-2">
+            <Database className="h-4 w-4" />
+            Data
           </TabsTrigger>
         )}
       </TabsList>
@@ -356,6 +363,12 @@ export function SettingsContent({ user, profile, company, branches, departments,
       {canManageTemplates && (
         <TabsContent value="templates" className="space-y-4">
           <DocumentTemplatesSettings templates={documentTemplates} />
+        </TabsContent>
+      )}
+
+      {isAdmin && (
+        <TabsContent value="data" className="space-y-4">
+          <BulkDataSettings />
         </TabsContent>
       )}
 

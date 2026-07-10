@@ -36,7 +36,7 @@ import {
 } from '@/components/ui/command'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
-import { Plus, Trash2, BookOpen, Save, TrendingUp, Calculator, Wrench, Check, ChevronsUpDown, ChevronDown, Sparkles, Building2, HardHat, Send, Eye, AlertTriangle } from 'lucide-react'
+import { Plus, Trash2, BookOpen, Save, TrendingUp, Calculator, Wrench, Check, ChevronsUpDown, ChevronDown, Sparkles, Building2, HardHat, Send, Eye, AlertTriangle, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { SendQuoteDialog } from '@/components/dashboard/sales/send-quote-dialog'
 import { PpmCalculatorDialog, type PpmDraft } from '@/components/dashboard/sales/ppm-calculator-dialog'
@@ -1180,6 +1180,8 @@ export function QuoteBuilder({
         if (defectId && !quote?.id) {
           await linkDefectToQuote(defectId, res.id)
         }
+        // The quote now lives in the database, so drop the local draft copy.
+        clearDraft()
         toast.success('Quote saved')
         if (quote?.id) router.refresh()
         else router.push(`/dashboard/sales/${res.id}`)
@@ -1215,51 +1217,170 @@ export function QuoteBuilder({
     return () => clearTimeout(handle)
   }, [canAutosave, title, buildPayload])
 
+  // ----- New-quote draft persistence (localStorage) -----
+  // Brand-new quotes have no id to autosave against, so if the user navigates
+  // away mid-build we'd lose everything. Keep the in-progress draft in
+  // localStorage, restore it on return, and clear it once the quote is saved.
+  const isNewQuote = !quote?.id && !readOnly
+  const draftKey = `pyrocel:new-quote-draft:${defectId ?? 'blank'}`
+  const [draftRestored, setDraftRestored] = useState(false)
+  // Skip the first save-effect run so the initial defaults never overwrite a
+  // previously-stored draft before the restore effect has applied it.
+  const draftSaveMounted = useRef(false)
+
+  const clearDraft = useCallback(() => {
+    try {
+      window.localStorage.removeItem(draftKey)
+    } catch {
+      // ignore storage errors (private mode, quota, etc.)
+    }
+  }, [draftKey])
+
+  // Restore once on mount.
+  useEffect(() => {
+    if (!isNewQuote) return
+    try {
+      const raw = window.localStorage.getItem(draftKey)
+      if (!raw) return
+      const d = JSON.parse(raw) as Record<string, unknown>
+      if (typeof d.title === 'string') {
+        setTitle(d.title)
+        titleDirty.current = Boolean(d.title)
+      }
+      if (typeof d.maintenanceOnly === 'boolean') setMaintenanceOnly(d.maintenanceOnly)
+      if (d.targetMode === 'client' || d.targetMode === 'prospect') setTargetMode(d.targetMode)
+      if (typeof d.branchId === 'string') setBranchId(d.branchId)
+      if (typeof d.clientId === 'string') setClientId(d.clientId)
+      if (typeof d.siteId === 'string') setSiteId(d.siteId)
+      if (typeof d.prospectName === 'string') setProspectName(d.prospectName)
+      if (typeof d.prospectContact === 'string') setProspectContact(d.prospectContact)
+      if (typeof d.prospectEmail === 'string') setProspectEmail(d.prospectEmail)
+      if (typeof d.prospectPhone === 'string') setProspectPhone(d.prospectPhone)
+      if (typeof d.prospectAddress === 'string') setProspectAddress(d.prospectAddress)
+      if (typeof d.terms === 'string') setTerms(d.terms)
+      if (typeof d.notes === 'string') setNotes(d.notes)
+      if (typeof d.vatRate === 'string') setVatRate(d.vatRate)
+      if (typeof d.discount === 'string') setDiscount(d.discount)
+      if (typeof d.validUntil === 'string') setValidUntil(d.validUntil)
+      if (typeof d.showLineItems === 'boolean') setShowLineItems(d.showLineItems)
+      if (typeof d.showEquipmentSpec === 'boolean') setShowEquipmentSpec(d.showEquipmentSpec)
+      if (typeof d.showMaintenanceAgreement === 'boolean')
+        setShowMaintenanceAgreement(d.showMaintenanceAgreement)
+      if (typeof d.showRequirementsMatrix === 'boolean')
+        setShowRequirementsMatrix(d.showRequirementsMatrix)
+      if (Array.isArray(d.requirements)) setRequirements(d.requirements as DraftRequirement[])
+      if (d.requirementSource !== undefined)
+        setRequirementSource((d.requirementSource as RequirementSourceInfo | null) ?? null)
+      if (Array.isArray(d.systems) && d.systems.length > 0)
+        setSystems(d.systems as EditSystem[])
+      setDraftRestored(true)
+    } catch {
+      // corrupt/unparseable draft — ignore and carry on with a fresh form.
+    }
+    // Run once on mount only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Debounced save whenever any persisted field changes.
+  useEffect(() => {
+    if (!isNewQuote) return
+    if (!draftSaveMounted.current) {
+      draftSaveMounted.current = true
+      return
+    }
+    const draft = {
+      title,
+      maintenanceOnly,
+      targetMode,
+      branchId,
+      clientId,
+      siteId,
+      prospectName,
+      prospectContact,
+      prospectEmail,
+      prospectPhone,
+      prospectAddress,
+      terms,
+      notes,
+      vatRate,
+      discount,
+      validUntil,
+      showLineItems,
+      showEquipmentSpec,
+      showMaintenanceAgreement,
+      showRequirementsMatrix,
+      requirements,
+      requirementSource,
+      systems,
+    }
+    const handle = setTimeout(() => {
+      try {
+        window.localStorage.setItem(draftKey, JSON.stringify(draft))
+      } catch {
+        // ignore storage errors (private mode, quota, etc.)
+      }
+    }, 500)
+    return () => clearTimeout(handle)
+  }, [
+    isNewQuote,
+    draftKey,
+    title,
+    maintenanceOnly,
+    targetMode,
+    branchId,
+    clientId,
+    siteId,
+    prospectName,
+    prospectContact,
+    prospectEmail,
+    prospectPhone,
+    prospectAddress,
+    terms,
+    notes,
+    vatRate,
+    discount,
+    validUntil,
+    showLineItems,
+    showEquipmentSpec,
+    showMaintenanceAgreement,
+    showRequirementsMatrix,
+    requirements,
+    requirementSource,
+    systems,
+  ])
+
   const disabled = readOnly || isPending
 
   return (
     <div className="space-y-6">
+      {/* Unsaved-draft notice: we recovered the in-progress quote from a previous
+          session so nothing was lost when the user navigated away. */}
+      {draftRestored && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
+          <span className="flex items-center gap-2">
+            <RotateCcw className="h-4 w-4 shrink-0" />
+            Restored your unsaved draft from a previous session.
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              clearDraft()
+              window.location.reload()
+            }}
+          >
+            Discard draft
+          </Button>
+        </div>
+      )}
+
       {/* ---------- Quote details ---------- */}
       <Card>
         <CardHeader>
           <CardTitle>Quote details</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-1.5">
-            <Label htmlFor="q-title">Title *</Label>
-            <Input
-              id="q-title"
-              value={title}
-              onChange={(e) => {
-                titleDirty.current = true
-                setTitle(e.target.value)
-              }}
-              placeholder="e.g. Fire alarm upgrade — Block A"
-              disabled={disabled}
-            />
-          </div>
-
-          {/* Maintenance-only mode toggle */}
-          {!readOnly && (
-            <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
-              <div className="grid gap-0.5">
-                <Label htmlFor="q-maint-only" className="cursor-pointer">
-                  Maintenance quote only
-                </Label>
-                <span className="text-xs text-muted-foreground text-pretty">
-                  Hides the client request and systems sections and focuses this quote on the
-                  routine-maintenance pricing calculator.
-                </span>
-              </div>
-              <Switch
-                id="q-maint-only"
-                checked={maintenanceOnly}
-                onCheckedChange={setMaintenanceOnly}
-                disabled={disabled}
-              />
-            </div>
-          )}
-
           {/* Issuing branch */}
           {branches.length > 0 && (
             <div className="grid gap-1.5">
@@ -1431,8 +1552,54 @@ export function QuoteBuilder({
             </div>
           )}
 
+          {/* Title — placed after client/site so it reads naturally and can
+              auto-follow the selected site name until manually edited. */}
+          <div className="grid gap-1.5">
+            <Label htmlFor="q-title">Title *</Label>
+            <Input
+              id="q-title"
+              value={title}
+              onChange={(e) => {
+                titleDirty.current = true
+                setTitle(e.target.value)
+              }}
+              placeholder="e.g. Fire alarm upgrade — Block A"
+              disabled={disabled}
+            />
+          </div>
         </CardContent>
       </Card>
+
+      {/* ---------- Maintenance quote only (own section) ---------- */}
+      {!readOnly && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Wrench className="h-4 w-4 text-muted-foreground" />
+              Maintenance quote only
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+              <div className="grid gap-0.5">
+                <Label htmlFor="q-maint-only" className="cursor-pointer">
+                  Enable maintenance-only mode
+                </Label>
+                <span className="text-xs text-muted-foreground text-pretty">
+                  Hides the client request and systems sections and focuses this quote on the
+                  routine-maintenance pricing calculator.
+                </span>
+              </div>
+              <Switch
+                id="q-maint-only"
+                checked={maintenanceOnly}
+                onCheckedChange={setMaintenanceOnly}
+                disabled={disabled}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ---------- Routine maintenance pricing (maintenance-only mode) ----------
         Only shown when "Maintenance quote only" is enabled. Opening the
@@ -2966,6 +3133,24 @@ function SystemCard({
           })
           })()}
 
+          {/* Reminder: prompt for services when parts have been added but no
+              service line exists yet (e.g. installation/commissioning missing). */}
+          {!readOnly &&
+            system.lines.some((l) => !l.is_service) &&
+            !system.lines.some((l) => l.is_service) && (
+              <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span className="text-pretty">
+                  No services added yet. Remember to add any services appropriate to{' '}
+                  <span className="font-medium">
+                    {WORK_TYPES.find((w) => w.code === system.work_type)?.label ?? 'this work'}
+                  </span>{' '}
+                  (e.g. installation, commissioning or decommission) using{' '}
+                  <span className="font-medium">Add service</span> below.
+                </span>
+              </div>
+            )}
+
           {!readOnly && (
             <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
               <div className="flex flex-wrap gap-2">
@@ -3024,7 +3209,9 @@ function SystemCard({
                   }}
                 >
                   <PopoverTrigger asChild>
-                    <Button variant="outline" size="sm" disabled={isPending}>
+                    {/* Highlighted as the primary parts-adding action so it
+                        stands out from the other outline buttons. */}
+                    <Button size="sm" disabled={isPending} className="shadow-sm">
                       <BookOpen className="mr-2 h-4 w-4" />
                       Add from catalogue
                     </Button>

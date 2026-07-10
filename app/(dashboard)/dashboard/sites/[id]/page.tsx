@@ -13,7 +13,6 @@ import { SiteSystemsManager } from '@/components/dashboard/sites/site-systems-ma
 import { SiteDefaultSubcontractor } from '@/components/dashboard/sites/site-default-subcontractor'
 import { QuotesTable } from '@/components/dashboard/sales/quotes-table'
 import { SiteAssetsTab, type SiteAsset } from '@/components/dashboard/sites/site-assets-tab'
-import { SiteReports } from '@/components/dashboard/sites/site-reports'
 import { SiteOpenCalls, type OpenCall } from '@/components/dashboard/sites/site-open-calls'
 import { SiteCalls, type SiteCall } from '@/components/dashboard/sites/site-calls'
 import { SiteLogbook } from '@/components/dashboard/sites/site-logbook'
@@ -518,7 +517,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
           <TabsTrigger value="logbook" className="flex-none">Log Book</TabsTrigger>
           <TabsTrigger value="documents" className="flex-none">Documents</TabsTrigger>
           <TabsTrigger value="engineer-info" className="flex-none">Engineer Info</TabsTrigger>
-          <TabsTrigger value="reports" className="flex-none">Reports</TabsTrigger>
+
         </TabsList>
 
         <TabsContent value="overview" className="mt-0">
@@ -709,6 +708,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             calls={allCalls}
             engineers={allCallEngineers}
             serviceTypes={allCallServiceTypes}
+            reportingEmails={(site as Site).reporting_emails || []}
           />
         </TabsContent>
 
@@ -778,14 +778,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
           />
         </TabsContent>
 
-        <TabsContent value="reports" className="mt-0">
-          <SiteReports
-            siteName={site.name}
-            siteAddress={site.address}
-            completedTasks={completedTasks}
-            reportingEmails={(site as Site).reporting_emails || []}
-          />
-        </TabsContent>
+
       </Tabs>
     </div>
   )

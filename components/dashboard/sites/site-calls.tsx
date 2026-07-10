@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -19,6 +20,14 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   Clock,
   ClipboardCheck,
@@ -38,6 +47,9 @@ import {
   Coins,
   Receipt,
   FileText,
+  Send,
+  Mail,
+  Loader2,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { formatDateUK, cn } from '@/lib/utils'
@@ -163,7 +175,7 @@ function ResultBadge({ status }: { status: string }) {
 
 // ─── Call card ────────────────────────────────────────────────────────────────
 
-function CallCard({ call }: { call: SiteCall }) {
+function CallCard({ call, onSendReport }: { call: SiteCall; onSendReport?: (c: SiteCall) => void }) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const scheduled = call.scheduled_date ? new Date(call.scheduled_date) : null
@@ -290,6 +302,12 @@ function CallCard({ call }: { call: SiteCall }) {
                 </Link>
               </Button>
             )}
+            {isCompleted && onSendReport && (
+              <Button variant="outline" size="sm" onClick={() => onSendReport(call)}>
+                <Send className="h-4 w-4" />
+                Send
+              </Button>
+            )}
             <Button variant="ghost" size="sm" asChild>
               <Link href={`/dashboard/tasks/${call.id}`}>
                 View
@@ -311,9 +329,49 @@ interface SiteCallsProps {
   calls: SiteCall[]
   engineers: { id: string; name: string }[]
   serviceTypes: { id: string; name: string }[]
+  reportingEmails?: string[]
 }
 
-export function SiteCalls({ calls, engineers, serviceTypes }: SiteCallsProps) {
+export function SiteCalls({ calls, engineers, serviceTypes, reportingEmails = [] }: SiteCallsProps) {
+  // Send-report dialog state
+  const [sendingCall, setSendingCall] = useState<SiteCall | null>(null)
+  const [sendEmails, setSendEmails] = useState<string[]>([])
+  const [newEmail, setNewEmail] = useState('')
+  const [isSending, setIsSending] = useState(false)
+  const [sendSuccess, setSendSuccess] = useState(false)
+
+  function openSendDialog(call: SiteCall) {
+    setSendingCall(call)
+    setSendEmails([...reportingEmails])
+    setNewEmail('')
+    setSendSuccess(false)
+  }
+
+  function addEmail() {
+    const trimmed = newEmail.trim()
+    if (trimmed && !sendEmails.includes(trimmed)) {
+      setSendEmails([...sendEmails, trimmed])
+      setNewEmail('')
+    }
+  }
+
+  async function handleSendReport() {
+    if (!sendingCall || sendEmails.length === 0) return
+    setIsSending(true)
+    try {
+      const res = await fetch('/api/send-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId: sendingCall.id, emails: sendEmails, resend: true }),
+      })
+      if (res.ok) {
+        setSendSuccess(true)
+        setTimeout(() => { setSendingCall(null); setSendSuccess(false) }, 2000)
+      }
+    } finally {
+      setIsSending(false)
+    }
+  }
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [engineerFilter, setEngineerFilter] = useState('all')
@@ -532,10 +590,79 @@ export function SiteCalls({ calls, engineers, serviceTypes }: SiteCallsProps) {
       ) : (
         <div className="flex flex-col gap-3">
           {filtered.map((call) => (
-            <CallCard key={call.id} call={call} />
+            <CallCard key={call.id} call={call} onSendReport={openSendDialog} />
           ))}
         </div>
       )}
+
+      {/* Send report dialog */}
+      <Dialog open={!!sendingCall} onOpenChange={() => setSendingCall(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send Report</DialogTitle>
+            <DialogDescription>
+              {sendingCall ? `${getServiceName(sendingCall)} — ${sendingCall.completed_at ? formatDateUK(sendingCall.completed_at) : ''}` : ''}
+            </DialogDescription>
+          </DialogHeader>
+
+          {sendSuccess ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <Mail className="mx-auto mb-3 h-10 w-10 text-green-500" />
+              <p className="text-base font-medium">Report sent successfully</p>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="send-email">Recipients</Label>
+                  <div className="mt-1 flex gap-2">
+                    <Input
+                      id="send-email"
+                      type="email"
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      placeholder="Add email address"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); addEmail() }
+                      }}
+                    />
+                    <Button type="button" variant="outline" onClick={addEmail}>Add</Button>
+                  </div>
+                </div>
+                {sendEmails.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {sendEmails.map((email) => (
+                      <Badge key={email} variant="secondary" className="gap-1">
+                        {email}
+                        <button
+                          type="button"
+                          onClick={() => setSendEmails(sendEmails.filter((e) => e !== email))}
+                          className="ml-1 hover:text-destructive"
+                          aria-label={`Remove ${email}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No recipients added yet.</p>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setSendingCall(null)}>Cancel</Button>
+                <Button onClick={handleSendReport} disabled={isSending || sendEmails.length === 0}>
+                  {isSending ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Sending…</>
+                  ) : (
+                    <><Send className="h-4 w-4" /> Send Report</>
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

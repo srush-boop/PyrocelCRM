@@ -1225,41 +1225,6 @@ export function QuoteBuilder({
           <CardTitle>Quote details</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-1.5">
-            <Label htmlFor="q-title">Title *</Label>
-            <Input
-              id="q-title"
-              value={title}
-              onChange={(e) => {
-                titleDirty.current = true
-                setTitle(e.target.value)
-              }}
-              placeholder="e.g. Fire alarm upgrade — Block A"
-              disabled={disabled}
-            />
-          </div>
-
-          {/* Maintenance-only mode toggle */}
-          {!readOnly && (
-            <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
-              <div className="grid gap-0.5">
-                <Label htmlFor="q-maint-only" className="cursor-pointer">
-                  Maintenance quote only
-                </Label>
-                <span className="text-xs text-muted-foreground text-pretty">
-                  Hides the client request and systems sections and focuses this quote on the
-                  routine-maintenance pricing calculator.
-                </span>
-              </div>
-              <Switch
-                id="q-maint-only"
-                checked={maintenanceOnly}
-                onCheckedChange={setMaintenanceOnly}
-                disabled={disabled}
-              />
-            </div>
-          )}
-
           {/* Issuing branch */}
           {branches.length > 0 && (
             <div className="grid gap-1.5">
@@ -1431,8 +1396,54 @@ export function QuoteBuilder({
             </div>
           )}
 
+          {/* Title — placed after client/site so it reads naturally and can
+              auto-follow the selected site name until manually edited. */}
+          <div className="grid gap-1.5">
+            <Label htmlFor="q-title">Title *</Label>
+            <Input
+              id="q-title"
+              value={title}
+              onChange={(e) => {
+                titleDirty.current = true
+                setTitle(e.target.value)
+              }}
+              placeholder="e.g. Fire alarm upgrade — Block A"
+              disabled={disabled}
+            />
+          </div>
         </CardContent>
       </Card>
+
+      {/* ---------- Maintenance quote only (own section) ---------- */}
+      {!readOnly && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Wrench className="h-4 w-4 text-muted-foreground" />
+              Maintenance quote only
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+              <div className="grid gap-0.5">
+                <Label htmlFor="q-maint-only" className="cursor-pointer">
+                  Enable maintenance-only mode
+                </Label>
+                <span className="text-xs text-muted-foreground text-pretty">
+                  Hides the client request and systems sections and focuses this quote on the
+                  routine-maintenance pricing calculator.
+                </span>
+              </div>
+              <Switch
+                id="q-maint-only"
+                checked={maintenanceOnly}
+                onCheckedChange={setMaintenanceOnly}
+                disabled={disabled}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ---------- Routine maintenance pricing (maintenance-only mode) ----------
         Only shown when "Maintenance quote only" is enabled. Opening the
@@ -2966,6 +2977,24 @@ function SystemCard({
           })
           })()}
 
+          {/* Reminder: prompt for services when parts have been added but no
+              service line exists yet (e.g. installation/commissioning missing). */}
+          {!readOnly &&
+            system.lines.some((l) => !l.is_service) &&
+            !system.lines.some((l) => l.is_service) && (
+              <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span className="text-pretty">
+                  No services added yet. Remember to add any services appropriate to{' '}
+                  <span className="font-medium">
+                    {WORK_TYPES.find((w) => w.code === system.work_type)?.label ?? 'this work'}
+                  </span>{' '}
+                  (e.g. installation, commissioning or decommission) using{' '}
+                  <span className="font-medium">Add service</span> below.
+                </span>
+              </div>
+            )}
+
           {!readOnly && (
             <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
               <div className="flex flex-wrap gap-2">
@@ -3024,7 +3053,9 @@ function SystemCard({
                   }}
                 >
                   <PopoverTrigger asChild>
-                    <Button variant="outline" size="sm" disabled={isPending}>
+                    {/* Highlighted as the primary parts-adding action so it
+                        stands out from the other outline buttons. */}
+                    <Button size="sm" disabled={isPending} className="shadow-sm">
                       <BookOpen className="mr-2 h-4 w-4" />
                       Add from catalogue
                     </Button>

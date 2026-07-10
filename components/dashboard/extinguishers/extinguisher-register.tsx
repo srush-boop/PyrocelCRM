@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { PrintButton } from '@/components/ui/print-button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { FloorInput } from '@/components/ui/floor-input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -401,11 +402,10 @@ export function ExtinguisherRegister({ siteId, siteName, extinguishers }: Exting
             </div>
             <div className="grid gap-2">
               <Label htmlFor="floor">Floor / Level</Label>
-              <Input
+              <FloorInput
                 id="floor"
                 value={form.floor}
-                onChange={(e) => setForm({ ...form, floor: e.target.value })}
-                placeholder="e.g. Ground"
+                onChange={(v) => setForm({ ...form, floor: v })}
               />
             </div>
             <div className="grid gap-2">

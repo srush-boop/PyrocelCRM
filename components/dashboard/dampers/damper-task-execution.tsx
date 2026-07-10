@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { CompletedReportActions } from '@/components/dashboard/reports/completed-report-actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { FloorInput } from '@/components/ui/floor-input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { TaskHeader } from '@/components/dashboard/tasks/task-header'
@@ -630,11 +631,10 @@ export function DamperTaskExecution({
             </div>
             <div className="grid gap-2">
               <Label htmlFor="add-floor">Floor / Level</Label>
-              <Input
+              <FloorInput
                 id="add-floor"
                 value={addForm.floor}
-                onChange={(e) => setAddForm({ ...addForm, floor: e.target.value })}
-                placeholder="e.g. Ground"
+                onChange={(v) => setAddForm({ ...addForm, floor: v })}
               />
             </div>
             <div className="grid gap-2">

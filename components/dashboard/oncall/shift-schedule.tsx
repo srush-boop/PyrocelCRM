@@ -25,6 +25,13 @@ interface ShiftScheduleProps {
 
 const UNASSIGNED = '__unassigned__'
 
+// Today's date as yyyy-mm-dd in local time, so we can highlight the current
+// day in the rota for quick reference.
+function todayKey(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+}
+
 // All yyyy-mm-dd dates within a month.
 function monthDates(month: string): string[] {
   const [y, m] = month.split('-').map(Number)
@@ -57,6 +64,7 @@ export function ShiftSchedule({
   const [pending, startTransition] = useTransition()
   const [coverShift, setCoverShift] = useState<OncallShift | null>(null)
   const [blockOpen, setBlockOpen] = useState(false)
+  const today = todayKey()
 
   // Lookup: `${branchId}|${date}` -> shift
   const shiftMap = useMemo(() => {
@@ -109,9 +117,19 @@ export function ShiftSchedule({
           ) : (
             <ul className="divide-y">
               {assigned.map((s) => (
-                <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <li
+                  key={s.id}
+                  className={`flex flex-wrap items-center justify-between gap-2 py-2 ${
+                    s.shiftDate === today ? '-mx-2 rounded-md bg-primary/10 px-2 ring-1 ring-inset ring-primary/30' : ''
+                  }`}
+                >
                   <div className="flex items-center gap-3">
                     <span className="min-w-[6.5rem] text-sm font-medium">{formatDay(s.shiftDate)}</span>
+                    {s.shiftDate === today && (
+                      <Badge variant="outline" className="border-primary/40 text-primary">
+                        Today
+                      </Badge>
+                    )}
                     {bandBadge(s.band)}
                     <span className="text-sm text-muted-foreground">{s.branchName}</span>
                   </div>
@@ -178,10 +196,21 @@ export function ShiftSchedule({
             const shift = shiftMap.get(`${branchId}|${date}`)
             const band = shift?.band ?? deriveBand(date, bankHolidaySet)
             const mine = shift?.engineerId === currentUserId
+            const isToday = date === today
             return (
-              <li key={date} className="flex flex-wrap items-center justify-between gap-2 py-2">
+              <li
+                key={date}
+                className={`flex flex-wrap items-center justify-between gap-2 py-2 ${
+                  isToday ? '-mx-2 rounded-md bg-primary/10 px-2 ring-1 ring-inset ring-primary/30' : ''
+                }`}
+              >
                 <div className="flex items-center gap-3">
                   <span className="min-w-[6.5rem] text-sm font-medium">{formatDay(date)}</span>
+                  {isToday && (
+                    <Badge variant="outline" className="border-primary/40 text-primary">
+                      Today
+                    </Badge>
+                  )}
                   {bandBadge(band)}
                 </div>
                 <div className="flex items-center gap-2">

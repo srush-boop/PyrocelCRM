@@ -141,6 +141,9 @@ export interface Profile {
   // Per-user top-level menu visibility override. NULL/undefined = use role
   // defaults. Otherwise an array of enabled top-level menu keys.
   menu_permissions: string[] | null
+  // Per-user dashboard tile colour overrides, keyed by tile title -> hex value
+  // (e.g. { "Service": "#2563eb" }). Empty object = use default theme colour.
+  dashboard_tile_colors: Record<string, string> | null
   // Nominated line manager for this user (self-referencing). Recorded for HR /
   // future approvals wiring. NULL = no manager set.
   manager_id: string | null

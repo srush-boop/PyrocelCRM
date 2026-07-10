@@ -1,7 +1,7 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import {
   Mail,
@@ -92,6 +92,7 @@ export function RequestsInbox({
   engineers: Profile[]
 }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [tab, setTab] = useState<TabKey>('review')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [approveOpen, setApproveOpen] = useState(false)
@@ -156,6 +157,17 @@ export function RequestsInbox({
     () => requests.find((r) => r.id === selectedId) ?? null,
     [requests, selectedId],
   )
+
+  // Deep-link support: /dashboard/requests?request=<id> (used by the per-entity
+  // "linked requests" cards) preselects that request and opens its correct tab.
+  useEffect(() => {
+    const requested = searchParams.get('request')
+    if (!requested) return
+    const match = requests.find((r) => r.id === requested)
+    if (!match) return
+    setSelectedId(requested)
+    setTab(match.status === 'actioned' ? 'actioned' : match.status === 'dismissed' ? 'dismissed' : 'review')
+  }, [searchParams, requests])
 
   async function withBusy(id: string, fn: () => Promise<void>) {
     setBusyId(id)

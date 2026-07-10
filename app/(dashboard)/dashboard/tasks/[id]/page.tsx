@@ -11,6 +11,8 @@ import { isFireAlarmService } from '@/lib/mcps'
 import { isEmergencyLightService } from '@/lib/emergency-lights'
 import { isExtinguisherService } from '@/lib/extinguishers'
 import { PreAttendancePanel } from '@/components/dashboard/site-info/pre-attendance-panel'
+import { AddRequestButton } from '@/components/dashboard/requests/add-request-button'
+import { EntityRequestsCard } from '@/components/dashboard/requests/entity-requests-card'
 import { CommissioningJobPanel } from '@/components/dashboard/tasks/commissioning-job-panel'
 import { resolveSiteFlags } from '@/lib/site-flags'
 import { getOpenRemedialForSite } from '@/lib/remedial'
@@ -206,6 +208,35 @@ export default async function TaskPage({ params }: PageProps) {
         </>
       )
     }
+  }
+
+  // Office/admin can raise a client request against this call (engineers can't).
+  // It's hard-linked to the task and prepended into the shared slot so it appears
+  // above every execution variant without touching each one.
+  if (canModerateNotes) {
+    const callSiteName = task.site_service?.site?.name ?? null
+    const callServiceName = task.site_service?.service_type?.name ?? null
+    const callLabel =
+      ['Call', callServiceName, callSiteName].filter(Boolean).join(' · ') || 'this call'
+    preAttendancePanel = (
+      <>
+        <div className="flex justify-end">
+          <AddRequestButton
+            entityType="task"
+            entityId={id}
+            context={{
+              siteId: preAttendanceSiteId,
+              clientId: task.site_service?.site?.client_id ?? task.client_id ?? null,
+              serviceTypeId: task.service_type_id ?? task.site_service?.service_type_id ?? null,
+              label: callLabel,
+            }}
+            revalidate={`/dashboard/tasks/${id}`}
+          />
+        </div>
+        <EntityRequestsCard entityType="task" entityId={id} />
+        {preAttendancePanel}
+      </>
+    )
   }
 
   // The shared pre-attendance panel is passed into each execution flow so it can

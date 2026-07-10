@@ -88,6 +88,94 @@ export async function addManualRequest(input: {
   return { ok: true, id }
 }
 
+/** Which entity a contextual request was raised from. */
+export type RequestEntityType = 'quote' | 'job' | 'site' | 'task' | 'defect'
+
+const ENTITY_COLUMN: Record<RequestEntityType, string> = {
+  quote: 'related_quote_id',
+  job: 'related_job_id',
+  site: 'related_site_id',
+  task: 'related_task_id',
+  defect: 'related_defect_id',
+}
+
+/**
+ * Raise a request from within an entity page (a quote, job, site, call or defect).
+ * Same as `addManualRequest` but (1) hard-links the row to the originating entity,
+ * (2) pre-seeds the known site/client, and (3) triages anchored to that context so
+ * the AI locks the match instead of guessing.
+ */
+export async function addContextualRequest(input: {
+  entityType: RequestEntityType
+  entityId: string
+  body: string
+  fromEmail?: string
+  fromName?: string
+  subject?: string
+  context?: {
+    siteId?: string | null
+    clientId?: string | null
+    serviceTypeId?: string | null
+    label?: string | null
+  }
+  revalidate?: string
+}): Promise<ActionResult> {
+  const { ctx, error } = await requireStaff()
+  if (error || !ctx) return { ok: false, error: error ?? 'Not authorised.' }
+
+  const body = input.body?.trim()
+  if (!body) return { ok: false, error: 'Paste the email content.' }
+
+  const column = ENTITY_COLUMN[input.entityType]
+  if (!column) return { ok: false, error: 'Unknown entity type.' }
+
+  let forwardedBy: string | null = null
+  if (input.fromEmail?.trim()) {
+    const { data: staff } = await ctx.supabase
+      .from('profiles')
+      .select('id')
+      .ilike('email', input.fromEmail.trim())
+      .maybeSingle()
+    forwardedBy = (staff as { id: string } | null)?.id ?? null
+  }
+
+  const { data: inserted, error: insErr } = await ctx.supabase
+    .from('inbound_requests')
+    .insert({
+      source: 'manual',
+      from_email: input.fromEmail?.trim() || null,
+      from_name: input.fromName?.trim() || null,
+      subject: input.subject?.trim() || null,
+      body_text: body,
+      forwarded_by: forwardedBy,
+      status: 'new',
+      [column]: input.entityId,
+      // Pre-seed the known match so it's correct even if triage fails.
+      matched_site_id: input.context?.siteId || null,
+      matched_client_id: input.context?.clientId || null,
+      matched_service_type_id: input.context?.serviceTypeId || null,
+    })
+    .select('id')
+    .single()
+
+  if (insErr || !inserted) {
+    console.log('[v0] addContextualRequest insert failed:', insErr?.message)
+    return { ok: false, error: 'Could not save the request.' }
+  }
+
+  const id = (inserted as { id: string }).id
+  await triageInboundRequest(id, {
+    siteId: input.context?.siteId ?? null,
+    clientId: input.context?.clientId ?? null,
+    serviceTypeId: input.context?.serviceTypeId ?? null,
+    contextLabel: input.context?.label ?? null,
+  })
+
+  revalidatePath('/dashboard/requests')
+  if (input.revalidate) revalidatePath(input.revalidate)
+  return { ok: true, id }
+}
+
 /** Re-run AI triage on a request (e.g. after correcting data or a triage error). */
 export async function retriageRequest(id: string): Promise<ActionResult> {
   const { ctx, error } = await requireStaff()

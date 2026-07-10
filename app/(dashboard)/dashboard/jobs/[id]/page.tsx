@@ -16,6 +16,8 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import { CreateDocumentButton } from '@/components/documents/create-document-dialog'
+import { AddRequestButton } from '@/components/dashboard/requests/add-request-button'
+import { EntityRequestsCard } from '@/components/dashboard/requests/entity-requests-card'
 import { BookJobCallButton } from '@/components/dashboard/jobs/book-job-call-button'
 import { JobStagePanel, JobContractReview } from '@/components/dashboard/jobs/job-controls'
 import { JobPurchasing } from '@/components/dashboard/jobs/job-purchasing'
@@ -146,6 +148,16 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
               jobTitle={typedJob.title ?? typedJob.quote?.title ?? null}
               poNumber={typedJob.po_number ?? null}
               jobNotes={typedJob.notes ?? null}
+            />
+            <AddRequestButton
+              entityType="job"
+              entityId={typedJob.id}
+              context={{
+                siteId: typedJob.site?.id ?? null,
+                clientId: typedJob.client?.id ?? null,
+                label: `Job ${typedJob.job_number ?? typedJob.title ?? ''}`.trim(),
+              }}
+              revalidate={`/dashboard/jobs/${typedJob.id}`}
             />
             <CreateDocumentButton
               ownerType="job"
@@ -296,6 +308,8 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
               </div>
             </CardContent>
           </Card>
+
+          <EntityRequestsCard entityType="job" entityId={typedJob.id} />
         </div>
       </div>
     </div>

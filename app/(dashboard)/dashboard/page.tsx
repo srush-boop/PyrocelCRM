@@ -25,6 +25,8 @@ import Link from 'next/link'
 import { ScanQrButton } from '@/components/dashboard/dampers/scan-qr-button'
 import { AddRequestDialog } from '@/components/dashboard/requests/add-request-dialog'
 import { ApprovalsWidget } from '@/components/dashboard/approvals/approvals-widget'
+import { TileColorPicker } from '@/components/dashboard/home/tile-color-picker'
+import { tileIconStyle, tileAccentStyle } from '@/lib/dashboard-tile-colors'
 import { getVisibleLeaveRequests } from '@/lib/leave-approvals'
 import { EngineerHome } from '@/components/dashboard/home/engineer-home'
 import { DashboardDateFilter } from '@/components/dashboard/home/dashboard-date-filter'
@@ -182,6 +184,9 @@ export default async function DashboardPage({
   const { pending: pendingApprovals } = await getVisibleLeaveRequests()
   const pendingApprovalsCount = pendingApprovals.length
 
+  // Per-user tile colour overrides (keyed by tile title). Empty = theme default.
+  const tileColors = (profile as Profile).dashboard_tile_colors ?? {}
+
   const modules: ModuleCard[] = [
     {
       title: 'Approvals',
@@ -335,52 +340,78 @@ export default async function DashboardPage({
 
       {/* Company overview — one hub per module */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {modules.map((m) => (
-          <Link
-            key={m.title}
-            href={m.href}
-            className="rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <Card className="group h-full transition-colors hover:border-primary/50 hover:bg-accent/40">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <m.icon className="h-5 w-5" />
-                    </span>
-                    <CardTitle className="text-base">{m.title}</CardTitle>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                </div>
-                <CardDescription className="pt-1">{m.description}</CardDescription>
-              </CardHeader>
-              {m.metrics.length > 0 && (
-                <CardContent>
-                  <div className="flex flex-wrap gap-x-6 gap-y-2">
-                    {m.metrics.map((metric) => (
-                      <div key={metric.label} className="space-y-0.5">
-                        <div
-                          className={`flex items-center gap-1 text-2xl font-bold ${
-                            metric.alert ? 'text-destructive' : ''
-                          }`}
-                        >
-                          {metric.icon && <metric.icon className="h-5 w-5" />}
-                          {metric.display ?? metric.value}
-                        </div>
-                        <p className="text-xs text-muted-foreground">{metric.label}</p>
-                        {metric.caption && (
-                          <p className="text-[0.7rem] leading-tight text-muted-foreground/70">
-                            {metric.caption}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
+        {modules.map((m) => {
+          const color = tileColors[m.title] ?? null
+          const iconStyle = tileIconStyle(color)
+          return (
+            <Card
+              key={m.title}
+              className="group relative h-full overflow-hidden transition-colors hover:border-primary/50 hover:bg-accent/40"
+            >
+              {/* Colour accent bar for personalised tiles. */}
+              {iconStyle && (
+                <span
+                  className="absolute inset-x-0 top-0 h-1"
+                  style={tileAccentStyle(color)}
+                  aria-hidden="true"
+                />
               )}
+              {/* Full-card navigation overlay. Sits behind the (pointer-events-none)
+                  content so clicks anywhere navigate, except the colour picker. */}
+              <Link
+                href={m.href}
+                aria-label={`Open ${m.title}`}
+                className="absolute inset-0 z-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              />
+              <div className="pointer-events-none relative z-[1]">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+                          iconStyle ? '' : 'bg-primary/10 text-primary'
+                        }`}
+                        style={iconStyle}
+                      >
+                        <m.icon className="h-5 w-5" />
+                      </span>
+                      <CardTitle className="text-base">{m.title}</CardTitle>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <TileColorPicker tileKey={m.title} currentColor={color} />
+                      <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                    </div>
+                  </div>
+                  <CardDescription className="pt-1">{m.description}</CardDescription>
+                </CardHeader>
+                {m.metrics.length > 0 && (
+                  <CardContent>
+                    <div className="flex flex-wrap gap-x-6 gap-y-2">
+                      {m.metrics.map((metric) => (
+                        <div key={metric.label} className="space-y-0.5">
+                          <div
+                            className={`flex items-center gap-1 text-2xl font-bold ${
+                              metric.alert ? 'text-destructive' : ''
+                            }`}
+                          >
+                            {metric.icon && <metric.icon className="h-5 w-5" />}
+                            {metric.display ?? metric.value}
+                          </div>
+                          <p className="text-xs text-muted-foreground">{metric.label}</p>
+                          {metric.caption && (
+                            <p className="text-[0.7rem] leading-tight text-muted-foreground/70">
+                              {metric.caption}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                )}
+              </div>
             </Card>
-          </Link>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

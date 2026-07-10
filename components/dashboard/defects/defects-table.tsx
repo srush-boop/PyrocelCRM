@@ -24,6 +24,7 @@ export interface DefectRow {
   taskId: string | null
   referenceNumber: string | null
   failedCount: number
+  advisoryCount: number
   status: DefectStatus
   quoteId: string | null
   createdAt: string
@@ -92,7 +93,7 @@ export function DefectsTable({ defects }: { defects: DefectRow[] }) {
             <AlertTriangle className="h-8 w-8 text-muted-foreground" />
             <p className="text-sm font-medium">No defects found</p>
             <p className="text-sm text-muted-foreground">
-              Failed reports will appear here automatically.
+              Failed reports and advisories will appear here automatically.
             </p>
           </div>
         ) : (
@@ -105,6 +106,7 @@ export function DefectsTable({ defects }: { defects: DefectRow[] }) {
                   <TableHead>Client</TableHead>
                   <TableHead>Service</TableHead>
                   <TableHead className="text-center">Failures</TableHead>
+                  <TableHead className="text-center">Advisories</TableHead>
                   <TableHead className="text-center">Parts</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Logged</TableHead>
@@ -123,7 +125,20 @@ export function DefectsTable({ defects }: { defects: DefectRow[] }) {
                     <TableCell>{d.clientName}</TableCell>
                     <TableCell>{d.serviceName}</TableCell>
                     <TableCell className="text-center">
-                      <Badge variant="destructive">{d.failedCount}</Badge>
+                      {d.failedCount > 0 ? (
+                        <Badge variant="destructive">{d.failedCount}</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {d.advisoryCount > 0 ? (
+                        <Badge className="bg-amber-500 text-white hover:bg-amber-600">
+                          {d.advisoryCount}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-center">
                       {d.suggestedPartsCount > 0 ? (

@@ -42,6 +42,7 @@ export default async function DefectsPage() {
     taskId: d.task_id,
     referenceNumber: d.reference_number,
     failedCount: d.failed_count,
+    advisoryCount: d.advisory_count ?? 0,
     status: d.status,
     quoteId: d.quote_id,
     createdAt: d.created_at,
@@ -57,8 +58,8 @@ export default async function DefectsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-balance">Defects</h1>
         <p className="text-sm text-muted-foreground">
-          Failed reports that may require remedial works. Raise a remedial quote directly from a
-          defect.
+          Failed reports and advisory observations that may require attention. Raise a remedial
+          quote directly from a defect.
         </p>
       </div>
       <DefectsTable defects={defects} />

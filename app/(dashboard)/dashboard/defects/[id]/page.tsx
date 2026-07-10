@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, FileText, ReceiptText, AlertTriangle, ExternalLink } from 'lucide-react'
+import { ArrowLeft, FileText, ReceiptText, AlertTriangle, ExternalLink, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -12,7 +12,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { formatDateUK } from '@/lib/utils'
-import { getFailedChecklistItems, DEFECT_STATUS_LABELS } from '@/lib/defects'
+import { getFailedChecklistItems, getAdvisoryChecklistItems, DEFECT_STATUS_LABELS } from '@/lib/defects'
 import { isDamperService } from '@/lib/dampers'
 import { isExtinguisherService } from '@/lib/extinguishers'
 import { DefectStatusActions } from '@/components/dashboard/defects/defect-status-actions'
@@ -80,6 +80,9 @@ export default async function DefectDetailPage({
   const clientName: string = d.client?.name ?? 'Unknown client'
   const serviceName: string = d.task?.site_service?.service_type?.name ?? 'Unknown service'
   const failedItems = getFailedChecklistItems(
+    (d.task_result?.checklist_results ?? []) as ChecklistResult[],
+  )
+  const advisoryItems = getAdvisoryChecklistItems(
     (d.task_result?.checklist_results ?? []) as ChecklistResult[],
   )
   const isOpen = status === 'open'
@@ -168,6 +171,34 @@ export default async function DefectDetailPage({
               </ul>
             )}
 
+            {advisoryItems.length > 0 && (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-2">
+                  <Info className="h-4 w-4 text-amber-600" />
+                  <p className="text-sm font-medium">Advisories ({advisoryItems.length})</p>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Not failures, but observations the engineer flagged for review.
+                </p>
+                <ul className="flex flex-col gap-3">
+                  {advisoryItems.map((item, i) => (
+                    <li
+                      key={item.item_id}
+                      className="flex gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3"
+                    >
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500 text-xs font-semibold text-white">
+                        {i + 1}
+                      </span>
+                      <div>
+                        <p className="text-sm font-medium">{item.label}</p>
+                        {item.notes && <p className="text-sm text-muted-foreground">{item.notes}</p>}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {d.task_result?.engineer_notes && (
               <div className="rounded-lg border bg-muted/40 p-3">
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -188,6 +219,16 @@ export default async function DefectDetailPage({
             <div className="flex items-center justify-between gap-2">
               <span className="text-muted-foreground">Failures</span>
               <Badge variant="destructive">{d.failed_count}</Badge>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-muted-foreground">Advisories</span>
+              {(d.advisory_count ?? 0) > 0 ? (
+                <Badge className="bg-amber-500 text-white hover:bg-amber-600">
+                  {d.advisory_count}
+                </Badge>
+              ) : (
+                <span>0</span>
+              )}
             </div>
             <div className="flex items-center justify-between gap-2">
               <span className="text-muted-foreground">Logged</span>

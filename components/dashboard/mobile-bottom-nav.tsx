@@ -42,6 +42,10 @@ export function MobileBottomNav({ profile }: { profile: Profile }) {
       ? pathname === href
       : pathname === href || pathname.startsWith(`${href}/`)
 
+  // "More" is active when no primary nav item matches the current path, so
+  // the engineer always knows where they are in the app.
+  const isMoreActive = items.every((item) => !isActive(item.href))
+
   return (
     <nav
       aria-label="Primary"
@@ -75,9 +79,13 @@ export function MobileBottomNav({ profile }: { profile: Profile }) {
           <button
             type="button"
             onClick={() => setOpenMobile(true)}
-            className="flex min-h-16 w-full flex-col items-center justify-center gap-1 px-1 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+            aria-label="More navigation options"
+            className={cn(
+              'flex min-h-16 w-full flex-col items-center justify-center gap-1 px-1 py-2 text-xs font-medium transition-colors',
+              isMoreActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
+            )}
           >
-            <Menu className="h-6 w-6" />
+            <Menu className={cn('h-6 w-6', isMoreActive && 'stroke-[2.5]')} />
             <span className="leading-none">More</span>
           </button>
         </li>

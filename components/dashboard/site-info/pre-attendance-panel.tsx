@@ -101,9 +101,9 @@ export function PreAttendancePanel({
 
         <Accordion type="multiple" className="w-full">
           <AccordionItem value="notes">
-            <AccordionTrigger className="text-sm">
+            <AccordionTrigger className="py-4 text-sm font-medium">
               <span className="flex items-center gap-2">
-                <MessageSquare className="h-4 w-4" />
+                <MessageSquare className="h-4 w-4 shrink-0" />
                 Internal notes
                 {notes.length > 0 && (
                   <span className="rounded-full bg-muted px-2 text-xs text-muted-foreground">
@@ -123,9 +123,9 @@ export function PreAttendancePanel({
           </AccordionItem>
 
           <AccordionItem value="files">
-            <AccordionTrigger className="text-sm">
+            <AccordionTrigger className="py-4 text-sm font-medium">
               <span className="flex items-center gap-2">
-                <FolderOpen className="h-4 w-4" />
+                <FolderOpen className="h-4 w-4 shrink-0" />
                 Engineer files &amp; downloads
                 {fileCount > 0 && (
                   <span className="rounded-full bg-muted px-2 text-xs text-muted-foreground">

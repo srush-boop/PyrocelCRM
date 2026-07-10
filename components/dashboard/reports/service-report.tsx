@@ -55,10 +55,12 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
   const stats = useMemo(() => {
     let pass = 0
     let fail = 0
+    let advisory = 0
     let other = 0
     for (const item of checklist) {
       if (item.type === 'pass_fail') {
-        if (item.passed) pass++
+        if (item.advisory) advisory++
+        else if (item.passed) pass++
         else fail++
       } else {
         other++
@@ -66,13 +68,14 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
     }
     const assessed = pass + fail
     const passRate = assessed > 0 ? Math.round((pass / assessed) * 100) : 0
-    return { pass, fail, other, total: checklist.length, passRate }
+    return { pass, fail, advisory, other, total: checklist.length, passRate }
   }, [checklist])
 
   const pieData = useMemo(
     () =>
       [
         { name: 'Pass', key: 'pass', value: stats.pass, color: '#16a34a' },
+        { name: 'Advisory', key: 'advisory', value: stats.advisory, color: '#f59e0b' },
         { name: 'Fail', key: 'fail', value: stats.fail, color: '#dc2626' },
         { name: 'Other', key: 'other', value: stats.other, color: '#6b7280' },
       ].filter((d) => d.value > 0),
@@ -261,9 +264,15 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
                           {item.type === 'pass_fail' ? (
                             <span
                               className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
-                              style={{ backgroundColor: item.passed ? '#16a34a' : '#dc2626' }}
+                              style={{
+                                backgroundColor: item.advisory
+                                  ? '#f59e0b'
+                                  : item.passed
+                                    ? '#16a34a'
+                                    : '#dc2626',
+                              }}
                             >
-                              {item.passed ? 'Pass' : 'Fail'}
+                              {item.advisory ? 'Advisory' : item.passed ? 'Pass' : 'Fail'}
                             </span>
                           ) : (
                             <span className="font-medium">{String(item.value)}</span>

@@ -9,12 +9,24 @@ export interface FailedChecklistItem {
 
 // Extract the failed pass/fail items from a report's checklist results.
 // A failure is a 'pass_fail' item explicitly marked passed === false.
+// Advisory items are deliberately excluded — they are not failures.
 export function getFailedChecklistItems(
   results: ChecklistResult[] | null | undefined,
 ): FailedChecklistItem[] {
   if (!Array.isArray(results)) return []
   return results
-    .filter((r) => r.type === 'pass_fail' && r.passed === false)
+    .filter((r) => r.type === 'pass_fail' && r.passed === false && !r.advisory)
+    .map((r) => ({ item_id: r.item_id, label: r.label, notes: r.notes }))
+}
+
+// Extract advisory items — pass/fail items flagged as worth noting but not
+// failures. These are surfaced in the defects log for review alongside failures.
+export function getAdvisoryChecklistItems(
+  results: ChecklistResult[] | null | undefined,
+): FailedChecklistItem[] {
+  if (!Array.isArray(results)) return []
+  return results
+    .filter((r) => r.type === 'pass_fail' && r.advisory === true)
     .map((r) => ({ item_id: r.item_id, label: r.label, notes: r.notes }))
 }
 

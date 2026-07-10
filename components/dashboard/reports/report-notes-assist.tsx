@@ -78,7 +78,12 @@ export function ReportNotesAssist({
           {label}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 space-y-3">
+      <PopoverContent
+        align="end"
+        sideOffset={6}
+        collisionPadding={12}
+        className="w-[min(20rem,calc(100vw-1.5rem))] max-h-[calc(100dvh-6rem)] overflow-y-auto space-y-3"
+      >
         <div className="space-y-1">
           <p className="text-sm font-medium">
             {isDefect ? 'Describe the fault' : 'Draft engineer summary'}

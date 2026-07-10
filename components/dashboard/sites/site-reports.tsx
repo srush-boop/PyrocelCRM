@@ -458,7 +458,9 @@ export function SiteReports({ siteName, siteAddress, completedTasks, reportingEm
                     >
                       <span className="text-sm">{result.label}</span>
                       {result.type === 'pass_fail' ? (
-                        result.passed ? (
+                        result.advisory ? (
+                          <Badge className="bg-amber-500/10 text-amber-600">Advisory</Badge>
+                        ) : result.passed ? (
                           <Badge className="bg-green-500/10 text-green-600">Pass</Badge>
                         ) : (
                           <Badge className="bg-red-500/10 text-red-600">Fail</Badge>

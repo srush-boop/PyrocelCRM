@@ -6,6 +6,8 @@ export interface ChecklistItem {
   // `passed` is only meaningful for pass/fail items. Summary/informational
   // items (numbers, text) carry `null` and must not be rendered as failures.
   passed: boolean | null
+  // Advisory items are observations worth noting, not failures.
+  advisory?: boolean
   type?: 'pass_fail' | 'text' | 'number' | 'checkbox'
   value?: boolean | string | number | null
   notes?: string
@@ -15,6 +17,15 @@ export interface ChecklistItem {
 // informational items (e.g. damper summary counts like "Failed: 1") render
 // neutrally with their value, so they are never shown as failures.
 const checklistItemHtml = (item: ChecklistItem): string => {
+  // Advisory items are neither pass nor fail — render them neutrally in amber.
+  if (item.advisory) {
+    return `
+      <div class="item advisory">
+        <strong>! ${item.label} (Advisory)</strong>
+        ${item.notes ? `<p>${item.notes}</p>` : ''}
+      </div>
+    `
+  }
   const isPassFail = item.type === 'pass_fail' || typeof item.passed === 'boolean'
   if (!isPassFail) {
     const hasValue = item.value !== undefined && item.value !== null && item.value !== ''
@@ -80,9 +91,10 @@ export const generateClientPassEmail = (data: EmailData): { subject: string; htm
           .content { padding: 20px; background: #f9f9f9; margin: 20px 0; border-radius: 5px; }
           .checklist { margin: 20px 0; }
           .item { padding: 10px; border-left: 4px solid #2d8659; background: white; margin: 10px 0; }
-          .pass { border-left-color: #28a745; }
-          .fail { border-left-color: #dc3545; }
-          .info { border-left-color: #6b7280; }
+    .pass { border-left-color: #28a745; }
+    .fail { border-left-color: #dc3545; }
+    .advisory { border-left-color: #f59e0b; }
+    .info { border-left-color: #6b7280; }
           .footer { text-align: center; color: #666; font-size: 12px; }
           .stamp { background: #28a745; color: white; padding: 10px 20px; border-radius: 5px; display: inline-block; font-weight: bold; }
         </style>
@@ -155,9 +167,10 @@ export const generateClientFailEmail = (data: EmailData): { subject: string; htm
           .content { padding: 20px; background: #f9f9f9; margin: 20px 0; border-radius: 5px; }
           .checklist { margin: 20px 0; }
           .item { padding: 10px; border-left: 4px solid #dc3545; background: white; margin: 10px 0; }
-          .pass { border-left-color: #28a745; }
-          .fail { border-left-color: #dc3545; }
-          .info { border-left-color: #6b7280; }
+    .pass { border-left-color: #28a745; }
+    .fail { border-left-color: #dc3545; }
+    .advisory { border-left-color: #f59e0b; }
+    .info { border-left-color: #6b7280; }
           .footer { text-align: center; color: #666; font-size: 12px; }
           .stamp { background: #dc3545; color: white; padding: 10px 20px; border-radius: 5px; display: inline-block; font-weight: bold; }
           .alert { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 12px; border-radius: 5px; margin: 20px 0; }

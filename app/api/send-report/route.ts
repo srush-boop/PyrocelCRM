@@ -125,6 +125,7 @@ export async function POST(request: NextRequest) {
           type?: 'pass_fail' | 'text' | 'number' | 'checkbox'
           value?: boolean | string | number | null
           passed: boolean | null
+          advisory?: boolean
           notes?: string
         }) => ({
           id: r.label,
@@ -134,6 +135,7 @@ export async function POST(request: NextRequest) {
           // Preserve null for summary/informational items so they are not
           // rendered as failures in the email.
           passed: r.passed ?? null,
+          advisory: r.advisory ?? false,
           notes: r.notes,
         })
       ),

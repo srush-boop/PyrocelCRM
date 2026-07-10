@@ -31,6 +31,8 @@ import { ReportNotesAssist } from '@/components/dashboard/reports/report-notes-a
 import { CompletedReportActions } from '@/components/dashboard/reports/completed-report-actions'
 import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
 import { CallPartsPicker } from '@/components/dashboard/tasks/call-parts-picker'
+import { FurtherWorksSheet } from '@/components/dashboard/tasks/further-works-sheet'
+import { isNonRecurringCall } from '@/lib/follow-up'
 import { formatDateUK, cn } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import {
@@ -1161,24 +1163,37 @@ export function TaskExecution({
 
       {/* Action Buttons */}
       {status === 'in_progress' && canEdit && (
-        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-50 flex gap-2 border-t bg-background px-4 py-3 lg:relative lg:inset-x-auto lg:bottom-auto lg:z-auto lg:border-0 lg:p-0">
-          <Button variant="outline" onClick={handleSave} disabled={saving} className="h-12 flex-1">
-            {saving ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="mr-2 h-4 w-4" />
-                Save Progress
-              </>
-            )}
-          </Button>
-          <Button onClick={() => setShowSubmitDialog(true)} className="h-12 flex-1">
-            <Send className="mr-2 h-4 w-4" />
-            Complete & Submit
-          </Button>
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-50 flex flex-col gap-2 border-t bg-background px-4 py-3 lg:relative lg:inset-x-auto lg:bottom-auto lg:z-auto lg:border-0 lg:p-0">
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleSave} disabled={saving} className="h-12 flex-1">
+              {saving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  Save Progress
+                </>
+              )}
+            </Button>
+            <Button onClick={() => setShowSubmitDialog(true)} className="h-12 flex-1">
+              <Send className="mr-2 h-4 w-4" />
+              Complete & Submit
+            </Button>
+          </div>
+          {/* Non-recurring calls (reactive / emergency / planned) can be flagged as
+              needing further works, which raises a follow-up for review. */}
+          {isNonRecurringCall(task) && (
+            <div className="flex">
+              <FurtherWorksSheet
+                taskId={task.id}
+                isEmergency={task.is_emergency}
+                onBeforeRaise={handleSave}
+              />
+            </div>
+          )}
         </div>
       )}
 

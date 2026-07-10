@@ -856,6 +856,14 @@ export interface Task {
   // Deadline-missed logging: reason + free-text note when respond_by was missed
   deadline_failed_reason: string | null
   deadline_failed_note: string | null
+  // Follow-up chain: when this call is a follow-up to an earlier call that could
+  // not be resolved on the day, this points at the previous call. `fix_attempt`
+  // counts visits in the chain (1 = original, 2 = first follow-up, …).
+  // `first_time_fix` is set to false on an emergency ORIGINAL when a follow-up is
+  // raised (null otherwise), for first-time-fix KPI reporting.
+  follow_up_to_id: string | null
+  first_time_fix: boolean | null
+  fix_attempt: number
   site_service?: SiteService
   // Direct joins for reactive/emergency calls (and available on recurring calls
   // via the backfilled ids).
@@ -865,6 +873,59 @@ export interface Task {
   assigned_engineer?: Profile | null
   visit_type?: ServiceVisitType | null
   client?: Client | null
+  // The call this one follows up on (when follow_up_to_id is set).
+  follow_up_to?: Task | null
+  }
+
+  // ── Follow-up calls ────────────────────────────────────────────────────────
+  export type FollowUpStatus = 'pending' | 'approved' | 'rejected' | 'cancelled'
+  export type FollowUpPartAction = 'none' | 'reserve' | 'order'
+  export type FollowUpReservationStatus = 'pending' | 'confirmed'
+
+  // A follow-up review-queue row, created when an engineer flags "further works
+  // required". Reviewed by office before the linked Planned Call is created.
+  export interface FollowUpRequest {
+  id: string
+  original_task_id: string
+  site_id: string | null
+  requested_by: string | null
+  fix_attempt: number
+  issue_summary: string
+  status: FollowUpStatus
+  proposed_date: string | null
+  assigned_engineer_id: string | null
+  reviewed_by: string | null
+  reviewed_at: string | null
+  reject_reason: string | null
+  created_task_id: string | null
+  escalated: boolean
+  escalated_at: string | null
+  resolved_at: string | null
+  created_at: string
+  // Joins.
+  original_task?: Task | null
+  site?: Site | null
+  requested_by_profile?: Profile | null
+  assigned_engineer?: Profile | null
+  parts?: FollowUpPart[]
+  }
+
+  // An engineer-suggested part for a follow-up, with optional reserve/order action.
+  export interface FollowUpPart {
+  id: string
+  request_id: string
+  part_id: string | null
+  description: string | null
+  quantity: number
+  action: FollowUpPartAction
+  location_id: string | null
+  reservation_status: FollowUpReservationStatus | null
+  location_ref: string | null
+  notes: string | null
+  created_at: string
+  // Joins.
+  part?: Part | null
+  location?: StockLocation | null
   }
 
   export interface ChecklistResult {

@@ -17,7 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Printer, Send, Mail, X, CheckCircle, Coins, Loader2, Wrench, Pencil } from 'lucide-react'
+import { Printer, Send, Mail, X, CheckCircle, Coins, Loader2, Wrench, Pencil, Receipt } from 'lucide-react'
 import { isDamperService } from '@/lib/dampers'
 import { isExtinguisherService } from '@/lib/extinguishers'
 import { useRouter } from 'next/navigation'
@@ -41,6 +41,8 @@ interface CompletedReportActionsProps {
   chargeReason?: string | null
   /** Current client reference (PO ref, quote ref, etc.) for chargeable calls. */
   clientRef?: string | null
+  /** ISO timestamp when the call was marked invoiced (if set, shows Invoiced badge). */
+  chargeInvoicedAt?: string | null
   /** True for office/admin, who may change the charge/review state. */
   canReview?: boolean
 }
@@ -64,6 +66,7 @@ export function CompletedReportActions({
   chargeReviewStatus = 'none',
   chargeReason,
   clientRef: initialClientRef = null,
+  chargeInvoicedAt = null,
   canReview = false,
 }: CompletedReportActionsProps) {
   const router = useRouter()
@@ -166,27 +169,33 @@ export function CompletedReportActions({
         <div
           className={cn(
             'rounded-md border p-3',
-            chargeable && chargeReviewStatus === 'pending'
-              ? 'border-amber-300 bg-amber-50'
-              : chargeReviewStatus === 'reviewed'
-                ? 'border-green-300 bg-green-50'
-                : 'border-border bg-muted/40',
+            chargeInvoicedAt
+              ? 'border-emerald-300 bg-emerald-50'
+              : chargeable && chargeReviewStatus === 'pending'
+                ? 'border-amber-300 bg-amber-50'
+                : chargeReviewStatus === 'reviewed'
+                  ? 'border-green-300 bg-green-50'
+                  : 'border-border bg-muted/40',
           )}
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              {chargeReason === 'parts_added' ? (
+              {chargeInvoicedAt ? (
+                <Receipt className="h-4 w-4 text-emerald-600" />
+              ) : chargeReason === 'parts_added' ? (
                 <Wrench className="h-4 w-4 text-amber-600" />
               ) : (
                 <Coins className="h-4 w-4 text-amber-600" />
               )}
               <div className="text-sm">
                 <span className="font-medium">
-                  {chargeable
-                    ? chargeReviewStatus === 'reviewed'
-                      ? 'Chargeable — reviewed'
-                      : 'Chargeable — awaiting review'
-                    : 'Not chargeable'}
+                  {chargeInvoicedAt
+                    ? 'Chargeable — invoiced'
+                    : chargeable
+                      ? chargeReviewStatus === 'reviewed'
+                        ? 'Chargeable — reviewed'
+                        : 'Chargeable — awaiting review'
+                      : 'Not chargeable'}
                 </span>
                 {chargeable && chargeReason && CHARGE_REASON_LABELS[chargeReason] && (
                   <span className="ml-2 text-xs text-muted-foreground">

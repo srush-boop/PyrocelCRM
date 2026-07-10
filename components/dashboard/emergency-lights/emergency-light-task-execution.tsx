@@ -378,6 +378,7 @@ export function EmergencyLightTaskExecution({
             chargeReviewStatus={task.charge_review_status}
             chargeReason={task.charge_reason}
             clientRef={(task as any).client_ref ?? null}
+            chargeInvoicedAt={(task as any).charge_invoiced_at ?? null}
             canReview={profile.role === 'admin' || profile.role === 'office'}
           />
         </div>

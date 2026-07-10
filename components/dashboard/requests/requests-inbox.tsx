@@ -511,15 +511,63 @@ function RequestDetail({
         </div>
       )}
 
-      {/* AI summary */}
-      {r.ai_summary && (
-        <div className="mt-4 rounded-md border bg-muted/40 p-3">
-          <p className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+      {/* AI recommendation card */}
+      {(r.ai_summary || r.ai_proposed_action) && (
+        <div className="mt-4 rounded-lg border border-primary/25 bg-primary/[0.04] p-4">
+          <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-primary">
             <Sparkles className="h-3.5 w-3.5" />
-            AI summary
-            {r.ai_intent && <span>· {INTENT_LABEL[r.ai_intent] ?? r.ai_intent}</span>}
+            AI recommendation
+            {r.ai_intent && (
+              <span className="ml-auto font-normal normal-case tracking-normal text-muted-foreground">
+                {INTENT_LABEL[r.ai_intent] ?? r.ai_intent}
+              </span>
+            )}
           </p>
-          <p className="text-sm text-pretty">{r.ai_summary}</p>
+
+          {/* What the client wants */}
+          {r.ai_summary && (
+            <div className="mb-3">
+              <p className="mb-0.5 text-xs font-medium text-muted-foreground">What they want</p>
+              <p className="text-sm text-pretty">{r.ai_summary}</p>
+            </div>
+          )}
+
+          {/* What AI proposes to do */}
+          {r.ai_proposed_action && !isClosed && (
+            <div className="flex items-start justify-between gap-3 rounded-md border border-primary/20 bg-background px-3 py-2.5">
+              <div className="flex items-start gap-2 min-w-0">
+                <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <p className="text-sm font-medium text-pretty">{r.ai_proposed_action}</p>
+              </div>
+              <Button
+                size="sm"
+                className="shrink-0"
+                disabled={executing || busy}
+                onClick={() => {
+                  onInstructionChange(r.ai_proposed_action!)
+                  // Small delay so state settles before executing
+                  setTimeout(() => onExecuteInstruction(), 50)
+                }}
+              >
+                {executing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <>
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Do it
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+
+          {/* Actioned state: show what was done */}
+          {r.ai_proposed_action && isClosed && (
+            <div className="flex items-start gap-2 rounded-md border bg-muted/40 px-3 py-2.5">
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground text-pretty">{r.ai_proposed_action}</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -644,52 +692,53 @@ function RequestDetail({
         </div>
       )}
 
-      {/* AI Instruction box — only shown for open (non-closed) requests */}
+      {/* AI instruction override — collapsed by default, shown for open requests */}
       {!isClosed && (
-        <div className="mt-4 rounded-lg border border-primary/20 bg-primary/[0.03] p-4">
-          <p className="mb-2 flex items-center gap-1.5 text-sm font-medium">
-            <Sparkles className="h-4 w-4 text-primary" />
-            Instruct AI to take action
-          </p>
-          <p className="mb-3 text-xs text-muted-foreground text-pretty">
-            Tell AI exactly what to do — it will carry out the action immediately. For example:
-            &ldquo;Book an emergency fire alarm call for tomorrow&rdquo; or &ldquo;Schedule a routine inspection for next Monday&rdquo;.
-          </p>
-          <Textarea
-            placeholder="e.g. Book an emergency call for this site for tomorrow…"
-            value={instruction}
-            onChange={(e) => onInstructionChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.nativeEvent.isComposing) {
-                e.preventDefault()
-                onExecuteInstruction()
-              }
-            }}
-            rows={3}
-            disabled={executing || busy}
-            className="mb-3 resize-none"
-          />
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs text-muted-foreground">Ctrl+Enter to run</p>
-            <Button
-              onClick={onExecuteInstruction}
-              disabled={executing || busy || !instruction.trim()}
-              size="sm"
-            >
-              {executing ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  AI is working…
-                </>
-              ) : (
-                <>
-                  <SendHorizonal className="h-4 w-4" />
-                  Let AI do this
-                </>
-              )}
-            </Button>
+        <details className="mt-3 rounded-lg border">
+          <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+            Give AI a different instruction…
+          </summary>
+          <div className="px-3 pb-3 pt-1">
+            <p className="mb-2 text-xs text-muted-foreground text-pretty">
+              Override AI&apos;s suggestion — tell it exactly what to do instead. For example: &ldquo;Book an emergency call for next Friday&rdquo; or &ldquo;Schedule a routine inspection for next month&rdquo;.
+            </p>
+            <Textarea
+              placeholder="e.g. Book an emergency fire alarm call for Friday 18th…"
+              value={instruction}
+              onChange={(e) => onInstructionChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.nativeEvent.isComposing) {
+                  e.preventDefault()
+                  onExecuteInstruction()
+                }
+              }}
+              rows={2}
+              disabled={executing || busy}
+              className="mb-2 resize-none"
+            />
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">Ctrl+Enter to run</p>
+              <Button
+                onClick={onExecuteInstruction}
+                disabled={executing || busy || !instruction.trim()}
+                size="sm"
+                variant="outline"
+              >
+                {executing ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    AI is working…
+                  </>
+                ) : (
+                  <>
+                    <SendHorizonal className="h-3.5 w-3.5" />
+                    Run instruction
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
-        </div>
+        </details>
       )}
 
       {/* Actions */}

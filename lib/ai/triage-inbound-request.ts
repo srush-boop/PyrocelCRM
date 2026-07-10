@@ -115,7 +115,18 @@ function scoreSite(
 const triageSchema = z.object({
   summary: z
     .string()
-    .describe('A concise 1-3 sentence summary of what the sender is asking for, in British English.'),
+    .describe(
+      'What does the client/sender WANT from us? Write 1-2 sentences focused purely on what they are asking us to do or provide — not a restatement of the email. British English.',
+    ),
+  proposed_action: z
+    .string()
+    .describe(
+      'A single clear sentence describing the specific action you recommend taking in the system right now. ' +
+      'Be concrete: name the site, call type, urgency, and any date if inferable. ' +
+      'Examples: "Book an emergency fire alarm attendance at Geordie\'s Butcher Block for tomorrow." ' +
+      '"Send the most recent fire alarm inspection certificate to the contact at Pyrocel Ltd." ' +
+      '"Schedule a routine fire extinguisher service for The Crown Hotel within the next 5 days."',
+    ),
   intent: z
     .enum(['new_call', 'chase_up', 'complaint', 'quote_request', 'send_report', 'general', 'unknown'])
     .describe(
@@ -290,7 +301,11 @@ export async function triageInboundRequest(
     const systemPrompt = [
       `You are an operations coordinator at ${companyName}, a UK fire and security systems company.`,
       'Office staff forward you client emails (service requests, chase-ups, complaints, quote enquiries, report/certificate requests).',
-      'Read the email and its sender, then: (1) summarise it, (2) classify intent and urgency, (3) match it to an existing SITE and CLIENT from the candidate list, (4) choose the most appropriate reactive call type from the allowed list (only when intent is new_call/complaint/general), and (5) draft a brief acknowledgement reply.',
+      'Your job is to: (1) identify what the client WANTS us to do, (2) propose a specific concrete action to take in our system, (3) classify intent + urgency, (4) match to an existing SITE/CLIENT from the candidate list, (5) choose the right reactive call type, and (6) draft a brief acknowledgement reply.',
+      '',
+      'SUMMARY FIELD: Do not summarise the email. Instead, answer "what does this client want from us?" in 1-2 sentences. Focus on their need, not the words they used.',
+      'PROPOSED_ACTION FIELD: Write one specific, actionable sentence describing exactly what you recommend doing right now. Name the site, call type or report type, and any date if inferable. This will be shown directly to staff as the AI recommendation.',
+      '',
       'Use British English. Never invent facts, dates, prices, or reference numbers. If you cannot confidently match a site/client/service, return null for that field rather than guessing.',
       'IMPORTANT: If the email is asking for inspection reports, service reports, test certificates, or compliance documents for a site, classify intent as "send_report". Do NOT classify these as new_call.',
       'Only ever return ids that appear in the lists below.',
@@ -383,6 +398,7 @@ export async function triageInboundRequest(
       .update({
         status: 'triaged',
         ai_summary: object.summary,
+        ai_proposed_action: object.proposed_action,
         ai_intent: intent,
         ai_urgency: urgency,
         ai_reply_draft: object.reply_draft,

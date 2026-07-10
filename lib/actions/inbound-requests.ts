@@ -5,7 +5,9 @@ import { createClient } from '@/lib/supabase/server'
 import { triageInboundRequest } from '@/lib/ai/triage-inbound-request'
 import { executeRequestInstructionAI, type ExecuteInstructionResult } from '@/lib/ai/execute-request-instruction'
 import { bookCall } from '@/app/(dashboard)/dashboard/schedule/book-call-actions'
+import { saveQuote } from '@/app/(dashboard)/dashboard/sales/actions'
 import { sendEmail } from '@/lib/email/send-email'
+import type { SuggestedAction, SuggestedActionKind, SuggestedActionPayload } from '@/lib/types/database'
 
 interface StaffContext {
   supabase: Awaited<ReturnType<typeof createClient>>
@@ -376,6 +378,152 @@ export async function executeRequestInstruction(
   }
 
   return { ok: false, error: 'Unexpected AI action result.' }
+}
+
+// ── One-click execution of the AI's stored structured plan ───────────────────
+
+export interface SuggestedActionResult {
+  ok: boolean
+  error?: string
+  /** UI hint: what happened / what to open next. */
+  kind?: SuggestedActionKind
+  /** For create_call & reply: the UI opens a dialog/composer instead of us acting. */
+  openDialog?: 'approve_call' | 'reply'
+  /** Where to navigate after a server-side action completed. */
+  navigateTo?: string
+  toast?: string
+}
+
+/**
+ * Execute the request's stored, fully-parameterised suggested action WITHOUT a
+ * second AI pass. Server-side actions (chase-up, create draft quote) complete
+ * outright; call bookings and replies return a hint so the UI opens the
+ * confirmation dialog/composer (a human always confirms a call before it's made).
+ */
+export async function executeSuggestedAction(
+  id: string,
+  kind?: SuggestedActionKind,
+): Promise<SuggestedActionResult> {
+  const { ctx, error } = await requireStaff()
+  if (error || !ctx) return { ok: false, error: error ?? 'Not authorised.' }
+
+  const { data: reqRow, error: reqErr } = await ctx.supabase
+    .from('inbound_requests')
+    .select('id, suggested_actions, matched_site_id, matched_client_id, ai_summary')
+    .eq('id', id)
+    .maybeSingle()
+  if (reqErr || !reqRow) return { ok: false, error: 'Request not found.' }
+
+  const req = reqRow as {
+    id: string
+    suggested_actions: SuggestedAction[] | null
+    matched_site_id: string | null
+    matched_client_id: string | null
+    ai_summary: string | null
+  }
+
+  const actions = Array.isArray(req.suggested_actions) ? req.suggested_actions : []
+  // Prefer the requested kind; otherwise run the primary (first) action.
+  const action = (kind ? actions.find((a) => a.kind === kind) : actions[0]) ?? actions[0]
+  if (!action) return { ok: false, error: 'No suggested action available. Try re-triaging.' }
+
+  const payload: SuggestedActionPayload = action.payload ?? {}
+
+  switch (action.kind) {
+    // Calls and replies are confirmed by a human — tell the UI to open them.
+    case 'create_call':
+      return { ok: true, kind: 'create_call', openDialog: 'approve_call' }
+    case 'reply':
+      return { ok: true, kind: 'reply', openDialog: 'reply' }
+
+    case 'send_report': {
+      if (!req.matched_site_id) return { ok: false, error: 'No site matched — set the site first.' }
+      return {
+        ok: true,
+        kind: 'send_report',
+        navigateTo: `/dashboard/sites/${req.matched_site_id}?tab=calls`,
+      }
+    }
+
+    case 'chase_up': {
+      // Log the chase-up and mark the request handled.
+      const { error: updErr } = await ctx.supabase
+        .from('inbound_requests')
+        .update({
+          status: 'actioned',
+          actioned_at: new Date().toISOString(),
+          actioned_by: ctx.userId,
+        })
+        .eq('id', id)
+      if (updErr) return { ok: false, error: 'Could not log the chase-up.' }
+      revalidatePath('/dashboard/requests')
+      return { ok: true, kind: 'chase_up', toast: 'Chase-up logged.' }
+    }
+
+    case 'create_quote': {
+      const quoteRes = await createDraftQuoteFromRequest(ctx, req, payload)
+      if (!quoteRes.ok || !quoteRes.id) {
+        return { ok: false, error: quoteRes.error ?? 'Could not create the draft quote.' }
+      }
+      await ctx.supabase
+        .from('inbound_requests')
+        .update({
+          status: 'actioned',
+          related_quote_id: quoteRes.id,
+          actioned_at: new Date().toISOString(),
+          actioned_by: ctx.userId,
+        })
+        .eq('id', id)
+      revalidatePath('/dashboard/requests')
+      revalidatePath('/dashboard/sales')
+      return {
+        ok: true,
+        kind: 'create_quote',
+        navigateTo: `/dashboard/sales/${quoteRes.id}`,
+        toast: 'Draft quote created.',
+      }
+    }
+
+    case 'dismiss':
+      return dismissRequest(id).then((r) => ({ ok: r.ok, kind: 'dismiss', error: r.error }))
+
+    default:
+      return { ok: false, error: 'This action cannot be executed automatically.' }
+  }
+}
+
+/**
+ * Create an empty DRAFT quote seeded from a request (client/site/type/summary).
+ * Staff then price it in the builder. Returns the new quote id.
+ */
+async function createDraftQuoteFromRequest(
+  ctx: StaffContext,
+  req: { id: string; matched_site_id: string | null; matched_client_id: string | null; ai_summary: string | null },
+  payload: SuggestedActionPayload,
+): Promise<{ ok: boolean; id?: string; error?: string }> {
+  // A quote needs a client OR a prospect name. Fall back to the sender.
+  let prospectName: string | null = null
+  if (!req.matched_client_id) {
+    const { data: senderRow } = await ctx.supabase
+      .from('inbound_requests')
+      .select('from_name, from_email')
+      .eq('id', req.id)
+      .maybeSingle()
+    const s = senderRow as { from_name: string | null; from_email: string | null } | null
+    prospectName = s?.from_name || s?.from_email || 'New prospect'
+  }
+
+  return saveQuote({
+    title: payload.title?.trim() || 'New quote',
+    quote_type: payload.quoteType || 'other',
+    client_id: req.matched_client_id || null,
+    site_id: req.matched_site_id || null,
+    prospect_name: req.matched_client_id ? null : prospectName,
+    summary: payload.summary || req.ai_summary || null,
+    vat_rate: 20,
+    discount_pence: 0,
+    systems: [],
+  })
 }
 
 function escapeHtml(s: string): string {

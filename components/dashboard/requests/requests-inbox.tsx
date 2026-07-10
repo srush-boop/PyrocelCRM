@@ -19,6 +19,9 @@ import {
   Loader2,
   SendHorizonal,
   ExternalLink,
+  PhoneCall,
+  FileSignature,
+  BellRing,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -43,6 +46,7 @@ import {
   updateRequestMatch,
   sendAcknowledgement,
   executeRequestInstruction,
+  executeSuggestedAction,
 } from '@/lib/actions/inbound-requests'
 import type {
   InboundRequest,
@@ -51,6 +55,8 @@ import type {
   ServiceType,
   SystemType,
   Profile,
+  SuggestedAction,
+  SuggestedActionKind,
 } from '@/lib/types/database'
 
 const NO_MATCH = '__none__'
@@ -78,6 +84,27 @@ const INTENT_LABEL: Record<string, string> = {
   send_report: 'Send reports',
   general: 'General',
   unknown: 'Unknown',
+}
+
+// How each primary action renders as a one-click button.
+const PRIMARY_ACTION_META: Record<
+  SuggestedActionKind,
+  { label: string; Icon: React.ComponentType<{ className?: string }> }
+> = {
+  create_call: { label: 'Book this call', Icon: PhoneCall },
+  send_report: { label: 'Send reports for this site', Icon: FileText },
+  chase_up: { label: 'Log chase-up', Icon: BellRing },
+  reply: { label: 'Send reply', Icon: CornerUpLeft },
+  create_quote: { label: 'Create draft quote', Icon: FileSignature },
+  dismiss: { label: 'Dismiss', Icon: X },
+}
+
+// Turn ai_confidence (0–1) into a short label + tone.
+function confidenceMeta(c: number | null): { label: string; className: string } | null {
+  if (c == null) return null
+  if (c >= 0.85) return { label: 'High confidence', className: 'text-primary' }
+  if (c >= 0.55) return { label: 'Medium confidence', className: 'text-amber-600 dark:text-amber-500' }
+  return { label: 'Low confidence — please check', className: 'text-muted-foreground' }
 }
 
 type TabKey = 'review' | 'actioned' | 'dismissed'
@@ -243,6 +270,34 @@ export function RequestsInbox({
     setReplyOpen(true)
   }
 
+  // Run the AI's stored structured action in one click (no second AI pass).
+  async function handleSuggestedAction(r: InboundRequest, kind?: SuggestedActionKind) {
+    setExecutingId(r.id)
+    try {
+      const res = await executeSuggestedAction(r.id, kind)
+      if (!res.ok) {
+        toast.error(res.error ?? 'Could not run the action.')
+        return
+      }
+      if (res.openDialog === 'approve_call') {
+        setApproveOpen(true)
+        return
+      }
+      if (res.openDialog === 'reply') {
+        openReply(r)
+        return
+      }
+      if (res.toast) toast.success(res.toast)
+      if (res.navigateTo) {
+        router.push(res.navigateTo)
+      } else {
+        router.refresh()
+      }
+    } finally {
+      setExecutingId(null)
+    }
+  }
+
   async function handleExecuteInstruction(r: InboundRequest) {
     if (!instruction.trim()) {
       toast.error('Enter an instruction first.')
@@ -389,6 +444,7 @@ export function RequestsInbox({
                 onReplyTextChange={setReplyText}
                 onInstructionChange={setInstruction}
                 onExecuteInstruction={() => handleExecuteInstruction(selected)}
+                onRunPrimary={(kind) => handleSuggestedAction(selected, kind)}
                 onOpenReply={() => openReply(selected)}
                 onCancelReply={() => setReplyOpen(false)}
                 onSendReply={() => handleSendReply(selected)}
@@ -417,6 +473,8 @@ export function RequestsInbox({
           reactiveServiceTypes={reactiveServiceTypes}
           systemTypes={systemTypes}
           engineers={engineers}
+          prefillDate={selected.suggested_actions?.[0]?.payload?.suggestedDate ?? undefined}
+          prefillNotes={selected.suggested_actions?.[0]?.payload?.notes ?? undefined}
         />
       )}
     </div>
@@ -437,6 +495,7 @@ function RequestDetail({
   onReplyTextChange,
   onInstructionChange,
   onExecuteInstruction,
+  onRunPrimary,
   onOpenReply,
   onCancelReply,
   onSendReply,
@@ -459,6 +518,7 @@ function RequestDetail({
   onReplyTextChange: (v: string) => void
   onInstructionChange: (v: string) => void
   onExecuteInstruction: () => void
+  onRunPrimary: (kind?: SuggestedActionKind) => void
   onOpenReply: () => void
   onCancelReply: () => void
   onSendReply: () => void
@@ -473,6 +533,14 @@ function RequestDetail({
 }) {
   const urgency = r.ai_urgency ? URGENCY_META[r.ai_urgency] : null
   const isClosed = r.status === 'actioned' || r.status === 'dismissed'
+
+  // The AI's primary, fully-parameterised recommendation (executed in one click).
+  const primary: SuggestedAction | undefined = r.suggested_actions?.[0]
+  const primaryMeta = primary ? PRIMARY_ACTION_META[primary.kind] : null
+  const conf = confidenceMeta(r.ai_confidence)
+  // Actions that touch a site can't run until a site is matched.
+  const needsSite = primary?.kind === 'create_call' || primary?.kind === 'send_report'
+  const primaryBlocked = needsSite && !r.matched_site_id
 
   return (
     <Card className="p-5">
@@ -517,11 +585,12 @@ function RequestDetail({
           <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-primary">
             <Sparkles className="h-3.5 w-3.5" />
             AI recommendation
-            {r.ai_intent && (
-              <span className="ml-auto font-normal normal-case tracking-normal text-muted-foreground">
-                {INTENT_LABEL[r.ai_intent] ?? r.ai_intent}
-              </span>
-            )}
+            <span className="ml-auto flex items-center gap-2 font-normal normal-case tracking-normal">
+              {conf && <span className={cn('text-xs', conf.className)}>{conf.label}</span>}
+              {r.ai_intent && (
+                <span className="text-muted-foreground">{INTENT_LABEL[r.ai_intent] ?? r.ai_intent}</span>
+              )}
+            </span>
           </p>
 
           {/* What the client wants */}
@@ -532,32 +601,38 @@ function RequestDetail({
             </div>
           )}
 
-          {/* What AI proposes to do */}
+          {/* What AI proposes to do + the one-click structured action */}
           {r.ai_proposed_action && !isClosed && (
-            <div className="flex items-start justify-between gap-3 rounded-md border border-primary/20 bg-background px-3 py-2.5">
-              <div className="flex items-start gap-2 min-w-0">
+            <div className="rounded-md border border-primary/20 bg-background px-3 py-2.5">
+              <div className="flex items-start gap-2">
                 <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <p className="text-sm font-medium text-pretty">{r.ai_proposed_action}</p>
               </div>
-              <Button
-                size="sm"
-                className="shrink-0"
-                disabled={executing || busy}
-                onClick={() => {
-                  onInstructionChange(r.ai_proposed_action!)
-                  // Small delay so state settles before executing
-                  setTimeout(() => onExecuteInstruction(), 50)
-                }}
-              >
-                {executing ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <>
-                    <Sparkles className="h-3.5 w-3.5" />
-                    Do it
-                  </>
-                )}
-              </Button>
+              {primary && primaryMeta && primary.kind !== 'dismiss' && (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    disabled={executing || busy || primaryBlocked}
+                    onClick={() => onRunPrimary(primary.kind)}
+                  >
+                    {executing ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <primaryMeta.Icon className="h-3.5 w-3.5" />
+                    )}
+                    {primaryMeta.label}
+                  </Button>
+                  {primary.kind === 'create_call' && (
+                    <span className="text-xs text-muted-foreground">You confirm the details before it&apos;s created.</span>
+                  )}
+                  {primaryBlocked && (
+                    <span className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-500">
+                      <AlertTriangle className="h-3 w-3" />
+                      Match a site below first.
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -741,21 +816,15 @@ function RequestDetail({
         </details>
       )}
 
-      {/* Actions */}
+      {/* Actions — the AI's recommended action lives in the card above; these are
+          the always-available manual fallbacks. */}
       <div className="mt-4 flex flex-wrap gap-2 border-t pt-4">
         {!isClosed ? (
           <>
-            {r.ai_intent === 'send_report' && r.matched_site_id ? (
-              <Button asChild>
-                <a href={`/dashboard/sites/${r.matched_site_id}?tab=reports`}>
-                  <FileText className="h-4 w-4" />
-                  View &amp; send reports for this site
-                </a>
-              </Button>
-            ) : (
-              <Button onClick={onApprove} disabled={busy || executing}>
-                <Check className="h-4 w-4" />
-                Create call
+            {primary?.kind !== 'create_call' && (
+              <Button variant="outline" onClick={onApprove} disabled={busy || executing}>
+                <PhoneCall className="h-4 w-4" />
+                Create call manually
               </Button>
             )}
             {EMAIL_FEATURES_ENABLED && r.from_email && !replyOpen && (

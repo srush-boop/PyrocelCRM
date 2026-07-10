@@ -199,13 +199,17 @@ function CallCard({ call, onSendReport }: { call: SiteCall; onSendReport?: (c: S
         isOverdue && 'border-l-4 border-l-destructive',
       )}
     >
-      <CardContent className="p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+      <CardContent className="p-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           {/* Left: core identity */}
-          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-            {/* Row 1: service + system + emergency/remedial flags */}
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            {/* Row 1: service + status + system + all flags/badges inline */}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span className="font-semibold">{serviceName}</span>
+              <StatusBadge status={call.status} />
+              {isCompleted && call.task_result && (
+                <ResultBadge status={call.task_result.overall_status} />
+              )}
               {systemName && (
                 <Badge variant="secondary" className="gap-1 text-xs font-normal">
                   <Shield className="h-3 w-3" />
@@ -220,10 +224,34 @@ function CallCard({ call, onSendReport }: { call: SiteCall; onSendReport?: (c: S
               {call.is_remedial && (
                 <Badge variant="outline" className="text-xs">Remedial</Badge>
               )}
+              {call.chargeable && (
+                <Badge variant="outline" className="gap-1 text-xs bg-amber-500/10 text-amber-700 border-amber-400/30">
+                  <Coins className="h-3 w-3" />
+                  Chargeable
+                </Badge>
+              )}
+              {awaitingReview && (
+                <Badge variant="outline" className="gap-1 text-xs bg-orange-500/10 text-orange-700 border-orange-400/30">
+                  <AlertCircle className="h-3 w-3" />
+                  Awaiting review
+                </Badge>
+              )}
+              {chargeInvoiced && (
+                <Badge variant="outline" className="gap-1 text-xs bg-blue-500/10 text-blue-700 border-blue-400/30">
+                  <Receipt className="h-3 w-3" />
+                  Invoiced
+                </Badge>
+              )}
+              {call.chargeable && !chargeInvoiced && call.charge_review_status === 'reviewed' && (
+                <Badge variant="outline" className="gap-1 text-xs text-muted-foreground">
+                  <Wrench className="h-3 w-3" />
+                  Reviewed
+                </Badge>
+              )}
             </div>
 
             {/* Row 2: meta grid */}
-            <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
+            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-muted-foreground">
               {/* Reference */}
               {refNum && (
                 <span className="flex items-center gap-1">
@@ -256,38 +284,6 @@ function CallCard({ call, onSendReport }: { call: SiteCall; onSendReport?: (c: S
                   <Coins className="h-3.5 w-3.5 shrink-0" />
                   {formatPence(value)}
                 </span>
-              )}
-            </div>
-
-            {/* Row 3: status badges */}
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge status={call.status} />
-              {isCompleted && call.task_result && (
-                <ResultBadge status={call.task_result.overall_status} />
-              )}
-              {call.chargeable && (
-                <Badge variant="outline" className="gap-1 text-xs bg-amber-500/10 text-amber-700 border-amber-400/30">
-                  <Coins className="h-3 w-3" />
-                  Chargeable
-                </Badge>
-              )}
-              {awaitingReview && (
-                <Badge variant="outline" className="gap-1 text-xs bg-orange-500/10 text-orange-700 border-orange-400/30">
-                  <AlertCircle className="h-3 w-3" />
-                  Awaiting review
-                </Badge>
-              )}
-              {chargeInvoiced && (
-                <Badge variant="outline" className="gap-1 text-xs bg-blue-500/10 text-blue-700 border-blue-400/30">
-                  <Receipt className="h-3 w-3" />
-                  Invoiced
-                </Badge>
-              )}
-              {call.chargeable && !chargeInvoiced && call.charge_review_status === 'reviewed' && (
-                <Badge variant="outline" className="gap-1 text-xs text-muted-foreground">
-                  <Wrench className="h-3 w-3" />
-                  Reviewed
-                </Badge>
               )}
             </div>
           </div>

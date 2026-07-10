@@ -7,6 +7,7 @@ import { ScheduleView } from '@/components/dashboard/schedule/schedule-view'
 import { CreateTaskDialog } from '@/components/dashboard/schedule/create-task-dialog'
 import { GenerateCallsButton } from '@/components/dashboard/schedule/generate-calls-button'
 import { ScanQrButton } from '@/components/dashboard/dampers/scan-qr-button'
+import { AddRequestDialog } from '@/components/dashboard/requests/add-request-dialog'
 import { BranchFilter } from '@/components/dashboard/branch-filter'
 import { getBranchScope } from '@/lib/branches'
 import type { Profile, Site, ServiceType, SiteService, SystemType, TaskWithDetails } from '@/lib/types/database'
@@ -144,6 +145,7 @@ export default async function SchedulePage({
                 Map view
               </Link>
             </Button>
+            <AddRequestDialog triggerVariant="outline" />
             <GenerateCallsButton />
             <CreateTaskDialog
               siteServices={siteServices}

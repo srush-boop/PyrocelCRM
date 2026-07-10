@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Hammer, ArrowRight, ClipboardCheck, TrendingUp, Percent } from 'lucide-react'
 import { BranchFilter } from '@/components/dashboard/branch-filter'
+import { AddRequestDialog } from '@/components/dashboard/requests/add-request-dialog'
 import { getBranchScope } from '@/lib/branches'
 import { getJobs } from '@/lib/jobs/queries'
 import { jobFinance } from '@/lib/jobs/finance'
@@ -70,6 +71,7 @@ export default async function JobsDashboardPage({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <BranchFilter branches={scope.branches} activeBranchId={scope.activeBranchId} />
+          <AddRequestDialog triggerVariant="outline" />
           <Button variant="outline" asChild>
             <Link href="/dashboard/jobs/list">
               All jobs

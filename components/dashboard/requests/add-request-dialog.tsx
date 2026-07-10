@@ -27,10 +27,14 @@ import { parseEmailFile } from '@/lib/email/parse-email-file'
 export function AddRequestDialog({
   fileToLoad,
   onFileConsumed,
+  triggerVariant = 'default',
 }: {
   // When set by a parent (e.g. a page-level drop), the dialog opens and parses it.
   fileToLoad?: File | null
   onFileConsumed?: () => void
+  // Lets list/dashboard headers render this as a secondary (outline) action so it
+  // doesn't compete with an existing primary button.
+  triggerVariant?: 'default' | 'outline'
 } = {}) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -120,7 +124,7 @@ export function AddRequestDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button>
+        <Button variant={triggerVariant}>
           <Plus className="h-4 w-4" />
           Add request
         </Button>

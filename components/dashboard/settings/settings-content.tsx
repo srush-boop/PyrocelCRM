@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home, Wrench, HardHat, FileText, Database } from 'lucide-react'
+import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home, Wrench, HardHat, FileText, Database, PhoneCall } from 'lucide-react'
 import type { User as AuthUser } from '@supabase/supabase-js'
 import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType, DocumentTemplate } from '@/lib/types/database'
 import { CompanySettings } from './company-settings'
@@ -21,6 +21,7 @@ import { DocumentTemplatesSettings } from './document-templates'
 import { SignatureManager } from './signature-manager'
 import { AvatarManager } from './avatar-manager'
 import { BulkDataSettings } from './bulk-data-settings'
+import { GlobalConfigSettings } from './global-config-settings'
 
 interface SettingsContentProps {
   user: AuthUser
@@ -31,9 +32,11 @@ interface SettingsContentProps {
   roles: Role[]
   propertyTypes: PropertyType[]
   documentTemplates: DocumentTemplate[]
+  poOverdueDays: number
+  deadlineReasons: string[]
 }
 
-export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates }: SettingsContentProps) {
+export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons }: SettingsContentProps) {
   const isAdmin = profile.role === 'admin'
   // Templates are managed by office/admin (mail-merge letters for client correspondence).
   const canManageTemplates = profile.role === 'admin' || profile.role === 'office'
@@ -163,6 +166,12 @@ export function SettingsContent({ user, profile, company, branches, departments,
           <TabsTrigger value="data" className="gap-2">
             <Database className="h-4 w-4" />
             Data
+          </TabsTrigger>
+        )}
+        {isAdmin && (
+          <TabsTrigger value="calls-config" className="gap-2">
+            <PhoneCall className="h-4 w-4" />
+            Calls
           </TabsTrigger>
         )}
       </TabsList>
@@ -369,6 +378,15 @@ export function SettingsContent({ user, profile, company, branches, departments,
       {isAdmin && (
         <TabsContent value="data" className="space-y-4">
           <BulkDataSettings />
+        </TabsContent>
+      )}
+
+      {isAdmin && (
+        <TabsContent value="calls-config" className="space-y-4">
+          <GlobalConfigSettings
+            poOverdueDays={poOverdueDays}
+            deadlineReasons={deadlineReasons}
+          />
         </TabsContent>
       )}
 

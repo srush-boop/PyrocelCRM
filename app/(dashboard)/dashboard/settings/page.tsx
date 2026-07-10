@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { SettingsContent } from '@/components/dashboard/settings/settings-content'
 import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType, DocumentTemplate } from '@/lib/types/database'
+import { getGlobalConfigs } from '@/lib/actions/global-config'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -37,6 +38,13 @@ export default async function SettingsPage() {
     ? await supabase.from('document_templates').select('*').order('name')
     : { data: [] }
 
+  const globalConfig = isAdmin
+    ? await getGlobalConfigs(['po_request_overdue_days', 'deadline_failed_reasons'])
+    : {}
+
+  const poOverdueDays = (globalConfig['po_request_overdue_days'] as number | null) ?? 14
+  const deadlineReasons = (globalConfig['deadline_failed_reasons'] as string[] | null) ?? []
+
   return (
     <div className="space-y-6">
       <div>
@@ -55,6 +63,8 @@ export default async function SettingsPage() {
         roles={(rolesResult.data as Role[]) || []}
         propertyTypes={(propertyTypesResult.data as PropertyType[]) || []}
         documentTemplates={(templatesResult.data as DocumentTemplate[]) || []}
+        poOverdueDays={poOverdueDays}
+        deadlineReasons={deadlineReasons}
       />
     </div>
   )

@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { setChargeReview } from '@/lib/actions/charge-review'
 import { Badge } from '@/components/ui/badge'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import {
@@ -19,7 +20,6 @@ import {
 import { Printer, Send, Mail, X, CheckCircle, Coins, Loader2, Wrench, Pencil } from 'lucide-react'
 import { isDamperService } from '@/lib/dampers'
 import { isExtinguisherService } from '@/lib/extinguishers'
-import { setChargeReview } from '@/lib/actions/charge-review'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 
@@ -39,6 +39,8 @@ interface CompletedReportActionsProps {
   chargeable?: boolean
   chargeReviewStatus?: 'none' | 'pending' | 'reviewed'
   chargeReason?: string | null
+  /** Current client reference (PO ref, quote ref, etc.) for chargeable calls. */
+  clientRef?: string | null
   /** True for office/admin, who may change the charge/review state. */
   canReview?: boolean
 }
@@ -61,6 +63,7 @@ export function CompletedReportActions({
   chargeable,
   chargeReviewStatus = 'none',
   chargeReason,
+  clientRef: initialClientRef = null,
   canReview = false,
 }: CompletedReportActionsProps) {
   const router = useRouter()
@@ -71,8 +74,28 @@ export function CompletedReportActions({
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
   const [reviewBusy, setReviewBusy] = useState(false)
+  // Client Ref
+  const [clientRef, setClientRef] = useState(initialClientRef ?? '')
+  const [editingRef, setEditingRef] = useState(false)
+  const [savingRef, setSavingRef] = useState(false)
 
   const showChargeSection = chargeable || chargeReviewStatus !== 'none' || canReview
+
+  const saveClientRef = async () => {
+    setSavingRef(true)
+    const { error } = await setChargeReview(taskId, {
+      kind: 'set_client_ref',
+      clientRef: clientRef.trim() || null,
+    })
+    setSavingRef(false)
+    if (error) {
+      toast.error(error)
+    } else {
+      toast.success('Client reference saved')
+      setEditingRef(false)
+      router.refresh()
+    }
+  }
 
   const runChargeAction = async (
     action:
@@ -207,6 +230,54 @@ export function CompletedReportActions({
               </div>
             )}
           </div>
+
+          {/* Client Reference — shown on chargeable calls for office/admin */}
+          {chargeable && canReview && (
+            <div className="mt-3 border-t pt-3">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="client-ref" className="text-xs font-medium text-muted-foreground shrink-0">
+                  Client Ref
+                </Label>
+                {editingRef ? (
+                  <>
+                    <Input
+                      id="client-ref"
+                      value={clientRef}
+                      onChange={(e) => setClientRef(e.target.value)}
+                      placeholder="PO number, quote ref, etc."
+                      className="h-7 text-sm"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.nativeEvent.isComposing) saveClientRef()
+                        if (e.key === 'Escape') setEditingRef(false)
+                      }}
+                      autoFocus
+                    />
+                    <Button size="sm" className="h-7 px-2 text-xs" onClick={saveClientRef} disabled={savingRef}>
+                      {savingRef ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setEditingRef(false)}>
+                      Cancel
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-sm text-foreground">
+                      {clientRef || <span className="italic text-muted-foreground">Not set</span>}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => setEditingRef(true)}
+                    >
+                      <Pencil className="h-3 w-3 mr-1" />
+                      {clientRef ? 'Edit' : 'Add'}
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2">

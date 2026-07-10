@@ -453,6 +453,7 @@ export function ExtinguisherTaskExecution({
             chargeable={task.chargeable}
             chargeReviewStatus={task.charge_review_status}
             chargeReason={task.charge_reason}
+            clientRef={(task as any).client_ref ?? null}
             canReview={profile.role === 'admin' || profile.role === 'office'}
           />
         )}

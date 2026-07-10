@@ -4,13 +4,7 @@ import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   Table,
   TableBody,
@@ -22,7 +16,6 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -30,16 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs'
 import {
   CheckCircle,
   Search,
@@ -50,8 +33,6 @@ import {
   Receipt,
   ChevronDown,
   AlertCircle,
-  Filter,
-  X,
   FileText,
   Clock,
 } from 'lucide-react'
@@ -76,11 +57,8 @@ export interface ChargeableCall {
   reviewerName: string | null
   partsCount: number
   partsTotalPence: number
-  /** PO requests logged against this call */
   poRequests: PurchaseOrderRequest[]
-  /** Whether the site/client has a contact email */
   hasContactEmail: boolean
-  /** Days after which a PO request is overdue */
   overdueAfterDays: number
 }
 
@@ -104,7 +82,7 @@ function isPoOverdue(call: ChargeableCall, overdueAfterDays: number): boolean {
   return days >= overdueAfterDays
 }
 
-type TabValue = 'pending' | 'reviewed' | 'invoiced' | 'all'
+type StatusFilter = 'pending' | 'reviewed' | 'invoiced' | 'all'
 
 export function ChargeableCallsTable({
   calls,
@@ -118,11 +96,24 @@ export function ChargeableCallsTable({
   const [busyId, setBusyId] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
-  // Filters
   const [search, setSearch] = useState('')
-  const [tab, setTab] = useState<TabValue>('pending')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending')
   const [reasonFilter, setReasonFilter] = useState<string>('all')
-  const [showFilters, setShowFilters] = useState(false)
+
+  const filtered = useMemo(() => {
+    return calls.filter((c) => {
+      if (statusFilter === 'pending' && (c.chargeReviewStatus !== 'pending' || !!c.chargeInvoicedAt)) return false
+      if (statusFilter === 'reviewed' && (c.chargeReviewStatus !== 'reviewed' || !!c.chargeInvoicedAt)) return false
+      if (statusFilter === 'invoiced' && !c.chargeInvoicedAt) return false
+      if (reasonFilter !== 'all' && c.chargeReason !== reasonFilter) return false
+      if (search) {
+        const q = search.toLowerCase()
+        const hay = `${c.referenceNumber} ${c.siteName} ${c.clientName} ${c.serviceName} ${c.engineerName} ${c.clientRef ?? ''}`.toLowerCase()
+        if (!hay.includes(q)) return false
+      }
+      return true
+    })
+  }, [calls, statusFilter, reasonFilter, search])
 
   const pendingCount = calls.filter(
     (c) => c.chargeReviewStatus === 'pending' && !c.chargeInvoicedAt,
@@ -133,31 +124,12 @@ export function ChargeableCallsTable({
   const invoicedCount = calls.filter((c) => !!c.chargeInvoicedAt).length
   const overdueCount = calls.filter((c) => isPoOverdue(c, overdueAfterDays)).length
 
-  const filtered = useMemo(() => {
-    return calls.filter((c) => {
-      // Tab filter
-      if (tab === 'pending' && (c.chargeReviewStatus !== 'pending' || !!c.chargeInvoicedAt)) return false
-      if (tab === 'reviewed' && (c.chargeReviewStatus !== 'reviewed' || !!c.chargeInvoicedAt)) return false
-      if (tab === 'invoiced' && !c.chargeInvoicedAt) return false
-      // Reason filter
-      if (reasonFilter !== 'all' && c.chargeReason !== reasonFilter) return false
-      // Search
-      if (search) {
-        const q = search.toLowerCase()
-        const hay =
-          `${c.referenceNumber} ${c.siteName} ${c.clientName} ${c.serviceName} ${c.engineerName} ${c.clientRef ?? ''}`.toLowerCase()
-        if (!hay.includes(q)) return false
-      }
-      return true
-    })
-  }, [calls, tab, search, reasonFilter])
-
-  const hasActiveFilters = reasonFilter !== 'all' || search.length > 0
-
-  const clearFilters = () => {
-    setSearch('')
-    setReasonFilter('all')
-  }
+  const STATUS_OPTIONS: { value: StatusFilter; label: string; count: number }[] = [
+    { value: 'pending', label: 'Awaiting review', count: pendingCount },
+    { value: 'reviewed', label: 'Reviewed', count: reviewedCount },
+    { value: 'invoiced', label: 'Invoiced', count: invoicedCount },
+    { value: 'all', label: 'All', count: calls.length },
+  ]
 
   const runAction = (
     id: string,
@@ -188,115 +160,67 @@ export function ChargeableCallsTable({
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <CardTitle>Calls for review</CardTitle>
-            <CardDescription>
-              {filtered.length} {filtered.length === 1 ? 'call' : 'calls'}
-              {overdueCount > 0 && (
-                <span className="ml-2 inline-flex items-center gap-1 text-amber-600">
-                  <AlertCircle className="h-3.5 w-3.5" />
-                  {overdueCount} PO overdue
-                </span>
-              )}
-            </CardDescription>
+      <CardContent className="flex flex-col gap-4 p-4 md:p-6">
+        {/* Filter row — mirrors defects table layout */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search reference, site, client or service"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8"
+            />
           </div>
-          <div className="flex items-center gap-2">
-            <div className="relative w-full max-w-xs">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search calls..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            <Button
-              variant={showFilters ? 'default' : 'outline'}
-              size="sm"
-              className="gap-2 shrink-0"
-              onClick={() => setShowFilters((v) => !v)}
-            >
-              <Filter className="h-4 w-4" />
-              Filters
-              {hasActiveFilters && (
-                <Badge className="ml-1 h-4 w-4 rounded-full p-0 text-[10px] flex items-center justify-center">
-                  !
-                </Badge>
-              )}
-            </Button>
-          </div>
+          <Select
+            value={statusFilter}
+            onValueChange={(v) => setStatusFilter(v as StatusFilter)}
+          >
+            <SelectTrigger className="w-full sm:w-52">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  <span className="flex items-center gap-2">
+                    {o.label}
+                    {o.count > 0 && (
+                      <span className="tabular-nums text-muted-foreground text-xs">
+                        ({o.count})
+                      </span>
+                    )}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={reasonFilter} onValueChange={setReasonFilter}>
+            <SelectTrigger className="w-full sm:w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All reasons</SelectItem>
+              <SelectItem value="service_default">Chargeable service</SelectItem>
+              <SelectItem value="parts_added">Parts used</SelectItem>
+              <SelectItem value="manual">Manual</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
-        {/* Expandable filter row */}
-        {showFilters && (
-          <div className="mt-3 flex flex-wrap items-end gap-4 rounded-md border bg-muted/30 p-3">
-            <div className="space-y-1 min-w-[180px]">
-              <Label className="text-xs">Charge reason</Label>
-              <Select value={reasonFilter} onValueChange={setReasonFilter}>
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All reasons</SelectItem>
-                  <SelectItem value="service_default">Chargeable service</SelectItem>
-                  <SelectItem value="parts_added">Parts used</SelectItem>
-                  <SelectItem value="manual">Manual</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {hasActiveFilters && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-1 text-muted-foreground h-8"
-                onClick={clearFilters}
-              >
-                <X className="h-3.5 w-3.5" />
-                Clear filters
-              </Button>
-            )}
+        {/* PO overdue notice */}
+        {overdueCount > 0 && (
+          <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            {overdueCount} {overdueCount === 1 ? 'call has' : 'calls have'} an overdue PO request
           </div>
         )}
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as TabValue)} className="pt-2">
-          <TabsList>
-            <TabsTrigger value="pending">
-              Awaiting review
-              {pendingCount > 0 && (
-                <Badge className="ml-2 bg-amber-100 text-amber-800 hover:bg-amber-100 text-xs px-1.5">
-                  {pendingCount}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="reviewed">
-              Reviewed
-              {reviewedCount > 0 && (
-                <Badge className="ml-2 bg-blue-100 text-blue-800 hover:bg-blue-100 text-xs px-1.5">
-                  {reviewedCount}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="invoiced">
-              Invoiced
-              {invoicedCount > 0 && (
-                <Badge className="ml-2 bg-emerald-100 text-emerald-800 hover:bg-emerald-100 text-xs px-1.5">
-                  {invoicedCount}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="all">All ({calls.length})</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </CardHeader>
-
-      <CardContent>
         {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 py-12 text-center text-muted-foreground">
-            <Coins className="h-8 w-8" />
-            <p className="text-sm">
-              No chargeable calls {tab === 'pending' ? 'awaiting review' : tab === 'invoiced' ? 'invoiced yet' : 'to show'}.
+          <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+            <Coins className="h-8 w-8 text-muted-foreground" />
+            <p className="text-sm font-medium">No chargeable calls found</p>
+            <p className="text-sm text-muted-foreground">
+              Completed chargeable calls will appear here for review.
             </p>
           </div>
         ) : (
@@ -306,7 +230,8 @@ export function ChargeableCallsTable({
                 <TableRow>
                   <TableHead className="w-8" />
                   <TableHead>Reference</TableHead>
-                  <TableHead>Site / Client</TableHead>
+                  <TableHead>Site</TableHead>
+                  <TableHead>Client</TableHead>
                   <TableHead>Service</TableHead>
                   <TableHead>Completed</TableHead>
                   <TableHead>Reason</TableHead>
@@ -329,7 +254,11 @@ export function ChargeableCallsTable({
                       <TableRow
                         key={c.id}
                         className={
-                          poOverdue ? 'bg-amber-50/60' : isExpanded ? 'bg-muted/30' : undefined
+                          poOverdue
+                            ? 'bg-amber-50/60'
+                            : isExpanded
+                              ? 'bg-muted/30'
+                              : undefined
                         }
                       >
                         {/* Expand toggle */}
@@ -372,17 +301,16 @@ export function ChargeableCallsTable({
                           </div>
                         </TableCell>
 
-                        <TableCell>
-                          <div className="font-medium">{c.siteName}</div>
-                          {c.clientName && (
-                            <div className="text-xs text-muted-foreground">{c.clientName}</div>
-                          )}
+                        <TableCell>{c.siteName}</TableCell>
+
+                        <TableCell className="text-muted-foreground">
+                          {c.clientName || '—'}
                         </TableCell>
 
-                        <TableCell className="text-sm">{c.serviceName}</TableCell>
+                        <TableCell>{c.serviceName}</TableCell>
 
-                        <TableCell className="tabular-nums text-sm">
-                          {c.completedAt ? formatDateUK(c.completedAt) : '-'}
+                        <TableCell className="whitespace-nowrap text-muted-foreground">
+                          {c.completedAt ? formatDateUK(c.completedAt) : '—'}
                         </TableCell>
 
                         <TableCell>
@@ -392,15 +320,15 @@ export function ChargeableCallsTable({
                             ) : (
                               <Coins className="h-3.5 w-3.5 text-amber-600" />
                             )}
-                            {c.chargeReason ? REASON_LABELS[c.chargeReason] ?? c.chargeReason : '-'}
+                            {c.chargeReason ? (REASON_LABELS[c.chargeReason] ?? c.chargeReason) : '—'}
                           </span>
                         </TableCell>
 
-                        <TableCell className="text-sm">
+                        <TableCell>
                           {c.clientRef ? (
-                            <span className="font-medium text-foreground">{c.clientRef}</span>
+                            <span className="font-medium">{c.clientRef}</span>
                           ) : (
-                            <span className="text-muted-foreground">-</span>
+                            <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
 
@@ -413,22 +341,22 @@ export function ChargeableCallsTable({
                               </span>
                             </span>
                           ) : (
-                            <span className="text-muted-foreground">-</span>
+                            <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
 
                         <TableCell>
                           {c.chargeInvoicedAt ? (
-                            <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 gap-1">
+                            <Badge variant="default" className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 gap-1">
                               <Receipt className="h-3 w-3" />
                               Invoiced
                             </Badge>
                           ) : c.chargeReviewStatus === 'reviewed' ? (
-                            <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">
+                            <Badge variant="secondary">
                               Reviewed
                             </Badge>
                           ) : (
-                            <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 gap-1">
+                            <Badge variant="outline" className="gap-1">
                               <Clock className="h-3 w-3" />
                               Awaiting review
                             </Badge>
@@ -482,7 +410,7 @@ export function ChargeableCallsTable({
                       {/* Expanded PO request log row */}
                       {isExpanded && (
                         <TableRow key={`${c.id}-po`} className="bg-muted/10 hover:bg-muted/10">
-                          <TableCell colSpan={10} className="px-4 pb-4 pt-2">
+                          <TableCell colSpan={11} className="px-4 pb-4 pt-2">
                             <PoRequestLog
                               taskId={c.id}
                               requests={c.poRequests}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import type { ReactNode } from 'react'
 import {
   Collapsible,
@@ -209,6 +209,13 @@ export function TaskExecution({
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [showSubmitDialog, setShowSubmitDialog] = useState(false)
+  // Id of the task_results row backing this call. Tracked so the autosave draft,
+  // the manual Save and the final Submit all update one row rather than inserting
+  // duplicates. Seeded from any result already loaded for the call.
+  const [resultId, setResultId] = useState<string | null>(existingResult?.id ?? null)
+  const resultIdRef = useRef<string | null>(existingResult?.id ?? null)
+  // Feedback for the automatic draft save (shown subtly next to the Notes).
+  const [autoSaveState, setAutoSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
   // "Book Visit" lets the engineer place this task onto the calendar by setting
   // a date and an optional appointment time slot.
   const [bookedDate, setBookedDate] = useState(task.scheduled_date)
@@ -360,13 +367,22 @@ export function TaskExecution({
       updated_at: new Date().toISOString(),
     }
 
-    if (existingResult) {
+    if (resultIdRef.current) {
       await supabase
         .from('task_results')
         .update(resultData)
-        .eq('id', existingResult.id)
+        .eq('id', resultIdRef.current)
     } else {
-      await supabase.from('task_results').insert(resultData)
+      const { data } = await supabase
+        .from('task_results')
+        .insert(resultData)
+        .select('id')
+        .single()
+      const newId = (data as { id: string } | null)?.id ?? null
+      if (newId) {
+        resultIdRef.current = newId
+        setResultId(newId)
+      }
     }
 
     setSaving(false)
@@ -389,13 +405,22 @@ export function TaskExecution({
     }
 
     // Save/update task result
-    if (existingResult) {
+    if (resultIdRef.current) {
       await supabase
         .from('task_results')
         .update(resultData)
-        .eq('id', existingResult.id)
+        .eq('id', resultIdRef.current)
     } else {
-      await supabase.from('task_results').insert(resultData)
+      const { data } = await supabase
+        .from('task_results')
+        .insert(resultData)
+        .select('id')
+        .single()
+      const newId = (data as { id: string } | null)?.id ?? null
+      if (newId) {
+        resultIdRef.current = newId
+        setResultId(newId)
+      }
     }
 
     // Mark task as completed
@@ -495,6 +520,80 @@ export function TaskExecution({
   // parts at any status (incl. after completion), while the assigned engineer
   // can edit while the call is actively in progress. RLS enforces this too.
   const canManageParts = isAdminOrOffice || canEdit
+
+  // Persist the current inputs to the backing task_results row (creating it on
+  // first save). Shared by the debounced autosave and the visibility flush.
+  const persistDraft = useCallback(async () => {
+    const resultData = {
+      task_id: task.id,
+      checklist_results: checklistResults,
+      overall_status: calculateOverallStatus(),
+      engineer_notes: engineerNotes,
+      testing_start_time: testingStartTime?.toISOString() ?? null,
+      testing_end_time: testingEndTime?.toISOString() ?? null,
+      photos: existingResult?.photos || [],
+      updated_at: new Date().toISOString(),
+    }
+    if (resultIdRef.current) {
+      await supabase.from('task_results').update(resultData).eq('id', resultIdRef.current)
+    } else {
+      const { data } = await supabase
+        .from('task_results')
+        .insert(resultData)
+        .select('id')
+        .single()
+      const newId = (data as { id: string } | null)?.id ?? null
+      if (newId) {
+        resultIdRef.current = newId
+        setResultId(newId)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checklistResults, engineerNotes, testingStartTime, testingEndTime, existingResult, task.id, supabase])
+
+  // Draft autosave. As the engineer fills in the checklist and notes, persist a
+  // draft to task_results after a short pause. This means accidentally leaving
+  // the page (e.g. swiping off on mobile to reach an off-screen button) never
+  // loses entered work — the server reloads this draft into `existingResult`
+  // when the call is reopened.
+  const autosaveArmed = useRef(false)
+  useEffect(() => {
+    if (!canEdit) return
+    // Skip the first run so the untouched initial state isn't written back.
+    if (!autosaveArmed.current) {
+      autosaveArmed.current = true
+      return
+    }
+    setAutoSaveState('saving')
+    const handle = setTimeout(async () => {
+      try {
+        await persistDraft()
+        setAutoSaveState('saved')
+      } catch {
+        setAutoSaveState('idle')
+      }
+    }, 1000)
+    return () => clearTimeout(handle)
+  }, [canEdit, persistDraft])
+
+  // Flush the draft immediately when the tab is hidden or the page is being torn
+  // down (covers mobile app-switching / swipe-away, where the debounce above may
+  // not have fired yet). Best-effort — failures are non-fatal.
+  useEffect(() => {
+    if (!canEdit) return
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden' && autosaveArmed.current) void persistDraft()
+    }
+    const onPageHide = () => {
+      if (autosaveArmed.current) void persistDraft()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('pagehide', onPageHide)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('pagehide', onPageHide)
+    }
+  }, [canEdit, persistDraft])
 
   // Group checklist rows by panel for rendering. Preserves the order results
   // were built in (per panel, then per item). Legacy results with no panel_id
@@ -1004,6 +1103,21 @@ export function TaskExecution({
               <div>
                 <CardTitle>Notes</CardTitle>
                 <CardDescription>Add any additional observations or comments</CardDescription>
+                {canEdit && autoSaveState !== 'idle' && (
+                  <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    {autoSaveState === 'saving' ? (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Saving draft…
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-3 w-3 text-primary" />
+                        Draft saved — your progress is kept if you leave
+                      </>
+                    )}
+                  </p>
+                )}
               </div>
               {canEdit && (
                 <ReportNotesAssist

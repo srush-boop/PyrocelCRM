@@ -79,7 +79,10 @@ export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[
       .from('service_types')
       .insert({
         name: formData.name,
-        system_type_id: formData.system_type_id || null,
+        // Only recurring PPM ties to a single prescriptive system. Reactive/
+        // planned types are assigned to systems via per-system checklists, so
+        // the single system_type_id is cleared for them.
+        system_type_id: isRecurring ? formData.system_type_id || null : null,
         description: formData.description || null,
         default_frequency_months: frequencyInMonths,
         default_frequency_value: formData.default_frequency_value,
@@ -171,41 +174,9 @@ export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[
                 required
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="system-type">System Type</Label>
-              <Select
-                value={formData.system_type_id}
-                onValueChange={(value) => setFormData({ ...formData, system_type_id: value })}
-              >
-                <SelectTrigger id="system-type">
-                  <SelectValue placeholder="Select a system type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {systemTypes.map((st) => (
-                    <SelectItem key={st.id} value={st.id}>
-                      {st.code ? `${st.code} — ${st.name}` : st.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                The system this service belongs to (e.g. Fire Alarm). The queryable code lives on the
-                system type.
-              </p>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Describe the service"
-              />
-            </div>
-            <ServiceColorPicker
-              value={formData.color}
-              onChange={(color) => setFormData({ ...formData, color })}
-            />
+            {/* Call kind is asked first: it decides whether this is a
+                prescriptive per-system PPM (one System Type) or a generic
+                reactive/planned call (assigned to many systems below). */}
             <div className="grid gap-2">
               <Label htmlFor="call-kind">Call kind *</Label>
               <Select
@@ -231,6 +202,28 @@ export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[
             </div>
             {isRecurring ? (
               <>
+                <div className="grid gap-2">
+                  <Label htmlFor="system-type">System Type</Label>
+                  <Select
+                    value={formData.system_type_id}
+                    onValueChange={(value) => setFormData({ ...formData, system_type_id: value })}
+                  >
+                    <SelectTrigger id="system-type">
+                      <SelectValue placeholder="Select a system type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {systemTypes.map((st) => (
+                        <SelectItem key={st.id} value={st.id}>
+                          {st.code ? `${st.code} — ${st.name}` : st.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Recurring PPM is prescriptive to one system (e.g. Fire Alarm) and uses that
+                    system&apos;s checklist. The queryable code lives on the system type.
+                  </p>
+                </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="grid gap-2">
                     <Label htmlFor="frequency-value">Frequency Value *</Label>
@@ -322,6 +315,19 @@ export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[
                 />
               </>
             )}
+            <div className="grid gap-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Describe the service"
+              />
+            </div>
+            <ServiceColorPicker
+              value={formData.color}
+              onChange={(color) => setFormData({ ...formData, color })}
+            />
             <div className="flex items-start justify-between gap-3 rounded-md border border-dashed p-3">
               <div className="space-y-0.5">
                 <Label htmlFor="default-chargeable" className="flex items-center gap-2">

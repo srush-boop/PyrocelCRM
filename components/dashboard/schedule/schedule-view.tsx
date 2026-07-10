@@ -981,11 +981,11 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   )
 
   return (
-    <div className="space-y-3">
-      {/* Row 1: search + quick filters */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[180px] sm:max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+    <div className="space-y-2">
+      {/* Row 1: search | quick-filter pill buttons | engineer select | dates | clear */}
+      <div className="flex items-center gap-2 overflow-x-auto scrollbar-none [-webkit-overflow-scrolling:touch] [scrollbar-width:none]">
+        <div className="relative shrink-0 w-[200px] sm:w-[240px]">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
             placeholder="Search calls..."
             value={search}
@@ -1000,13 +1000,13 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
             variant={needsBookingOnly ? 'default' : 'outline'}
             onClick={() => setNeedsBookingOnly((v) => !v)}
             aria-pressed={needsBookingOnly}
-            className="gap-2 shrink-0"
+            className="gap-1.5 shrink-0"
           >
             <CalendarClock className="h-4 w-4" />
             {isEngineer ? 'To book' : 'Needs booking'}
             <Badge
               variant={needsBookingOnly ? 'secondary' : 'outline'}
-              className="ml-0.5 px-1.5"
+              className="ml-0.5 px-1.5 py-0"
             >
               {needsBookingCount}
             </Badge>
@@ -1019,13 +1019,13 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
             variant={showOverdueOnly ? 'destructive' : 'outline'}
             onClick={() => setShowOverdueOnly((v) => !v)}
             aria-pressed={showOverdueOnly}
-            className="gap-2 shrink-0"
+            className="gap-1.5 shrink-0"
           >
             <Clock className="h-4 w-4" />
             Overdue
             <Badge
               variant={showOverdueOnly ? 'secondary' : 'destructive'}
-              className="ml-0.5 px-1.5"
+              className="ml-0.5 px-1.5 py-0"
             >
               {overdueTasks.length}
             </Badge>
@@ -1034,8 +1034,8 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
 
         {isAdminOrOffice && engineers.length > 0 && (
           <Select value={selectedEngineer} onValueChange={setSelectedEngineer}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Engineer" />
+            <SelectTrigger className="w-[160px] shrink-0">
+              <SelectValue placeholder="All Engineers" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Engineers</SelectItem>
@@ -1049,8 +1049,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
           </Select>
         )}
 
-        {/* Date range filtering is for admin/office planning only; engineers just
-            see their own upcoming/overdue/completed lists without date pickers. */}
+        {/* Date range — admin/office only */}
         {!isEngineer && (
           <>
             <Popover>
@@ -1058,21 +1057,16 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                 <Button
                   variant="outline"
                   className={cn(
-                    "w-[140px] justify-start text-left font-normal",
-                    !dateFrom && "text-muted-foreground"
+                    'w-[120px] shrink-0 justify-start text-left font-normal',
+                    !dateFrom && 'text-muted-foreground',
                   )}
                 >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dateFrom ? format(dateFrom, "dd/MM/yy") : "From"}
+                  <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                  {dateFrom ? format(dateFrom, 'dd/MM/yy') : 'From'}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
-                <CalendarComponent
-                  mode="single"
-                  selected={dateFrom}
-                  onSelect={setDateFrom}
-                  initialFocus
-                />
+                <CalendarComponent mode="single" selected={dateFrom} onSelect={setDateFrom} initialFocus />
               </PopoverContent>
             </Popover>
 
@@ -1081,44 +1075,36 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                 <Button
                   variant="outline"
                   className={cn(
-                    "w-[140px] justify-start text-left font-normal",
-                    !dateTo && "text-muted-foreground"
+                    'w-[120px] shrink-0 justify-start text-left font-normal',
+                    !dateTo && 'text-muted-foreground',
                   )}
                 >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dateTo ? format(dateTo, "dd/MM/yy") : "To"}
+                  <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                  {dateTo ? format(dateTo, 'dd/MM/yy') : 'To'}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
-                <CalendarComponent
-                  mode="single"
-                  selected={dateTo}
-                  onSelect={setDateTo}
-                  initialFocus
-                />
+                <CalendarComponent mode="single" selected={dateTo} onSelect={setDateTo} initialFocus />
               </PopoverContent>
             </Popover>
           </>
         )}
 
         {hasActiveFilters && (
-          <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-2 shrink-0">
+          <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1.5 shrink-0 text-muted-foreground hover:text-foreground">
             <X className="h-4 w-4" />
             Clear
           </Button>
         )}
       </div>
 
-      {/* Row 2: system/service filters + sort/view toggle.
-          Horizontally scrollable on mobile so nothing wraps or clips. */}
+      {/* Row 2: system/service selects | → sort + view toggle */}
       <div className="flex items-center gap-2 overflow-x-auto scrollbar-none [-webkit-overflow-scrolling:touch] [scrollbar-width:none]">
         {systemOptions.length > 0 && (
           <Select
             value={selectedSystem}
             onValueChange={(v) => {
               setSelectedSystem(v)
-              // Service options depend on the selected system, so reset the
-              // service filter to avoid a stale selection that hides everything.
               setSelectedService('all')
             }}
           >

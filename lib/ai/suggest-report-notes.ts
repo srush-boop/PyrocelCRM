@@ -33,6 +33,7 @@ interface ChecklistLine {
   type: string
   value: boolean | string | number
   passed: boolean | null
+  advisory?: boolean
   notes?: string
 }
 
@@ -90,11 +91,13 @@ function describeChecklist(checklist: ChecklistLine[]): string {
     .map((c) => {
       const result =
         c.type === 'pass_fail'
-          ? c.passed === true
-            ? 'PASS'
-            : c.passed === false
-              ? 'FAIL'
-              : 'not assessed'
+          ? c.advisory
+            ? 'ADVISORY'
+            : c.passed === true
+              ? 'PASS'
+              : c.passed === false
+                ? 'FAIL'
+                : 'not assessed'
           : String(c.value)
       const note = c.notes ? ` — note: ${c.notes}` : ''
       return `- ${c.label}: ${result}${note}`

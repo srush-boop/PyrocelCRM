@@ -1002,6 +1002,7 @@ export function TaskExecution({
                       type: r.type,
                       value: r.value,
                       passed: r.passed,
+                      advisory: r.advisory,
                       notes: r.notes,
                     })),
                   }}

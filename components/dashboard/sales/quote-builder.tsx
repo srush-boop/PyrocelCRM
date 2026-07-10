@@ -36,7 +36,7 @@ import {
 } from '@/components/ui/command'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
-import { Plus, Trash2, BookOpen, Save, TrendingUp, Calculator, Wrench, Check, ChevronsUpDown, ChevronDown, Sparkles, Building2, HardHat, Send, Eye, AlertTriangle } from 'lucide-react'
+import { Plus, Trash2, BookOpen, Save, TrendingUp, Calculator, Wrench, Check, ChevronsUpDown, ChevronDown, Sparkles, Building2, HardHat, Send, Eye, AlertTriangle, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { SendQuoteDialog } from '@/components/dashboard/sales/send-quote-dialog'
 import { PpmCalculatorDialog, type PpmDraft } from '@/components/dashboard/sales/ppm-calculator-dialog'
@@ -1180,6 +1180,8 @@ export function QuoteBuilder({
         if (defectId && !quote?.id) {
           await linkDefectToQuote(defectId, res.id)
         }
+        // The quote now lives in the database, so drop the local draft copy.
+        clearDraft()
         toast.success('Quote saved')
         if (quote?.id) router.refresh()
         else router.push(`/dashboard/sales/${res.id}`)
@@ -1215,10 +1217,164 @@ export function QuoteBuilder({
     return () => clearTimeout(handle)
   }, [canAutosave, title, buildPayload])
 
+  // ----- New-quote draft persistence (localStorage) -----
+  // Brand-new quotes have no id to autosave against, so if the user navigates
+  // away mid-build we'd lose everything. Keep the in-progress draft in
+  // localStorage, restore it on return, and clear it once the quote is saved.
+  const isNewQuote = !quote?.id && !readOnly
+  const draftKey = `pyrocel:new-quote-draft:${defectId ?? 'blank'}`
+  const [draftRestored, setDraftRestored] = useState(false)
+  // Skip the first save-effect run so the initial defaults never overwrite a
+  // previously-stored draft before the restore effect has applied it.
+  const draftSaveMounted = useRef(false)
+
+  const clearDraft = useCallback(() => {
+    try {
+      window.localStorage.removeItem(draftKey)
+    } catch {
+      // ignore storage errors (private mode, quota, etc.)
+    }
+  }, [draftKey])
+
+  // Restore once on mount.
+  useEffect(() => {
+    if (!isNewQuote) return
+    try {
+      const raw = window.localStorage.getItem(draftKey)
+      if (!raw) return
+      const d = JSON.parse(raw) as Record<string, unknown>
+      if (typeof d.title === 'string') {
+        setTitle(d.title)
+        titleDirty.current = Boolean(d.title)
+      }
+      if (typeof d.maintenanceOnly === 'boolean') setMaintenanceOnly(d.maintenanceOnly)
+      if (d.targetMode === 'client' || d.targetMode === 'prospect') setTargetMode(d.targetMode)
+      if (typeof d.branchId === 'string') setBranchId(d.branchId)
+      if (typeof d.clientId === 'string') setClientId(d.clientId)
+      if (typeof d.siteId === 'string') setSiteId(d.siteId)
+      if (typeof d.prospectName === 'string') setProspectName(d.prospectName)
+      if (typeof d.prospectContact === 'string') setProspectContact(d.prospectContact)
+      if (typeof d.prospectEmail === 'string') setProspectEmail(d.prospectEmail)
+      if (typeof d.prospectPhone === 'string') setProspectPhone(d.prospectPhone)
+      if (typeof d.prospectAddress === 'string') setProspectAddress(d.prospectAddress)
+      if (typeof d.terms === 'string') setTerms(d.terms)
+      if (typeof d.notes === 'string') setNotes(d.notes)
+      if (typeof d.vatRate === 'string') setVatRate(d.vatRate)
+      if (typeof d.discount === 'string') setDiscount(d.discount)
+      if (typeof d.validUntil === 'string') setValidUntil(d.validUntil)
+      if (typeof d.showLineItems === 'boolean') setShowLineItems(d.showLineItems)
+      if (typeof d.showEquipmentSpec === 'boolean') setShowEquipmentSpec(d.showEquipmentSpec)
+      if (typeof d.showMaintenanceAgreement === 'boolean')
+        setShowMaintenanceAgreement(d.showMaintenanceAgreement)
+      if (typeof d.showRequirementsMatrix === 'boolean')
+        setShowRequirementsMatrix(d.showRequirementsMatrix)
+      if (Array.isArray(d.requirements)) setRequirements(d.requirements as DraftRequirement[])
+      if (d.requirementSource !== undefined)
+        setRequirementSource((d.requirementSource as RequirementSourceInfo | null) ?? null)
+      if (Array.isArray(d.systems) && d.systems.length > 0)
+        setSystems(d.systems as EditSystem[])
+      setDraftRestored(true)
+    } catch {
+      // corrupt/unparseable draft — ignore and carry on with a fresh form.
+    }
+    // Run once on mount only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Debounced save whenever any persisted field changes.
+  useEffect(() => {
+    if (!isNewQuote) return
+    if (!draftSaveMounted.current) {
+      draftSaveMounted.current = true
+      return
+    }
+    const draft = {
+      title,
+      maintenanceOnly,
+      targetMode,
+      branchId,
+      clientId,
+      siteId,
+      prospectName,
+      prospectContact,
+      prospectEmail,
+      prospectPhone,
+      prospectAddress,
+      terms,
+      notes,
+      vatRate,
+      discount,
+      validUntil,
+      showLineItems,
+      showEquipmentSpec,
+      showMaintenanceAgreement,
+      showRequirementsMatrix,
+      requirements,
+      requirementSource,
+      systems,
+    }
+    const handle = setTimeout(() => {
+      try {
+        window.localStorage.setItem(draftKey, JSON.stringify(draft))
+      } catch {
+        // ignore storage errors (private mode, quota, etc.)
+      }
+    }, 500)
+    return () => clearTimeout(handle)
+  }, [
+    isNewQuote,
+    draftKey,
+    title,
+    maintenanceOnly,
+    targetMode,
+    branchId,
+    clientId,
+    siteId,
+    prospectName,
+    prospectContact,
+    prospectEmail,
+    prospectPhone,
+    prospectAddress,
+    terms,
+    notes,
+    vatRate,
+    discount,
+    validUntil,
+    showLineItems,
+    showEquipmentSpec,
+    showMaintenanceAgreement,
+    showRequirementsMatrix,
+    requirements,
+    requirementSource,
+    systems,
+  ])
+
   const disabled = readOnly || isPending
 
   return (
     <div className="space-y-6">
+      {/* Unsaved-draft notice: we recovered the in-progress quote from a previous
+          session so nothing was lost when the user navigated away. */}
+      {draftRestored && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
+          <span className="flex items-center gap-2">
+            <RotateCcw className="h-4 w-4 shrink-0" />
+            Restored your unsaved draft from a previous session.
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              clearDraft()
+              window.location.reload()
+            }}
+          >
+            Discard draft
+          </Button>
+        </div>
+      )}
+
       {/* ---------- Quote details ---------- */}
       <Card>
         <CardHeader>

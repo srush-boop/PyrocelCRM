@@ -2280,6 +2280,7 @@ export type InboundRequestIntent =
   | 'chase_up'
   | 'complaint'
   | 'quote_request'
+  | 'send_report'
   | 'general'
   | 'unknown'
 export type InboundRequestUrgency = 'emergency' | 'high' | 'normal' | 'low'
@@ -2287,7 +2288,7 @@ export type InboundRequestUrgency = 'emergency' | 'high' | 'normal' | 'low'
 // One AI-proposed action. `kind` drives which control the inbox renders; the
 // human always confirms before anything is created.
 export interface SuggestedAction {
-  kind: 'create_call' | 'chase_up' | 'reply' | 'dismiss'
+  kind: 'create_call' | 'chase_up' | 'reply' | 'send_report' | 'dismiss'
   label: string
   // Loose bag of hints for the action (e.g. suggested notes, KPI hours). The UI
   // treats these as prefill defaults only.

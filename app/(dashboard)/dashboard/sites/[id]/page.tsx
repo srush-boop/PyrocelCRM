@@ -15,6 +15,7 @@ import { QuotesTable } from '@/components/dashboard/sales/quotes-table'
 import { SiteAssetsTab, type SiteAsset } from '@/components/dashboard/sites/site-assets-tab'
 import { SiteReports } from '@/components/dashboard/sites/site-reports'
 import { SiteOpenCalls, type OpenCall } from '@/components/dashboard/sites/site-open-calls'
+import { SiteCalls, type SiteCall } from '@/components/dashboard/sites/site-calls'
 import { SiteLogbook } from '@/components/dashboard/sites/site-logbook'
 import { SiteDocuments } from '@/components/dashboard/sites/site-documents'
 import { SiteEngineerInfoTab } from '@/components/dashboard/sites/site-engineer-info-tab'
@@ -245,6 +246,47 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
 
   const openCalls = (openCallsData || []) as OpenCall[]
 
+  // All calls (open + completed) with full joins for the unified Calls tab.
+  const { data: allCallsData } = await supabase
+    .from('tasks')
+    .select(`
+      *,
+      site_service:site_services(*, service_type:service_types(*)),
+      service_type:service_types(id, name),
+      system_type:system_types(id, name),
+      assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(*),
+      task_result:task_results(reference_number, overall_status, email_sent_at),
+      call_parts(unit_cost_pence, quantity)
+    `)
+    .or(completedFilter)
+    .order('scheduled_date', { ascending: false })
+
+  const allCalls = ((allCallsData || []) as any[]).map((t) => ({
+    ...t,
+    task_result: Array.isArray(t.task_result) ? t.task_result[0] ?? null : t.task_result,
+  })) as SiteCall[]
+
+  // Unique engineers + service types from all calls for the filter dropdowns.
+  const allCallEngineers = Array.from(
+    new Map(
+      allCalls
+        .filter((c) => c.assigned_engineer)
+        .map((c) => [c.assigned_engineer!.id, c.assigned_engineer!.full_name || c.assigned_engineer!.email]),
+    ).entries(),
+  ).map(([id, name]) => ({ id, name: name ?? '' }))
+
+  const allCallServiceTypes = Array.from(
+    new Map(
+      allCalls
+        .map((c) => {
+          const id = c.site_service?.service_type?.id ?? c.service_type?.id
+          const name = c.site_service?.service_type?.name ?? c.service_type?.name
+          return id && name ? [id, name] as [string, string] : null
+        })
+        .filter((x): x is [string, string] => x !== null),
+    ).entries(),
+  ).map(([id, name]) => ({ id, name }))
+
   // Filter out service types already added to this site. Reactive / emergency
   // (non-recurring) call types are excluded here — they aren't recurring
   // services, they're logged ad-hoc via "Book Call".
@@ -460,11 +502,11 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
       >
         <TabsList className="h-auto flex-wrap justify-start">
           <TabsTrigger value="overview" className="flex-none">Overview</TabsTrigger>
-          <TabsTrigger value="open-calls" className="flex-none">
-            Open Calls
-            {openCalls.length > 0 && (
+          <TabsTrigger value="calls" className="flex-none">
+            Calls
+            {allCalls.length > 0 && (
               <Badge variant="secondary" className="ml-2">
-                {openCalls.length}
+                {allCalls.length}
               </Badge>
             )}
           </TabsTrigger>
@@ -662,8 +704,12 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
           </div>
         </TabsContent>
 
-        <TabsContent value="open-calls" className="mt-0">
-          <SiteOpenCalls openCalls={openCalls} />
+        <TabsContent value="calls" className="mt-0">
+          <SiteCalls
+            calls={allCalls}
+            engineers={allCallEngineers}
+            serviceTypes={allCallServiceTypes}
+          />
         </TabsContent>
 
         <TabsContent value="systems" className="mt-0">

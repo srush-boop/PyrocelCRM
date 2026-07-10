@@ -68,7 +68,9 @@ export default async function ChargeableCallsPage() {
     .limit(500)
 
   const rows: ChargeableCall[] = (data ?? []).map((t: any) => {
-    const site = t.site_service?.sites || t.direct_site
+    // site_service is a one-to-many embed — Supabase returns an array
+    const siteServiceRow = Array.isArray(t.site_service) ? t.site_service[0] : t.site_service
+    const site = siteServiceRow?.sites || t.direct_site
     const client = site?.clients
     const partsTotalPence = (t.call_parts ?? []).reduce(
       (sum: number, p: { quantity: number | null; unit_cost_pence: number | null }) =>
@@ -98,7 +100,7 @@ export default async function ChargeableCallsPage() {
       clientRef: t.client_ref ?? null,
       siteName: site?.name || 'Unknown site',
       clientName: client?.name || '',
-      serviceName: t.site_service?.service_type?.name || 'Ad-hoc / reactive',
+      serviceName: siteServiceRow?.service_type?.name || 'Ad-hoc / reactive',
       engineerName:
         t.assigned_engineer?.full_name ||
         t.assigned_engineer?.email ||

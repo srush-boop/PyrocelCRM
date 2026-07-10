@@ -117,9 +117,9 @@ const triageSchema = z.object({
     .string()
     .describe('A concise 1-3 sentence summary of what the sender is asking for, in British English.'),
   intent: z
-    .enum(['new_call', 'chase_up', 'complaint', 'quote_request', 'general', 'unknown'])
+    .enum(['new_call', 'chase_up', 'complaint', 'quote_request', 'send_report', 'general', 'unknown'])
     .describe(
-      'new_call = wants a service visit/attendance booked; chase_up = chasing an existing job/visit; complaint = dissatisfaction; quote_request = wants pricing/a quote; general = general enquiry; unknown = cannot tell.',
+      'new_call = wants a service visit/attendance booked; chase_up = chasing an existing job/visit; complaint = dissatisfaction; quote_request = wants pricing/a quote; send_report = asking for inspection/service/test reports or certificates for a site; general = general enquiry; unknown = cannot tell.',
     ),
   urgency: z
     .enum(['emergency', 'high', 'normal', 'low'])
@@ -289,9 +289,10 @@ export async function triageInboundRequest(
 
     const systemPrompt = [
       `You are an operations coordinator at ${companyName}, a UK fire and security systems company.`,
-      'Office staff forward you client emails (service requests, chase-ups, complaints, quote enquiries).',
-      'Read the email and its sender, then: (1) summarise it, (2) classify intent and urgency, (3) match it to an existing SITE and CLIENT from the candidate list, (4) choose the most appropriate reactive call type from the allowed list, and (5) draft a brief acknowledgement reply.',
+      'Office staff forward you client emails (service requests, chase-ups, complaints, quote enquiries, report/certificate requests).',
+      'Read the email and its sender, then: (1) summarise it, (2) classify intent and urgency, (3) match it to an existing SITE and CLIENT from the candidate list, (4) choose the most appropriate reactive call type from the allowed list (only when intent is new_call/complaint/general), and (5) draft a brief acknowledgement reply.',
       'Use British English. Never invent facts, dates, prices, or reference numbers. If you cannot confidently match a site/client/service, return null for that field rather than guessing.',
+      'IMPORTANT: If the email is asking for inspection reports, service reports, test certificates, or compliance documents for a site, classify intent as "send_report". Do NOT classify these as new_call.',
       'Only ever return ids that appear in the lists below.',
       ...anchorLines,
       '',
@@ -346,7 +347,16 @@ export async function triageInboundRequest(
     const intent = object.intent as InboundRequestIntent
     const urgency = object.urgency as InboundRequestUrgency
     const suggested: SuggestedAction[] = []
-    if (intent === 'new_call' || intent === 'complaint' || intent === 'general') {
+    if (intent === 'send_report') {
+      suggested.push({
+        kind: 'send_report',
+        label: 'Send most recent inspection reports for this site',
+        payload: {
+          siteId: matchedSiteId,
+          clientId: derivedClientId,
+        },
+      })
+    } else if (intent === 'new_call' || intent === 'complaint' || intent === 'general') {
       const svc = matchedServiceTypeId ? serviceById.get(matchedServiceTypeId) : undefined
       suggested.push({
         kind: 'create_call',

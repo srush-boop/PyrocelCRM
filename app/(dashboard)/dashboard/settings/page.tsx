@@ -39,11 +39,18 @@ export default async function SettingsPage() {
     : { data: [] }
 
   const globalConfig = isAdmin
-    ? await getGlobalConfigs(['po_request_overdue_days', 'deadline_failed_reasons'])
+    ? await getGlobalConfigs([
+        'po_request_overdue_days',
+        'deadline_failed_reasons',
+        'engagement_stats_enabled',
+      ])
     : {}
 
   const poOverdueDays = (globalConfig['po_request_overdue_days'] as number | null) ?? 14
   const deadlineReasons = (globalConfig['deadline_failed_reasons'] as string[] | null) ?? []
+  // Encouragement stats default to ON when the key has never been set.
+  const engagementStatsEnabled =
+    (globalConfig['engagement_stats_enabled'] as boolean | null) ?? true
 
   return (
     <div className="space-y-6">
@@ -65,6 +72,7 @@ export default async function SettingsPage() {
         documentTemplates={(templatesResult.data as DocumentTemplate[]) || []}
         poOverdueDays={poOverdueDays}
         deadlineReasons={deadlineReasons}
+        engagementStatsEnabled={engagementStatsEnabled}
       />
     </div>
   )

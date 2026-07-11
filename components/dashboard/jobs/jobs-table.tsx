@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -20,7 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Search, Hammer } from 'lucide-react'
+import { Hammer } from 'lucide-react'
+import { GridSearch } from '@/components/dashboard/grid-header'
 import { cn } from '@/lib/utils'
 import { formatPence } from '@/lib/sales'
 import { JOB_STAGES, JOB_STATUSES, jobStageMeta, jobStatusMeta } from '@/lib/jobs/stages'

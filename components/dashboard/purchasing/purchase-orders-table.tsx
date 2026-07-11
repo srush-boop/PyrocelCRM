@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -20,7 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Search, ShoppingCart } from 'lucide-react'
+import { ShoppingCart } from 'lucide-react'
+import { GridSearch } from '@/components/dashboard/grid-header'
 import { cn, formatDateUK } from '@/lib/utils'
 import { formatPence } from '@/lib/sales'
 import { PURCHASE_ORDER_STATUSES, purchaseOrderStatusMeta } from '@/lib/jobs/purchasing-shared'
@@ -58,15 +58,12 @@ export function PurchaseOrdersTable({ orders }: { orders: PurchaseOrder[] }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative w-full sm:max-w-xs">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search orders..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8"
-          />
-        </div>
+        <GridSearch
+          value={search}
+          onChange={setSearch}
+          placeholder="Search orders..."
+          className="w-full sm:max-w-xs"
+        />
         <Select value={status} onValueChange={setStatus}>
           <SelectTrigger className="w-[160px]">
             <SelectValue placeholder="Status" />

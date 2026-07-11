@@ -10,7 +10,6 @@ import { EditSiteButton } from '@/components/dashboard/sites/edit-site-button'
 import { CreateTaskDialog } from '@/components/dashboard/schedule/create-task-dialog'
 import { SiteServicesManager } from '@/components/dashboard/sites/site-services-manager'
 import { SiteSystemsManager } from '@/components/dashboard/sites/site-systems-manager'
-import { SiteSubcontractorsPanel } from '@/components/dashboard/sites/site-subcontractors-panel'
 import { QuotesTable } from '@/components/dashboard/sales/quotes-table'
 import { SiteAssetsTab, type SiteAsset } from '@/components/dashboard/sites/site-assets-tab'
 import { SiteOpenCalls, type OpenCall } from '@/components/dashboard/sites/site-open-calls'
@@ -691,12 +690,6 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             )}
           </CardContent>
         </Card>
-
-                <SiteSubcontractorsPanel
-                  siteId={id}
-                  siteName={(site as Site).name}
-                  siteServices={siteServices}
-                />
 
                 <SiteServicesManager
                   siteId={id}

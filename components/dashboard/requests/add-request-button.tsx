@@ -134,6 +134,12 @@ export function AddRequestButton({
     }
   }
 
+  // Feature temporarily hidden everywhere: the "Add request" flow was
+  // mis-triaging and creating unintended calls. Returning null after all hooks
+  // keeps the Rules of Hooks intact while removing every entry point. Restore by
+  // deleting this early return once the triage flow is fixed.
+  return null
+
   return (
     <Dialog
       open={open}
@@ -161,7 +167,7 @@ export function AddRequestButton({
           <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/[0.04] px-3 py-2 text-sm">
             <Link2 className="h-4 w-4 shrink-0 text-primary" />
             <span className="text-pretty">
-              This request will be linked to <span className="font-medium">{context.label}</span>.
+              This request will be linked to <span className="font-medium">{context?.label}</span>.
             </span>
           </div>
         )}

@@ -581,6 +581,18 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             </CardContent>
           </Card>
         )}
+        {siteClientId && (
+          <SiteBillingCard
+            siteId={id}
+            siteBillingAccountId={(site as Site).billing_account_id ?? null}
+            services={siteServices.map((ss) => ({
+              id: ss.id,
+              name: ss.service_type?.name ?? 'Service',
+              billing_account_id: ss.billing_account_id ?? null,
+            }))}
+            accounts={billingAccounts}
+          />
+        )}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

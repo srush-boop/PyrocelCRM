@@ -17,6 +17,7 @@ import { CommissioningJobPanel } from '@/components/dashboard/tasks/commissionin
 import { resolveSiteFlags } from '@/lib/site-flags'
 import { getOpenRemedialForSite } from '@/lib/remedial'
 import { DeadlineFailedPanel } from '@/components/dashboard/tasks/deadline-failed-panel'
+import { CallNotesCard } from '@/components/dashboard/tasks/call-notes-card'
 import { getGlobalConfig } from '@/lib/actions/global-config'
 import type { DocumentFile, DocumentFolder, SiteInternalNote } from '@/lib/types/database'
 import type {
@@ -225,6 +226,10 @@ export default async function TaskPage({ params }: PageProps) {
       'Weather conditions',
       'Other',
     ]
+    // Office/admin, or the engineer assigned to the call, may log the reason.
+    const canLogDeadline =
+      canModerateNotes ||
+      (role === 'engineer' && task.assigned_engineer_id === user.id)
     const deadlinePanelNode = (
       <DeadlineFailedPanel
         taskId={id}
@@ -232,7 +237,7 @@ export default async function TaskPage({ params }: PageProps) {
         currentReason={(task as any).deadline_failed_reason ?? null}
         currentNote={(task as any).deadline_failed_note ?? null}
         reasons={deadlineReasons ?? defaultReasons}
-        canLog={canModerateNotes}
+        canLog={canLogDeadline}
       />
     )
     preAttendancePanel = (
@@ -267,6 +272,17 @@ export default async function TaskPage({ params }: PageProps) {
           />
         </div>
         <EntityRequestsCard entityType="task" entityId={id} />
+        {preAttendancePanel}
+      </>
+    )
+  }
+
+  // Prominent "Call notes" card at the very top of the slot, visible to every
+  // role, so the description captured when the call was logged is never hidden.
+  if ((task.notes as string | null)?.trim()) {
+    preAttendancePanel = (
+      <>
+        <CallNotesCard notes={task.notes as string} />
         {preAttendancePanel}
       </>
     )

@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { AlertTriangle, Save, Loader2 } from 'lucide-react'
-import { setChargeReview } from '@/lib/actions/charge-review'
+import { setDeadlineFailedReason } from '@/lib/actions/deadline'
 
 interface DeadlineFailedPanelProps {
   taskId: string
@@ -25,7 +25,7 @@ interface DeadlineFailedPanelProps {
   currentNote: string | null
   /** Configurable list of reasons from global_config */
   reasons: string[]
-  /** All roles can see the countdown; only office/admin can log the reason */
+  /** All roles see the countdown; office/admin and the assigned engineer can log */
   canLog: boolean
 }
 
@@ -57,11 +57,7 @@ export function DeadlineFailedPanel({
       return
     }
     startTransition(async () => {
-      const { error } = await setChargeReview(taskId, {
-        kind: 'set_deadline_failed',
-        reason,
-        note: note.trim() || null,
-      })
+      const { error } = await setDeadlineFailedReason(taskId, reason, note.trim() || null)
       if (error) {
         toast.error(error)
       } else {

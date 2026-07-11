@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { STATUS_TONE_SOLID, type StatusTone } from '@/lib/status-colors'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -35,11 +37,14 @@ export interface DefectRow {
   suggestedPartsCount: number
 }
 
-const STATUS_VARIANT: Record<DefectStatus, 'destructive' | 'secondary' | 'default' | 'outline'> = {
-  open: 'destructive',
-  quoted: 'secondary',
-  resolved: 'default',
-  dismissed: 'outline',
+// Defect lifecycle mapped to the shared semantic palette: an open defect is a
+// live problem (danger), quoted is informational, resolved is success, and a
+// dismissed defect is neutral.
+const STATUS_TONE: Record<DefectStatus, StatusTone> = {
+  open: 'danger',
+  quoted: 'info',
+  resolved: 'success',
+  dismissed: 'neutral',
 }
 
 export function DefectsTable({ defects }: { defects: DefectRow[] }) {
@@ -126,14 +131,14 @@ export function DefectsTable({ defects }: { defects: DefectRow[] }) {
                     <TableCell>{d.serviceName}</TableCell>
                     <TableCell className="text-center">
                       {d.failedCount > 0 ? (
-                        <Badge variant="destructive">{d.failedCount}</Badge>
+                        <Badge className={STATUS_TONE_SOLID.danger}>{d.failedCount}</Badge>
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
                     <TableCell className="text-center">
                       {d.advisoryCount > 0 ? (
-                        <Badge className="bg-amber-500 text-white hover:bg-amber-600">
+                        <Badge className={STATUS_TONE_SOLID.warning}>
                           {d.advisoryCount}
                         </Badge>
                       ) : (
@@ -154,9 +159,10 @@ export function DefectsTable({ defects }: { defects: DefectRow[] }) {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={STATUS_VARIANT[d.status]}>
-                        {DEFECT_STATUS_LABELS[d.status]}
-                      </Badge>
+                      <StatusBadge
+                        tone={STATUS_TONE[d.status]}
+                        label={DEFECT_STATUS_LABELS[d.status]}
+                      />
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-muted-foreground">
                       {formatDateUK(d.createdAt)}

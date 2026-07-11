@@ -1,6 +1,7 @@
 // Client-safe purchasing helpers. Deliberately free of `server-only` and any
 // server imports so both client components and server code can use them.
 import type { PurchaseOrderLine, PurchaseOrderStatus } from '@/lib/types/database'
+import { STATUS_TONE_CLASS } from '@/lib/status-colors'
 
 export interface PurchaseOrderStatusMeta {
   key: PurchaseOrderStatus
@@ -9,23 +10,11 @@ export interface PurchaseOrderStatusMeta {
 }
 
 export const PURCHASE_ORDER_STATUSES: PurchaseOrderStatusMeta[] = [
-  { key: 'draft', label: 'Draft', badgeClass: 'bg-muted text-muted-foreground border-border' },
-  { key: 'sent', label: 'Sent', badgeClass: 'bg-primary/10 text-primary border-primary/20' },
-  {
-    key: 'part_received',
-    label: 'Part received',
-    badgeClass: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30',
-  },
-  {
-    key: 'received',
-    label: 'Received',
-    badgeClass: 'bg-chart-4/15 text-foreground border-chart-4/30',
-  },
-  {
-    key: 'cancelled',
-    label: 'Cancelled',
-    badgeClass: 'bg-destructive/10 text-destructive border-destructive/20',
-  },
+  { key: 'draft', label: 'Draft', badgeClass: STATUS_TONE_CLASS.neutral },
+  { key: 'sent', label: 'Sent', badgeClass: STATUS_TONE_CLASS.info },
+  { key: 'part_received', label: 'Part received', badgeClass: STATUS_TONE_CLASS.warning },
+  { key: 'received', label: 'Received', badgeClass: STATUS_TONE_CLASS.success },
+  { key: 'cancelled', label: 'Cancelled', badgeClass: STATUS_TONE_CLASS.neutral },
 ]
 
 const PO_STATUS_BY_KEY = new Map<PurchaseOrderStatus, PurchaseOrderStatusMeta>(

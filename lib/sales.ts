@@ -2,6 +2,7 @@
 // status metadata. Money is always integer pence internally.
 
 import type { QuoteLineItem, QuoteStatus } from '@/lib/types/database'
+import { STATUS_TONE_CLASS } from '@/lib/status-colors'
 
 // --- Quote types -------------------------------------------------------
 // Futureproof: the canonical list lives here (not a DB enum) so new offer
@@ -130,14 +131,11 @@ export const QUOTE_STATUS_META: Record<
   QuoteStatus,
   { label: string; badgeClass: string }
 > = {
-  draft: { label: 'Draft', badgeClass: 'bg-muted text-muted-foreground' },
-  sent: { label: 'Sent for approval', badgeClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' },
-  accepted: {
-    label: 'Accepted',
-    badgeClass: 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300',
-  },
-  rejected: { label: 'Declined', badgeClass: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300' },
-  expired: { label: 'Expired', badgeClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' },
+  draft: { label: 'Draft', badgeClass: STATUS_TONE_CLASS.neutral },
+  sent: { label: 'Sent for approval', badgeClass: STATUS_TONE_CLASS.info },
+  accepted: { label: 'Accepted', badgeClass: STATUS_TONE_CLASS.success },
+  rejected: { label: 'Declined', badgeClass: STATUS_TONE_CLASS.danger },
+  expired: { label: 'Expired', badgeClass: STATUS_TONE_CLASS.warning },
 }
 
 // --- Money helpers -----------------------------------------------------

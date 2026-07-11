@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/ui/status-badge'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -194,9 +195,10 @@ export function SitesTable({ sites, routes, clients, branches = [], propertyType
                     </span>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={site.status === 'live' ? 'default' : 'destructive'}>
-                      {site.status}
-                    </Badge>
+                    <StatusBadge
+                      tone={site.status === 'live' ? 'success' : 'warning'}
+                      label={site.status === 'live' ? 'Live' : 'Off-contract'}
+                    />
                   </TableCell>
                   <TableCell>
                     {site.client ? (

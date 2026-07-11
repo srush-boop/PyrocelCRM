@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { STATUS_TONE_CLASS } from '@/lib/status-colors'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -115,32 +116,32 @@ function StatusBadge({ status }: { status: string }) {
   switch (status) {
     case 'pending':
       return (
-        <Badge variant="outline" className="gap-1 bg-secondary/60 text-secondary-foreground">
+        <Badge variant="outline" className={cn('gap-1', STATUS_TONE_CLASS.neutral)}>
           <Clock className="h-3 w-3" /> Pending
         </Badge>
       )
     case 'in_progress':
       return (
-        <Badge variant="outline" className="gap-1 bg-primary/10 text-primary border-primary/20">
-          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-primary" aria-hidden />
+        <Badge variant="outline" className={cn('gap-1', STATUS_TONE_CLASS.info)}>
+          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-blue-600" aria-hidden />
           In Progress
         </Badge>
       )
     case 'paused':
       return (
-        <Badge variant="outline" className="gap-1 bg-amber-500/10 text-amber-600 border-amber-500/20">
+        <Badge variant="outline" className={cn('gap-1', STATUS_TONE_CLASS.warning)}>
           <PauseCircle className="h-3 w-3" /> Paused
         </Badge>
       )
     case 'completed':
       return (
-        <Badge variant="outline" className="gap-1 bg-green-500/10 text-green-700 border-green-500/20">
+        <Badge variant="outline" className={cn('gap-1', STATUS_TONE_CLASS.success)}>
           <ClipboardCheck className="h-3 w-3" /> Completed
         </Badge>
       )
     case 'cancelled':
       return (
-        <Badge variant="outline" className="gap-1 text-muted-foreground">
+        <Badge variant="outline" className={cn('gap-1', STATUS_TONE_CLASS.neutral)}>
           <XCircle className="h-3 w-3" /> Cancelled
         </Badge>
       )
@@ -153,25 +154,25 @@ function ResultBadge({ status }: { status: string }) {
   switch (status) {
     case 'pass':
       return (
-        <Badge className="gap-1 bg-green-500/10 text-green-700 border-green-500/20">
+        <Badge variant="outline" className={cn('gap-1', STATUS_TONE_CLASS.success)}>
           <CheckCircle2 className="h-3 w-3" /> Pass
         </Badge>
       )
     case 'fail':
       return (
-        <Badge className="gap-1 bg-red-500/10 text-red-600 border-red-500/20">
+        <Badge variant="outline" className={cn('gap-1', STATUS_TONE_CLASS.danger)}>
           <XCircle className="h-3 w-3" /> Fail
         </Badge>
       )
     case 'partial':
       return (
-        <Badge className="gap-1 bg-yellow-500/10 text-yellow-700 border-yellow-500/20">
+        <Badge variant="outline" className={cn('gap-1', STATUS_TONE_CLASS.warning)}>
           <AlertCircle className="h-3 w-3" /> Partial
         </Badge>
       )
     case 'no_access':
       return (
-        <Badge className="gap-1 bg-amber-500/10 text-amber-600 border-amber-500/20">
+        <Badge variant="outline" className={cn('gap-1', STATUS_TONE_CLASS.neutral)}>
           <AlertTriangle className="h-3 w-3" /> No Access
         </Badge>
       )

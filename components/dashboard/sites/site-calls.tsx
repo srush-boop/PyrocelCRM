@@ -48,10 +48,17 @@ import type { Task, SiteService, ServiceType, Profile, SystemType, TaskResult } 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+// The system type carried on a call — either directly (7 of ~52 calls) or,
+// far more commonly, resolved via the call's service type.
+type CallSystemType = Pick<SystemType, 'id' | 'name' | 'code' | 'color'>
+type CallServiceType = Pick<ServiceType, 'id' | 'name'> & {
+  system_type?: CallSystemType | null
+}
+
 export type SiteCall = Omit<Task, 'service_type' | 'system_type' | 'assigned_engineer' | 'site_service'> & {
-  site_service: (SiteService & { service_type: ServiceType | null }) | null
-  service_type: Pick<ServiceType, 'id' | 'name'> | null
-  system_type: Pick<SystemType, 'id' | 'name' | 'code' | 'color'> | null
+  site_service: (SiteService & { service_type: CallServiceType | null }) | null
+  service_type: CallServiceType | null
+  system_type: CallSystemType | null
   assigned_engineer: Profile | null
   task_result: TaskResult | null
   call_parts: { unit_cost_pence: number | null; quantity: number }[]
@@ -73,8 +80,22 @@ function getServiceName(call: SiteCall) {
   )
 }
 
+/**
+ * Resolve the call's system type. Most calls have no direct `system_type_id`, so
+ * fall back to the system linked to their service type (site service first, then
+ * the ad-hoc service type) — mirroring how the schedule grid resolves it.
+ */
+function getSystem(call: SiteCall): CallSystemType | null {
+  return (
+    call.system_type ??
+    call.site_service?.service_type?.system_type ??
+    call.service_type?.system_type ??
+    null
+  )
+}
+
 function getSystemName(call: SiteCall) {
-  return call.system_type?.name ?? null
+  return getSystem(call)?.name ?? null
 }
 
 function getReportHref(call: SiteCall) {
@@ -102,15 +123,16 @@ function CallCard({ call, onSendReport }: { call: SiteCall; onSendReport?: (c: S
   const scheduled = call.scheduled_date ? new Date(call.scheduled_date) : null
   const isOverdue = !!(scheduled && scheduled < today && call.status === 'pending')
   const serviceName = getServiceName(call)
-  const systemName = getSystemName(call)
+  const system = getSystem(call)
+  const systemName = system?.name ?? null
   // The site name is implicit on the site page, so lead with the system type and
   // service (both bold in the tile title), plus a matching system icon so these
   // tiles share the same layout/dimensions as the all-calls grid tiles.
   const title = systemName ? `${systemName} · ${serviceName}` : serviceName
-  // Colour-code by the configured system type (falls back to a neutral slate),
+  // Colour-code by the resolved system type (falls back to a neutral slate),
   // matching the all-calls grid: coloured icon tile + left-border accent.
-  const systemLike = { name: systemName ?? serviceName, code: call.system_type?.code, color: call.system_type?.color }
-  const systemColors = getSystemColors(call.system_type?.color)
+  const systemLike = { name: systemName ?? serviceName, code: system?.code, color: system?.color }
+  const systemColors = getSystemColors(system?.color)
   const isCompleted = call.status === 'completed'
   const chargeInvoiced = !!call.charge_invoiced_at
   const reportHref = isCompleted ? getReportHref(call) : null

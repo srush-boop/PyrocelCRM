@@ -53,19 +53,32 @@ export async function addPoRequest(
   return { error: null, id: (data as { id: string }).id }
 }
 
-/** Send a PO request email to the site/client and record it against this log entry. */
-export async function sendPoRequestEmail(
-  poRequestId: string,
-  taskId: string,
-  specialNote: string | null,
-): Promise<{ error: string | null }> {
-  const ctx = await requireManager()
-  if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
-  const { supabase } = ctx
+interface PoEmailData {
+  recipients: string[]
+  siteName: string
+  clientName: string | null
+  contactName: string | null
+  serviceName: string
+  systemName: string | null
+  panelName: string | null
+  referenceNumber: string | null
+  completedAt: string | null
+  clientRef: string | null
+  engineerNotes: string | null
+  parts: { name: string; quantity: number; unitCostPence: number }[]
+  partsTotalPence: number
+  priorRequests: any[]
+}
 
-  // Gather task info needed to build the email.
+/**
+ * Gather everything needed to build/preview a PO-request email for a call.
+ * Shared by the preview and the send actions so both show identical content.
+ */
+async function gatherPoEmailData(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  taskId: string,
+): Promise<{ error: string } | { error: null; data: PoEmailData }> {
   // site_service is a one-to-many embed so Supabase returns an array — we take [0].
-  // Use maybeSingle() so a missing row returns { data: null } rather than an error.
   const { data: task, error: taskError } = await supabase
     .from('tasks')
     .select(`
@@ -77,9 +90,10 @@ export async function sendPoRequestEmail(
       direct_site:sites!tasks_site_id_fkey(id, name, contact_email, contact_name, clients(id, name, contact_email, contact_name)),
       site_service:site_services(
         sites(id, name, contact_email, contact_name, clients(id, name, contact_email, contact_name)),
-        service_type:service_types(id, name)
+        service_type:service_types(id, name),
+        site_system:site_systems(id, name, panels:system_panels(name))
       ),
-      call_parts(name, quantity, unit_cost_pence)
+      call_parts(quantity, unit_cost_pence, sale_unit_price_pence, part:parts(name))
     `)
     .eq('id', taskId)
     .maybeSingle()
@@ -91,23 +105,16 @@ export async function sendPoRequestEmail(
   if (!task) return { error: 'Call not found' }
   const t = task as any
 
-  // site_service comes back as an array; grab the first element
   const siteServiceRow = Array.isArray(t.site_service) ? t.site_service[0] : t.site_service
   const site = siteServiceRow?.sites || t.direct_site
   const client = site?.clients
 
-  // Gather recipient emails
   const recipients: string[] = []
   if (site?.contact_email) recipients.push(site.contact_email)
   if (client?.contact_email && !recipients.includes(client.contact_email)) {
     recipients.push(client.contact_email)
   }
 
-  if (recipients.length === 0) {
-    return { error: 'No email address found for this site or client. Please check the site/client contact email.' }
-  }
-
-  // Gather prior PO requests for this task (to include in email)
   const { data: priorRequests } = await supabase
     .from('po_requests')
     .select('id, created_at, note, po_number, authorised_at, requester:profiles!po_requests_requested_by_fkey(full_name, email)')
@@ -119,43 +126,112 @@ export async function sendPoRequestEmail(
   const refNum = taskResults[0]?.reference_number ?? null
   const notes = taskResults[0]?.engineer_notes ?? null
 
+  // System + panel for the email overview (fire alarm etc. may have named panels).
+  const systemRow = siteServiceRow?.site_system
+  const systemName = systemRow?.name || null
+  const panelNames = ((systemRow?.panels ?? []) as { name: string }[]).map((p) => p.name).filter(Boolean)
+  const panelName = panelNames.length > 0 ? panelNames.join(', ') : null
+
+  // Price parts at the sale price (what the client is invoiced); fall back to cost.
   const partsList = ((t.call_parts ?? []) as any[]).map((p: any) => ({
-    name: p.name || 'Part',
+    name: p.part?.name || 'Part',
     quantity: p.quantity ?? 1,
-    unitCostPence: p.unit_cost_pence ?? 0,
+    unitCostPence: p.sale_unit_price_pence ?? p.unit_cost_pence ?? 0,
   }))
   const partsTotalPence = partsList.reduce((s: number, p: any) => s + p.quantity * p.unitCostPence, 0)
 
-  // Mark as sent
-  const { error: updateError } = await supabase
-    .from('po_requests')
-    .update({
-      email_sent_at: new Date().toISOString(),
-      email_sent_to: recipients,
-      special_note: specialNote?.trim() || null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', poRequestId)
-
-  if (updateError) return { error: updateError.message }
-
-  // Fire email (best effort — build inline, avoid a heavy template for now)
-  try {
-    const { sendPoRequestEmail: dispatch } = await import('@/lib/email/po-request-email')
-    await dispatch(recipients, {
+  return {
+    error: null,
+    data: {
+      recipients,
       siteName: site?.name ?? 'Site',
       clientName: client?.name ?? null,
       contactName: site?.contact_name ?? client?.contact_name ?? null,
       serviceName,
+      systemName,
+      panelName,
       referenceNumber: refNum ?? null,
-      completedAt: t.completed_at,
+      completedAt: t.completed_at ?? null,
       clientRef: t.client_ref ?? null,
       engineerNotes: notes ?? null,
       parts: partsList,
       partsTotalPence,
-      specialNote: specialNote?.trim() || null,
       priorRequests: (priorRequests ?? []) as any[],
-      authorisationToken: poRequestId, // use ID as token
+    },
+  }
+}
+
+/**
+ * Build the review-before-send overview for a PO request. Returns the same
+ * content the email will contain (recipients, call summary, parts, total) so the
+ * reviewer can check it before dispatching. Does not send or mutate anything.
+ */
+export async function getPoRequestPreview(
+  taskId: string,
+): Promise<{ error: string | null; data?: PoEmailData }> {
+  const ctx = await requireManager()
+  if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
+  const result = await gatherPoEmailData(ctx.supabase, taskId)
+  if (result.error !== null) return { error: result.error }
+  return { error: null, data: result.data }
+}
+
+/** Send a PO request email to the site/client and record it against this log entry. */
+export async function sendPoRequestEmail(
+  poRequestId: string,
+  taskId: string,
+  specialNote: string | null,
+): Promise<{ error: string | null }> {
+  const ctx = await requireManager()
+  if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
+  const { supabase } = ctx
+
+  const gathered = await gatherPoEmailData(supabase, taskId)
+  if (gathered.error !== null) return { error: gathered.error }
+  const d = gathered.data
+
+  if (d.recipients.length === 0) {
+    return { error: 'No email address found for this site or client. Please check the site/client contact email.' }
+  }
+
+  // Mark as sent and get the row's authorisation_token back (the token the public
+  // /po-authorise/[token] page matches on — NOT the row id).
+  const { data: sentRow, error: updateError } = await supabase
+    .from('po_requests')
+    .update({
+      email_sent_at: new Date().toISOString(),
+      email_sent_to: d.recipients,
+      special_note: specialNote?.trim() || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', poRequestId)
+    .select('authorisation_token')
+    .single()
+
+  if (updateError) return { error: updateError.message }
+  const authorisationToken = (sentRow as { authorisation_token: string | null })?.authorisation_token
+  if (!authorisationToken) {
+    return { error: 'This PO request has no authorisation token. Please try creating a new request.' }
+  }
+
+  try {
+    const { sendPoRequestEmail: dispatch } = await import('@/lib/email/po-request-email')
+    await dispatch(d.recipients, {
+      siteName: d.siteName,
+      clientName: d.clientName,
+      contactName: d.contactName,
+      serviceName: d.serviceName,
+      systemName: d.systemName,
+      panelName: d.panelName,
+      referenceNumber: d.referenceNumber,
+      completedAt: d.completedAt,
+      clientRef: d.clientRef,
+      engineerNotes: d.engineerNotes,
+      parts: d.parts,
+      partsTotalPence: d.partsTotalPence,
+      specialNote: specialNote?.trim() || null,
+      priorRequests: d.priorRequests,
+      authorisationToken, // real per-row token matched by the public authorise page
       companyName: process.env.COMPANY_NAME || 'Pyrocel',
       baseUrl: process.env.NEXT_PUBLIC_SITE_URL || '',
     })

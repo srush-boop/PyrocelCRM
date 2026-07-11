@@ -5,6 +5,8 @@ interface PoRequestEmailOptions {
   clientName: string | null
   contactName: string | null
   serviceName: string
+  systemName: string | null
+  panelName: string | null
   referenceNumber: string | null
   completedAt: string | null
   clientRef: string | null
@@ -112,9 +114,12 @@ export async function sendPoRequestEmail(
             <tr><td style="padding:12px 16px;">
               <table width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;">
                 <tr><td style="color:#666;padding:3px 0;width:40%;">Service:</td><td style="font-weight:500;">${options.serviceName}</td></tr>
-                ${options.referenceNumber ? `<tr><td style="color:#666;padding:3px 0;">Reference:</td><td style="font-weight:500;">${options.referenceNumber}</td></tr>` : ''}
+                ${options.systemName ? `<tr><td style="color:#666;padding:3px 0;">System:</td><td style="font-weight:500;">${options.systemName}</td></tr>` : ''}
+                ${options.panelName ? `<tr><td style="color:#666;padding:3px 0;">Panel(s):</td><td style="font-weight:500;">${options.panelName}</td></tr>` : ''}
+                ${options.referenceNumber ? `<tr><td style="color:#666;padding:3px 0;">Call Reference:</td><td style="font-weight:500;">${options.referenceNumber}</td></tr>` : ''}
                 <tr><td style="color:#666;padding:3px 0;">Completed:</td><td style="font-weight:500;">${formatDate(options.completedAt)}</td></tr>
                 ${options.clientRef ? `<tr><td style="color:#666;padding:3px 0;">Client Ref:</td><td style="font-weight:500;">${options.clientRef}</td></tr>` : ''}
+                <tr><td style="color:#666;padding:3px 0;">Total to be invoiced:</td><td style="font-weight:700;">${formatGBP(options.partsTotalPence)}</td></tr>
               </table>
             </td></tr>
           </table>

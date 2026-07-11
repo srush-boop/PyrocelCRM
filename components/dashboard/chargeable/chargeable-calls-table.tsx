@@ -42,27 +42,43 @@ import {
 import { formatDateUK } from '@/lib/utils'
 import { setChargeReview } from '@/lib/actions/charge-review'
 import { PoRequestLog } from '@/components/dashboard/chargeable/po-request-log'
+import { ChargeableReviewDialog } from '@/components/dashboard/chargeable/chargeable-review-dialog'
 import type { PurchaseOrderRequest } from '@/lib/types/database'
 
 export interface ChargeableCall {
   id: string
   referenceNumber: string
   completedAt: string | null
+  respondBy: string | null
   chargeReviewStatus: 'none' | 'pending' | 'reviewed'
   chargeReason: string | null
   chargeReviewedAt: string | null
   chargeInvoicedAt: string | null
+  chargeable: boolean
   clientRef: string | null
+  deadlineFailedReason: string | null
+  deadlineFailedNote: string | null
+  poNotRequired: boolean
   siteName: string
   clientName: string
   serviceName: string
+  systemName: string | null
+  panelName: string | null
   engineerName: string
+  engineerNotes: string | null
   reviewerName: string | null
   partsCount: number
   partsTotalPence: number
   poRequests: PurchaseOrderRequest[]
   hasContactEmail: boolean
   overdueAfterDays: number
+  // Derived review facts (computed server-side; mirrored by computeGates)
+  missedDeadline: boolean
+  clientRequiresPo: boolean
+  poRequired: boolean
+  hasAuthorisedPo: boolean
+  poReadyToReview: boolean
+  followUpLogged: boolean
 }
 
 const REASON_LABELS: Record<string, string> = {
@@ -155,13 +171,14 @@ export function ChargeableCallsTable({
   const [isPending, startTransition] = useTransition()
   const [busyId, setBusyId] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [reviewId, setReviewId] = useState<string | null>(null)
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending')
   const [reasonFilter, setReasonFilter] = useState<string>('all')
 
   const filtered = useMemo(() => {
-    return calls.filter((c) => {
+    const rows = calls.filter((c) => {
       if (statusFilter === 'pending' && (c.chargeReviewStatus !== 'pending' || !!c.chargeInvoicedAt)) return false
       if (statusFilter === 'reviewed' && (c.chargeReviewStatus !== 'reviewed' || !!c.chargeInvoicedAt)) return false
       if (statusFilter === 'invoiced' && !c.chargeInvoicedAt) return false
@@ -173,7 +190,11 @@ export function ChargeableCallsTable({
       }
       return true
     })
+    // Float "PO received — ready to review" calls to the top of the queue.
+    return rows.sort((a, b) => Number(b.poReadyToReview) - Number(a.poReadyToReview))
   }, [calls, statusFilter, reasonFilter, search])
+
+  const reviewCall = calls.find((c) => c.id === reviewId) ?? null
 
   const pendingCount = calls.filter(
     (c) => c.chargeReviewStatus === 'pending' && !c.chargeInvoicedAt,

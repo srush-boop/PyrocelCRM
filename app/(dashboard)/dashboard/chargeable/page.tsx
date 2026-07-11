@@ -38,22 +38,28 @@ export default async function ChargeableCallsPage() {
       `
       id,
       completed_at,
+      respond_by,
       chargeable,
       charge_review_status,
       charge_reason,
       charge_reviewed_at,
       charge_invoiced_at,
       client_ref,
-      task_result:task_results(reference_number),
+      deadline_failed_reason,
+      deadline_failed_note,
+      po_not_required,
+      task_result:task_results(reference_number, engineer_notes),
       assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(id, full_name, email),
       reviewer:profiles!tasks_charge_reviewed_by_fkey(id, full_name, email),
-      direct_site:sites!tasks_site_id_fkey(id, name, contact_email, client_id, clients(id, name, contact_email)),
+      direct_site:sites!tasks_site_id_fkey(id, name, contact_email, client_id, clients(id, name, contact_email, requires_po)),
       site_service:site_services(
         id,
-        sites(id, name, contact_email, client_id, clients(id, name, contact_email)),
-        service_type:service_types(id, name)
+        sites(id, name, contact_email, client_id, clients(id, name, contact_email, requires_po)),
+        service_type:service_types(id, name),
+        site_system:site_systems(id, name, panels:system_panels(name))
       ),
-      call_parts(quantity, unit_cost_pence),
+      call_parts(quantity, unit_cost_pence, sale_unit_price_pence),
+      follow_ups:follow_up_requests!follow_up_requests_original_task_id_fkey(id, status),
       po_requests(
         id, task_id, requested_by, note, email_sent_at, email_sent_to,
         special_note, po_number, authorised_by_name, authorised_at,
@@ -72,9 +78,10 @@ export default async function ChargeableCallsPage() {
     const siteServiceRow = Array.isArray(t.site_service) ? t.site_service[0] : t.site_service
     const site = siteServiceRow?.sites || t.direct_site
     const client = site?.clients
+    // "Total to be invoiced" uses the sale price where set, falling back to cost.
     const partsTotalPence = (t.call_parts ?? []).reduce(
-      (sum: number, p: { quantity: number | null; unit_cost_pence: number | null }) =>
-        sum + (p.quantity ?? 0) * (p.unit_cost_pence ?? 0),
+      (sum: number, p: { quantity: number | null; unit_cost_pence: number | null; sale_unit_price_pence: number | null }) =>
+        sum + (p.quantity ?? 0) * (p.sale_unit_price_pence ?? p.unit_cost_pence ?? 0),
       0,
     )
 
@@ -86,6 +93,24 @@ export default async function ChargeableCallsPage() {
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     )
 
+    // ---- Derived review facts (mirror computeGates on the server) ----
+    const missedDeadline =
+      !!t.respond_by && !!t.completed_at && new Date(t.completed_at) > new Date(t.respond_by)
+    const clientRequiresPo = !!client?.requires_po
+    const poRequired = clientRequiresPo && !t.po_not_required
+    const hasAuthorisedPo = poRequests.some((r) => !!r.authorised_at)
+    // A PO arrived (client authorised the link) but hasn't been applied/invoiced yet.
+    const poReadyToReview =
+      !t.charge_invoiced_at &&
+      !(t.client_ref && String(t.client_ref).trim()) &&
+      poRequests.some((r) => !!r.authorised_at)
+    const followUpLogged = (t.follow_ups ?? []).length > 0
+
+    const systemRow = siteServiceRow?.site_system
+    const panelNames = ((systemRow?.panels ?? []) as { name: string }[])
+      .map((p) => p.name)
+      .filter(Boolean)
+
     return {
       id: t.id,
       referenceNumber:
@@ -93,18 +118,29 @@ export default async function ChargeableCallsPage() {
           ? t.task_result[0]?.reference_number
           : t.task_result?.reference_number) || '-',
       completedAt: t.completed_at,
+      respondBy: t.respond_by ?? null,
       chargeReviewStatus: t.charge_review_status,
       chargeReason: t.charge_reason,
       chargeReviewedAt: t.charge_reviewed_at,
       chargeInvoicedAt: t.charge_invoiced_at ?? null,
+      chargeable: !!t.chargeable,
       clientRef: t.client_ref ?? null,
+      deadlineFailedReason: t.deadline_failed_reason ?? null,
+      deadlineFailedNote: t.deadline_failed_note ?? null,
+      poNotRequired: !!t.po_not_required,
       siteName: site?.name || 'Unknown site',
       clientName: client?.name || '',
       serviceName: siteServiceRow?.service_type?.name || 'Ad-hoc / reactive',
+      systemName: systemRow?.name || null,
+      panelName: panelNames.length > 0 ? panelNames.join(', ') : null,
       engineerName:
         t.assigned_engineer?.full_name ||
         t.assigned_engineer?.email ||
         'Unassigned',
+      engineerNotes:
+        (Array.isArray(t.task_result)
+          ? t.task_result[0]?.engineer_notes
+          : t.task_result?.engineer_notes) || null,
       reviewerName:
         t.reviewer?.full_name || t.reviewer?.email || null,
       partsCount: (t.call_parts ?? []).length,
@@ -112,6 +148,13 @@ export default async function ChargeableCallsPage() {
       poRequests,
       hasContactEmail,
       overdueAfterDays,
+      // derived
+      missedDeadline,
+      clientRequiresPo,
+      poRequired,
+      hasAuthorisedPo,
+      poReadyToReview,
+      followUpLogged,
     }
   })
 

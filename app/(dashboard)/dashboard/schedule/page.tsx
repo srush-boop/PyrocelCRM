@@ -12,6 +12,7 @@ import { BranchFilter } from '@/components/dashboard/branch-filter'
 import { getBranchScope } from '@/lib/branches'
 import type { Profile, Site, ServiceType, SiteService, SystemType, TaskWithDetails } from '@/lib/types/database'
 import { normalizeTasks } from '@/lib/normalize-task'
+import { getMyCurrentOncall } from '@/lib/oncall/queries'
 
 export default async function SchedulePage({
   searchParams,
@@ -32,6 +33,12 @@ export default async function SchedulePage({
   if (!profile) redirect('/auth/login')
 
   const isAdminOrOffice = (profile as Profile).role === 'admin' || (profile as Profile).role === 'office'
+
+  // On-call engineers can log reactive / emergency call-outs for the duration of
+  // their shift. Reuse the same shift detection that drives the on-call banner.
+  const onCallNow =
+    (profile as Profile).role === 'engineer' ? await getMyCurrentOncall() : null
+  const needsBookingData = isAdminOrOffice || Boolean(onCallNow)
 
   const { branch } = await searchParams
   const scope = await getBranchScope(profile as Profile, branch)
@@ -75,7 +82,8 @@ export default async function SchedulePage({
     ? normalizedTasks.filter((t) => t.site_service?.site?.branch_id === scope.activeBranchId)
     : normalizedTasks
 
-  // Only load additional data for admins/office
+  // Booking data. Loaded for admin/office (full scheduled + reactive) and for
+  // on-call engineers (reactive only).
   let sites: Site[] = []
   let engineers: Profile[] = []
   let siteServices: (SiteService & { site: Site; service_type: ServiceType })[] = []
@@ -83,32 +91,41 @@ export default async function SchedulePage({
   let reactiveServiceTypes: ServiceType[] = []
   let systemTypes: SystemType[] = []
 
-  if (isAdminOrOffice) {
-    const [sitesResult, engineersResult, siteServicesResult, clientsResult, serviceTypesResult, systemTypesResult] =
-      await Promise.all([
-        supabase.from('sites').select('*').order('name'),
+  if (needsBookingData) {
+    const [sitesResult, clientsResult, serviceTypesResult, systemTypesResult] = await Promise.all([
+      supabase.from('sites').select('*').order('name'),
+      supabase.from('clients').select('id, name').order('name'),
+      supabase.from('service_types').select('*, system_type:system_types(*)').order('name'),
+      supabase.from('system_types').select('*').order('name'),
+    ])
+
+    sites = (sitesResult.data || []) as Site[]
+    clients = (clientsResult.data || []) as { id: string; name: string }[]
+    // Reactive / emergency (non-recurring) call types are logged ad-hoc via Log Call.
+    reactiveServiceTypes = ((serviceTypesResult.data || []) as ServiceType[]).filter(
+      (st) => st.is_recurring === false && (st.status || 'live') !== 'dead',
+    )
+    systemTypes = (systemTypesResult.data || []) as SystemType[]
+
+    if (isAdminOrOffice) {
+      // Admin/office also get the recurring (scheduled) path and the full
+      // engineer list for assignment.
+      const [engineersResult, siteServicesResult] = await Promise.all([
         supabase.from('profiles').select('*').eq('role', 'engineer').order('full_name'),
         supabase.from('site_services').select(`
           *,
           site:sites(*, client:clients(id, name)),
           service_type:service_types(*, system_type:system_types(*))
         `),
-        supabase.from('clients').select('id, name').order('name'),
-        supabase.from('service_types').select('*, system_type:system_types(*)').order('name'),
-        supabase.from('system_types').select('*').order('name'),
       ])
-
-    sites = (sitesResult.data || []) as Site[]
-    engineers = (engineersResult.data || []) as Profile[]
-    // Dead sites and dead service types are paused: do not allow scheduling new tasks for them
-    siteServices = ((siteServicesResult.data || []) as (SiteService & { site: Site; service_type: ServiceType })[])
-      .filter((ss) => ss.site?.status !== 'dead' && ss.service_type?.status !== 'dead')
-    clients = (clientsResult.data || []) as { id: string; name: string }[]
-    // Reactive / emergency (non-recurring) call types are logged ad-hoc via Book Call.
-    reactiveServiceTypes = ((serviceTypesResult.data || []) as ServiceType[]).filter(
-      (st) => st.is_recurring === false && (st.status || 'live') !== 'dead',
-    )
-    systemTypes = (systemTypesResult.data || []) as SystemType[]
+      engineers = (engineersResult.data || []) as Profile[]
+      // Dead sites and dead service types are paused: do not allow scheduling new tasks for them
+      siteServices = ((siteServicesResult.data || []) as (SiteService & { site: Site; service_type: ServiceType })[])
+        .filter((ss) => ss.site?.status !== 'dead' && ss.service_type?.status !== 'dead')
+    } else if (onCallNow) {
+      // On-call engineer logs to themselves only — no full engineer list.
+      engineers = [profile as Profile]
+    }
   }
 
   return (
@@ -154,6 +171,22 @@ export default async function SchedulePage({
               reactiveServiceTypes={reactiveServiceTypes}
               sites={sites}
               systemTypes={systemTypes}
+            />
+          </div>
+        )}
+
+        {/* On-call engineers can log reactive / emergency call-outs during their shift. */}
+        {!isAdminOrOffice && onCallNow && (
+          <div className="flex flex-wrap items-center gap-2 [&>*]:flex-1 sm:[&>*]:flex-none">
+            <CreateTaskDialog
+              siteServices={siteServices}
+              engineers={engineers}
+              clients={clients}
+              reactiveServiceTypes={reactiveServiceTypes}
+              sites={sites}
+              systemTypes={systemTypes}
+              lockReactive
+              defaultEngineerId={user.id}
             />
           </div>
         )}

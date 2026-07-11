@@ -30,7 +30,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -38,7 +37,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { MoreHorizontal, Pencil, Trash2, Search, Building2, X } from 'lucide-react'
+import { GridToolbar, GridSearch, GridClearButton } from '@/components/dashboard/grid-header'
+import { MoreHorizontal, Pencil, Trash2, Building2 } from 'lucide-react'
 import { PrintButton } from '@/components/ui/print-button'
 import { EditSiteDialog } from './edit-site-dialog'
 import type { Site, Route, Client, Branch, PropertyType } from '@/lib/types/database'
@@ -100,17 +100,9 @@ export function SitesTable({ sites, routes, clients, branches = [], propertyType
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search sites..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        
+      <GridToolbar>
+        <GridSearch value={search} onChange={setSearch} placeholder="Search sites..." />
+
         <Select value={selectedClient} onValueChange={setSelectedClient}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Filter by client" />
@@ -141,15 +133,10 @@ export function SitesTable({ sites, routes, clients, branches = [], propertyType
           </SelectContent>
         </Select>
 
-        {hasActiveFilters && (
-          <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-2">
-            <X className="h-4 w-4" />
-            Clear
-          </Button>
-        )}
+        {hasActiveFilters && <GridClearButton onClick={clearFilters} />}
 
         <PrintButton targetId="sites-grid" title="Sites" className="ml-auto" />
-      </div>
+      </GridToolbar>
 
       <div className="rounded-md border">
         <Table id="sites-grid">

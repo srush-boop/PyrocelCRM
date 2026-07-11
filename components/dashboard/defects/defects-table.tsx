@@ -7,7 +7,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { STATUS_TONE_SOLID, type StatusTone } from '@/lib/status-colors'
-import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -15,7 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Search, AlertTriangle, ChevronRight, Package } from 'lucide-react'
+import { GridSearch } from '@/components/dashboard/grid-header'
+import { AlertTriangle, ChevronRight, Package } from 'lucide-react'
 import { PrintButton } from '@/components/ui/print-button'
 import { formatDateUK } from '@/lib/utils'
 import { DEFECT_STATUS_LABELS } from '@/lib/defects'
@@ -69,15 +69,12 @@ export function DefectsTable({ defects }: { defects: DefectRow[] }) {
     <Card>
       <CardContent className="flex flex-col gap-4 p-4 md:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search reference, site, client or service"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-8"
-            />
-          </div>
+          <GridSearch
+            value={search}
+            onChange={setSearch}
+            placeholder="Search reference, site, client or service"
+            className="max-w-none"
+          />
           <Select value={status} onValueChange={setStatus}>
             <SelectTrigger className="w-full sm:w-44">
               <SelectValue />

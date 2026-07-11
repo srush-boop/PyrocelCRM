@@ -581,7 +581,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
         isEmergency={task.is_emergency}
         emergencyAnimated={isEngineer}
         accentColor={!isOverdue ? sysColors.solid : undefined}
-        leading={<SystemIcon system={system ?? {}} boxed boxClassName="h-9 w-9 shrink-0" />}
+        leading={<SystemIcon system={system ?? {}} boxed boxClassName="h-8 w-8 shrink-0" />}
         extraBadges={
           system?.name ? <SystemBadge system={system} className="text-xs font-normal" /> : null
         }

@@ -220,12 +220,12 @@ export function CallTile({
       )}
       style={accentStyle}
     >
-      <CardContent className="p-3">
-        <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+      <CardContent className="p-2.5">
+        <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
           {/* Left: leading icon + core identity */}
           <div className="flex min-w-0 flex-1 items-start gap-2">
             {leading}
-            <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               {/* Row 1: title + status + result + system + flags */}
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 {isEmergency && emergencyAnimated && (

@@ -67,9 +67,8 @@ interface SiteServicesManagerProps {
   subcontractors?: Subcontractor[]
   tasks?: Task[]
   siteStatus?: 'live' | 'dead' | 'new'
-  // Cascade defaults: a service with no explicit sub-contractor inherits its
-  // system's default, then the site's default.
-  siteDefaultSubcontractorId?: string | null
+  // Cascade default: a service with no explicit sub-contractor inherits its
+  // system's default.
   systemDefaultsById?: Record<string, string | null>
 }
 
@@ -84,7 +83,6 @@ export function SiteServicesManager({
   subcontractors = [],
   tasks = [],
   siteStatus = 'live',
-  siteDefaultSubcontractorId = null,
   systemDefaultsById = {},
 }: SiteServicesManagerProps) {
   const [selectedServiceTypes, setSelectedServiceTypes] = useState<string[]>([])
@@ -152,13 +150,11 @@ export function SiteServicesManager({
         return matching.length > 0 ? matching : subcontractors
       })()
     : subcontractors
-  // Inherited default: system default first, then site default.
+  // Inherited default: the service's system default (if any).
   const inheritedSubcontractorId =
     (editingService?.site_system_id
       ? systemDefaultsById[editingService.site_system_id]
-      : null) ||
-    siteDefaultSubcontractorId ||
-    null
+      : null) || null
   const inheritedSubcontractorName = inheritedSubcontractorId
     ? subcontractors.find((s) => s.id === inheritedSubcontractorId)?.name ?? null
     : null

@@ -22,6 +22,10 @@ export default async function RequestsPage() {
   } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
+  // Requests inbox is hidden for all users while the AI triage flow is paused.
+  // Block direct-URL access too, not just the (now removed) nav item.
+  redirect('/dashboard')
+
   const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single()
   const role = (profile as Profile | null)?.role
   if (role !== 'admin' && role !== 'office') {

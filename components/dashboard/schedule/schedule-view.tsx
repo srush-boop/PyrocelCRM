@@ -35,7 +35,7 @@ import {
 import { Calendar as CalendarComponent } from '@/components/ui/calendar'
 import { 
   Calendar,
-  Search,
+  ArrowRight,
   ClipboardCheck,
   CheckCircle2,
   Clock,
@@ -71,6 +71,8 @@ import { SystemIcon, SystemBadge, getSystemColors } from '@/lib/system-types'
 import { Building2 } from 'lucide-react'
 import { SiteFlagBadges } from '@/components/dashboard/site-info/site-flag-badges'
 import { resolveSiteFlags } from '@/lib/site-flags'
+import { CallTile } from '@/components/dashboard/calls/call-tile'
+import { GridSearch } from '@/components/dashboard/grid-header'
 
 type ViewMode = 'grid' | 'list' | 'route' | 'area'
 type SortKey = 'date' | 'postcode' | 'nearby'
@@ -235,12 +237,10 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   // CDOs perform route-based work, so they keep the "By route" grouping in their
   // engineer view; regular engineers do not.
   const isCdo = profile.discipline === 'cdo'
-  // Only engineers and admins can actually start/continue a call. Office staff
-  // coordinate work (view + assign) but never run the on-site inspection, so the
-  // "Start/Continue Call" action is hidden from them.
-  const canStartCall = isEngineer || profile.role === 'admin'
   // Everyone who works the schedule (engineers, admins and office) can open the
   // read-only call preview — office needs it to review and assign a call.
+  // Starting/continuing a call is no longer offered from the schedule; it lives
+  // on the task overview page, gated to the assigned engineer.
   const canPreviewCall = isEngineer || isAdminOrOffice
 
   // Unique system types present across the current calls, for the system filter.
@@ -545,82 +545,54 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   }
 
   const TaskCard = ({ task }: { task: TaskWithDetails }) => {
-    const config = statusConfig[task.status]
-    const Icon = config.icon
     const taskDate = new Date(task.scheduled_date)
     const isOverdue = taskDate < today && task.status === 'pending'
     const system = task.site_service?.service_type?.system_type
     const sysColors = getSystemColors(system?.color)
     const bookedSlot = formatBookedSlot(task.booked_start_time, task.booked_end_time)
+    const workerType = task.site_service?.worker_type
+    const siteFlags = resolveSiteFlags(task.site_service?.site, task.site_service, {
+      system: task.site_service?.site_system,
+      remedialOpen: task.is_remedial,
+    })
+    // Start/Continue is intentionally NOT surfaced here — those actions live on
+    // the task overview page and are gated to the assigned user. Grid tiles only
+    // navigate (View) and, for admin/office, allow assigning.
+    const canView = canPreviewCall && task.status !== 'completed' && task.status !== 'cancelled'
 
     return (
-      <Card
-        className={cn('border-l-4', isOverdue && 'border-destructive')}
-        style={!isOverdue ? { borderLeftColor: sysColors.solid } : undefined}
-      >
-        <CardHeader className="pb-2">
-          <div className="flex items-start justify-between">
-            <div className="flex min-w-0 items-start gap-2">
-              <SystemIcon system={system ?? {}} boxed boxClassName="h-9 w-9 shrink-0" />
-              <div className="min-w-0">
-                <CardTitle className="flex flex-wrap items-center gap-2 text-lg">
-                  {isEngineer && task.is_emergency && (
-                    <BellRing
-                      className="h-4 w-4 shrink-0 animate-pulse text-destructive"
-                      role="img"
-                      aria-label="Emergency call"
-                    />
-                  )}
-                  {task.site_service?.site?.name}
-                  {system?.name && (
-                    <SystemBadge system={system} className="text-xs font-normal" />
-                  )}
-                </CardTitle>
-                <CardDescription>
-                  {task.site_service?.service_type?.name}
-                  {task.visit_type?.name ? ` · ${task.visit_type.name}` : ''}
-                </CardDescription>
-              </div>
-            </div>
-            <Badge variant={config.variant} className="flex shrink-0 items-center gap-1">
-              <Icon className="h-3 w-3" />
-              {config.label}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2 text-sm">
-            <p className="text-muted-foreground">
-              {task.site_service?.site?.address}
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1 text-muted-foreground">
-                <Calendar className="h-4 w-4" />
-                {formatDateUK(task.scheduled_date)}
-              </div>
-              {bookedSlot ? (
-                <Badge className="gap-1 border-transparent bg-emerald-600 text-white hover:bg-emerald-600/90">
-                  <Clock className="h-3 w-3" />
-                  Booked · {bookedSlot}
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="gap-1 text-muted-foreground">
-                  <Clock className="h-3 w-3" />
-                  Not booked
-                </Badge>
-              )}
-              {isOverdue && (
-                <Badge variant="destructive" className="text-xs">
-                  Overdue
-                </Badge>
-              )}
-            </div>
-            {!isEngineer && task.site_service?.worker_type && (
+      <CallTile
+        title={task.site_service?.site?.name ?? 'Unknown site'}
+        subtitle={
+          `${task.site_service?.service_type?.name ?? 'Ad-hoc / reactive'}` +
+          (task.visit_type?.name ? ` · ${task.visit_type.name}` : '')
+        }
+        status={task.status}
+        scheduledDate={task.scheduled_date}
+        isOverdue={isOverdue}
+        engineerName={
+          !isEngineer
+            ? task.assigned_engineer?.full_name || task.assigned_engineer?.email || ''
+            : undefined
+        }
+        address={task.site_service?.site?.address ?? null}
+        bookedSlot={bookedSlot}
+        showBooking
+        isEmergency={task.is_emergency}
+        emergencyAnimated={isEngineer}
+        accentColor={!isOverdue ? sysColors.solid : undefined}
+        leading={<SystemIcon system={system ?? {}} boxed boxClassName="h-9 w-9 shrink-0" />}
+        extraBadges={
+          system?.name ? <SystemBadge system={system} className="text-xs font-normal" /> : null
+        }
+        secondary={
+          <div className="flex flex-col gap-2 pt-1">
+            {!isEngineer && workerType && (
               <div className="flex flex-wrap items-center gap-1.5">
                 <Badge variant="secondary" className="text-xs font-normal">
-                  {WORKER_TYPE_LABELS[task.site_service.worker_type]}
+                  {WORKER_TYPE_LABELS[workerType]}
                 </Badge>
-                {task.site_service.worker_type === 'subcontractor' && task.site_service.subcontractor && (
+                {workerType === 'subcontractor' && task.site_service?.subcontractor && (
                   <Badge variant="outline" className="gap-1 text-xs font-normal">
                     <HardHat className="h-3 w-3" />
                     {task.site_service.subcontractor.name}
@@ -628,52 +600,25 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                 )}
               </div>
             )}
-            {!isEngineer && task.assigned_engineer && (
-              <p className="text-sm">
-                <span className="text-muted-foreground">Engineer: </span>
-                {task.assigned_engineer.full_name || task.assigned_engineer.email}
-              </p>
-            )}
-            <SiteFlagBadges
-              flags={resolveSiteFlags(task.site_service?.site, task.site_service, {
-                system: task.site_service?.site_system,
-                remedialOpen: task.is_remedial,
-              })}
-              variant="full"
-              className="pt-1"
-            />
+            <SiteFlagBadges flags={siteFlags} variant="full" />
+            <AssignControl task={task} />
           </div>
-          <AssignControl task={task} className="mt-4" />
-          {canPreviewCall && task.status !== 'completed' && task.status !== 'cancelled' && (
-            <div className="mt-4 flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="flex-1"
-                size="sm"
-                onClick={() => setViewTask(task)}
-              >
-                <Eye className="mr-2 h-4 w-4" />
-                View Call
-              </Button>
-              {canStartCall && (
-                <Button asChild className="flex-1" size="sm">
-                  <Link href={`/dashboard/tasks/${task.id}?from=/dashboard/schedule`}>
-                    {task.status === 'pending' ? 'Start Call' : 'Continue Call'}
-                  </Link>
-                </Button>
-              )}
-            </div>
-          )}
-          {task.status === 'completed' && (
-            <Button asChild variant="outline" className="w-full mt-4" size="sm">
+        }
+        actions={
+          canView ? (
+            <Button type="button" variant="outline" size="sm" onClick={() => setViewTask(task)}>
+              <Eye className="mr-2 h-4 w-4" />
+              View Call
+            </Button>
+          ) : task.status === 'completed' ? (
+            <Button asChild variant="outline" size="sm">
               <Link href={`/dashboard/tasks/${task.id}?from=/dashboard/schedule`}>
                 View Details
               </Link>
             </Button>
-          )}
-        </CardContent>
-      </Card>
+          ) : null
+        }
+      />
     )
   }
 
@@ -775,22 +720,6 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                 }}
               >
                 <Eye className="h-4 w-4 text-muted-foreground" />
-              </Button>
-            )}
-            {actionable && canStartCall && (
-                <Button
-                type="button"
-                size="sm"
-                className="h-9 shrink-0 gap-1.5 font-semibold"
-                aria-label={`${task.status === 'pending' ? 'Start' : 'Continue'} call at ${task.site_service?.site?.name}`}
-                onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  router.push(`/dashboard/tasks/${task.id}?from=/dashboard/schedule`)
-                }}
-              >
-                <Wrench className="h-4 w-4" />
-                {task.status === 'pending' ? 'Start' : 'Continue'}
               </Button>
             )}
           </div>
@@ -984,15 +913,12 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     <div className="space-y-2">
       {/* Row 1: search | quick-filter pill buttons | engineer select | dates | clear */}
       <div className="flex items-center gap-2 overflow-x-auto scrollbar-none [-webkit-overflow-scrolling:touch] [scrollbar-width:none]">
-        <div className="relative shrink-0 w-[200px] sm:w-[240px]">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <Input
-            placeholder="Search calls..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+        <GridSearch
+          value={search}
+          onChange={setSearch}
+          placeholder="Search calls..."
+          className="shrink-0 w-[200px] max-w-none sm:w-[240px]"
+        />
 
         {(needsBookingCount > 0 || needsBookingOnly) && (
           <Button
@@ -1255,7 +1181,6 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
             const config = statusConfig[viewTask.status]
             const StatusIcon = config.icon
             const slot = formatBookedSlot(viewTask.booked_start_time, viewTask.booked_end_time)
-            const canStart = viewTask.status !== 'completed' && viewTask.status !== 'cancelled'
             return (
               <>
                 <DialogHeader>
@@ -1444,13 +1369,14 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                   <Button variant="outline" onClick={() => setViewTask(null)}>
                     Close
                   </Button>
-                  {canStartCall && canStart && (
-                    <Button asChild>
-                      <Link href={`/dashboard/tasks/${viewTask.id}?from=/dashboard/schedule`}>
-                        {viewTask.status === 'pending' ? 'Start Call' : 'Continue Call'}
-                      </Link>
-                    </Button>
-                  )}
+                  {/* Navigation only — starting/continuing a call happens on the task
+                      overview page, gated to the assigned engineer. */}
+                  <Button asChild>
+                    <Link href={`/dashboard/tasks/${viewTask.id}?from=/dashboard/schedule`}>
+                      Open call
+                      <ArrowRight className="ml-1 h-4 w-4" />
+                    </Link>
+                  </Button>
                 </DialogFooter>
               </>
             )

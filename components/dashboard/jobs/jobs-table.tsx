@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -20,7 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Search, Hammer } from 'lucide-react'
+import { Hammer } from 'lucide-react'
+import { GridSearch } from '@/components/dashboard/grid-header'
 import { cn } from '@/lib/utils'
 import { formatPence } from '@/lib/sales'
 import { JOB_STAGES, JOB_STATUSES, jobStageMeta, jobStatusMeta } from '@/lib/jobs/stages'
@@ -74,15 +74,12 @@ export function JobsTable({ jobs }: { jobs: Job[] }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative w-full sm:max-w-xs">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search jobs..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8"
-          />
-        </div>
+        <GridSearch
+          value={search}
+          onChange={setSearch}
+          placeholder="Search jobs..."
+          className="w-full sm:max-w-xs"
+        />
         <Select value={stage} onValueChange={setStage}>
           <SelectTrigger className="w-[170px]">
             <SelectValue placeholder="Stage" />

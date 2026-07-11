@@ -48,7 +48,6 @@ import {
   QrCode,
   LifeBuoy,
   Briefcase,
-  Inbox,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { UserRole } from '@/lib/types/database'
@@ -378,7 +377,8 @@ const chatNavItem: NavItem = {
 
 const adminNavItems: NavItem[] = [
   { key: 'dashboard', title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { key: 'requests', title: 'Requests', href: '/dashboard/requests', icon: Inbox },
+  // Requests inbox hidden for all users while the AI triage flow is paused.
+  // { key: 'requests', title: 'Requests', href: '/dashboard/requests', icon: Inbox },
   { key: 'clients', title: 'Clients', href: '/dashboard/clients', icon: Building },
   sitesNavItem,
   adminCallsNavItem,
@@ -396,7 +396,8 @@ const adminNavItems: NavItem[] = [
 
 const officeNavItems: NavItem[] = [
   { key: 'dashboard', title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { key: 'requests', title: 'Requests', href: '/dashboard/requests', icon: Inbox },
+  // Requests inbox hidden for all users while the AI triage flow is paused.
+  // { key: 'requests', title: 'Requests', href: '/dashboard/requests', icon: Inbox },
   { key: 'clients', title: 'Clients', href: '/dashboard/clients', icon: Building },
   sitesNavItem,
   officeCallsNavItem,

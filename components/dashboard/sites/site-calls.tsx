@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { CallTile } from '@/components/dashboard/calls/call-tile'
+import { GridToolbar, GridSearch, GridClearButton } from '@/components/dashboard/grid-header'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -29,31 +30,18 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
-  Clock,
-  ClipboardCheck,
-  PauseCircle,
-  Search,
   AlertCircle,
-  Flame,
   ArrowRight,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
   CalendarIcon,
-  User,
-  Wrench,
-  Shield,
   X,
-  Coins,
-  Receipt,
   FileText,
   Send,
   Mail,
   Loader2,
-  RotateCcw,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { formatDateUK, cn } from '@/lib/utils'
+import { SystemIcon } from '@/lib/system-types'
 import { isDamperService } from '@/lib/dampers'
 import { isExtinguisherService } from '@/lib/extinguishers'
 import type { Task, SiteService, ServiceType, Profile, SystemType, TaskResult } from '@/lib/types/database'
@@ -105,258 +93,88 @@ function calcValue(call: SiteCall): number | null {
   return total > 0 ? total : null
 }
 
-function formatPence(pence: number) {
-  return `£${(pence / 100).toFixed(2)}`
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function StatusBadge({ status }: { status: string }) {
-  switch (status) {
-    case 'pending':
-      return (
-        <Badge variant="outline" className="gap-1 bg-secondary/60 text-secondary-foreground">
-          <Clock className="h-3 w-3" /> Pending
-        </Badge>
-      )
-    case 'in_progress':
-      return (
-        <Badge variant="outline" className="gap-1 bg-primary/10 text-primary border-primary/20">
-          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-primary" aria-hidden />
-          In Progress
-        </Badge>
-      )
-    case 'paused':
-      return (
-        <Badge variant="outline" className="gap-1 bg-amber-500/10 text-amber-600 border-amber-500/20">
-          <PauseCircle className="h-3 w-3" /> Paused
-        </Badge>
-      )
-    case 'completed':
-      return (
-        <Badge variant="outline" className="gap-1 bg-green-500/10 text-green-700 border-green-500/20">
-          <ClipboardCheck className="h-3 w-3" /> Completed
-        </Badge>
-      )
-    case 'cancelled':
-      return (
-        <Badge variant="outline" className="gap-1 text-muted-foreground">
-          <XCircle className="h-3 w-3" /> Cancelled
-        </Badge>
-      )
-    default:
-      return <Badge variant="secondary">{status}</Badge>
-  }
-}
-
-function ResultBadge({ status }: { status: string }) {
-  switch (status) {
-    case 'pass':
-      return (
-        <Badge className="gap-1 bg-green-500/10 text-green-700 border-green-500/20">
-          <CheckCircle2 className="h-3 w-3" /> Pass
-        </Badge>
-      )
-    case 'fail':
-      return (
-        <Badge className="gap-1 bg-red-500/10 text-red-600 border-red-500/20">
-          <XCircle className="h-3 w-3" /> Fail
-        </Badge>
-      )
-    case 'partial':
-      return (
-        <Badge className="gap-1 bg-yellow-500/10 text-yellow-700 border-yellow-500/20">
-          <AlertCircle className="h-3 w-3" /> Partial
-        </Badge>
-      )
-    case 'no_access':
-      return (
-        <Badge className="gap-1 bg-amber-500/10 text-amber-600 border-amber-500/20">
-          <AlertTriangle className="h-3 w-3" /> No Access
-        </Badge>
-      )
-    default:
-      return <Badge variant="secondary">{status}</Badge>
-  }
-}
-
 // ─── Call card ────────────────────────────────────────────────────────────────
+// Thin wrapper that maps a SiteCall onto the shared CallTile template.
 
 function CallCard({ call, onSendReport }: { call: SiteCall; onSendReport?: (c: SiteCall) => void }) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const scheduled = call.scheduled_date ? new Date(call.scheduled_date) : null
-  const isOverdue =
-    scheduled && scheduled < today && call.status === 'pending'
+  const isOverdue = !!(scheduled && scheduled < today && call.status === 'pending')
   const serviceName = getServiceName(call)
   const systemName = getSystemName(call)
-  const value = calcValue(call)
+  // The site name is implicit on the site page, so lead with the system type and
+  // service (both bold in the tile title), plus a matching system icon so these
+  // tiles share the same layout/dimensions as the all-calls grid tiles.
+  const title = systemName ? `${systemName} · ${serviceName}` : serviceName
   const isCompleted = call.status === 'completed'
-  const refNum = call.task_result?.reference_number ?? null
   const chargeInvoiced = !!call.charge_invoiced_at
-  const awaitingReview =
-    call.chargeable && call.charge_review_status === 'pending'
   const reportHref = isCompleted ? getReportHref(call) : null
-  // Follow-up chain context.
+  // Follow-up chain context → ordinal visit label ("2nd visit", "3rd visit", …).
   const isFollowUp = !!call.follow_up_to_id
-  const originalRef = call.follow_up_to?.task_result?.reference_number ?? null
   const attempt = call.fix_attempt ?? 1
-  // Ordinal for the visit ("2nd visit", "3rd visit", …).
   const attemptLabel =
     attempt === 2 ? '2nd visit' : attempt === 3 ? '3rd visit' : `${attempt}th visit`
-  const failedFirstFix = call.first_time_fix === false
 
   return (
-    <Card
-      className={cn(
-        'transition-colors',
-        call.status === 'in_progress' && 'border-l-4 border-l-primary',
-        isOverdue && 'border-l-4 border-l-destructive',
-      )}
-    >
-      <CardContent className="p-3">
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-          {/* Left: core identity */}
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            {/* Row 1: service + status + system + all flags/badges inline */}
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span className="font-semibold">{serviceName}</span>
-              <StatusBadge status={call.status} />
-              {isCompleted && call.task_result && (
-                <ResultBadge status={call.task_result.overall_status} />
-              )}
-              {systemName && (
-                <Badge variant="secondary" className="gap-1 text-xs font-normal">
-                  <Shield className="h-3 w-3" />
-                  {systemName}
-                </Badge>
-              )}
-              {call.is_emergency && (
-                <Badge variant="destructive" className="gap-1 text-xs">
-                  <Flame className="h-3 w-3" /> Emergency
-                </Badge>
-              )}
-              {call.is_remedial && (
-                <Badge variant="outline" className="text-xs">Remedial</Badge>
-              )}
-              {isFollowUp && (
-                <Badge variant="outline" className="gap-1 text-xs bg-primary/10 text-primary border-primary/30">
-                  <RotateCcw className="h-3 w-3" />
-                  Follow-up · {attemptLabel}
-                </Badge>
-              )}
-              {failedFirstFix && (
-                <Badge variant="outline" className="gap-1 text-xs bg-destructive/10 text-destructive border-destructive/30">
-                  <XCircle className="h-3 w-3" />
-                  First-time fix: No
-                </Badge>
-              )}
-              {call.chargeable && (
-                <Badge variant="outline" className="gap-1 text-xs bg-amber-500/10 text-amber-700 border-amber-400/30">
-                  <Coins className="h-3 w-3" />
-                  Chargeable
-                </Badge>
-              )}
-              {awaitingReview && (
-                <Badge variant="outline" className="gap-1 text-xs bg-orange-500/10 text-orange-700 border-orange-400/30">
-                  <AlertCircle className="h-3 w-3" />
-                  Awaiting review
-                </Badge>
-              )}
-              {chargeInvoiced && (
-                <Badge variant="outline" className="gap-1 text-xs bg-blue-500/10 text-blue-700 border-blue-400/30">
-                  <Receipt className="h-3 w-3" />
-                  Invoiced
-                </Badge>
-              )}
-              {call.chargeable && !chargeInvoiced && call.charge_review_status === 'reviewed' && (
-                <Badge variant="outline" className="gap-1 text-xs text-muted-foreground">
-                  <Wrench className="h-3 w-3" />
-                  Reviewed
-                </Badge>
-              )}
-            </div>
-
-            {/* Row 2: meta grid */}
-            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-muted-foreground">
-              {/* Reference */}
-              {refNum && (
-                <span className="flex items-center gap-1">
-                  <FileText className="h-3.5 w-3.5 shrink-0" />
-                  <span className="font-mono text-foreground">{refNum}</span>
-                </span>
-              )}
-              {/* Follow-up origin */}
-              {isFollowUp && (
-                <span className="flex items-center gap-1">
-                  <RotateCcw className="h-3.5 w-3.5 shrink-0" />
-                  {call.follow_up_to_id ? (
-                    <Link
-                      href={`/dashboard/tasks/${call.follow_up_to_id}`}
-                      className="text-foreground hover:underline"
-                    >
-                      Follow Up to {originalRef ?? 'original call'}
-                    </Link>
-                  ) : (
-                    <span>Follow Up to {originalRef ?? 'original call'}</span>
-                  )}
-                </span>
-              )}
-              {/* Date */}
-              <span className="flex items-center gap-1">
-                <CalendarIcon className="h-3.5 w-3.5 shrink-0" />
-                <span className={cn(isOverdue && 'font-medium text-destructive')}>
-                  {isCompleted && call.completed_at
-                    ? formatDateUK(call.completed_at)
-                    : call.scheduled_date
-                      ? formatDateUK(call.scheduled_date)
-                      : '—'}
-                </span>
-                {isOverdue && (
-                  <span className="ml-0.5 text-xs font-medium text-destructive">Overdue</span>
-                )}
-              </span>
-              {/* Assigned to */}
-              <span className="flex items-center gap-1">
-                <User className="h-3.5 w-3.5 shrink-0" />
-                {call.assigned_engineer?.full_name || 'Unassigned'}
-              </span>
-              {/* Value */}
-              {value !== null && (
-                <span className="flex items-center gap-1">
-                  <Coins className="h-3.5 w-3.5 shrink-0" />
-                  {formatPence(value)}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Right: actions */}
-          <div className="flex shrink-0 items-center gap-2">
-            {reportHref && (
-              <Button variant="outline" size="sm" asChild>
-                <Link href={reportHref} target="_blank">
-                  <FileText className="h-4 w-4" />
-                  Report
-                </Link>
-              </Button>
-            )}
-            {isCompleted && onSendReport && (
-              <Button variant="outline" size="sm" onClick={() => onSendReport(call)}>
-                <Send className="h-4 w-4" />
-                Send
-              </Button>
-            )}
-            <Button variant="ghost" size="sm" asChild>
-              <Link href={`/dashboard/tasks/${call.id}`}>
-                View
-                <ArrowRight className="ml-1 h-4 w-4" />
+    <CallTile
+      leading={
+        <SystemIcon
+          system={{ name: systemName ?? serviceName }}
+          boxed
+          boxClassName="h-9 w-9 shrink-0"
+        />
+      }
+      title={title}
+      status={call.status}
+      result={call.task_result?.overall_status ?? null}
+      reference={call.task_result?.reference_number ?? null}
+      scheduledDate={call.scheduled_date}
+      completedDate={call.completed_at}
+      isOverdue={isOverdue}
+      engineerName={call.assigned_engineer?.full_name ?? ''}
+      valuePence={calcValue(call)}
+      isEmergency={call.is_emergency}
+      isRemedial={call.is_remedial}
+      followUp={
+        isFollowUp
+          ? {
+              attemptLabel,
+              originRef: call.follow_up_to?.task_result?.reference_number ?? null,
+              originId: call.follow_up_to_id,
+            }
+          : null
+      }
+      failedFirstFix={call.first_time_fix === false}
+      chargeable={call.chargeable}
+      awaitingReview={call.chargeable && call.charge_review_status === 'pending'}
+      invoiced={chargeInvoiced}
+      reviewed={call.chargeable && !chargeInvoiced && call.charge_review_status === 'reviewed'}
+      actions={
+        <>
+          {reportHref && (
+            <Button variant="outline" size="sm" asChild>
+              <Link href={reportHref} target="_blank">
+                <FileText className="h-4 w-4" />
+                Report
               </Link>
             </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+          )}
+          {isCompleted && onSendReport && (
+            <Button variant="outline" size="sm" onClick={() => onSendReport(call)}>
+              <Send className="h-4 w-4" />
+              Send
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" asChild>
+            <Link href={`/dashboard/tasks/${call.id}`}>
+              View
+              <ArrowRight className="ml-1 h-4 w-4" />
+            </Link>
+          </Button>
+        </>
+      }
+    />
   )
 }
 
@@ -512,16 +330,10 @@ export function SiteCalls({ calls, engineers, serviceTypes, reportingEmails = []
   return (
     <div className="space-y-4">
       {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[180px] flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <Input
-            placeholder="Search calls..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+      <GridToolbar
+        meta={`${filtered.length} of ${calls.length} ${calls.length === 1 ? 'call' : 'calls'}`}
+      >
+        <GridSearch value={search} onChange={setSearch} placeholder="Search calls..." />
 
         <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
           <SelectTrigger className="w-[140px]">
@@ -608,17 +420,8 @@ export function SiteCalls({ calls, engineers, serviceTypes, reportingEmails = []
           </PopoverContent>
         </Popover>
 
-        {hasActiveFilters && (
-          <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1.5 text-muted-foreground hover:text-foreground">
-            <X className="h-4 w-4" />
-            Clear
-          </Button>
-        )}
-
-        <span className="ml-auto text-sm text-muted-foreground">
-          {filtered.length} of {calls.length} {calls.length === 1 ? 'call' : 'calls'}
-        </span>
-      </div>
+        {hasActiveFilters && <GridClearButton onClick={clearFilters} />}
+      </GridToolbar>
 
       {/* Call cards */}
       {filtered.length === 0 ? (

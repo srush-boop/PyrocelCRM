@@ -5,7 +5,8 @@ import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { STATUS_TONE_SOLID, type StatusTone } from '@/lib/status-colors'
 import {
   Select,
   SelectContent,
@@ -13,7 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Search, AlertTriangle, ChevronRight, Package } from 'lucide-react'
+import { GridSearch } from '@/components/dashboard/grid-header'
+import { AlertTriangle, ChevronRight, Package } from 'lucide-react'
 import { PrintButton } from '@/components/ui/print-button'
 import { formatDateUK } from '@/lib/utils'
 import { DEFECT_STATUS_LABELS } from '@/lib/defects'
@@ -35,11 +37,14 @@ export interface DefectRow {
   suggestedPartsCount: number
 }
 
-const STATUS_VARIANT: Record<DefectStatus, 'destructive' | 'secondary' | 'default' | 'outline'> = {
-  open: 'destructive',
-  quoted: 'secondary',
-  resolved: 'default',
-  dismissed: 'outline',
+// Defect lifecycle mapped to the shared semantic palette: an open defect is a
+// live problem (danger), quoted is informational, resolved is success, and a
+// dismissed defect is neutral.
+const STATUS_TONE: Record<DefectStatus, StatusTone> = {
+  open: 'danger',
+  quoted: 'info',
+  resolved: 'success',
+  dismissed: 'neutral',
 }
 
 export function DefectsTable({ defects }: { defects: DefectRow[] }) {
@@ -64,15 +69,12 @@ export function DefectsTable({ defects }: { defects: DefectRow[] }) {
     <Card>
       <CardContent className="flex flex-col gap-4 p-4 md:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search reference, site, client or service"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-8"
-            />
-          </div>
+          <GridSearch
+            value={search}
+            onChange={setSearch}
+            placeholder="Search reference, site, client or service"
+            className="max-w-none"
+          />
           <Select value={status} onValueChange={setStatus}>
             <SelectTrigger className="w-full sm:w-44">
               <SelectValue />
@@ -126,14 +128,14 @@ export function DefectsTable({ defects }: { defects: DefectRow[] }) {
                     <TableCell>{d.serviceName}</TableCell>
                     <TableCell className="text-center">
                       {d.failedCount > 0 ? (
-                        <Badge variant="destructive">{d.failedCount}</Badge>
+                        <Badge className={STATUS_TONE_SOLID.danger}>{d.failedCount}</Badge>
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
                     <TableCell className="text-center">
                       {d.advisoryCount > 0 ? (
-                        <Badge className="bg-amber-500 text-white hover:bg-amber-600">
+                        <Badge className={STATUS_TONE_SOLID.warning}>
                           {d.advisoryCount}
                         </Badge>
                       ) : (
@@ -154,9 +156,10 @@ export function DefectsTable({ defects }: { defects: DefectRow[] }) {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={STATUS_VARIANT[d.status]}>
-                        {DEFECT_STATUS_LABELS[d.status]}
-                      </Badge>
+                      <StatusBadge
+                        tone={STATUS_TONE[d.status]}
+                        label={DEFECT_STATUS_LABELS[d.status]}
+                      />
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-muted-foreground">
                       {formatDateUK(d.createdAt)}

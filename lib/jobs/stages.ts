@@ -1,4 +1,5 @@
 import type { JobStage, JobStatus } from '@/lib/types/database'
+import { STATUS_TONE_CLASS } from '@/lib/status-colors'
 
 /**
  * Built-in job delivery pipeline. Fixed for Phase 1 (can be made configurable
@@ -87,10 +88,10 @@ export interface JobStatusMeta {
 }
 
 export const JOB_STATUSES: JobStatusMeta[] = [
-  { key: 'open', label: 'Open', badgeClass: 'bg-primary/10 text-primary border-primary/20' },
-  { key: 'on_hold', label: 'On hold', badgeClass: 'bg-muted text-muted-foreground border-border' },
-  { key: 'complete', label: 'Complete', badgeClass: 'bg-chart-4/15 text-foreground border-chart-4/30' },
-  { key: 'cancelled', label: 'Cancelled', badgeClass: 'bg-destructive/10 text-destructive border-destructive/20' },
+  { key: 'open', label: 'Open', badgeClass: STATUS_TONE_CLASS.info },
+  { key: 'on_hold', label: 'On hold', badgeClass: STATUS_TONE_CLASS.warning },
+  { key: 'complete', label: 'Complete', badgeClass: STATUS_TONE_CLASS.success },
+  { key: 'cancelled', label: 'Cancelled', badgeClass: STATUS_TONE_CLASS.neutral },
 ]
 
 const STATUS_BY_KEY = new Map<JobStatus, JobStatusMeta>(JOB_STATUSES.map((s) => [s.key, s]))

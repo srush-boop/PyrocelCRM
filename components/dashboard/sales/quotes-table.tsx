@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -40,7 +39,6 @@ import {
 } from '@/components/ui/alert-dialog'
 import {
   Plus,
-  Search,
   MoreHorizontal,
   GitBranch,
   Trash2,
@@ -48,6 +46,7 @@ import {
   FileText,
   MessageCircle,
 } from 'lucide-react'
+import { GridSearch } from '@/components/dashboard/grid-header'
 import { toast } from 'sonner'
 import { cn, formatDateUK } from '@/lib/utils'
 import { formatPence, quoteTypeLabel, QUOTE_STATUS_META, QUOTE_TYPES } from '@/lib/sales'
@@ -138,15 +137,12 @@ export function QuotesTable({
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-1 flex-wrap items-center gap-3">
-          <div className="relative w-full sm:max-w-xs">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search quotes..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-8"
-            />
-          </div>
+          <GridSearch
+            value={search}
+            onChange={setSearch}
+            placeholder="Search quotes..."
+            className="w-full sm:max-w-xs"
+          />
           <Select value={status} onValueChange={setStatus}>
             <SelectTrigger className="w-[150px]">
               <SelectValue placeholder="Status" />

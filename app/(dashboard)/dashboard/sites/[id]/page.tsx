@@ -255,7 +255,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
       assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(*),
       task_result:task_results(reference_number, overall_status, email_sent_at),
       call_parts(unit_cost_pence, quantity),
-      follow_up_to:tasks!tasks_follow_up_to_id_fkey(id, is_emergency, task_result:task_results(reference_number))
+      follow_up_to:tasks!follow_up_to_id(id, is_emergency, task_result:task_results(reference_number))
     `)
     .or(completedFilter)
     .order('scheduled_date', { ascending: false })

@@ -38,6 +38,7 @@ import {
   Pencil,
   Check,
   X,
+  ClipboardCheck,
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { setChargeReview } from '@/lib/actions/charge-review'
@@ -163,15 +164,21 @@ type StatusFilter = 'pending' | 'reviewed' | 'invoiced' | 'all'
 export function ChargeableCallsTable({
   calls,
   overdueAfterDays = 14,
+  initialReviewId = null,
 }: {
   calls: ChargeableCall[]
   overdueAfterDays?: number
+  // When set (via ?review=<taskId>), opens the guided review dialog on mount —
+  // used to deep-link from a call's report page into its review.
+  initialReviewId?: string | null
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [busyId, setBusyId] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [reviewId, setReviewId] = useState<string | null>(null)
+  const [reviewId, setReviewId] = useState<string | null>(
+    initialReviewId && calls.some((c) => c.id === initialReviewId) ? initialReviewId : null,
+  )
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending')
@@ -335,11 +342,13 @@ export function ChargeableCallsTable({
                       <TableRow
                         key={c.id}
                         className={
-                          poOverdue
-                            ? 'bg-amber-50/60'
-                            : isExpanded
-                              ? 'bg-muted/30'
-                              : undefined
+                          c.poReadyToReview
+                            ? 'bg-emerald-50/70 hover:bg-emerald-50'
+                            : poOverdue
+                              ? 'bg-amber-50/60'
+                              : isExpanded
+                                ? 'bg-muted/30'
+                                : undefined
                         }
                       >
                         {/* Expand toggle */}
@@ -380,6 +389,12 @@ export function ChargeableCallsTable({
                               </span>
                             )}
                           </div>
+                          {c.poReadyToReview && (
+                            <Badge className="mt-1 gap-1 bg-emerald-600 hover:bg-emerald-600 text-xs">
+                              <CheckCircle className="h-3 w-3" />
+                              PO received — ready to review
+                            </Badge>
+                          )}
                         </TableCell>
 
                         <TableCell>{c.siteName}</TableCell>
@@ -470,19 +485,19 @@ export function ChargeableCallsTable({
                                 size="sm"
                                 variant="outline"
                                 className="text-xs"
-                                onClick={() => runAction(c.id, { kind: 'reopen' })}
+                                onClick={() => setReviewId(c.id)}
                               >
-                                Re-open
+                                Re-review
                               </Button>
                             </div>
                           ) : (
                             <Button
                               size="sm"
                               className="gap-1.5"
-                              onClick={() => runAction(c.id, { kind: 'reviewed' })}
+                              onClick={() => setReviewId(c.id)}
                             >
-                              <CheckCircle className="h-3.5 w-3.5" />
-                              Mark reviewed
+                              <ClipboardCheck className="h-3.5 w-3.5" />
+                              Review
                             </Button>
                           )}
                         </TableCell>
@@ -515,6 +530,16 @@ export function ChargeableCallsTable({
           </div>
         )}
       </CardContent>
+
+      {reviewCall && (
+        <ChargeableReviewDialog
+          call={reviewCall}
+          open={!!reviewId}
+          onOpenChange={(o) => {
+            if (!o) setReviewId(null)
+          }}
+        />
+      )}
     </Card>
   )
 }

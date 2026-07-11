@@ -9,7 +9,12 @@ export const dynamic = 'force-dynamic'
 // The Chargeable Calls review queue. Completed calls become chargeable
 // automatically (service-type default OR parts used) and land here for office/
 // admin to review before they are passed for invoicing. Managers only.
-export default async function ChargeableCallsPage() {
+export default async function ChargeableCallsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ review?: string }>
+}) {
+  const { review: reviewTaskId } = await searchParams
   const supabase = await createClient()
 
   const {
@@ -167,7 +172,11 @@ export default async function ChargeableCallsPage() {
         </p>
       </div>
 
-      <ChargeableCallsTable calls={rows} overdueAfterDays={overdueAfterDays} />
+        <ChargeableCallsTable
+          calls={rows}
+          overdueAfterDays={overdueAfterDays}
+          initialReviewId={reviewTaskId ?? null}
+        />
     </div>
   )
 }

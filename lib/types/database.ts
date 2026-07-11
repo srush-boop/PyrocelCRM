@@ -93,6 +93,8 @@ export interface Client {
   logo_url: string | null
   /** Positive tagline shown on the client's branded login page. */
   login_tagline: string | null
+  /** When true, chargeable calls for this client need a PO number before invoicing. */
+  requires_po: boolean
   created_at: string
   updated_at: string
 }

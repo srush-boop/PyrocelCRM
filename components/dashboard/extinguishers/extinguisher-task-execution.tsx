@@ -728,15 +728,17 @@ export function ExtinguisherTaskExecution({
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex-col gap-2 sm:flex-col">
+            {(profile.role === 'admin' || profile.role === 'office') && (
+              <Button
+                className="w-full"
+                onClick={() => router.push(`/dashboard/extinguishers/report/${task.id}`)}
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                View report
+              </Button>
+            )}
             <Button
-              className="w-full"
-              onClick={() => router.push(`/dashboard/extinguishers/report/${task.id}`)}
-            >
-              <FileText className="mr-2 h-4 w-4" />
-              View report
-            </Button>
-            <Button
-              variant="outline"
+              variant={profile.role === 'admin' || profile.role === 'office' ? 'outline' : 'default'}
               className="w-full"
               onClick={() => {
                 setShowDone(false)

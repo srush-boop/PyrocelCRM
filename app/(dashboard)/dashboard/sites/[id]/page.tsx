@@ -9,6 +9,7 @@ import { ArrowLeft, MapPin, Phone, Mail, Building2, Radio, Building, User, Exter
 import { EditSiteButton } from '@/components/dashboard/sites/edit-site-button'
 import { CreateTaskDialog } from '@/components/dashboard/schedule/create-task-dialog'
 import { SiteServicesManager } from '@/components/dashboard/sites/site-services-manager'
+import { SiteBillingCard } from '@/components/dashboard/billing/site-billing-card'
 import { SiteSystemsManager } from '@/components/dashboard/sites/site-systems-manager'
 import { QuotesTable } from '@/components/dashboard/sales/quotes-table'
 import { SiteAssetsTab, type SiteAsset } from '@/components/dashboard/sites/site-assets-tab'
@@ -55,6 +56,7 @@ import type {
   SiteBuildingInfo,
   Quote,
   SiteInternalNote,
+  BillingAccount,
 } from '@/lib/types/database'
 
 interface PageProps {
@@ -185,6 +187,19 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
         .order('position')
     : { data: [] }
   const panels = (panelsData || []) as SystemPanel[]
+
+  // Billing accounts belonging to this site's client (includes sub-clients), used
+  // by the Billing card to show/override which account each service is billed to.
+  const siteClientId = (site as Site).client_id
+  const { data: billingAccountsData } = siteClientId
+    ? await supabase
+        .from('billing_accounts')
+        .select('*')
+        .eq('client_id', siteClientId)
+        .order('is_default', { ascending: false })
+        .order('name', { ascending: true })
+    : { data: [] }
+  const billingAccounts = (billingAccountsData || []) as BillingAccount[]
 
   // Get tasks for this site's services
   const siteServiceIds = siteServices.map(ss => ss.id)

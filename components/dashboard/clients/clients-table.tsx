@@ -31,13 +31,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { MoreHorizontal, Pencil, Trash2, Search, Building, Plus, ChevronRight, ChevronDown, MapPin, ExternalLink, ListChecks, Link2, FileText } from 'lucide-react'
+import { MoreHorizontal, Pencil, Trash2, Search, Building, Plus, ChevronRight, ChevronDown, MapPin, ExternalLink, ListChecks, Link2, FileText, Wallet } from 'lucide-react'
 import { PrintButton } from '@/components/ui/print-button'
 import type { Client, Site, SystemType, ServiceType } from '@/lib/types/database'
 import { AddClientDialog } from './add-client-dialog'
 import { EditClientDialog } from './edit-client-dialog'
 import { ClientChecklistDialog } from './client-checklist-dialog'
 import { ClientLinksDialog } from './client-links-dialog'
+import { BillingAccountsDialog } from '@/components/dashboard/billing/billing-accounts-dialog'
 import { CreateDocumentDialog } from '@/components/documents/create-document-dialog'
 
 interface ClientsTableProps {
@@ -47,6 +48,7 @@ interface ClientsTableProps {
   serviceTypes?: ServiceType[]
   checklistCountByClient?: Record<string, number>
   linkCountByClient?: Record<string, number>
+  billingCountByClient?: Record<string, number>
 }
 
 export function ClientsTable({
@@ -56,12 +58,14 @@ export function ClientsTable({
   serviceTypes = [],
   checklistCountByClient = {},
   linkCountByClient = {},
+  billingCountByClient = {},
 }: ClientsTableProps) {
   const [search, setSearch] = useState('')
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [editClient, setEditClient] = useState<Client | null>(null)
   const [checklistClient, setChecklistClient] = useState<Client | null>(null)
   const [linksClient, setLinksClient] = useState<Client | null>(null)
+  const [billingClient, setBillingClient] = useState<Client | null>(null)
   const [docClient, setDocClient] = useState<Client | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const searchParams = useSearchParams()
@@ -187,6 +191,10 @@ export function ClientsTable({
                               <Pencil className="mr-2 h-4 w-4" />
                               Edit
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setBillingClient(client)}>
+                              <Wallet className="mr-2 h-4 w-4" />
+                              Billing accounts
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setChecklistClient(client)}>
                               <ListChecks className="mr-2 h-4 w-4" />
                               Checklist items
@@ -281,6 +289,22 @@ export function ClientsTable({
                                 Manage links
                               </Button>
                             </div>
+                            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <Wallet className="h-4 w-4" />
+                                {billingCountByClient[client.id] || 0} billing account
+                                {(billingCountByClient[client.id] || 0) === 1 ? '' : 's'}
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-2"
+                                onClick={() => setBillingClient(client)}
+                              >
+                                <Wallet className="h-4 w-4" />
+                                Manage billing accounts
+                              </Button>
+                            </div>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -320,6 +344,14 @@ export function ClientsTable({
           onOpenChange={(open) => !open && setLinksClient(null)}
           systemTypes={systemTypes}
           serviceTypes={serviceTypes}
+        />
+      )}
+
+      {billingClient && (
+        <BillingAccountsDialog
+          client={billingClient}
+          open={!!billingClient}
+          onOpenChange={(open) => !open && setBillingClient(null)}
         />
       )}
 

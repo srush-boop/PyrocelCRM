@@ -97,6 +97,43 @@ export interface Client {
   updated_at: string
 }
 
+// Billing status of a billing account (sub-client):
+//  - live      = contracted / active
+//  - suspended = accounts hold (payment issues or other decision)
+//  - dead      = account closed
+export type BillingAccountStatus = 'live' | 'suspended' | 'dead'
+
+// A billable entity under a client. A client can have many billing accounts
+// (sub-clients), each with its own Sage A/C ref and invoice address, so charges
+// can be invoiced separately under the same overarching client.
+export interface BillingAccount {
+  id: string
+  client_id: string
+  name: string
+  /** Sage 50 A/C Ref (<=8 chars). Unique (case-insensitive) when present. */
+  sage_account_ref: string | null
+  status: BillingAccountStatus
+  status_reason: string | null
+  status_changed_at: string | null
+  status_changed_by: string | null
+  // Invoice address block (own address per sub-client).
+  invoice_address: string | null
+  invoice_postcode: string | null
+  invoice_contact_name: string | null
+  invoice_email: string | null
+  invoice_phone: string | null
+  // Billing defaults consumed by later invoicing / Sage export phases.
+  payment_terms_days: number
+  default_tax_code: string
+  default_nominal_code: string
+  /** The client's primary account; at most one per client. */
+  is_default: boolean
+  notes: string | null
+  created_at: string
+  updated_at: string
+  client?: Client
+}
+
 // A single day's working hours. `start`/`end` are 24h "HH:MM" strings and
 // `break_minutes` is the unpaid break to deduct when computing net hours.
 export interface WorkDayHoursEntry {
@@ -454,6 +491,9 @@ export interface Site {
   route_id: string | null
   client_id: string | null
   branch_id: string | null
+  // Billing account this site is invoiced under. null = inherit the client's
+  // default billing account (see resolveBillingAccount).
+  billing_account_id: string | null
   site_id_cash: string | null
   // Unique Property Reference Number (UK national property identifier).
   uprn: string | null
@@ -480,6 +520,7 @@ export interface Site {
   monitoring_station_phone: string | null
   monitoring_station_url: string | null
   route_position: number | null
+  billing_account?: BillingAccount | null
   // Cached geocode of the postcode (via postcodes.io), used for "nearby calls".
   latitude: number | null
   longitude: number | null
@@ -656,6 +697,11 @@ export interface Site {
   // client (comprehensive cover typically means no/reduced charge). Store-only today.
   comprehensive_cover: boolean
   comprehensive_cover_note: string | null
+  // Billing account this specific service is invoiced under. null = inherit the
+  // site's billing account (which itself falls back to the client default). This
+  // is how a single service can be billed to a different (sub-)client than its
+  // site — "change the client at service level".
+  billing_account_id: string | null
   created_at: string
   site?: Site
   site_system?: SiteSystem | null
@@ -664,6 +710,7 @@ export interface Site {
   area?: Area | null
   subcontractor?: Subcontractor | null
   assigned_engineer?: Profile
+  billing_account?: BillingAccount | null
 }
 
 // Document store: folders + files attached to a client, site, a site's service,

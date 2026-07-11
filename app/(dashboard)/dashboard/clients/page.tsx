@@ -36,12 +36,13 @@ export default async function ClientsPage() {
 
   // Lookups for scoping client-specific checklist items, plus existing item
   // counts shown against each client.
-  const [{ data: systemTypes }, { data: serviceTypes }, { data: checklistItems }, { data: linkItems }] =
+  const [{ data: systemTypes }, { data: serviceTypes }, { data: checklistItems }, { data: linkItems }, { data: billingItems }] =
     await Promise.all([
       supabase.from('system_types').select('id, name').order('name'),
       supabase.from('service_types').select('id, name').order('name'),
       supabase.from('client_checklist_items').select('client_id'),
       supabase.from('client_links').select('client_id'),
+      supabase.from('billing_accounts').select('client_id'),
     ])
 
   const checklistCountByClient: Record<string, number> = {}
@@ -52,6 +53,11 @@ export default async function ClientsPage() {
   const linkCountByClient: Record<string, number> = {}
   for (const row of (linkItems || []) as { client_id: string }[]) {
     linkCountByClient[row.client_id] = (linkCountByClient[row.client_id] || 0) + 1
+  }
+
+  const billingCountByClient: Record<string, number> = {}
+  for (const row of (billingItems || []) as { client_id: string }[]) {
+    billingCountByClient[row.client_id] = (billingCountByClient[row.client_id] || 0) + 1
   }
 
   // Group sites by their client_id for the expandable rows
@@ -79,6 +85,7 @@ export default async function ClientsPage() {
           serviceTypes={(serviceTypes || []) as ServiceType[]}
           checklistCountByClient={checklistCountByClient}
           linkCountByClient={linkCountByClient}
+          billingCountByClient={billingCountByClient}
         />
       </Suspense>
     </div>

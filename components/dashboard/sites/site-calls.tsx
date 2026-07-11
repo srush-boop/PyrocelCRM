@@ -41,7 +41,7 @@ import {
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { formatDateUK, cn } from '@/lib/utils'
-import { SystemIcon } from '@/lib/system-types'
+import { SystemIcon, getSystemColors } from '@/lib/system-types'
 import { isDamperService } from '@/lib/dampers'
 import { isExtinguisherService } from '@/lib/extinguishers'
 import type { Task, SiteService, ServiceType, Profile, SystemType, TaskResult } from '@/lib/types/database'
@@ -51,7 +51,7 @@ import type { Task, SiteService, ServiceType, Profile, SystemType, TaskResult } 
 export type SiteCall = Omit<Task, 'service_type' | 'system_type' | 'assigned_engineer' | 'site_service'> & {
   site_service: (SiteService & { service_type: ServiceType | null }) | null
   service_type: Pick<ServiceType, 'id' | 'name'> | null
-  system_type: Pick<SystemType, 'id' | 'name'> | null
+  system_type: Pick<SystemType, 'id' | 'name' | 'code' | 'color'> | null
   assigned_engineer: Profile | null
   task_result: TaskResult | null
   call_parts: { unit_cost_pence: number | null; quantity: number }[]
@@ -107,6 +107,10 @@ function CallCard({ call, onSendReport }: { call: SiteCall; onSendReport?: (c: S
   // service (both bold in the tile title), plus a matching system icon so these
   // tiles share the same layout/dimensions as the all-calls grid tiles.
   const title = systemName ? `${systemName} · ${serviceName}` : serviceName
+  // Colour-code by the configured system type (falls back to a neutral slate),
+  // matching the all-calls grid: coloured icon tile + left-border accent.
+  const systemLike = { name: systemName ?? serviceName, code: call.system_type?.code, color: call.system_type?.color }
+  const systemColors = getSystemColors(call.system_type?.color)
   const isCompleted = call.status === 'completed'
   const chargeInvoiced = !!call.charge_invoiced_at
   const reportHref = isCompleted ? getReportHref(call) : null
@@ -118,12 +122,9 @@ function CallCard({ call, onSendReport }: { call: SiteCall; onSendReport?: (c: S
 
   return (
     <CallTile
+      accentColor={systemColors.solid}
       leading={
-        <SystemIcon
-          system={{ name: systemName ?? serviceName }}
-          boxed
-          boxClassName="h-9 w-9 shrink-0"
-        />
+        <SystemIcon system={systemLike} boxed boxClassName="h-8 w-8 shrink-0" />
       }
       title={title}
       status={call.status}

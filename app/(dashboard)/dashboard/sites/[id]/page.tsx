@@ -10,7 +10,6 @@ import { EditSiteButton } from '@/components/dashboard/sites/edit-site-button'
 import { CreateTaskDialog } from '@/components/dashboard/schedule/create-task-dialog'
 import { SiteServicesManager } from '@/components/dashboard/sites/site-services-manager'
 import { SiteSystemsManager } from '@/components/dashboard/sites/site-systems-manager'
-import { SiteSubcontractorsPanel } from '@/components/dashboard/sites/site-subcontractors-panel'
 import { QuotesTable } from '@/components/dashboard/sales/quotes-table'
 import { SiteAssetsTab, type SiteAsset } from '@/components/dashboard/sites/site-assets-tab'
 import { SiteOpenCalls, type OpenCall } from '@/components/dashboard/sites/site-open-calls'
@@ -256,7 +255,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
       assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(*),
       task_result:task_results(reference_number, overall_status, email_sent_at),
       call_parts(unit_cost_pence, quantity),
-      follow_up_to:tasks!tasks_follow_up_to_id_fkey(id, is_emergency, task_result:task_results(reference_number))
+      follow_up_to:tasks!follow_up_to_id(id, is_emergency, task_result:task_results(reference_number))
     `)
     .or(completedFilter)
     .order('scheduled_date', { ascending: false })
@@ -691,12 +690,6 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             )}
           </CardContent>
         </Card>
-
-                <SiteSubcontractorsPanel
-                  siteId={id}
-                  siteName={(site as Site).name}
-                  siteServices={siteServices}
-                />
 
                 <SiteServicesManager
                   siteId={id}

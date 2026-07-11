@@ -16,7 +16,7 @@ export const SYSTEM_FACTS: string[] = [
   'Emergency lighting needs a short monthly function test and a full-duration (usually 3-hour) test annually. The annual test proves the batteries actually last the rated time.',
   'Fire suppression in kitchens (wet chemical systems) tackles high-temperature oil fires that water would spread. Nozzles must be kept clear of grease to fire correctly.',
   'Aspirating smoke detection (ASD) draws air through pipework to sample for smoke, giving very early warning in data centres and warehouses. Airflow faults are the most common issue to look for.',
-  'Fire alarm call points should be tested in rotation so that over a year every single one has been activated at least once. Rotating the test point each visit keeps the coverage honest.',
+  'Fire alarm call points should be tested in rotation, activating a different one each week so coverage stays honest. With roughly 52 weekly tests a year you work steadily through the register, though a site with more call points than weeks will not see every one within a single year.',
   'Magnetic door holders release fire doors automatically when the alarm sounds. Testing the release as part of the alarm test confirms the whole cause-and-effect chain works.',
   'Smoke control damper actuators have a finite number of operations in them. Logging each test helps predict end-of-life before a failure on the day it matters.',
   'A fire alarm log book is a legal expectation, not just good practice. Recording tests, faults and false alarms on site protects both the client and the engineer.',

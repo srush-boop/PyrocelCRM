@@ -34,9 +34,10 @@ interface SettingsContentProps {
   documentTemplates: DocumentTemplate[]
   poOverdueDays: number
   deadlineReasons: string[]
+  engagementStatsEnabled: boolean
 }
 
-export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons }: SettingsContentProps) {
+export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, engagementStatsEnabled }: SettingsContentProps) {
   const isAdmin = profile.role === 'admin'
   // Templates are managed by office/admin (mail-merge letters for client correspondence).
   const canManageTemplates = profile.role === 'admin' || profile.role === 'office'
@@ -386,6 +387,7 @@ export function SettingsContent({ user, profile, company, branches, departments,
           <GlobalConfigSettings
             poOverdueDays={poOverdueDays}
             deadlineReasons={deadlineReasons}
+            engagementStatsEnabled={engagementStatsEnabled}
           />
         </TabsContent>
       )}

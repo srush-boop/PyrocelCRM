@@ -31,6 +31,13 @@ import { ReportNotesAssist } from '@/components/dashboard/reports/report-notes-a
 import { CompletedReportActions } from '@/components/dashboard/reports/completed-report-actions'
 import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
 import { CallPartsPicker } from '@/components/dashboard/tasks/call-parts-picker'
+import { FurtherWorksSheet } from '@/components/dashboard/tasks/further-works-sheet'
+import { NearbyCallsPrompt } from '@/components/dashboard/tasks/nearby-calls-prompt'
+import {
+  findNearbyOverdueCalls,
+  type NearbyOverdueCall,
+} from '@/app/(dashboard)/dashboard/nearby/actions'
+import { isNonRecurringCall } from '@/lib/follow-up'
 import { formatDateUK, cn } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import {
@@ -209,6 +216,9 @@ export function TaskExecution({
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [showSubmitDialog, setShowSubmitDialog] = useState(false)
+  // After completion, nearby overdue/due-soon calls the engineer can take on.
+  const [nearbyCalls, setNearbyCalls] = useState<NearbyOverdueCall[]>([])
+  const [showNearbyPrompt, setShowNearbyPrompt] = useState(false)
   // Id of the task_results row backing this call. Tracked so the autosave draft,
   // the manual Save and the final Submit all update one row rather than inserting
   // duplicates. Seeded from any result already loaded for the call.
@@ -506,8 +516,33 @@ export function TaskExecution({
       console.error('[v0] Report email request error:', err)
     }
 
-    setSubmitting(false)
     setShowSubmitDialog(false)
+
+    // Before leaving, check for overdue / due-soon calls at other nearby sites so
+    // the engineer can take them on while they're in the area (avoids sending a
+    // second engineer out later). Best-effort — never block completion on it.
+    if (profile.role === 'engineer') {
+      try {
+        const res = await findNearbyOverdueCalls({ fromTaskId: task.id })
+        if (res.ok && res.calls && res.calls.length > 0) {
+          setNearbyCalls(res.calls)
+          setShowNearbyPrompt(true)
+          setSubmitting(false)
+          return
+        }
+      } catch (err) {
+        console.error('[v0] Nearby calls lookup failed:', err)
+      }
+    }
+
+    setSubmitting(false)
+    router.push('/dashboard/schedule')
+    router.refresh()
+  }
+
+  // Leave the completed task once the engineer dismisses the nearby-calls prompt.
+  const handleNearbyPromptClose = () => {
+    setShowNearbyPrompt(false)
     router.push('/dashboard/schedule')
     router.refresh()
   }
@@ -1161,24 +1196,37 @@ export function TaskExecution({
 
       {/* Action Buttons */}
       {status === 'in_progress' && canEdit && (
-        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-50 flex gap-2 border-t bg-background px-4 py-3 lg:relative lg:inset-x-auto lg:bottom-auto lg:z-auto lg:border-0 lg:p-0">
-          <Button variant="outline" onClick={handleSave} disabled={saving} className="h-12 flex-1">
-            {saving ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="mr-2 h-4 w-4" />
-                Save Progress
-              </>
-            )}
-          </Button>
-          <Button onClick={() => setShowSubmitDialog(true)} className="h-12 flex-1">
-            <Send className="mr-2 h-4 w-4" />
-            Complete & Submit
-          </Button>
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-50 flex flex-col gap-2 border-t bg-background px-4 py-3 lg:relative lg:inset-x-auto lg:bottom-auto lg:z-auto lg:border-0 lg:p-0">
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleSave} disabled={saving} className="h-12 flex-1">
+              {saving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  Save Progress
+                </>
+              )}
+            </Button>
+            <Button onClick={() => setShowSubmitDialog(true)} className="h-12 flex-1">
+              <Send className="mr-2 h-4 w-4" />
+              Complete & Submit
+            </Button>
+          </div>
+          {/* Non-recurring calls (reactive / emergency / planned) can be flagged as
+              needing further works, which raises a follow-up for review. */}
+          {isNonRecurringCall(task) && (
+            <div className="flex">
+              <FurtherWorksSheet
+                taskId={task.id}
+                isEmergency={task.is_emergency}
+                onBeforeRaise={handleSave}
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -1247,6 +1295,13 @@ export function TaskExecution({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Post-completion: offer nearby overdue / due-soon calls to take on */}
+      <NearbyCallsPrompt
+        open={showNearbyPrompt}
+        calls={nearbyCalls}
+        onClose={handleNearbyPromptClose}
+      />
     </div>
   )
 }

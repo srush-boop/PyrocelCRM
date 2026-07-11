@@ -50,6 +50,7 @@ import {
   Send,
   Mail,
   Loader2,
+  RotateCcw,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { formatDateUK, cn } from '@/lib/utils'
@@ -66,6 +67,12 @@ export type SiteCall = Omit<Task, 'service_type' | 'system_type' | 'assigned_eng
   assigned_engineer: Profile | null
   task_result: TaskResult | null
   call_parts: { unit_cost_pence: number | null; quantity: number }[]
+  // Populated when this call is a follow-up to an earlier one (for the sub-label).
+  follow_up_to: {
+    id: string
+    is_emergency: boolean
+    task_result: { reference_number: string | null } | null
+  } | null
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -190,6 +197,14 @@ function CallCard({ call, onSendReport }: { call: SiteCall; onSendReport?: (c: S
   const awaitingReview =
     call.chargeable && call.charge_review_status === 'pending'
   const reportHref = isCompleted ? getReportHref(call) : null
+  // Follow-up chain context.
+  const isFollowUp = !!call.follow_up_to_id
+  const originalRef = call.follow_up_to?.task_result?.reference_number ?? null
+  const attempt = call.fix_attempt ?? 1
+  // Ordinal for the visit ("2nd visit", "3rd visit", …).
+  const attemptLabel =
+    attempt === 2 ? '2nd visit' : attempt === 3 ? '3rd visit' : `${attempt}th visit`
+  const failedFirstFix = call.first_time_fix === false
 
   return (
     <Card
@@ -224,6 +239,18 @@ function CallCard({ call, onSendReport }: { call: SiteCall; onSendReport?: (c: S
               {call.is_remedial && (
                 <Badge variant="outline" className="text-xs">Remedial</Badge>
               )}
+              {isFollowUp && (
+                <Badge variant="outline" className="gap-1 text-xs bg-primary/10 text-primary border-primary/30">
+                  <RotateCcw className="h-3 w-3" />
+                  Follow-up · {attemptLabel}
+                </Badge>
+              )}
+              {failedFirstFix && (
+                <Badge variant="outline" className="gap-1 text-xs bg-destructive/10 text-destructive border-destructive/30">
+                  <XCircle className="h-3 w-3" />
+                  First-time fix: No
+                </Badge>
+              )}
               {call.chargeable && (
                 <Badge variant="outline" className="gap-1 text-xs bg-amber-500/10 text-amber-700 border-amber-400/30">
                   <Coins className="h-3 w-3" />
@@ -257,6 +284,22 @@ function CallCard({ call, onSendReport }: { call: SiteCall; onSendReport?: (c: S
                 <span className="flex items-center gap-1">
                   <FileText className="h-3.5 w-3.5 shrink-0" />
                   <span className="font-mono text-foreground">{refNum}</span>
+                </span>
+              )}
+              {/* Follow-up origin */}
+              {isFollowUp && (
+                <span className="flex items-center gap-1">
+                  <RotateCcw className="h-3.5 w-3.5 shrink-0" />
+                  {call.follow_up_to_id ? (
+                    <Link
+                      href={`/dashboard/tasks/${call.follow_up_to_id}`}
+                      className="text-foreground hover:underline"
+                    >
+                      Follow Up to {originalRef ?? 'original call'}
+                    </Link>
+                  ) : (
+                    <span>Follow Up to {originalRef ?? 'original call'}</span>
+                  )}
                 </span>
               )}
               {/* Date */}

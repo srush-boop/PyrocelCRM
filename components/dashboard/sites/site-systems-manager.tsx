@@ -35,8 +35,28 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Pencil, Trash2, Layers, Wrench, ExternalLink, Settings2, Siren } from 'lucide-react'
-import { EDITABLE_SITE_FLAG_KEYS, SITE_FLAG_META, type EditableSiteFlagKey } from '@/lib/site-flags'
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Layers,
+  Wrench,
+  ExternalLink,
+  Settings2,
+  Siren,
+  CalendarDays,
+  AlertTriangle,
+  HardHat,
+} from 'lucide-react'
+import {
+  EDITABLE_SITE_FLAG_KEYS,
+  SITE_FLAG_META,
+  resolveSiteFlags,
+  activeFlagKeys,
+  type EditableSiteFlagKey,
+} from '@/lib/site-flags'
+import { cn } from '@/lib/utils'
+import { format, parseISO } from 'date-fns'
 import { toast } from 'sonner'
 import { buildSeedTaskRows, fetchVisitsByServiceType } from '@/lib/scheduling'
 import { SystemPanelsManager } from '@/components/dashboard/sites/system-panels-manager'
@@ -416,10 +436,29 @@ export function SiteSystemsManager({
               ? panelDefsBySystemType.get(system.system_type_id) ?? []
               : []
             const systemPanels = panelsBySystem.get(system.id) ?? []
+
+            // Summary info for the tile: active service count, next visit due
+            // (earliest across the system's active services, flagged if overdue),
+            // effective attendance requirements, and the default sub-contractor.
+            const activeServices = services.filter((s) => s.active !== false)
+            const nextDueDate = activeServices
+              .map((s) => s.next_service_date)
+              .filter((d): d is string => !!d)
+              .sort()[0] ?? null
+            const todayStr = new Date().toISOString().slice(0, 10)
+            const nextDueOverdue = nextDueDate ? nextDueDate < todayStr : false
+            const systemFlags = resolveSiteFlags(siteFlagDefaults, null, { system })
+            const activeFlags = activeFlagKeys(systemFlags).filter(
+              (k) => k !== 'remedial_required',
+            )
+            const subName = system.default_subcontractor_id
+              ? subcontractors.find((s) => s.id === system.default_subcontractor_id)?.name ?? null
+              : null
+
             return (
               <Card
                 key={system.id}
-                className={st ? 'border-l-4' : undefined}
+                className={st ? 'border-2 border-l-4' : undefined}
                 style={st ? systemAccentStyle(st.color) : undefined}
               >
                 <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 py-2">
@@ -448,6 +487,67 @@ export function SiteSystemsManager({
                         <ExternalLink className="h-3.5 w-3.5" />
                         Open Nimbus
                       </a>
+                    )}
+
+                    {/* At-a-glance system info */}
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1">
+                        <Wrench className="h-3.5 w-3.5" />
+                        {activeServices.length} service{activeServices.length !== 1 ? 's' : ''}
+                      </span>
+                      {nextDueDate && (
+                        <span
+                          className={cn(
+                            'inline-flex items-center gap-1',
+                            nextDueOverdue && 'font-medium text-destructive',
+                          )}
+                        >
+                          {nextDueOverdue ? (
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                          ) : (
+                            <CalendarDays className="h-3.5 w-3.5" />
+                          )}
+                          {nextDueOverdue ? 'Overdue' : 'Next visit'}:{' '}
+                          {format(parseISO(nextDueDate), 'd MMM yyyy')}
+                        </span>
+                      )}
+                      {system.install_date && (
+                        <span className="inline-flex items-center gap-1">
+                          <HardHat className="h-3.5 w-3.5" />
+                          Installed {format(parseISO(system.install_date), 'MMM yyyy')}
+                        </span>
+                      )}
+                      {systemPanels.length > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <Layers className="h-3.5 w-3.5" />
+                          {systemPanels.length} panel{systemPanels.length !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                      {subName && (
+                        <span className="inline-flex items-center gap-1">
+                          Sub-contractor: <span className="text-foreground">{subName}</span>
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Effective attendance requirements */}
+                    {activeFlags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 pt-1">
+                        {activeFlags.map((key) => {
+                          const meta = SITE_FLAG_META[key]
+                          const FlagIcon = meta.icon
+                          return (
+                            <span
+                              key={key}
+                              className="inline-flex items-center gap-1 rounded-md border bg-muted/40 px-1.5 py-0.5 text-xs text-foreground"
+                              title={meta.label}
+                            >
+                              <FlagIcon className="h-3 w-3" />
+                              {meta.short}
+                            </span>
+                          )
+                        })}
+                      </div>
                     )}
                   </div>
                   <div className="flex gap-1">

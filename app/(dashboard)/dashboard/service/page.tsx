@@ -21,6 +21,7 @@ import {
   ChevronRight,
   Activity,
   Siren,
+  Wrench,
 } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 import Link from 'next/link'
@@ -255,6 +256,29 @@ export default async function ServiceDashboardPage() {
     },
   ]
 
+  // Escalated follow-ups: a 3rd (or later) visit failed to fix the issue and needs
+  // service-manager attention. Surfaced as a red-bordered alert tile at the top.
+  const { data: escalationsData } = await supabase
+    .from('follow_up_requests')
+    .select(
+      `id, fix_attempt, issue_summary, escalated_at, site:sites(id, name)`,
+    )
+    .eq('escalated', true)
+    .is('resolved_at', null)
+    .order('escalated_at', { ascending: false })
+    .limit(10)
+
+  const escalations = (escalationsData || []).map((e) => {
+    const site = Array.isArray((e as any).site) ? (e as any).site[0] ?? null : (e as any).site
+    return {
+      id: e.id as string,
+      fix_attempt: e.fix_attempt as number,
+      issue_summary: e.issue_summary as string,
+      escalated_at: e.escalated_at as string | null,
+      siteName: (site?.name as string) ?? 'Unknown site',
+    }
+  })
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -274,6 +298,50 @@ export default async function ServiceDashboardPage() {
           </Button>
         </div>
       </div>
+
+      {/* Escalated follow-ups — 3rd-visit fix failures needing the service manager */}
+      {escalations.length > 0 && (
+        <Card className="border-2 border-destructive bg-destructive/5">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-destructive/15 text-destructive">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <CardTitle className="text-destructive">
+                  {escalations.length} escalated follow-up{escalations.length === 1 ? '' : 's'}
+                </CardTitle>
+                <CardDescription>
+                  A third visit failed to resolve the issue — service manager action required.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {escalations.map((e) => (
+              <Link
+                key={e.id}
+                href={`/dashboard/follow-ups?id=${e.id}`}
+                className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-background px-3 py-2.5 transition-colors hover:bg-destructive/5"
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <Wrench className="h-4 w-4 shrink-0 text-destructive" />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{e.siteName}</p>
+                    <p className="truncate text-xs text-muted-foreground">{e.issue_summary}</p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Badge variant="destructive" className="text-xs">
+                    Visit {e.fix_attempt} failed
+                  </Badge>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </div>
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stat tiles */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">

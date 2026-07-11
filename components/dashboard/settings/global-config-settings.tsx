@@ -15,20 +15,41 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { Switch } from '@/components/ui/switch'
 import { setGlobalConfig } from '@/lib/actions/global-config'
-import { Loader2, Plus, Trash2, Save } from 'lucide-react'
+import { Loader2, Plus, Trash2, Save, Crown } from 'lucide-react'
 
 interface GlobalConfigSettingsProps {
   poOverdueDays: number
   deadlineReasons: string[]
+  engagementStatsEnabled: boolean
 }
 
 export function GlobalConfigSettings({
   poOverdueDays: initialOverdueDays,
   deadlineReasons: initialReasons,
+  engagementStatsEnabled: initialEngagementEnabled,
 }: GlobalConfigSettingsProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+
+  // Engineer encouragement / standings feature
+  const [engagementEnabled, setEngagementEnabled] = useState(initialEngagementEnabled)
+  const [savingEngagement, setSavingEngagement] = useState(false)
+
+  const toggleEngagement = async (next: boolean) => {
+    setEngagementEnabled(next)
+    setSavingEngagement(true)
+    const { error } = await setGlobalConfig('engagement_stats_enabled', next)
+    setSavingEngagement(false)
+    if (error) {
+      setEngagementEnabled(!next) // revert on failure
+      toast.error(error)
+    } else {
+      toast.success(next ? 'Engineer standings enabled' : 'Engineer standings hidden')
+      startTransition(() => router.refresh())
+    }
+  }
 
   // PO overdue threshold
   const [overdueDays, setOverdueDays] = useState(String(initialOverdueDays))
@@ -89,6 +110,42 @@ export function GlobalConfigSettings({
 
   return (
     <div className="space-y-6">
+      {/* Engineer encouragement / standings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Crown className="h-5 w-5 text-primary" />
+            Engineer Standings
+          </CardTitle>
+          <CardDescription>
+            Shows each engineer their own productivity position and first-time-fix rating within
+            their department, plus a crown on the leader&apos;s home page. Engineers never see
+            anyone else&apos;s position. Turn this off to hide it for everyone.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="engagement-toggle" className="text-sm font-medium">
+                Show standings on engineer dashboards
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {engagementEnabled ? 'Currently visible to engineers' : 'Currently hidden'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {savingEngagement && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+              <Switch
+                id="engagement-toggle"
+                checked={engagementEnabled}
+                onCheckedChange={toggleEngagement}
+                disabled={savingEngagement}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* PO request overdue threshold */}
       <Card>
         <CardHeader>

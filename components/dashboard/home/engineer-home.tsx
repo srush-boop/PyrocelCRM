@@ -18,12 +18,15 @@ import {
   ChevronRight,
   Sun,
   Signal,
+  Crown,
 } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import type { Profile } from '@/lib/types/database'
 import { getDailyFact } from '@/lib/system-facts'
 import { LocationSharingToggle } from '@/components/dashboard/home/location-sharing-toggle'
+import { getEngineerEngagementStats } from '@/lib/engagement-stats'
+import { EngineerStandingCard } from '@/components/dashboard/home/engineer-standing-card'
 
 // Greeting that reflects the time of day, so the home feels alive.
 function greeting(d: Date): string {
@@ -93,12 +96,22 @@ export async function EngineerHome({ profile }: { profile: Profile }) {
   const remaining = todayTasks.filter((t) => t.status !== 'completed')
   const doneToday = todayTasks.length - remaining.length
 
+  // Encouragement: the engineer's own standing within their department. Null when
+  // the feature is switched off, or they have no department / not enough data.
+  const engagementStats = await getEngineerEngagementStats(supabase, profile)
+
   return (
     <div className="space-y-6">
       {/* Welcome */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-balance">
+        <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight text-balance">
           {greeting(now)}, {firstName}
+          {engagementStats?.isLeader && (
+            <Crown
+              className="h-7 w-7 text-primary"
+              aria-label={`Department leader in ${engagementStats.departmentName}`}
+            />
+          )}
         </h1>
         <p className="text-muted-foreground">
           {format(now, 'EEEE, d MMMM yyyy')}
@@ -138,6 +151,9 @@ export async function EngineerHome({ profile }: { profile: Profile }) {
           value={doneToday}
         />
       </div>
+
+      {/* Encouragement: your standing in the department */}
+      {engagementStats && <EngineerStandingCard stats={engagementStats} />}
 
       {/* Today's schedule */}
       <Card>

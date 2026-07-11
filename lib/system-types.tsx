@@ -102,14 +102,14 @@ export function getSystemColors(color?: string | null): SystemColors {
 }
 
 /**
- * Inline style for a left-border accent strip (e.g. on cards/rows) plus a very
- * subtle tinted background.
+ * Inline style for a system-coloured border treatment (no background fill): a
+ * subtle tinted outline on all sides with a stronger solid left-edge accent.
  */
 export function systemAccentStyle(color?: string | null): CSSProperties {
   const c = getSystemColors(color)
   return {
+    borderColor: c.border,
     borderLeftColor: c.solid,
-    background: `linear-gradient(to right, ${c.tint}, transparent 60%)`,
   }
 }
 

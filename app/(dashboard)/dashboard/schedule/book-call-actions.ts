@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
   import { geocodeSites } from '@/lib/geocode'
 import { computeRespondBy, notifyEmergencyAssignment } from '@/lib/dispatch'
+import { getMyCurrentOncall } from '@/lib/oncall/queries'
 
 export interface BookCallInput {
   /** 'recurring' = scheduled PPM against an existing site_service. */
@@ -64,7 +65,18 @@ export async function bookCall(input: BookCallInput): Promise<BookCallResult> {
     .single()
   const role = (profile as { role?: string } | null)?.role
   if (role !== 'admin' && role !== 'office') {
-    return { ok: false, error: 'You do not have permission to book calls.' }
+    // On-call engineers may log reactive / emergency call-outs during their
+    // shift, but only assigned to themselves. Reuse the same shift detection
+    // that drives the "You are on call" banner.
+    const onCall = role === 'engineer' ? await getMyCurrentOncall() : null
+    const allowedAsOncall =
+      role === 'engineer' &&
+      onCall !== null &&
+      input.mode === 'reactive' &&
+      input.assignedEngineerId === user.id
+    if (!allowedAsOncall) {
+      return { ok: false, error: 'You do not have permission to book calls.' }
+    }
   }
 
   if (!input.scheduledDate) return { ok: false, error: 'A scheduled date is required.' }

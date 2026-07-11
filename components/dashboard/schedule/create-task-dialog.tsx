@@ -50,7 +50,14 @@ interface CreateTaskDialogProps {
   defaultSystemTypeId?: string
   /** Which mode to open in. Defaults to recurring. */
   defaultMode?: 'recurring' | 'reactive'
-  /** Custom trigger. Omit for the default "Book Call" button. */
+  /**
+   * Lock the dialog to reactive / emergency logging only (hides the mode toggle
+   * and the scheduled path). Used for on-call engineers logging call-outs.
+   */
+  lockReactive?: boolean
+  /** Pre-select the assigned engineer (e.g. the on-call engineer logs to self). */
+  defaultEngineerId?: string
+  /** Custom trigger. Omit for the default "Log Call" button. */
   trigger?: React.ReactNode
   /**
    * Fired after a call is booked successfully, with the site it was booked
@@ -76,6 +83,8 @@ export function CreateTaskDialog({
   defaultSiteId,
   defaultSystemTypeId,
   defaultMode = 'recurring',
+  lockReactive = false,
+  defaultEngineerId,
   trigger,
   onBooked,
 }: CreateTaskDialogProps) {
@@ -88,7 +97,7 @@ export function CreateTaskDialog({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<'recurring' | 'reactive'>(
-    reactiveEnabled ? defaultMode : 'recurring',
+    lockReactive ? 'reactive' : reactiveEnabled ? defaultMode : 'recurring',
   )
 
   // Cascading selection: site -> system -> service (which resolves to a site_service).
@@ -105,7 +114,7 @@ export function CreateTaskDialog({
 
   const [formData, setFormData] = useState({
     site_service_id: '',
-    assigned_engineer_id: '',
+    assigned_engineer_id: defaultEngineerId ?? '',
     scheduled_date: new Date(),
     booked_start_time: '',
     booked_end_time: '',
@@ -255,14 +264,14 @@ export function CreateTaskDialog({
     setError(null)
     setFormData({
       site_service_id: '',
-      assigned_engineer_id: '',
+      assigned_engineer_id: defaultEngineerId ?? '',
       scheduled_date: new Date(),
       booked_start_time: '',
       booked_end_time: '',
     })
     setVisitTypes([])
     setVisitTypeId(ALL_VISITS)
-    setMode(reactiveEnabled ? defaultMode : 'recurring')
+    setMode(lockReactive ? 'reactive' : reactiveEnabled ? defaultMode : 'recurring')
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -356,11 +365,13 @@ export function CreateTaskDialog({
           <DialogHeader>
             <DialogTitle>Log New Call</DialogTitle>
             <DialogDescription>
-              Log a scheduled service call or a reactive / emergency call-out.
+              {lockReactive
+                ? 'Log a reactive / emergency call-out for your on-call shift.'
+                : 'Log a scheduled service call or a reactive / emergency call-out.'}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            {reactiveEnabled && (
+            {reactiveEnabled && !lockReactive && (
               <div className="grid grid-cols-2 gap-2 rounded-md bg-muted p-1">
                 <Button
                   type="button"

@@ -35,7 +35,7 @@ import {
 import { Calendar as CalendarComponent } from '@/components/ui/calendar'
 import { 
   Calendar,
-  Search,
+  ArrowRight,
   ClipboardCheck,
   CheckCircle2,
   Clock,
@@ -72,6 +72,7 @@ import { Building2 } from 'lucide-react'
 import { SiteFlagBadges } from '@/components/dashboard/site-info/site-flag-badges'
 import { resolveSiteFlags } from '@/lib/site-flags'
 import { CallTile } from '@/components/dashboard/calls/call-tile'
+import { GridSearch } from '@/components/dashboard/grid-header'
 
 type ViewMode = 'grid' | 'list' | 'route' | 'area'
 type SortKey = 'date' | 'postcode' | 'nearby'
@@ -236,12 +237,10 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   // CDOs perform route-based work, so they keep the "By route" grouping in their
   // engineer view; regular engineers do not.
   const isCdo = profile.discipline === 'cdo'
-  // Only engineers and admins can actually start/continue a call. Office staff
-  // coordinate work (view + assign) but never run the on-site inspection, so the
-  // "Start/Continue Call" action is hidden from them.
-  const canStartCall = isEngineer || profile.role === 'admin'
   // Everyone who works the schedule (engineers, admins and office) can open the
   // read-only call preview — office needs it to review and assign a call.
+  // Starting/continuing a call is no longer offered from the schedule; it lives
+  // on the task overview page, gated to the assigned engineer.
   const canPreviewCall = isEngineer || isAdminOrOffice
 
   // Unique system types present across the current calls, for the system filter.
@@ -914,15 +913,12 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     <div className="space-y-2">
       {/* Row 1: search | quick-filter pill buttons | engineer select | dates | clear */}
       <div className="flex items-center gap-2 overflow-x-auto scrollbar-none [-webkit-overflow-scrolling:touch] [scrollbar-width:none]">
-        <div className="relative shrink-0 w-[200px] sm:w-[240px]">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <Input
-            placeholder="Search calls..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+        <GridSearch
+          value={search}
+          onChange={setSearch}
+          placeholder="Search calls..."
+          className="shrink-0 w-[200px] max-w-none sm:w-[240px]"
+        />
 
         {(needsBookingCount > 0 || needsBookingOnly) && (
           <Button
@@ -1185,7 +1181,6 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
             const config = statusConfig[viewTask.status]
             const StatusIcon = config.icon
             const slot = formatBookedSlot(viewTask.booked_start_time, viewTask.booked_end_time)
-            const canStart = viewTask.status !== 'completed' && viewTask.status !== 'cancelled'
             return (
               <>
                 <DialogHeader>
@@ -1374,13 +1369,14 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
                   <Button variant="outline" onClick={() => setViewTask(null)}>
                     Close
                   </Button>
-                  {canStartCall && canStart && (
-                    <Button asChild>
-                      <Link href={`/dashboard/tasks/${viewTask.id}?from=/dashboard/schedule`}>
-                        {viewTask.status === 'pending' ? 'Start Call' : 'Continue Call'}
-                      </Link>
-                    </Button>
-                  )}
+                  {/* Navigation only — starting/continuing a call happens on the task
+                      overview page, gated to the assigned engineer. */}
+                  <Button asChild>
+                    <Link href={`/dashboard/tasks/${viewTask.id}?from=/dashboard/schedule`}>
+                      Open call
+                      <ArrowRight className="ml-1 h-4 w-4" />
+                    </Link>
+                  </Button>
                 </DialogFooter>
               </>
             )

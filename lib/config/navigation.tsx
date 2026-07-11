@@ -122,7 +122,6 @@ const adminCallsNavItem: NavItem = {
   icon: Wrench,
   children: [
     { title: 'Service Dashboard', href: '/dashboard/service', icon: LayoutDashboard },
-    { title: 'Requests', href: '/dashboard/requests', icon: Inbox },
     { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
     { title: 'Map', href: '/dashboard/schedule/map', icon: MapPinned },
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
@@ -143,7 +142,6 @@ const officeCallsNavItem: NavItem = {
   icon: Wrench,
   children: [
     { title: 'Service Dashboard', href: '/dashboard/service', icon: LayoutDashboard },
-    { title: 'Requests', href: '/dashboard/requests', icon: Inbox },
     { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
     { title: 'Map', href: '/dashboard/schedule/map', icon: MapPinned },
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
@@ -380,6 +378,7 @@ const chatNavItem: NavItem = {
 
 const adminNavItems: NavItem[] = [
   { key: 'dashboard', title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { key: 'requests', title: 'Requests', href: '/dashboard/requests', icon: Inbox },
   { key: 'clients', title: 'Clients', href: '/dashboard/clients', icon: Building },
   sitesNavItem,
   adminCallsNavItem,
@@ -397,6 +396,7 @@ const adminNavItems: NavItem[] = [
 
 const officeNavItems: NavItem[] = [
   { key: 'dashboard', title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { key: 'requests', title: 'Requests', href: '/dashboard/requests', icon: Inbox },
   { key: 'clients', title: 'Clients', href: '/dashboard/clients', icon: Building },
   sitesNavItem,
   officeCallsNavItem,
@@ -480,5 +480,10 @@ export function getVisibleMenu(
   const menu = getMenuForRole(role)
   if (!menuPermissions) return menu
   const enabled = new Set(migratePermissionKeys(menuPermissions))
+  // Requests was promoted out of the Service (`calls`) group into a top-level
+  // item. Existing per-user overrides only stored `calls`, so inherit visibility
+  // from it — anyone who could see the Service group keeps access to Requests
+  // without a data migration.
+  if (enabled.has('calls')) enabled.add('requests')
   return menu.filter((item) => item.locked || enabled.has(item.key))
 }

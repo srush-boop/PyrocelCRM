@@ -68,6 +68,8 @@ import type {
   SystemType,
   PanelFieldDef,
   SystemPanel,
+  ServiceVisitType,
+  PanelVisitAssignment,
   Supplier,
   Profile,
   Site,
@@ -86,6 +88,10 @@ interface SiteSystemsManagerProps {
   siteStatus?: 'live' | 'dead' | 'new'
   panelFieldDefs?: PanelFieldDef[]
   panels?: SystemPanel[]
+  // Visit types (Annual/Periodic/…) for the service types used on this site, and
+  // any saved panel→visit rotation assignments. Feed the rotation grid.
+  serviceVisitTypes?: ServiceVisitType[]
+  panelAssignments?: PanelVisitAssignment[]
   // Active sub-contractors, for the per-system default assignment.
   subcontractors?: Supplier[]
   // Data for the per-system "Book call" (reactive/emergency) dialog. When
@@ -108,6 +114,8 @@ export function SiteSystemsManager({
   siteStatus = 'live',
   panelFieldDefs = [],
   panels = [],
+  serviceVisitTypes = [],
+  panelAssignments = [],
   subcontractors = [],
   site,
   engineers = [],
@@ -436,6 +444,18 @@ export function SiteSystemsManager({
               ? panelDefsBySystemType.get(system.system_type_id) ?? []
               : []
             const systemPanels = panelsBySystem.get(system.id) ?? []
+            // Rotation grid inputs for this system: the distinct visit types of
+            // its active services (ordered), and the saved assignments. Rotation
+            // only makes sense when a service actually has ≥2 visit occurrences.
+            const systemServiceTypeIds = new Set(
+              services.map((s) => s.service_type_id).filter(Boolean) as string[],
+            )
+            const systemVisitTypes = serviceVisitTypes
+              .filter((vt) => systemServiceTypeIds.has(vt.service_type_id))
+              .sort((a, b) => a.sort_order - b.sort_order)
+            const systemPanelAssignments = panelAssignments.filter(
+              (pa) => pa.site_system_id === system.id,
+            )
 
             // Summary info for the tile: active service count, next visit due
             // (earliest across the system's active services, flagged if overdue),
@@ -636,6 +656,9 @@ export function SiteSystemsManager({
                       fieldDefs={systemPanelDefs}
                       sitePath={pathname}
                       disabled={isDead}
+                      rotationEnabled={system.panel_rotation_enabled}
+                      visitTypes={systemVisitTypes}
+                      assignments={systemPanelAssignments}
                     />
                   )}
                 </CardContent>

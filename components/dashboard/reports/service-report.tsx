@@ -255,6 +255,7 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
                         <tr style={{ backgroundColor: `${headerColor}0d` }}>
                           <td colSpan={3} className="px-3 py-2 text-[11px] font-bold uppercase tracking-wide">
                             {item.panel_name}
+                            {item.panel_level ? ` — ${item.panel_level}` : ''}
                           </td>
                         </tr>
                       )}

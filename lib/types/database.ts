@@ -614,6 +614,9 @@ export interface Site {
     keys_required: boolean | null
     two_engineers_required: boolean | null
     remedial_notes: string | null
+    // When true, multi-panel visits spread the heavy (Annual) inspections across
+    // the cycle's visit occurrences per panel_visit_assignments (opt-in).
+    panel_rotation_enabled: boolean
     created_at: string
     updated_at: string
     site?: Site
@@ -648,6 +651,20 @@ export interface Site {
     name: string
     position: number
     field_values: Record<string, string | number | boolean | null>
+    created_at: string
+    updated_at: string
+  }
+
+  // Panel-level visit rotation. For a multi-panel system with rotation enabled,
+  // each panel is assigned, per scheduled visit occurrence (`visit_type_id`), the
+  // checklist level actually applied to it (`applied_visit_type_id`). This spreads
+  // the heavy (Annual) inspections across the cycle's visits.
+  export interface PanelVisitAssignment {
+    id: string
+    site_system_id: string
+    panel_id: string
+    visit_type_id: string
+    applied_visit_type_id: string
     created_at: string
     updated_at: string
   }
@@ -992,6 +1009,9 @@ export interface Task {
   // legacy/non-panel results, which keeps older reports rendering unchanged.
   panel_id?: string | null
   panel_name?: string | null
+  // When panel rotation is active, the visit-type/level label actually applied to
+  // this panel on this visit (e.g. "Annual" / "Periodic"). Absent otherwise.
+  panel_level?: string | null
   }
 
 // PO request log: one row per request sent to the client for a PO number.

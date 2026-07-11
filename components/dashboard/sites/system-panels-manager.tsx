@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -31,11 +31,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Plus, Pencil, Trash2, Cpu } from 'lucide-react'
+import { Plus, Pencil, Trash2, Cpu, CalendarRange, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { savePanel, deletePanel } from '@/lib/actions/panels'
+import { setPanelRotationEnabled, savePanelRotation } from '@/lib/actions/panel-rotation'
+import type { PanelRotationCell } from '@/lib/actions/panel-rotation'
 import { orderedActiveDefs, panelSummaryLine } from '@/lib/panels'
-import type { PanelFieldDef, SystemPanel } from '@/lib/types/database'
+import type {
+  PanelFieldDef,
+  SystemPanel,
+  ServiceVisitType,
+  PanelVisitAssignment,
+} from '@/lib/types/database'
 
 type FieldValue = string | number | boolean | null
 
@@ -45,12 +52,20 @@ export function SystemPanelsManager({
   fieldDefs,
   sitePath,
   disabled = false,
+  rotationEnabled = false,
+  visitTypes = [],
+  assignments = [],
 }: {
   siteSystemId: string
   panels: SystemPanel[]
   fieldDefs: PanelFieldDef[]
   sitePath: string
   disabled?: boolean
+  // Panel-level visit rotation: whether it's on for this system, the visit types
+  // that form the grid columns, and any saved panel→visit assignments.
+  rotationEnabled?: boolean
+  visitTypes?: ServiceVisitType[]
+  assignments?: PanelVisitAssignment[]
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -62,6 +77,114 @@ export function SystemPanelsManager({
 
   const defs = orderedActiveDefs(fieldDefs)
   const systemPanels = [...panels].sort((a, b) => a.position - b.position)
+
+  // ── Panel-level visit rotation ───────────────────────────────────────────────
+  // Rotation only makes sense with ≥2 panels and ≥2 visit occurrences (e.g. a
+  // fire alarm service with Annual + Periodic). The grid is panels × visit types;
+  // each cell stores which level (visit type id) that panel gets on that visit.
+  const orderedVisitTypes = [...visitTypes].sort((a, b) => a.sort_order - b.sort_order)
+  const rotationSupported = systemPanels.length >= 2 && orderedVisitTypes.length >= 2
+  // The heavy level (Annual) is the first visit type by sort order; the rest are
+  // treated as the light default when a cell isn't explicitly set.
+  const heavyVisitType = orderedVisitTypes[0]
+  const lightVisitType = orderedVisitTypes[1]
+
+  const [enabled, setEnabled] = useState(rotationEnabled)
+  // cells keyed by `${panelId}::${visitTypeId}` → applied visit type id.
+  const [cells, setCells] = useState<Record<string, string>>({})
+  const [rotationDirty, setRotationDirty] = useState(false)
+
+  // Seed the grid from saved assignments; cells with no assignment default to the
+  // light level so every panel is at least Periodic on every visit.
+  useEffect(() => {
+    const seeded: Record<string, string> = {}
+    for (const panel of systemPanels) {
+      for (const vt of orderedVisitTypes) {
+        const saved = assignments.find(
+          (a) => a.panel_id === panel.id && a.visit_type_id === vt.id,
+        )
+        seeded[`${panel.id}::${vt.id}`] =
+          saved?.applied_visit_type_id ?? lightVisitType?.id ?? vt.id
+      }
+    }
+    setCells(seeded)
+    setRotationDirty(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteSystemId, panels.length, visitTypes.length, assignments.length])
+
+  function cellLevel(panelId: string, visitTypeId: string): string {
+    return cells[`${panelId}::${visitTypeId}`] ?? lightVisitType?.id ?? visitTypeId
+  }
+
+  function setCell(panelId: string, visitTypeId: string, appliedId: string) {
+    setCells((prev) => ({ ...prev, [`${panelId}::${visitTypeId}`]: appliedId }))
+    setRotationDirty(true)
+  }
+
+  // Auto-split: give each panel its heavy (Annual) level on exactly one visit
+  // column, block-distributed by panel order across the columns; everything else
+  // defaults to the light level. e.g. 6 panels / 2 visits → panels 1-3 heavy on
+  // visit A, panels 4-6 heavy on visit B.
+  function autoSplit() {
+    if (!heavyVisitType || !lightVisitType) return
+    const cols = orderedVisitTypes.length
+    const perCol = Math.ceil(systemPanels.length / cols)
+    const next: Record<string, string> = {}
+    systemPanels.forEach((panel, idx) => {
+      const heavyCol = Math.min(Math.floor(idx / perCol), cols - 1)
+      orderedVisitTypes.forEach((vt, colIdx) => {
+        next[`${panel.id}::${vt.id}`] =
+          colIdx === heavyCol ? heavyVisitType.id : lightVisitType.id
+      })
+    })
+    setCells(next)
+    setRotationDirty(true)
+  }
+
+  function handleToggleRotation(on: boolean) {
+    setEnabled(on)
+    startTransition(async () => {
+      const res = await setPanelRotationEnabled({
+        site_system_id: siteSystemId,
+        enabled: on,
+        sitePath,
+      })
+      if (res.ok) {
+        toast.success(on ? 'Panel rotation enabled' : 'Panel rotation disabled')
+        router.refresh()
+      } else {
+        setEnabled(!on)
+        toast.error(res.error ?? 'Could not update rotation')
+      }
+    })
+  }
+
+  function handleSaveRotation() {
+    const payload: PanelRotationCell[] = []
+    for (const panel of systemPanels) {
+      for (const vt of orderedVisitTypes) {
+        payload.push({
+          panel_id: panel.id,
+          visit_type_id: vt.id,
+          applied_visit_type_id: cellLevel(panel.id, vt.id),
+        })
+      }
+    }
+    startTransition(async () => {
+      const res = await savePanelRotation({
+        site_system_id: siteSystemId,
+        cells: payload,
+        sitePath,
+      })
+      if (res.ok) {
+        toast.success('Rotation saved')
+        setRotationDirty(false)
+        router.refresh()
+      } else {
+        toast.error(res.error ?? 'Could not save rotation')
+      }
+    })
+  }
 
   function openNew() {
     setEditing(null)
@@ -187,6 +310,113 @@ export function SystemPanelsManager({
             )
           })}
         </ul>
+      )}
+
+      {rotationSupported && (
+        <div className="space-y-3 rounded-md border p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <span className="flex items-center gap-2 text-sm font-medium">
+                <CalendarRange className="h-3.5 w-3.5 text-muted-foreground" />
+                Spread {heavyVisitType?.name ?? 'Annual'} across visits
+              </span>
+              <p className="mt-0.5 text-xs text-muted-foreground text-pretty">
+                Rotate which panels get the {heavyVisitType?.name ?? 'Annual'} inspection each
+                visit, so the heavy workload is shared across the year.
+              </p>
+            </div>
+            <Switch
+              checked={enabled}
+              onCheckedChange={handleToggleRotation}
+              disabled={disabled || isPending}
+              aria-label="Toggle panel rotation"
+            />
+          </div>
+
+          {enabled && (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={autoSplit}
+                  disabled={disabled || isPending}
+                >
+                  <Wand2 className="h-3.5 w-3.5" />
+                  Auto-split
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleSaveRotation}
+                  disabled={disabled || isPending || !rotationDirty}
+                >
+                  {isPending ? 'Saving...' : 'Save rotation'}
+                </Button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="p-2 text-left font-medium">Panel</th>
+                      {orderedVisitTypes.map((vt, i) => (
+                        <th key={vt.id} className="p-2 text-center font-medium">
+                          Visit {i + 1}
+                          <span className="block text-xs font-normal text-muted-foreground">
+                            {vt.name}
+                          </span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {systemPanels.map((panel) => (
+                      <tr key={panel.id} className="border-b last:border-0">
+                        <td className="p-2 font-medium">{panel.name}</td>
+                        {orderedVisitTypes.map((vt) => {
+                          const level = cellLevel(panel.id, vt.id)
+                          const isHeavy = level === heavyVisitType?.id
+                          return (
+                            <td key={vt.id} className="p-2 text-center">
+                              <Select
+                                value={level}
+                                onValueChange={(v) => setCell(panel.id, vt.id, v)}
+                                disabled={disabled || isPending}
+                              >
+                                <SelectTrigger
+                                  className={
+                                    isHeavy
+                                      ? 'h-8 justify-center border-primary/40 bg-primary/5 text-xs font-medium'
+                                      : 'h-8 justify-center text-xs'
+                                  }
+                                >
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {orderedVisitTypes.map((opt) => (
+                                    <SelectItem key={opt.id} value={opt.id}>
+                                      {opt.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-muted-foreground text-pretty">
+                Each cell is the inspection level that panel receives on that visit. Highlighted
+                cells are the heavier {heavyVisitType?.name ?? 'Annual'} inspection.
+              </p>
+            </>
+          )}
+        </div>
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>

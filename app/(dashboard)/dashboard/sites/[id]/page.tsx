@@ -44,6 +44,8 @@ import type {
   SystemType,
   PanelFieldDef,
   SystemPanel,
+  ServiceVisitType,
+  PanelVisitAssignment,
   Task,
   TaskResult,
   Damper,
@@ -187,6 +189,29 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
         .order('position')
     : { data: [] }
   const panels = (panelsData || []) as SystemPanel[]
+
+  // Panel-level visit rotation data: the visit types (Annual/Periodic/…) for the
+  // service types used on this site, plus any saved panel→visit assignments. Both
+  // feed the rotation grid in the panels manager.
+  const siteServiceTypeIds = Array.from(
+    new Set(siteServices.map((ss) => ss.service_type_id).filter(Boolean)),
+  ) as string[]
+  const { data: visitTypesData } = siteServiceTypeIds.length > 0
+    ? await supabase
+        .from('service_visit_types')
+        .select('*')
+        .in('service_type_id', siteServiceTypeIds)
+        .order('sort_order')
+    : { data: [] }
+  const serviceVisitTypes = (visitTypesData || []) as ServiceVisitType[]
+
+  const { data: panelAssignmentsData } = siteSystemIds.length > 0
+    ? await supabase
+        .from('panel_visit_assignments')
+        .select('*')
+        .in('site_system_id', siteSystemIds)
+    : { data: [] }
+  const panelAssignments = (panelAssignmentsData || []) as PanelVisitAssignment[]
 
   // Billing accounts belonging to this site's client (includes sub-clients), used
   // by the Billing card to show/override which account each service is billed to.
@@ -735,6 +760,8 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
                   siteStatus={(site as Site).status}
                   panelFieldDefs={panelFieldDefs}
                   panels={panels}
+                  serviceVisitTypes={serviceVisitTypes}
+                  panelAssignments={panelAssignments}
                   subcontractors={subcontractors}
                   site={site as Site}
                   engineers={engineers}

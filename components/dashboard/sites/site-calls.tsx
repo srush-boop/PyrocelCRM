@@ -41,6 +41,7 @@ import {
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { formatDateUK, cn } from '@/lib/utils'
+import { SystemIcon } from '@/lib/system-types'
 import { isDamperService } from '@/lib/dampers'
 import { isExtinguisherService } from '@/lib/extinguishers'
 import type { Task, SiteService, ServiceType, Profile, SystemType, TaskResult } from '@/lib/types/database'
@@ -101,6 +102,11 @@ function CallCard({ call, onSendReport }: { call: SiteCall; onSendReport?: (c: S
   const scheduled = call.scheduled_date ? new Date(call.scheduled_date) : null
   const isOverdue = !!(scheduled && scheduled < today && call.status === 'pending')
   const serviceName = getServiceName(call)
+  const systemName = getSystemName(call)
+  // The site name is implicit on the site page, so lead with the system type and
+  // service (both bold in the tile title), plus a matching system icon so these
+  // tiles share the same layout/dimensions as the all-calls grid tiles.
+  const title = systemName ? `${systemName} · ${serviceName}` : serviceName
   const isCompleted = call.status === 'completed'
   const chargeInvoiced = !!call.charge_invoiced_at
   const reportHref = isCompleted ? getReportHref(call) : null
@@ -112,7 +118,14 @@ function CallCard({ call, onSendReport }: { call: SiteCall; onSendReport?: (c: S
 
   return (
     <CallTile
-      title={serviceName}
+      leading={
+        <SystemIcon
+          system={{ name: systemName ?? serviceName }}
+          boxed
+          boxClassName="h-9 w-9 shrink-0"
+        />
+      }
+      title={title}
       status={call.status}
       result={call.task_result?.overall_status ?? null}
       reference={call.task_result?.reference_number ?? null}
@@ -121,7 +134,6 @@ function CallCard({ call, onSendReport }: { call: SiteCall; onSendReport?: (c: S
       isOverdue={isOverdue}
       engineerName={call.assigned_engineer?.full_name ?? ''}
       valuePence={calcValue(call)}
-      systemName={getSystemName(call)}
       isEmergency={call.is_emergency}
       isRemedial={call.is_remedial}
       followUp={

@@ -347,14 +347,14 @@ export function CreateTaskDialog({
         {trigger ?? (
           <Button>
             <Plus className="mr-2 h-4 w-4" />
-            Book Call
+            Log Call
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Book New Call</DialogTitle>
+            <DialogTitle>Log New Call</DialogTitle>
             <DialogDescription>
               Log a scheduled service call or a reactive / emergency call-out.
             </DialogDescription>
@@ -712,10 +712,10 @@ export function CreateTaskDialog({
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Booking...
+                  Logging...
                 </>
               ) : (
-                'Book Call'
+                'Log Call'
               )}
             </Button>
           </DialogFooter>

@@ -408,8 +408,8 @@ export function SiteServicesManager({
           {isDead && (
             <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">
               {isNewSite
-                ? 'This site is New (created from a won quote) and off-contract. No tasks will be generated until it is set Live.'
-                : 'This site is marked Dead. No new tasks will be generated until it is set back to Live.'}
+                ? 'This site is Engaged (created from a won quote) and off-contract. No tasks will be generated until it is set Active.'
+                : 'This site is marked Dormant. No new tasks will be generated until it is set back to Active.'}
             </p>
           )}
           {siteServices.length === 0 ? (
@@ -535,7 +535,7 @@ export function SiteServicesManager({
                         className="text-primary hover:text-primary"
                         title={
                           isDead
-                            ? 'Site is dead — scheduling disabled'
+                            ? 'Site is dormant — scheduling disabled'
                             : ss.active === false
                               ? 'Service is inactive — scheduling disabled'
                               : 'Book Call'
@@ -638,7 +638,7 @@ export function SiteServicesManager({
             </Popover>
             <p className="text-xs text-muted-foreground">
               {isDead
-                ? 'This site is Dead — services will be added but no tasks will be scheduled.'
+                ? 'This site is Dormant — services will be added but no tasks will be scheduled.'
                 : 'A scheduled task will be generated for each selected service on this date.'}
             </p>
           </div>

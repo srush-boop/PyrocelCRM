@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/select'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Plus, Loader2, CalendarIcon, Siren, Mail, MapPin } from 'lucide-react'
+import { Plus, Loader2, CalendarIcon, Siren, Mail, MapPin, AlertTriangle } from 'lucide-react'
 import { format } from 'date-fns'
 import type { Profile, SiteService, Site, ServiceType, SystemType } from '@/lib/types/database'
 import { cn } from '@/lib/utils'
@@ -57,6 +57,12 @@ interface CreateTaskDialogProps {
   lockReactive?: boolean
   /** Pre-select the assigned engineer (e.g. the on-call engineer logs to self). */
   defaultEngineerId?: string
+  /**
+   * On-call engineer context. Restricts the site picker to Active sites only
+   * (matching the server rule that on-call engineers may only log against
+   * Active sites with an active system).
+   */
+  oncallMode?: boolean
   /** Custom trigger. Omit for the default "Log Call" button. */
   trigger?: React.ReactNode
   /**
@@ -85,6 +91,7 @@ export function CreateTaskDialog({
   defaultMode = 'recurring',
   lockReactive = false,
   defaultEngineerId,
+  oncallMode = false,
   trigger,
   onBooked,
 }: CreateTaskDialogProps) {
@@ -135,14 +142,22 @@ export function CreateTaskDialog({
   ).sort((a, b) => (a.name || '').localeCompare(b.name || ''))
 
   // Sites for the reactive picker: prefer the full list; fall back to sites with
-  // services if a full list wasn't supplied.
+  // services if a full list wasn't supplied. Dormant (dead) sites are always
+  // excluded; on-call engineers are further restricted to Active (live) sites.
   const reactiveSites = (allSites && allSites.length > 0 ? allSites : recurringSites)
-    .filter((s) => s.status !== 'dead')
+    .filter((s) => (oncallMode ? s.status === 'live' : s.status !== 'dead'))
     .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
 
   const selectedRecurringSite = recurringSites.find((s) => s.id === siteId)
   const selectedReactiveSite = reactiveSites.find((s) => s.id === siteId)
   const lockSite = Boolean(defaultSiteId)
+
+  // Warn (but allow) when a non-on-call user selects an Engaged (new) site.
+  const selectedSiteForWarning =
+    (allSites && allSites.length > 0 ? allSites : recurringSites).find((s) => s.id === siteId) ??
+    null
+  const showEngagedWarning =
+    !oncallMode && mode === 'reactive' && selectedSiteForWarning?.status === 'new'
 
   const systemsForSite = siteId
     ? Array.from(
@@ -544,6 +559,13 @@ export function CreateTaskDialog({
                       ))}
                     </SelectContent>
                   </Select>
+                  {showEngagedWarning && (
+                    <p className="flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      This site is not live yet (Engaged). You can still log the call, but confirm
+                      it should go ahead.
+                    </p>
+                  )}
                 </div>
 
                 {reactiveSystemOptions.length > 0 && (

@@ -186,6 +186,7 @@ export default async function SchedulePage({
               sites={sites}
               systemTypes={systemTypes}
               lockReactive
+              oncallMode
               defaultEngineerId={user.id}
             />
           </div>

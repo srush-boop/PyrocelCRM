@@ -301,8 +301,8 @@ export function AddSiteDialog({ clients, branches = [], propertyTypes = [] }: Ad
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="live">Live</SelectItem>
-                  <SelectItem value="dead">Dead</SelectItem>
+                  <SelectItem value="live">Active</SelectItem>
+                  <SelectItem value="dead">Dormant</SelectItem>
                 </SelectContent>
               </Select>
             </div>

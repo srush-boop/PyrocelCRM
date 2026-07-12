@@ -37,6 +37,7 @@ import { isFireAlarmService } from '@/lib/mcps'
 import { isEmergencyLightService } from '@/lib/emergency-lights'
 import { isExtinguisherService } from '@/lib/extinguishers'
 import { REMOTE_MONITORING_LABELS } from '@/lib/sites'
+import { siteStatusLabel } from '@/lib/site-status'
 import type {
   Profile,
   Site,
@@ -556,8 +557,16 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
         </Button>
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
-            <Badge variant={(site as Site).status === 'dead' ? 'destructive' : 'default'}>
-              {(site as Site).status === 'dead' ? 'Dead' : 'Live'}
+            <Badge
+              variant={
+                (site as Site).status === 'dead'
+                  ? 'destructive'
+                  : (site as Site).status === 'new'
+                    ? 'secondary'
+                    : 'default'
+              }
+            >
+              {siteStatusLabel((site as Site).status)}
             </Badge>
             {(site as Site & { route: Route | null }).route && (
               <Badge variant="secondary">

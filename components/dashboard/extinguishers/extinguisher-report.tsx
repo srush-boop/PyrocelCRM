@@ -1,8 +1,6 @@
 'use client'
 
 import { useMemo } from 'react'
-import Link from 'next/link'
-import { signatureSrc } from '@/lib/blob'
 import {
   PieChart,
   Pie,
@@ -15,11 +13,22 @@ import {
   Tooltip,
   Legend,
 } from 'recharts'
-import { Button } from '@/components/ui/button'
-import { ArrowLeft, Printer, CheckCircle2, XCircle, AlertTriangle, MinusCircle } from 'lucide-react'
-import { formatDateUK } from '@/lib/utils'
+import { CheckCircle2, XCircle, AlertTriangle, MinusCircle } from 'lucide-react'
 import { getServiceIcon } from '@/lib/service-icons'
 import { PYROCEL_RED } from '@/lib/service-colors'
+import {
+  ReportActionBar,
+  ReportHeader,
+  ReportMeta,
+  ReportMetaGrid,
+  ReportStatusRibbon,
+  StatCard,
+  SectionHeading,
+  ReportPanel,
+  SignatureBlock,
+  ReportFooter,
+  REPORT_COLORS,
+} from '@/components/dashboard/reports/report-shell'
 import {
   RESULT_COLORS,
   RESULT_LABELS,
@@ -52,8 +61,12 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
   const headerColor = serviceType?.color || template?.header_color || PYROCEL_RED
   const companyName = companyInfo?.name || template?.company_name || 'Pyrocel Ltd'
   const sections = template?.sections || {}
-  // Company address on the report header comes from central Company Information.
   const companyAddress = companyInfo?.address || sections.company_address || null
+  const companyPhone = companyInfo?.phone || sections.company_phone || null
+  const companyEmail = companyInfo?.email || sections.company_email || null
+  const companyWebsite = companyInfo?.website || null
+  const logoUrl = companyInfo?.logo_url || template?.company_logo_url || null
+  const standards = sections.standards || null
   const ServiceIcon = getServiceIcon(serviceType?.name)
 
   const stats = useMemo(() => {
@@ -111,89 +124,64 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
 
   const completedDate = task.completed_at || task.scheduled_date
 
+  const overall =
+    stats.fail > 0
+      ? { label: 'Action Required', color: REPORT_COLORS.fail }
+      : stats.remedial > 0
+        ? { label: 'Remedial', color: REPORT_COLORS.remedial }
+        : { label: 'Compliant', color: REPORT_COLORS.pass }
+
   return (
     <div className="mx-auto max-w-4xl">
-      {/* Action bar */}
-      <div className="mb-6 flex items-center justify-between print:hidden">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href={site ? `/dashboard/sites/${site.id}` : '/dashboard/extinguishers'}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back
-          </Link>
-        </Button>
-        <Button onClick={() => window.print()}>
-          <Printer className="mr-2 h-4 w-4" />
-          Print / Save PDF
-        </Button>
-      </div>
+      <ReportActionBar backHref={site ? `/dashboard/sites/${site.id}` : '/dashboard/extinguishers'} />
 
       <div className="report-page rounded-lg border bg-card p-8 print:border-0 print:p-0">
-        {/* Header */}
-        <header
-          className="-mx-8 -mt-8 mb-8 flex items-center justify-between px-8 py-6 text-white print:mx-0 print:mt-0 print:rounded-none"
-          style={{ backgroundColor: headerColor }}
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg bg-white p-1">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/images/pyrocel-logo.png"
-                alt="Pyrocel logo"
-                crossOrigin="anonymous"
-                className="h-full w-full object-contain"
-              />
-            </div>
-            <div>
-              <p className="text-xl font-extrabold uppercase tracking-wide leading-tight">
-                {companyName}
-              </p>
-                {companyAddress && (
-                  <p className="text-xs text-white/80">{companyAddress}</p>
-                )}
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="text-right">
-              <p className="text-sm font-semibold uppercase tracking-wide">Service Report</p>
-              <p className="text-xs text-white/80">Fire Extinguishers</p>
-              {referenceNumber && (
-                <p className="mt-1 font-mono text-sm font-bold">{referenceNumber}</p>
-              )}
-            </div>
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white/15 ring-1 ring-white/25">
-              <ServiceIcon className="h-6 w-6" aria-hidden="true" />
-            </div>
-          </div>
-        </header>
+        <ReportHeader
+          headerColor={headerColor}
+          companyName={companyName}
+          logoUrl={logoUrl}
+          address={companyAddress}
+          phone={companyPhone}
+          email={companyEmail}
+          website={companyWebsite}
+          docType="Service Report"
+          docSubtitle={serviceType?.name || 'Fire Extinguishers'}
+          referenceNumber={referenceNumber}
+          reportDate={completedDate}
+          ServiceIcon={ServiceIcon}
+        />
 
-        {/* Meta */}
-        <section className="mb-8 grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
-          <Meta label="Service Reference" value={referenceNumber} />
-          <Meta label="Report Date" value={formatDateUK(completedDate)} />
-          <Meta label="Site" value={site?.name} />
-          <Meta label="Address" value={site?.address} />
-          <Meta label="Serviced By" value={engineer?.full_name || engineer?.email} />
-          <Meta label="Service" value={serviceType?.name} />
-          {sections.standards && <Meta label="Standards" value={sections.standards} />}
-        </section>
+        <ReportMetaGrid>
+          <ReportMeta label="Service Reference" value={referenceNumber} />
+          <ReportMeta label="Site" value={site?.name} />
+          <ReportMeta label="Serviced By" value={engineer?.full_name || engineer?.email} />
+          <ReportMeta label="Address" value={site?.address} />
+          <ReportMeta label="Service" value={serviceType?.name} />
+          <ReportMeta label="Units Serviced" value={String(stats.tested)} />
+        </ReportMetaGrid>
+
+        <ReportStatusRibbon
+          statusLabel={overall.label}
+          color={overall.color}
+          note={`${stats.tested} extinguishers serviced · ${stats.passRate}% pass rate`}
+        />
 
         {/* Executive summary */}
-        <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
+        <SectionHeading index={1} color={headerColor}>
           Executive Summary
-        </h2>
+        </SectionHeading>
         <div className="mb-8 grid grid-cols-3 gap-3 sm:grid-cols-6">
-          <Stat label="Serviced" value={stats.tested} />
-          <Stat label="Pass" value={stats.pass} color="#16a34a" icon={<CheckCircle2 className="h-4 w-4" />} />
-          <Stat label="Remedial" value={stats.remedial} color="#d97706" icon={<AlertTriangle className="h-4 w-4" />} />
-          <Stat label="Fail" value={stats.fail} color="#dc2626" icon={<XCircle className="h-4 w-4" />} />
-          <Stat label="N/A" value={stats.na} color="#6b7280" icon={<MinusCircle className="h-4 w-4" />} />
-          <Stat label="Pass Rate" value={`${stats.passRate}%`} color={headerColor} />
+          <StatCard label="Serviced" value={stats.tested} color={REPORT_COLORS.neutral} />
+          <StatCard label="Pass" value={stats.pass} color={REPORT_COLORS.pass} icon={<CheckCircle2 className="h-4 w-4" />} />
+          <StatCard label="Remedial" value={stats.remedial} color={REPORT_COLORS.remedial} icon={<AlertTriangle className="h-4 w-4" />} />
+          <StatCard label="Fail" value={stats.fail} color={REPORT_COLORS.fail} icon={<XCircle className="h-4 w-4" />} />
+          <StatCard label="N/A" value={stats.na} color={REPORT_COLORS.na} icon={<MinusCircle className="h-4 w-4" />} />
+          <StatCard label="Pass Rate" value={`${stats.passRate}%`} color={headerColor} />
         </div>
 
         {/* Charts */}
         <div className="mb-8 grid gap-6 md:grid-cols-2">
-          <div className="avoid-break rounded-lg border p-4">
-            <h3 className="mb-3 text-sm font-semibold">Results Breakdown</h3>
+          <ReportPanel title="Results Breakdown">
             {pieData.length > 0 ? (
               <ResponsiveContainer width="100%" height={240}>
                 <PieChart>
@@ -218,10 +206,9 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
             ) : (
               <p className="py-12 text-center text-sm text-muted-foreground">No data</p>
             )}
-          </div>
+          </ReportPanel>
 
-          <div className="avoid-break rounded-lg border p-4">
-            <h3 className="mb-3 text-sm font-semibold">Results by Floor</h3>
+          <ReportPanel title="Results by Floor">
             {byFloor.length > 0 ? (
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={byFloor}>
@@ -237,15 +224,15 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
             ) : (
               <p className="py-12 text-center text-sm text-muted-foreground">No data</p>
             )}
-          </div>
+          </ReportPanel>
         </div>
 
         {/* Remedial actions */}
         {remedials.length > 0 && (
           <section className="mb-8">
-            <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
+            <SectionHeading index={2} color={headerColor}>
               Remedial Actions Required ({remedials.length})
-            </h2>
+            </SectionHeading>
             <div className="space-y-2">
               {remedials.map((insp) => (
                 <div
@@ -268,36 +255,36 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
 
         {/* Detailed results */}
         <section className="mb-8">
-          <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
+          <SectionHeading index={3} color={headerColor}>
             Detailed Results
-          </h2>
+          </SectionHeading>
           <div className="overflow-hidden rounded-md border">
             <table className="w-full text-left text-xs">
               <thead style={{ backgroundColor: `${headerColor}15` }}>
                 <tr>
-                  <th className="px-3 py-2 font-semibold">URN</th>
-                  <th className="px-3 py-2 font-semibold">Location</th>
-                  <th className="px-3 py-2 font-semibold">Floor</th>
-                  <th className="px-3 py-2 font-semibold">Type</th>
-                  <th className="px-3 py-2 text-center font-semibold">Access</th>
-                  <th className="px-3 py-2 font-semibold">Result</th>
+                  <th className="px-3 py-2 font-semibold uppercase tracking-wide">URN</th>
+                  <th className="px-3 py-2 font-semibold uppercase tracking-wide">Location</th>
+                  <th className="px-3 py-2 font-semibold uppercase tracking-wide">Floor</th>
+                  <th className="px-3 py-2 font-semibold uppercase tracking-wide">Type</th>
+                  <th className="px-3 py-2 text-center font-semibold uppercase tracking-wide">Access</th>
+                  <th className="px-3 py-2 font-semibold uppercase tracking-wide">Result</th>
                 </tr>
               </thead>
               <tbody>
                 {inspections.map((insp) => (
-                  <tr key={insp.id} className="border-t">
-                    <td className="px-3 py-2 font-mono">{insp.extinguisher?.urn || '-'}</td>
-                    <td className="px-3 py-2">{insp.extinguisher?.location || '-'}</td>
-                    <td className="px-3 py-2">{insp.extinguisher?.floor || '-'}</td>
+                  <tr key={insp.id} className="border-t odd:bg-muted/30">
+                    <td className="px-3 py-2 font-mono">{insp.extinguisher?.urn || '—'}</td>
+                    <td className="px-3 py-2">{insp.extinguisher?.location || '—'}</td>
+                    <td className="px-3 py-2">{insp.extinguisher?.floor || '—'}</td>
                     <td className="px-3 py-2">
                       {insp.extinguisher
                         ? EXTINGUISHER_TYPE_LABELS[insp.extinguisher.extinguisher_type]
-                        : '-'}
+                        : '—'}
                     </td>
                     <td className="px-3 py-2 text-center">{insp.accessible ? 'Yes' : 'No'}</td>
                     <td className="px-3 py-2">
                       <span
-                        className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
+                        className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase text-white"
                         style={{ backgroundColor: RESULT_COLORS[insp.overall_result] }}
                       >
                         {RESULT_LABELS[insp.overall_result]}
@@ -320,14 +307,14 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
         {/* Per-extinguisher service checklist */}
         {inspections.length > 0 && (
           <section className="mb-8">
-            <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
+            <SectionHeading index={4} color={headerColor}>
               Service Checklist
-            </h2>
+            </SectionHeading>
             <div className="space-y-4">
               {inspections.map((insp) => (
                 <div key={insp.id} className="avoid-break rounded-md border p-4">
                   <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
-                    <span className="font-mono font-semibold">{insp.extinguisher?.urn || '-'}</span>
+                    <span className="font-mono font-semibold">{insp.extinguisher?.urn || '—'}</span>
                     {insp.extinguisher?.location && (
                       <span className="text-muted-foreground">{insp.extinguisher.location}</span>
                     )}
@@ -335,7 +322,7 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
                       <span className="text-muted-foreground">· {insp.extinguisher.floor}</span>
                     )}
                     <span
-                      className="ml-auto inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
+                      className="ml-auto inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase text-white"
                       style={{ backgroundColor: RESULT_COLORS[insp.overall_result] }}
                     >
                       {RESULT_LABELS[insp.overall_result]}
@@ -387,14 +374,14 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
         {/* Photographic evidence */}
         {photoGroups.length > 0 && (
           <section className="mb-8">
-            <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
+            <SectionHeading index={5} color={headerColor}>
               Photographic Evidence ({photoCount})
-            </h2>
+            </SectionHeading>
             <div className="space-y-6">
               {photoGroups.map(({ insp, cats }) => (
                 <div key={insp.id} className="avoid-break rounded-md border p-3">
                   <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
-                    <span className="font-mono font-semibold">{insp.extinguisher?.urn || '-'}</span>
+                    <span className="font-mono font-semibold">{insp.extinguisher?.urn || '—'}</span>
                     {insp.extinguisher?.location && (
                       <span className="text-muted-foreground">{insp.extinguisher.location}</span>
                     )}
@@ -402,7 +389,7 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
                       <span className="text-muted-foreground">· {insp.extinguisher.floor}</span>
                     )}
                     <span
-                      className="ml-auto inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
+                      className="ml-auto inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase text-white"
                       style={{ backgroundColor: RESULT_COLORS[insp.overall_result] }}
                     >
                       {RESULT_LABELS[insp.overall_result]}
@@ -443,40 +430,27 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
           </section>
         )}
 
-        {/* Signature & footer */}
+        {/* Signature */}
         {template?.include_signature !== false && (
-          <section className="avoid-break mb-6 grid grid-cols-2 gap-8 pt-4 text-sm">
-            <div>
-              {engineer?.signature_url ? (
-                <div className="mb-1 flex h-12 items-end">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={signatureSrc(engineer.signature_url) || '/placeholder.svg'}
-                    alt={`Signature of ${engineer.full_name || 'engineer'}`}
-                    crossOrigin="anonymous"
-                    className="max-h-12 w-auto object-contain"
-                  />
-                </div>
-              ) : (
-                <div className="mb-1 h-12 border-b border-dashed" />
-              )}
-              <p className="font-medium">{sections.signatory_name || engineer?.full_name || ''}</p>
-              <p className="text-xs text-muted-foreground">
-                {engineer?.role_ref?.name || engineer?.job_title || sections.signatory_title || 'Engineer'}
-              </p>
-            </div>
-            <div>
-              <div className="mb-1 h-12 border-b border-dashed" />
-              <p className="text-xs text-muted-foreground">Date: {formatDateUK(completedDate)}</p>
-            </div>
-          </section>
+          <SignatureBlock
+            signatureUrl={engineer?.signature_url}
+            signatoryName={sections.signatory_name || engineer?.full_name || ''}
+            signatoryTitle={
+              engineer?.role_ref?.name ||
+              engineer?.job_title ||
+              sections.signatory_title ||
+              'Engineer'
+            }
+            date={completedDate}
+          />
         )}
 
-        {template?.footer_text && (
-          <footer className="border-t pt-4 text-center text-xs text-muted-foreground">
-            {template.footer_text}
-          </footer>
-        )}
+        <ReportFooter
+          headerColor={headerColor}
+          companyInfo={companyInfo}
+          template={template}
+          standards={standards}
+        />
       </div>
     </div>
   )
@@ -502,37 +476,6 @@ function CheckRow({ label, value }: { label: string; value: boolean | null }) {
           N/A
         </span>
       )}
-    </div>
-  )
-}
-
-function Meta({ label, value }: { label: string; value?: string | null }) {
-  return (
-    <div>
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="font-medium">{value || '-'}</p>
-    </div>
-  )
-}
-
-function Stat({
-  label,
-  value,
-  color,
-  icon,
-}: {
-  label: string
-  value: string | number
-  color?: string
-  icon?: React.ReactNode
-}) {
-  return (
-    <div className="avoid-break rounded-lg border p-3 text-center">
-      <div className="flex items-center justify-center gap-1" style={{ color: color || 'inherit' }}>
-        {icon}
-        <span className="text-2xl font-bold">{value}</span>
-      </div>
-      <p className="mt-1 text-xs text-muted-foreground">{label}</p>
     </div>
   )
 }

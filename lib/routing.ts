@@ -232,3 +232,48 @@ export async function drivingMatrix(points: LatLng[]): Promise<DrivingMatrix> {
     return straightLineMatrix(points)
   }
 }
+
+export interface TripOrderResult {
+  /**
+   * Optimal visiting order as 0-based indices into the `stops` argument (home
+   * excluded). e.g. `[2, 0, 1]` = visit stops[2] first, then stops[0], stops[1].
+   */
+  order: number[]
+  approximate: boolean
+}
+
+/**
+ * Solve the visiting order (a TSP) that minimises driving time through
+ * `home → stops… → home` using OSRM's `trip` service (free demo, no key, no live
+ * traffic — typical road speeds only). Home is fixed as the first and last stop
+ * (`source=first`, `roundtrip=true`). Returns `approximate: true` with the
+ * unchanged order on any failure so callers can fall back to a matrix heuristic.
+ */
+export async function tripOrder(home: LatLng, stops: LatLng[]): Promise<TripOrderResult> {
+  const identity = stops.map((_, i) => i)
+  if (stops.length < 2) return { order: identity, approximate: true }
+
+  const points = [home, ...stops]
+  const coordPath = points.map((p) => `${p.longitude},${p.latitude}`).join(';')
+  const url = `https://router.project-osrm.org/trip/v1/driving/${coordPath}?source=first&roundtrip=true&overview=false`
+
+  try {
+    const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(8000) })
+    if (!res.ok) return { order: identity, approximate: true }
+    const data = (await res.json()) as {
+      code: string
+      // waypoints[i].waypoint_index = position of input point i in the optimised tour
+      waypoints?: Array<{ waypoint_index: number }>
+    }
+    if (data.code !== 'Ok' || !data.waypoints || data.waypoints.length !== points.length) {
+      return { order: identity, approximate: true }
+    }
+    // Sort stop indices (input 1..n) by their optimised tour position.
+    const ranked = stops
+      .map((_, i) => ({ stopIndex: i, tourPos: data.waypoints![i + 1].waypoint_index }))
+      .sort((a, b) => a.tourPos - b.tourPos)
+    return { order: ranked.map((r) => r.stopIndex), approximate: false }
+  } catch {
+    return { order: identity, approximate: true }
+  }
+}

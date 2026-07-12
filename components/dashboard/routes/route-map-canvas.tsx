@@ -59,6 +59,33 @@ function FitBounds({ points }: { points: [number, number][] }) {
   return null
 }
 
+/**
+ * Leaflet caches the container's size at init. When the map mounts inside an
+ * animating/transformed container (e.g. a Radix dialog) or a cell whose height
+ * only resolves after paint, that cache is stale and the container can size
+ * wrong. A ResizeObserver recomputes exactly once per real size change (rAF
+ * debounced) — no arbitrary timers, so the map never oscillates.
+ */
+function InvalidateSize() {
+  const map = useMap()
+  useEffect(() => {
+    const container = map.getContainer()
+    let raf = 0
+    const fix = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => map.invalidateSize({ animate: false }))
+    }
+    fix()
+    const ro = new ResizeObserver(fix)
+    ro.observe(container)
+    return () => {
+      cancelAnimationFrame(raf)
+      ro.disconnect()
+    }
+  }, [map])
+  return null
+}
+
 export const RouteMapCanvas = memo(function RouteMapCanvas({
   home,
   stops,
@@ -105,6 +132,7 @@ export const RouteMapCanvas = memo(function RouteMapCanvas({
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
+      <InvalidateSize />
       <FitBounds points={fitPoints} />
 
       {line.length > 1 && (

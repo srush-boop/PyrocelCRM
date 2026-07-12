@@ -124,6 +124,18 @@
   }
 }
 
+/* Leaflet maps must never paint above modal overlays. `.leaflet-container` is
+   only `position: relative` with `z-index: auto`, so it does NOT establish its
+   own stacking context — its internal tile panes (z-index 400) and controls
+   (z-index 1000) end up compared directly against Radix dialog overlays
+   (z-index 50) in the ROOT stacking context and win, bleeding the map on top of
+   any open dialog/sheet. Isolating the container scopes those z-indexes to the
+   map so the whole map stays behind overlays. */
+.leaflet-container {
+  isolation: isolate;
+  z-index: 0;
+}
+
 /* Print: hide app chrome and use clean white page for labels & reports */
 @media print {
   /* Hide dashboard chrome (sidebar, header) and anything explicitly marked */

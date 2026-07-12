@@ -68,6 +68,8 @@ interface PoEmailData {
   parts: { name: string; quantity: number; unitCostPence: number }[]
   partsTotalPence: number
   priorRequests: any[]
+  companyName: string
+  baseUrl: string
 }
 
 /**
@@ -157,6 +159,8 @@ async function gatherPoEmailData(
       parts: partsList,
       partsTotalPence,
       priorRequests: (priorRequests ?? []) as any[],
+      companyName: process.env.COMPANY_NAME || 'Pyrocel',
+      baseUrl: process.env.NEXT_PUBLIC_SITE_URL || '',
     },
   }
 }

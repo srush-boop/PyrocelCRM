@@ -50,6 +50,10 @@ import {
   sendPoRequestEmail,
   getPoRequestPreview,
 } from '@/lib/actions/po-requests'
+import {
+  buildPoRequestEmailHtml,
+  type PoRequestEmailContent,
+} from '@/lib/email/po-request-template'
 import type { ChargeableCall } from '@/components/dashboard/chargeable/chargeable-calls-table'
 
 function formatGBP(pence: number): string {
@@ -71,14 +75,19 @@ interface PoPreview {
   recipients: string[]
   siteName: string
   clientName: string | null
+  contactName: string | null
   serviceName: string
   systemName: string | null
   panelName: string | null
   referenceNumber: string | null
   completedAt: string | null
   clientRef: string | null
+  engineerNotes: string | null
   parts: { name: string; quantity: number; unitCostPence: number }[]
   partsTotalPence: number
+  priorRequests: PoRequestEmailContent['priorRequests']
+  companyName: string
+  baseUrl: string
 }
 
 /** A single gated checklist point in the review. */
@@ -141,6 +150,32 @@ export function ChargeableReviewDialog({
     () => call.poRequests.find((r) => !!r.authorised_at && r.po_number),
     [call.poRequests],
   )
+
+  // Render the actual email HTML for the in-dialog preview. Rebuilds live as the
+  // reviewer edits the optional message. The authorisation token is a placeholder
+  // here — the real per-request token is generated when the email is sent.
+  const previewHtml = useMemo(() => {
+    if (!preview) return ''
+    return buildPoRequestEmailHtml({
+      siteName: preview.siteName,
+      clientName: preview.clientName,
+      contactName: preview.contactName,
+      serviceName: preview.serviceName,
+      systemName: preview.systemName,
+      panelName: preview.panelName,
+      referenceNumber: preview.referenceNumber,
+      completedAt: preview.completedAt,
+      clientRef: preview.clientRef,
+      engineerNotes: preview.engineerNotes,
+      parts: preview.parts,
+      partsTotalPence: preview.partsTotalPence,
+      specialNote: specialNote.trim() || null,
+      priorRequests: preview.priorRequests,
+      authorisationToken: 'PREVIEW-LINK',
+      companyName: preview.companyName,
+      baseUrl: preview.baseUrl,
+    })
+  }, [preview, specialNote])
 
   // ---- Gates (mirror server computeGates) ----
   const deadlineReasonSatisfied = !call.missedDeadline || !!deadlineReason.trim()
@@ -300,34 +335,6 @@ export function ChargeableReviewDialog({
                   )}
                 </div>
 
-                {preview && (
-                  <div className="rounded-lg border p-4 text-sm">
-                    <p className="mb-2 font-semibold">Call overview (included in email)</p>
-                    <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-                      <dt className="text-muted-foreground">Call reference</dt>
-                      <dd className="font-medium">{preview.referenceNumber ?? '—'}</dd>
-                      <dt className="text-muted-foreground">Completed</dt>
-                      <dd>{preview.completedAt ? formatDateUK(preview.completedAt) : '—'}</dd>
-                      <dt className="text-muted-foreground">Service</dt>
-                      <dd>{preview.serviceName}</dd>
-                      {preview.systemName && (
-                        <>
-                          <dt className="text-muted-foreground">System</dt>
-                          <dd>{preview.systemName}</dd>
-                        </>
-                      )}
-                      {preview.panelName && (
-                        <>
-                          <dt className="text-muted-foreground">Panel(s)</dt>
-                          <dd>{preview.panelName}</dd>
-                        </>
-                      )}
-                      <dt className="text-muted-foreground">Total to be invoiced</dt>
-                      <dd className="font-semibold">{formatGBP(preview.partsTotalPence)}</dd>
-                    </dl>
-                  </div>
-                )}
-
                 <div className="space-y-1.5">
                   <Label htmlFor="po-special-note">Message to client (optional)</Label>
                   <Textarea
@@ -337,7 +344,31 @@ export function ChargeableReviewDialog({
                     placeholder="Any specific message to include in this request…"
                     rows={3}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Your message appears in the highlighted note box within the email below.
+                  </p>
                 </div>
+
+                {preview && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                      <p className="text-sm font-medium">Email preview</p>
+                    </div>
+                    <div className="overflow-hidden rounded-lg border bg-muted/30">
+                      <iframe
+                        title="PO request email preview"
+                        srcDoc={previewHtml}
+                        sandbox=""
+                        className="h-[420px] w-full border-0 bg-white"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      This is a preview. The &quot;Authorise&quot; button links to a unique,
+                      secure page generated when the request is sent.
+                    </p>
+                  </div>
+                )}
 
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" onClick={() => setPoView('idle')} disabled={busyAny}>

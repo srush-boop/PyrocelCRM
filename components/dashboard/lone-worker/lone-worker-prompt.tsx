@@ -12,6 +12,12 @@ import {
   pushLocation,
 } from '@/app/(dashboard)/dashboard/lone-worker/actions'
 import type { LoneWorkerPromptState, MyLoneWorkerState } from '@/lib/lone-worker/types'
+import {
+  installAlarmUnlockOnGesture,
+  primeAlarm,
+  playAlarmTone,
+  buzz,
+} from '@/lib/lone-worker/alarm'
 
 type DisplayState = 'none' | 'ok' | 'prompting' | 'amber' | 'red'
 
@@ -54,6 +60,13 @@ export function LoneWorkerPrompt() {
     if (!data?.session || data.session.status !== 'active') return
     const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
+  }, [data?.session])
+
+  // While on shift, unlock audio on the first user gesture so the alarm can
+  // sound later on iOS (Web Audio is blocked until a gesture primes it).
+  useEffect(() => {
+    if (!data?.session || data.session.status !== 'active') return
+    return installAlarmUnlockOnGesture()
   }, [data?.session])
 
   const effectiveNow = now + offset
@@ -121,42 +134,31 @@ export function LoneWorkerPrompt() {
     )
   }, [display])
 
-  // Alarm sound loop while a prompt/escalation is on screen.
+  // Alarm sound + vibration loop while a prompt/escalation is on screen. Uses
+  // the shared persistent AudioContext (primed on a user gesture) so it is
+  // actually audible on iOS, including when the phone is on silent.
   const soundEnabled = data?.timings.soundEnabled ?? true
   useEffect(() => {
     if (!soundEnabled) return
     if (display !== 'prompting' && display !== 'amber' && display !== 'red') return
 
-    let ctx: AudioContext | null = null
-    const beep = () => {
-      try {
-        const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-        ctx = ctx || new AC()
-        if (ctx.state === 'suspended') void ctx.resume()
-        const osc = ctx.createOscillator()
-        const gain = ctx.createGain()
-        osc.type = 'sine'
-        osc.frequency.value = display === 'red' ? 880 : display === 'amber' ? 660 : 520
-        gain.gain.setValueAtTime(0.0001, ctx.currentTime)
-        gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.03)
-        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.4)
-        osc.connect(gain).connect(ctx.destination)
-        osc.start()
-        osc.stop(ctx.currentTime + 0.42)
-      } catch {
-        /* audio blocked until user interaction — visual alert still applies */
-      }
-    }
-    beep()
+    const frequency = display === 'red' ? 880 : display === 'amber' ? 660 : 520
+    const duration = display === 'red' ? 500 : 400
     const period = display === 'red' ? 900 : display === 'amber' ? 1400 : 2500
-    const id = setInterval(beep, period)
-    return () => {
-      clearInterval(id)
-      if (ctx) void ctx.close()
+    const vibratePattern = display === 'red' ? [300, 120, 300] : display === 'amber' ? [250, 150, 250] : 200
+
+    const pulse = () => {
+      playAlarmTone(frequency, duration)
+      buzz(vibratePattern)
     }
+    pulse()
+    const id = setInterval(pulse, period)
+    return () => clearInterval(id)
   }, [display, soundEnabled])
 
   const onConfirm = useCallback(async () => {
+    // This tap is a user gesture — (re)unlock audio for the next check-in cycle.
+    primeAlarm()
     setConfirming(true)
     const res = await confirmSafe()
     setConfirming(false)

@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useShiftGate } from '@/components/dashboard/tasks/use-shift-gate'
 import { useRouter } from 'next/navigation'
 import { CompletedReportActions } from '@/components/dashboard/reports/completed-report-actions'
 import { Button } from '@/components/ui/button'
@@ -156,6 +157,7 @@ export function DamperTaskExecution({
   const [showDone, setShowDone] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+  const { ensureOnShift, checking: checkingShift, shiftGateDialog } = useShiftGate()
 
   const [states, setStates] = useState<Record<string, InspectionState>>(() => {
     const map: Record<string, InspectionState> = {}
@@ -228,6 +230,7 @@ export function DamperTaskExecution({
   }
 
   const handleStart = async () => {
+    if (!(await ensureOnShift())) return
     await supabase
       .from('tasks')
       .update({ status: 'in_progress', started_at: new Date().toISOString(), updated_at: new Date().toISOString() })
@@ -448,11 +451,17 @@ export function DamperTaskExecution({
       {preAttendance}
 
       {status === 'pending' && canEdit && (
-        <Button onClick={handleStart} size="lg" className="w-full">
-          <Play className="mr-2 h-5 w-5" />
+        <Button onClick={handleStart} disabled={checkingShift} size="lg" className="w-full">
+          {checkingShift ? (
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+          ) : (
+            <Play className="mr-2 h-5 w-5" />
+          )}
           Start Inspection
         </Button>
       )}
+
+      {shiftGateDialog}
 
       {(status === 'in_progress' || status === 'completed') && (
         <>

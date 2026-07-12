@@ -37,6 +37,7 @@ import {
   findNearbyOverdueCalls,
   type NearbyOverdueCall,
 } from '@/app/(dashboard)/dashboard/nearby/actions'
+import { useShiftGate } from '@/components/dashboard/tasks/use-shift-gate'
 import { isNonRecurringCall } from '@/lib/follow-up'
 import { formatDateUK, cn } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
@@ -262,6 +263,8 @@ export function TaskExecution({
   const [bookingVisit, setBookingVisit] = useState(false)
   const [bookError, setBookError] = useState<string | null>(null)
   const [bookSaved, setBookSaved] = useState(false)
+  // Lone-worker gate: blocks starting a call until the engineer's shift is on.
+  const { ensureOnShift, checking: checkingShift, shiftGateDialog } = useShiftGate()
   const router = useRouter()
   const supabase = createClient()
 
@@ -302,6 +305,9 @@ export function TaskExecution({
   }
 
   const handleStartTask = async () => {
+    // Lone workers must be on shift (safety check-ins active) before starting.
+    if (!(await ensureOnShift())) return
+
     await supabase
       .from('tasks')
       .update({
@@ -810,8 +816,17 @@ export function TaskExecution({
       {/* Start Task — the primary action, kept prominent and above the
           optional booking panel so engineers can begin in one tap. */}
       {status === 'pending' && canEdit && (
-        <Button onClick={handleStartTask} size="lg" className="h-14 w-full text-base font-bold">
-          <Play className="mr-2 h-5 w-5" />
+        <Button
+          onClick={handleStartTask}
+          disabled={checkingShift}
+          size="lg"
+          className="h-14 w-full text-base font-bold"
+        >
+          {checkingShift ? (
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+          ) : (
+            <Play className="mr-2 h-5 w-5" />
+          )}
           Start Inspection
         </Button>
       )}
@@ -1304,6 +1319,9 @@ export function TaskExecution({
       <TaskAttachments taskId={task.id} profile={profile} />
 
       {/* Submit Confirmation Dialog */}
+      {/* Lone-worker shift gate — blocks starting a call until on shift. */}
+      {shiftGateDialog}
+
       <AlertDialog open={showSubmitDialog} onOpenChange={setShowSubmitDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>

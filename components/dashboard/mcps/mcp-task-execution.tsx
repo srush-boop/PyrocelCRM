@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useShiftGate } from '@/components/dashboard/tasks/use-shift-gate'
 import { useRouter } from 'next/navigation'
 import { TaskHeader } from '@/components/dashboard/tasks/task-header'
 import { PauseResumeControls } from '@/components/dashboard/tasks/pause-resume-controls'
@@ -121,6 +122,7 @@ export function McpTaskExecution({
   const [noAccessNotes, setNoAccessNotes] = useState('')
   const router = useRouter()
   const supabase = createClient()
+  const { ensureOnShift, checking: checkingShift, shiftGateDialog } = useShiftGate()
 
   // Engineers can register new call points during the test, so keep a local
   // copy of the register that we can append to without losing in-progress state.
@@ -210,6 +212,7 @@ export function McpTaskExecution({
   const dueDone = !nextMcp || Boolean(states[nextMcp.id]?.touched)
 
   const handleStart = async () => {
+    if (!(await ensureOnShift())) return
     await supabase
       .from('tasks')
       .update({ status: 'in_progress', started_at: new Date().toISOString(), updated_at: new Date().toISOString() })
@@ -397,6 +400,8 @@ export function McpTaskExecution({
   // automatically if the engineer hasn't pressed Start yet).
   const handleAllTestedOk = async () => {
     if (!nextMcp) return
+    // This shortcut auto-starts the task when pending, so apply the same gate.
+    if (status === 'pending' && !(await ensureOnShift())) return
     setSubmitting(true)
 
     if (status === 'pending') {
@@ -567,11 +572,17 @@ export function McpTaskExecution({
       )}
 
       {status === 'pending' && canEdit && (
-        <Button onClick={handleStart} size="lg" className="w-full">
-          <Play className="mr-2 h-5 w-5" />
+        <Button onClick={handleStart} disabled={checkingShift} size="lg" className="w-full">
+          {checkingShift ? (
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+          ) : (
+            <Play className="mr-2 h-5 w-5" />
+          )}
           Start Test
         </Button>
       )}
+
+      {shiftGateDialog}
 
       {(status === 'in_progress' || status === 'completed') && (
         <>

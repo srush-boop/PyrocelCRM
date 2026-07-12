@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useShiftGate } from '@/components/dashboard/tasks/use-shift-gate'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -104,6 +105,7 @@ export function EmergencyLightTaskExecution({
   const [showDone, setShowDone] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+  const { ensureOnShift, checking: checkingShift, shiftGateDialog } = useShiftGate()
 
   // Engineers can register new fittings during the inspection, so keep a local
   // copy of the register that we can append to without losing in-progress state.
@@ -193,6 +195,7 @@ export function EmergencyLightTaskExecution({
   }, [lightList, search, states])
 
   const handleStart = async () => {
+    if (!(await ensureOnShift())) return
     await supabase
       .from('tasks')
       .update({
@@ -388,11 +391,17 @@ export function EmergencyLightTaskExecution({
       {preAttendance}
 
       {status === 'pending' && canEdit && (
-        <Button onClick={handleStart} size="lg" className="w-full">
-          <Play className="mr-2 h-5 w-5" />
+        <Button onClick={handleStart} disabled={checkingShift} size="lg" className="w-full">
+          {checkingShift ? (
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+          ) : (
+            <Play className="mr-2 h-5 w-5" />
+          )}
           Start Inspection
         </Button>
       )}
+
+      {shiftGateDialog}
 
       {(status === 'in_progress' || status === 'completed') && (
         <>

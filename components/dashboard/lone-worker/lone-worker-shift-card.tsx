@@ -122,6 +122,13 @@ export function LoneWorkerShiftCard() {
   const session = data.session
   const onShift = session?.status === 'active'
 
+  // Engineers may only REDUCE the interval below the configured default (check
+  // in more often), never extend it. Offer the default plus any shorter presets.
+  const defaultInterval = data.timings.checkinMinutes
+  const intervalChoices = Array.from(
+    new Set([...INTERVAL_OPTIONS.filter((m) => m <= defaultInterval), defaultInterval]),
+  ).sort((a, b) => a - b)
+
   // Not eligible (role off, disabled, or on leave): show a quiet informative card.
   if (!data.eligible && !onShift) {
     return (
@@ -232,15 +239,16 @@ export function LoneWorkerShiftCard() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {INTERVAL_OPTIONS.map((m) => (
+                  {intervalChoices.map((m) => (
                     <SelectItem key={m} value={String(m)}>
-                      Every {m} minutes
+                      Every {m} minutes{m === defaultInterval ? ' (default)' : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Increase the frequency (shorter interval) when working in higher-risk conditions.
+                Check in more often (shorter interval) when working in higher-risk conditions. You
+                cannot set it longer than the {defaultInterval}-minute default.
               </p>
             </div>
 

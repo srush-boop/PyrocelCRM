@@ -22,6 +22,8 @@ import { SiteLogbook } from '@/components/dashboard/sites/site-logbook'
 import { SiteDocuments } from '@/components/dashboard/sites/site-documents'
 import { SiteEngineerInfoTab } from '@/components/dashboard/sites/site-engineer-info-tab'
 import { getOwnerDocuments } from '@/lib/documents/data'
+import { forecastCalls } from '@/lib/forecast'
+import { toDateString } from '@/lib/scheduling'
 import { CreateDocumentButton } from '@/components/documents/create-document-dialog'
 import { AddRequestButton } from '@/components/dashboard/requests/add-request-button'
 import { EntityRequestsCard } from '@/components/dashboard/requests/entity-requests-card'
@@ -345,37 +347,37 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
     ((openPoReqs || []) as { task_id: string }[]).map((r) => r.task_id),
   ).size
 
-  // Service calls expected in the next 6 months (pending scheduled visits).
+  // Service calls expected in the next 6 months. This projects each recurring
+  // service's cadence — so calls that are DUE TO BE GENERATED (but whose task
+  // row doesn't exist yet) still appear as "forecast", alongside already-created
+  // calls that can be booked inline.
   const overviewToday = new Date()
   overviewToday.setHours(0, 0, 0, 0)
   const overviewHorizon = new Date(overviewToday)
   overviewHorizon.setMonth(overviewHorizon.getMonth() + 6)
-  const upcomingVisits: UpcomingVisit[] = allCalls
-    .filter((c) => {
-      if (c.status !== 'pending' || !c.scheduled_date) return false
-      const d = new Date(c.scheduled_date)
-      return d >= overviewToday && d <= overviewHorizon
-    })
-    .sort((a, b) => ((a.scheduled_date ?? '') < (b.scheduled_date ?? '') ? -1 : 1))
-    .map((c) => {
-      const system =
-        c.system_type ??
-        c.site_service?.service_type?.system_type ??
-        c.service_type?.system_type ??
-        null
-      const ss = c.site_service
-      const isWeeklyRecurring =
-        !!ss && ss.frequency_unit === 'weeks' && (ss.frequency_value ?? 1) === 1
+  const forecastRows = await forecastCalls(
+    toDateString(overviewToday),
+    toDateString(overviewHorizon),
+    { siteId: id },
+  )
+  const upcomingVisits: UpcomingVisit[] = forecastRows
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+    .map((r) => {
+      const isWeeklyRecurring = r.frequencyUnit === 'weeks' && r.frequencyValue === 1
+      const serviceName = r.visitName
+        ? `${r.serviceTypeName} · ${r.visitName}`
+        : r.serviceTypeName
       return {
-        id: c.id,
-        serviceName:
-          c.site_service?.service_type?.name ?? c.service_type?.name ?? 'Service visit',
-        systemName: system?.name ?? null,
-        systemColor: system?.color ?? null,
-        systemCode: system?.code ?? null,
-        scheduledDate: c.scheduled_date as string,
-        bookedStartTime: c.booked_start_time ?? null,
-        bookedEndTime: c.booked_end_time ?? null,
+        key: r.taskId ?? `${r.siteServiceId}|${r.visitTypeId ?? 'none'}|${r.date}`,
+        taskId: r.taskId,
+        status: r.status,
+        serviceName,
+        systemName: r.systemTypeName,
+        systemColor: r.systemColor,
+        systemCode: r.systemCode,
+        scheduledDate: r.date,
+        bookedStartTime: r.bookedStartTime,
+        bookedEndTime: r.bookedEndTime,
         isWeeklyRecurring,
       }
     })

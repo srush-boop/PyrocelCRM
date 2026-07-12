@@ -334,6 +334,9 @@ export function SiteServicesManager({
 
     setSavingEdit(false)
     setEditingId(null)
+    // Drop the ?editService= param (mirrors the dialog's onOpenChange) so the
+    // auto-open effect doesn't reopen the dialog when the refresh re-renders.
+    if (initialEditServiceId) router.replace(pathname)
     router.refresh()
   }
 

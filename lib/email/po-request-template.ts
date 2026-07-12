@@ -72,6 +72,30 @@ export function buildPoRequestEmailHtml(options: PoRequestEmailContent): string 
           .join('')
       : '<tr><td colspan="4" style="color:#888;padding:6px 0;">No parts recorded</td></tr>'
 
+  // Brief, human-readable summary of parts used (e.g. "2× Smoke detector, 1× Battery").
+  const partsSummary =
+    options.parts.length > 0
+      ? options.parts.map((p) => `${p.quantity}× ${esc(p.name)}`).join(', ')
+      : 'No parts recorded'
+
+  // "Reason for charge" — a narrative overview of work done + parts used, shown
+  // directly beneath the charge summary. Only rendered when we have something
+  // meaningful to say (engineer notes and/or parts).
+  const reasonBlock =
+    options.engineerNotes || options.parts.length > 0
+      ? `<div style="margin-bottom:20px;padding:14px 16px;background:#f9f9f9;border:1px solid #e5e5e5;border-radius:6px;">
+          <p style="margin:0 0 10px;font-size:14px;font-weight:600;color:#333;">Reason for charge</p>
+          ${
+            options.engineerNotes
+              ? `<p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#666;">Work carried out</p>
+                 <p style="margin:0 0 12px;font-size:14px;color:#333;white-space:pre-line;">${esc(options.engineerNotes)}</p>`
+              : ''
+          }
+          <p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#666;">Parts used</p>
+          <p style="margin:0;font-size:14px;color:#333;">${partsSummary}</p>
+        </div>`
+      : ''
+
   const priorBlock =
     options.priorRequests.length > 1
       ? `<div style="margin:24px 0 0;padding:16px;background:#fff8e7;border:1px solid #f59e0b;border-radius:6px;">
@@ -135,7 +159,7 @@ export function buildPoRequestEmailHtml(options: PoRequestEmailContent): string 
             </td></tr>
           </table>
 
-          ${options.engineerNotes ? `<div style="margin-bottom:20px;padding:12px 16px;background:#f9f9f9;border:1px solid #e5e5e5;border-radius:6px;"><p style="margin:0 0 6px;font-size:13px;font-weight:600;color:#444;">Works carried out:</p><p style="margin:0;font-size:14px;color:#333;white-space:pre-line;">${esc(options.engineerNotes)}</p></div>` : ''}
+          ${reasonBlock}
 
           ${
             options.parts.length > 0

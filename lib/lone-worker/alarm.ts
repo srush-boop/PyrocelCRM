@@ -19,6 +19,7 @@ type WebkitWindow = Window & { webkitAudioContext?: typeof AudioContext }
 type AudioSessionNav = Navigator & { audioSession?: { type?: string } }
 
 let ctx: AudioContext | null = null
+let masterGain: GainNode | null = null
 let unlocked = false
 let gestureListenerInstalled = false
 
@@ -34,6 +35,27 @@ function getCtx(): AudioContext | null {
     }
   }
   return ctx
+}
+
+/**
+ * A shared output chain: master gain → limiter → destination. The limiter lets
+ * us drive the level hard (loud alarm) while catching peaks so it stays clear
+ * instead of distorting. Created lazily once per context.
+ */
+function getOutputNode(c: AudioContext): AudioNode {
+  if (masterGain) return masterGain
+  const gain = c.createGain()
+  gain.gain.value = 1
+  const limiter = c.createDynamicsCompressor()
+  // Aggressive limiter settings so the loud tone stays controlled.
+  limiter.threshold.value = -6
+  limiter.knee.value = 0
+  limiter.ratio.value = 20
+  limiter.attack.value = 0.002
+  limiter.release.value = 0.1
+  gain.connect(limiter).connect(c.destination)
+  masterGain = gain
+  return gain
 }
 
 // Ask iOS to treat our audio as playback so it ignores the mute switch.
@@ -74,25 +96,52 @@ export function isAlarmUnlocked(): boolean {
   return unlocked
 }
 
-/** Play a single alarm tone. No-op if audio was never unlocked. */
+/**
+ * Play a single alarm tone. No-op if audio was never unlocked.
+ *
+ * For maximum audibility on a phone speaker we:
+ *   - use a square wave (far louder/harsher than a sine at the same level),
+ *   - layer a detuned sawtooth so the tone cuts through ambient noise,
+ *   - hold the tone at a high, near-constant level (a sustained tone reads as
+ *     much louder than one that decays), and
+ *   - route through the shared limiter so the high level stays clean.
+ */
 export function playAlarmTone(frequency: number, durationMs = 400): void {
   const c = getCtx()
   if (!c) return
   // Best-effort resume in case iOS suspended it; only works while foregrounded.
   if (c.state === 'suspended') void c.resume()
   try {
-    const osc = c.createOscillator()
-    const gain = c.createGain()
-    osc.type = 'sine'
-    osc.frequency.value = frequency
+    const out = getOutputNode(c)
     const t = c.currentTime
     const dur = durationMs / 1000
+
+    const gain = c.createGain()
+    // Short attack, long hold near peak, short release — no long fade-out.
+    const peak = 0.9
     gain.gain.setValueAtTime(0.0001, t)
-    gain.gain.exponentialRampToValueAtTime(0.3, t + 0.03)
+    gain.gain.exponentialRampToValueAtTime(peak, t + 0.008)
+    gain.gain.setValueAtTime(peak, t + Math.max(0.02, dur - 0.03))
     gain.gain.exponentialRampToValueAtTime(0.0001, t + dur)
-    osc.connect(gain).connect(c.destination)
+    gain.connect(out)
+
+    // Primary square tone.
+    const osc = c.createOscillator()
+    osc.type = 'square'
+    osc.frequency.value = frequency
+    osc.connect(gain)
     osc.start(t)
     osc.stop(t + dur + 0.02)
+
+    // Detuned sawtooth layer an octave up for extra bite/presence.
+    const osc2 = c.createOscillator()
+    osc2.type = 'sawtooth'
+    osc2.frequency.value = frequency * 2
+    const gain2 = c.createGain()
+    gain2.gain.value = 0.35
+    osc2.connect(gain2).connect(gain)
+    osc2.start(t)
+    osc2.stop(t + dur + 0.02)
   } catch {
     /* ignore */
   }

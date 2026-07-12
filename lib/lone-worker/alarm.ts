@@ -22,6 +22,8 @@ let ctx: AudioContext | null = null
 let masterGain: GainNode | null = null
 let unlocked = false
 let gestureListenerInstalled = false
+let keepAliveSrc: OscillatorNode | null = null
+let visibilityHandlerInstalled = false
 
 function getCtx(): AudioContext | null {
   if (typeof window === 'undefined') return null
@@ -58,6 +60,41 @@ function getOutputNode(c: AudioContext): AudioNode {
   return gain
 }
 
+/**
+ * Keep the AudioContext from being suspended by iOS while idle. We run a
+ * permanent, effectively-silent oscillator: as long as a source is playing the
+ * context stays in the "running" state, so a beep fired later by the check-in
+ * timer (which is NOT a user gesture) is heard immediately instead of being
+ * swallowed by a suspended context. Started from primeAlarm() (a gesture).
+ */
+function startKeepAlive(c: AudioContext) {
+  if (keepAliveSrc) return
+  try {
+    const osc = c.createOscillator()
+    const gain = c.createGain()
+    // Inaudible level — just enough to keep the audio pipeline alive.
+    gain.gain.value = 0.0001
+    osc.frequency.value = 20
+    osc.connect(gain).connect(c.destination)
+    osc.start()
+    keepAliveSrc = osc
+  } catch {
+    /* ignore */
+  }
+}
+
+// Re-resume the context whenever the tab returns to the foreground, since iOS
+// suspends it while backgrounded. Installed once.
+function installVisibilityResume() {
+  if (typeof document === 'undefined' || visibilityHandlerInstalled) return
+  visibilityHandlerInstalled = true
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && ctx && ctx.state === 'suspended') {
+      void ctx.resume()
+    }
+  })
+}
+
 // Ask iOS to treat our audio as playback so it ignores the mute switch.
 function configureAudioSession() {
   try {
@@ -87,6 +124,9 @@ export function primeAlarm(): void {
     src.connect(c.destination)
     src.start(0)
     unlocked = true
+    // Keep the context alive so timer-fired beeps are heard without a tap.
+    startKeepAlive(c)
+    installVisibilityResume()
   } catch {
     /* ignore */
   }

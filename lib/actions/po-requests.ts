@@ -249,6 +249,100 @@ export async function sendPoRequestEmail(
   return { error: null }
 }
 
+export interface PoAuthorisationStatus {
+  error: string | null
+  /**
+   * - 'open': no PO on file / call still open → show the entry form.
+   * - 'already_provided': a PO has already been provided AND the call is closed
+   *   (invoiced) → show the client the existing PO number + provider, read-only.
+   * - 'not_found': token doesn't match any request.
+   */
+  state?: 'open' | 'already_provided' | 'not_found'
+  poNumber?: string | null
+  authorisedByName?: string | null
+  authorisedAt?: string | null
+  siteName?: string | null
+  referenceNumber?: string | null
+}
+
+/**
+ * Public lookup for the authorise page. Determines whether the client should see
+ * the PO entry form, or a read-only confirmation that a PO has already been
+ * provided and the call closed (invoiced) — in which case we surface the existing
+ * PO number and the name of whoever provided it.
+ */
+export async function getPoAuthorisationStatus(
+  token: string,
+): Promise<PoAuthorisationStatus> {
+  const { createClient: createServiceClient } = await import('@/lib/supabase/server')
+  const supabase = await createServiceClient()
+
+  // Resolve the token to its request + parent task.
+  const { data: reqRow, error: reqError } = await supabase
+    .from('po_requests')
+    .select('id, task_id')
+    .eq('authorisation_token', token)
+    .maybeSingle()
+
+  if (reqError) return { error: reqError.message }
+  if (!reqRow) return { error: null, state: 'not_found' }
+
+  const taskId = (reqRow as { task_id: string }).task_id
+
+  // Is the call closed (invoiced)?
+  const { data: task } = await supabase
+    .from('tasks')
+    .select('charge_invoiced_at, task_results(reference_number)')
+    .eq('id', taskId)
+    .maybeSingle()
+
+  const t = task as
+    | { charge_invoiced_at: string | null; task_results: { reference_number: string | null }[] | { reference_number: string | null } | null }
+    | null
+  const invoiced = !!t?.charge_invoiced_at
+  const trArr = Array.isArray(t?.task_results)
+    ? t?.task_results
+    : t?.task_results
+      ? [t.task_results]
+      : []
+  const referenceNumber = trArr[0]?.reference_number ?? null
+
+  // Any authorised PO already on file for this call?
+  const { data: authorised } = await supabase
+    .from('po_requests')
+    .select('po_number, authorised_by_name, authorised_at, task_id, tasks(site_id, sites(name))')
+    .eq('task_id', taskId)
+    .not('authorised_at', 'is', null)
+    .not('po_number', 'is', null)
+    .order('authorised_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const a = authorised as
+    | {
+        po_number: string | null
+        authorised_by_name: string | null
+        authorised_at: string | null
+        tasks: { sites: { name: string | null } | null } | null
+      }
+    | null
+
+  // Only lock to read-only when a PO has been provided AND the call is closed.
+  if (a && invoiced) {
+    return {
+      error: null,
+      state: 'already_provided',
+      poNumber: a.po_number,
+      authorisedByName: a.authorised_by_name,
+      authorisedAt: a.authorised_at,
+      siteName: a.tasks?.sites?.name ?? null,
+      referenceNumber,
+    }
+  }
+
+  return { error: null, state: 'open', referenceNumber }
+}
+
 /** Record that the client has authorised the PO request with a PO number/name. */
 export async function authorisePoRequest(
   token: string,

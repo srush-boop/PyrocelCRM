@@ -360,9 +360,22 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
     toDateString(overviewHorizon),
     { siteId: id },
   )
-  const upcomingVisits: UpcomingVisit[] = forecastRows
-    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
-    .map((r) => {
+  // Group by service (site-service + visit type) so each service appears once,
+  // represented by its soonest occurrence. Any further occurrences within the
+  // window are collapsed into an `otherDates` note. Groups are ordered by their
+  // soonest date so the most imminent calls are prioritised at the top.
+  const forecastGroups = new Map<string, typeof forecastRows>()
+  for (const r of forecastRows) {
+    const gk = `${r.siteServiceId}|${r.visitTypeId ?? 'none'}`
+    const arr = forecastGroups.get(gk)
+    if (arr) arr.push(r)
+    else forecastGroups.set(gk, [r])
+  }
+  const upcomingVisits: UpcomingVisit[] = Array.from(forecastGroups.values())
+    .map((group) => group.slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)))
+    .sort((a, b) => (a[0].date < b[0].date ? -1 : a[0].date > b[0].date ? 1 : 0))
+    .map((group) => {
+      const r = group[0]
       const isWeeklyRecurring = r.frequencyUnit === 'weeks' && r.frequencyValue === 1
       const serviceName = r.visitName
         ? `${r.serviceTypeName} · ${r.visitName}`
@@ -379,6 +392,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
         bookedStartTime: r.bookedStartTime,
         bookedEndTime: r.bookedEndTime,
         isWeeklyRecurring,
+        otherDates: group.slice(1).map((o) => o.date),
       }
     })
 

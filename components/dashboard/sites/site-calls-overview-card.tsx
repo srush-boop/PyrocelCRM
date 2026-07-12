@@ -41,6 +41,8 @@ export interface UpcomingVisit {
   bookedEndTime: string | null
   /** Weekly recurring PPM calls can't be booked as an individual appointment. */
   isWeeklyRecurring: boolean
+  /** Further occurrences of this same service within the window (ISO dates). */
+  otherDates: string[]
 }
 
 interface SiteCallsOverviewCardProps {
@@ -284,6 +286,12 @@ export function SiteCallsOverviewCard({
                           </>
                         )}
                       </p>
+                      {visit.otherDates.length > 0 && (
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground/80">
+                          {visit.otherDates.length === 1 ? 'Also due ' : `+${visit.otherDates.length} more: `}
+                          {visit.otherDates.map((d) => formatDateUK(d)).join(', ')}
+                        </p>
+                      )}
                     </div>
                     {visit.isWeeklyRecurring ? (
                       <Badge variant="outline" className="shrink-0 text-xs font-normal">

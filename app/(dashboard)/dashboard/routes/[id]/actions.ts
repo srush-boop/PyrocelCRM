@@ -179,9 +179,15 @@ export async function getRouteMapData(
   }
 
   // Backfill + cache missing site coordinates.
-  const rawSites = services
-    .map((s) => rel(s.site))
-    .filter((s): s is NonNullable<ReturnType<typeof rel>> => Boolean(s))
+  type RawSite = {
+    id: string
+    address: string | null
+  }
+  const rawSites: RawSite[] = []
+  for (const s of services) {
+    const site = rel(s.site)
+    if (site) rawSites.push({ id: site.id, address: site.address })
+  }
   const needGeocode = Array.from(stopMap.values()).filter(
     (st) => !st.hasLocation && st.postcode,
   )

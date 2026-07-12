@@ -32,9 +32,14 @@ import {
   Loader2,
   AlertCircle,
   Mail,
+  X,
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
-import { addPoRequest, sendPoRequestEmail } from '@/lib/actions/po-requests'
+import {
+  addPoRequest,
+  sendPoRequestEmail,
+  getPoRequestPreview,
+} from '@/lib/actions/po-requests'
 import type { PurchaseOrderRequest } from '@/lib/types/database'
 
 interface PoRequestLogProps {

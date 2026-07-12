@@ -226,6 +226,14 @@ export function InvoiceDetail({
               </Table>
             </div>
 
+            {isDraft && (
+              <p className="text-xs text-muted-foreground">
+                Call-out and labour lines are auto-priced from the account&apos;s rate card. Adjust
+                the labour <span className="font-medium">Qty</span> (hours) to account for travel
+                time or on-site adjustments before issuing.
+              </p>
+            )}
+
             {isDraft && <AddLineForm invoiceId={invoice.id} onAdded={() => router.refresh()} />}
           </CardContent>
         </Card>

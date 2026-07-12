@@ -25,6 +25,8 @@ import { AvatarManager } from './avatar-manager'
 import { BulkDataSettings } from './bulk-data-settings'
 import { GlobalConfigSettings } from './global-config-settings'
 import { LoneWorkerSettings } from './lone-worker-settings'
+import { RateCardsSettings } from './rate-cards-settings'
+import type { RateCard } from '@/lib/billing/rate-cards'
 import { signatureSrc } from '@/lib/blob'
 
 interface SettingsContentProps {
@@ -42,9 +44,11 @@ interface SettingsContentProps {
   canManageLoneWorker: boolean
   loneWorkerUsers: LoneWorkerManagedUser[]
   loneWorkerTimings: LoneWorkerTimings
+  canManageRates: boolean
+  rateCards: RateCard[]
 }
 
-export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings }: SettingsContentProps) {
+export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards }: SettingsContentProps) {
   const isAdmin = profile.role === 'admin'
   // Templates are managed by office/admin (mail-merge letters for client correspondence).
   const canManageTemplates = profile.role === 'admin' || profile.role === 'office'
@@ -186,6 +190,12 @@ export function SettingsContent({ user, profile, company, branches, departments,
           <TabsTrigger value="lone-worker" className="gap-2">
             <ShieldCheck className="h-4 w-4" />
             Lone Worker
+          </TabsTrigger>
+        )}
+        {canManageRates && (
+          <TabsTrigger value="rates" className="gap-2">
+            <Receipt className="h-4 w-4" />
+            Rates
           </TabsTrigger>
         )}
       </TabsList>
@@ -412,6 +422,12 @@ export function SettingsContent({ user, profile, company, branches, departments,
             users={loneWorkerUsers}
             isAdmin={isAdmin}
           />
+        </TabsContent>
+      )}
+
+      {canManageRates && (
+        <TabsContent value="rates" className="space-y-4">
+          <RateCardsSettings rateCards={rateCards} />
         </TabsContent>
       )}
 

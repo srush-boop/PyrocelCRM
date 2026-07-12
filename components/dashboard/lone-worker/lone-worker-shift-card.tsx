@@ -3,7 +3,7 @@
 import { useCallback, useState, useTransition } from 'react'
 import useSWR from 'swr'
 import { toast } from 'sonner'
-import { ShieldCheck, ShieldAlert, Play, Square, Clock, Gauge, Loader2 } from 'lucide-react'
+import { ShieldCheck, ShieldAlert, Play, Square, Clock, Gauge, Loader2, Volume2 } from 'lucide-react'
 import {
   Card,
   CardContent,
@@ -29,6 +29,7 @@ import {
   setCheckinInterval,
 } from '@/app/(dashboard)/dashboard/lone-worker/actions'
 import { formatShiftTime, type MyLoneWorkerState } from '@/lib/lone-worker/types'
+import { primeAlarm, playAlarmTone, buzz } from '@/lib/lone-worker/alarm'
 
 // Frequency presets the worker can raise to when risk increases.
 const INTERVAL_OPTIONS = [15, 30, 45, 60, 90, 120]
@@ -50,6 +51,9 @@ export function LoneWorkerShiftCard() {
   const seededEnd = end || data?.defaultShiftEnd || '17:00'
 
   const onStart = useCallback(() => {
+    // Unlock alarm audio now, while we still have the user's tap gesture — iOS
+    // blocks Web Audio that isn't primed inside a gesture.
+    primeAlarm()
     startStarting(async () => {
       const res = await startShift({ shiftStart: seededStart, shiftEnd: seededEnd })
       if (res.error) {
@@ -72,6 +76,16 @@ export function LoneWorkerShiftCard() {
       await mutate()
     })
   }, [mutate])
+
+  // Lets the worker confirm the alarm is audible on this device — and, being a
+  // tap, primes the audio context so real check-in alarms will sound on iOS.
+  const onTestAlarm = useCallback(() => {
+    primeAlarm()
+    playAlarmTone(660, 400)
+    buzz([200, 120, 200])
+    setTimeout(() => playAlarmTone(880, 400), 550)
+    toast.success('If you did not hear a tone, check your ringer/volume and try again')
+  }, [])
 
   const onChangeInterval = useCallback(
     async (value: string) => {
@@ -230,15 +244,25 @@ export function LoneWorkerShiftCard() {
               </p>
             </div>
 
-            <Button
-              onClick={onFinish}
-              disabled={finishing}
-              variant="outline"
-              className="w-full gap-2"
-            >
-              {finishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
-              Finish shift
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                onClick={onTestAlarm}
+                variant="outline"
+                className="flex-1 gap-2"
+              >
+                <Volume2 className="h-4 w-4" />
+                Test alarm
+              </Button>
+              <Button
+                onClick={onFinish}
+                disabled={finishing}
+                variant="outline"
+                className="flex-1 gap-2"
+              >
+                {finishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
+                Finish shift
+              </Button>
+            </div>
           </>
         )}
 

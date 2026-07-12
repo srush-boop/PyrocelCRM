@@ -139,6 +139,62 @@ export interface BillingAccount {
   client?: Client
 }
 
+// ---- Invoicing (Phase 3) ------------------------------------------------
+export type InvoiceStatus = 'draft' | 'issued' | 'paid' | 'void'
+export type InvoiceLineKind = 'labour' | 'part' | 'other'
+
+// A CRM-owned invoice, built from reviewed chargeable calls grouped under one
+// billing account. Amounts are stored in integer pence.
+export interface Invoice {
+  id: string
+  invoice_number: string
+  financial_year: number
+  sequence: number
+  billing_account_id: string | null
+  client_id: string | null
+  status: InvoiceStatus
+  // Bill-to snapshot taken at issue time (the billing account can change later).
+  bill_to_name: string | null
+  bill_to_address: string | null
+  bill_to_email: string | null
+  sage_account_ref: string | null
+  issue_date: string | null
+  due_date: string | null
+  payment_terms_days: number
+  tax_rate: number
+  subtotal_pence: number
+  tax_pence: number
+  total_pence: number
+  notes: string | null
+  issued_at: string | null
+  issued_by: string | null
+  paid_at: string | null
+  paid_by: string | null
+  voided_at: string | null
+  voided_by: string | null
+  void_reason: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  line_items?: InvoiceLineItem[]
+  billing_account?: BillingAccount | null
+  client?: Client | null
+}
+
+export interface InvoiceLineItem {
+  id: string
+  invoice_id: string
+  task_id: string | null
+  part_id: string | null
+  kind: InvoiceLineKind
+  description: string
+  quantity: number
+  unit_price_pence: number
+  amount_pence: number
+  sort_order: number
+  created_at: string
+}
+
 // A single day's working hours. `start`/`end` are 24h "HH:MM" strings and
 // `break_minutes` is the unpaid break to deduct when computing net hours.
 export interface WorkDayHoursEntry {

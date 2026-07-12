@@ -119,43 +119,6 @@ export async function EngineerHome({ profile }: { profile: Profile }) {
         </p>
       </div>
 
-      {/* Daily fact */}
-      <Card className="border-primary/30 bg-primary/5">
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Lightbulb className="h-5 w-5 text-primary" />
-            Did you know?
-          </CardTitle>
-          <CardDescription>A daily fact about the systems we service</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-pretty leading-relaxed">{fact}</p>
-        </CardContent>
-      </Card>
-
-      {/* Day ahead summary */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <SummaryTile
-          icon={Calendar}
-          label="Calls today"
-          value={todayTasks.length}
-        />
-        <SummaryTile
-          icon={Clock}
-          label="Still to do"
-          value={remaining.length}
-          alert={remaining.length > 0}
-        />
-        <SummaryTile
-          icon={CheckCircle2}
-          label="Completed today"
-          value={doneToday}
-        />
-      </div>
-
-      {/* Encouragement: your standing in the department */}
-      {engagementStats && <EngineerStandingCard stats={engagementStats} />}
-
       {/* Lone worker safety — start/finish shift and check-in frequency */}
       <LoneWorkerShiftCard />
 
@@ -261,7 +224,30 @@ export async function EngineerHome({ profile }: { profile: Profile }) {
         </CardContent>
       </Card>
 
-      {/* Location sharing — engineers only */}
+      {/* Call count summary — compact so it doesn't dominate the home screen */}
+      <div className="grid grid-cols-3 gap-3">
+        <SummaryTile
+          icon={Calendar}
+          label="Calls today"
+          value={todayTasks.length}
+        />
+        <SummaryTile
+          icon={Clock}
+          label="Still to do"
+          value={remaining.length}
+          alert={remaining.length > 0}
+        />
+        <SummaryTile
+          icon={CheckCircle2}
+          label="Completed today"
+          value={doneToday}
+        />
+      </div>
+
+      {/* Encouragement: your standing in the department */}
+      {engagementStats && <EngineerStandingCard stats={engagementStats} />}
+
+      {/* Location sharing — engineers only. Kept on for health & safety. */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
@@ -269,13 +255,28 @@ export async function EngineerHome({ profile }: { profile: Profile }) {
             Location sharing
           </CardTitle>
           <CardDescription>
-            Promotes efficiency and teamwork when out on the road
+            Kept on for health &amp; safety reasons, so we can reach you quickly and
+            send help to your location if something goes wrong on the road.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <LocationSharingToggle
             initialEnabled={profile.location_sharing_enabled ?? false}
           />
+        </CardContent>
+      </Card>
+
+      {/* Daily fact */}
+      <Card className="border-primary/30 bg-primary/5">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Lightbulb className="h-5 w-5 text-primary" />
+            Did you know?
+          </CardTitle>
+          <CardDescription>A daily fact about the systems we service</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-pretty leading-relaxed">{fact}</p>
         </CardContent>
       </Card>
     </div>
@@ -295,17 +296,17 @@ function SummaryTile({
 }) {
   return (
     <Card className={alert ? 'border-primary/40' : ''}>
-      <CardContent className="flex items-center gap-3 py-4">
+      <CardContent className="flex flex-col items-center gap-1 px-2 py-3 text-center sm:flex-row sm:gap-3 sm:text-left">
         <span
-          className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+          className={`flex h-8 w-8 items-center justify-center rounded-lg ${
             alert ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
           }`}
         >
-          <Icon className="h-5 w-5" />
+          <Icon className="h-4 w-4" />
         </span>
         <div>
-          <div className="text-2xl font-bold">{value}</div>
-          <p className="text-xs text-muted-foreground">{label}</p>
+          <div className="text-lg font-bold leading-none">{value}</div>
+          <p className="mt-1 text-[11px] leading-tight text-muted-foreground">{label}</p>
         </div>
       </CardContent>
     </Card>

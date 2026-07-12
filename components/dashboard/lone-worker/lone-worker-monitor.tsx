@@ -21,7 +21,11 @@ import {
   getMonitorData,
   officeMadeContact,
 } from '@/app/(dashboard)/dashboard/lone-worker/actions'
-import type { LoneWorkerMonitorData, LoneWorkerMonitorRow } from '@/lib/lone-worker/types'
+import {
+  formatShiftTime,
+  type LoneWorkerMonitorData,
+  type LoneWorkerMonitorRow,
+} from '@/lib/lone-worker/types'
 
 function timeAgo(iso: string | null, now: number): string {
   if (!iso) return '—'
@@ -223,7 +227,7 @@ function MonitorRow({
             <p className="font-semibold">{row.userName}</p>
             <p className="flex items-center gap-1 text-xs text-muted-foreground">
               <Clock className="h-3 w-3" />
-              Shift {row.shiftStart}–{row.shiftEnd}
+                Shift {formatShiftTime(row.shiftStart)}–{formatShiftTime(row.shiftEnd)}
             </p>
           </div>
         </div>

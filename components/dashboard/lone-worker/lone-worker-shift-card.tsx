@@ -28,7 +28,7 @@ import {
   finishShift,
   setCheckinInterval,
 } from '@/app/(dashboard)/dashboard/lone-worker/actions'
-import type { MyLoneWorkerState } from '@/lib/lone-worker/types'
+import { formatShiftTime, type MyLoneWorkerState } from '@/lib/lone-worker/types'
 
 // Frequency presets the worker can raise to when risk increases.
 const INTERVAL_OPTIONS = [15, 30, 45, 60, 90, 120]
@@ -191,7 +191,7 @@ export function LoneWorkerShiftCard() {
               <div className="rounded-lg border bg-muted/40 p-3">
                 <p className="text-xs text-muted-foreground">Shift</p>
                 <p className="font-medium tabular-nums">
-                  {session.shiftStart} – {session.shiftEnd}
+                  {formatShiftTime(session.shiftStart)} – {formatShiftTime(session.shiftEnd)}
                 </p>
               </div>
               <div className="rounded-lg border bg-muted/40 p-3">

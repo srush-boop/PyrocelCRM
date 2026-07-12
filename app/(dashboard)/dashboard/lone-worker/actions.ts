@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
-import { getLoneWorkerConfig } from '@/lib/lone-worker/config'
+import { getLoneWorkerConfig, LONE_WORKER_DEFAULTS } from '@/lib/lone-worker/config'
 import { evaluateEligibility } from '@/lib/lone-worker/eligibility'
 import {
   computeDeadlines,
@@ -428,6 +428,9 @@ export async function getLoneWorkerAdminData(): Promise<{
   users: LoneWorkerManagedUser[]
   timings: MyLoneWorkerState['timings']
 }> {
+  const { profile } = await getCaller()
+  const canManage = profile?.role === 'admin' || profile?.can_manage_lone_worker === true
+  if (!canManage) return { users: [], timings: LONE_WORKER_DEFAULTS }
   const admin = createAdminClient()
   const { timings } = await getLoneWorkerConfig(admin)
 
@@ -439,6 +442,7 @@ export async function getLoneWorkerAdminData(): Promise<{
     .eq('status', 'active')
     .order('full_name', { ascending: true })
 
+  type RoleRef = { name: string | null; lone_worker_enabled: boolean | null }
   type Row = {
     id: string
     full_name: string | null
@@ -446,19 +450,25 @@ export async function getLoneWorkerAdminData(): Promise<{
     can_manage_lone_worker: boolean
     lone_worker_disabled_until: string | null
     lone_worker_disabled_reason: string | null
-    role_ref: { name: string | null; lone_worker_enabled: boolean | null } | null
+    // Supabase may type an embedded relation as an array; normalise below.
+    role_ref: RoleRef | RoleRef[] | null
   }
 
+  // A one-to-one embed can come back as an object or a single-element array.
+  const oneRole = (r: RoleRef | RoleRef[] | null): RoleRef | null =>
+    Array.isArray(r) ? r[0] ?? null : r
+
   const now = Date.now()
-  const users: LoneWorkerManagedUser[] = ((rows ?? []) as Row[])
-    .filter((r) => r.role_ref?.lone_worker_enabled === true)
+  const users: LoneWorkerManagedUser[] = ((rows ?? []) as unknown as Row[])
+    .filter((r) => oneRole(r.role_ref)?.lone_worker_enabled === true)
     .map((r) => {
+      const role = oneRole(r.role_ref)
       const until = r.lone_worker_disabled_until
       const disabled = until != null && new Date(until).getTime() > now
       return {
         id: r.id,
         name: r.full_name || r.email || 'User',
-        roleName: r.role_ref?.name ?? null,
+        roleName: role?.name ?? null,
         onShift: false,
         disabledUntil: disabled ? until : null,
         disabledReason: disabled ? r.lone_worker_disabled_reason : null,

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { SettingsContent } from '@/components/dashboard/settings/settings-content'
 import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType, DocumentTemplate } from '@/lib/types/database'
 import { getGlobalConfigs } from '@/lib/actions/global-config'
+import { getLoneWorkerAdminData } from '@/app/(dashboard)/dashboard/lone-worker/actions'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -52,6 +53,12 @@ export default async function SettingsPage() {
   const engagementStatsEnabled =
     (globalConfig['engagement_stats_enabled'] as boolean | null) ?? true
 
+  // Lone worker admin tab: available to admins and nominated managers.
+  const canManageLoneWorker = isAdmin || (profile as Profile).can_manage_lone_worker === true
+  const loneWorkerData = canManageLoneWorker
+    ? await getLoneWorkerAdminData()
+    : { users: [], timings: { checkinMinutes: 60, amberMinutes: 5, redMinutes: 5, soundEnabled: true } }
+
   return (
     <div className="space-y-6">
       <div>
@@ -73,6 +80,9 @@ export default async function SettingsPage() {
         poOverdueDays={poOverdueDays}
         deadlineReasons={deadlineReasons}
         engagementStatsEnabled={engagementStatsEnabled}
+        canManageLoneWorker={canManageLoneWorker}
+        loneWorkerUsers={loneWorkerData.users}
+        loneWorkerTimings={loneWorkerData.timings}
       />
     </div>
   )

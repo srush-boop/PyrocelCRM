@@ -13,6 +13,7 @@ import {
   Car,
   Timer,
   Save,
+  Sparkles,
   TriangleAlert,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -27,15 +28,23 @@ import {
 } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { RouteDayTimeline } from './route-day-timeline'
+import { RouteOptimizeDialog, type ProposedRoute } from './route-optimize-dialog'
 import {
   buildDayPlan,
   legsFromMatrix,
   formatClock,
+  type DayPlan,
   type DayPlanStopInput,
   type WorkingDay,
 } from '@/lib/routes/day-plan'
+import { optimizeFromMatrix } from '@/lib/routes/optimize'
 import { formatDuration } from '@/lib/task-duration'
-import { getRouteMapData, saveRouteOrder, getRoutePolyline } from '@/app/(dashboard)/dashboard/routes/[id]/actions'
+import {
+  getRouteMapData,
+  saveRouteOrder,
+  getRoutePolyline,
+  optimizeRouteOrder,
+} from '@/app/(dashboard)/dashboard/routes/[id]/actions'
 import type { RouteMapData } from '@/app/(dashboard)/dashboard/routes/[id]/types'
 import type { CanvasStop } from './route-map-canvas'
 
@@ -83,6 +92,9 @@ export function RouteMapPlanner({ initialData }: { initialData: RouteMapData }) 
   })
   const [isLoading, startLoad] = useTransition()
   const [isSaving, startSave] = useTransition()
+  const [isOptimizing, startOptimize] = useTransition()
+  const [optimizeOpen, setOptimizeOpen] = useState(false)
+  const [proposed, setProposed] = useState<ProposedRoute | null>(null)
   const dragIndex = useRef<number | null>(null)
 
   const stopById = useMemo(() => {
@@ -139,6 +151,103 @@ export function RouteMapPlanner({ initialData }: { initialData: RouteMapData }) 
     }))
     return buildDayPlan(stops, legs, { firstArrival: FIRST_ARRIVAL, workingDay })
   }, [legs, home, locatedStops, workingDay])
+
+  // Build a day plan for an arbitrary located-stop order (used for the proposed
+  // optimised route). Scores against the SAME matrix as the live plan so the
+  // "time saved" comparison is consistent with the on-screen ETAs.
+  const buildPlanFor = useCallback(
+    (locatedIds: string[]): DayPlan | null => {
+      if (!data.matrix || !home || locatedIds.length === 0) return null
+      const orderedStopIndices = locatedIds
+        .map((id) => data.locatedStopIds.indexOf(id))
+        .filter((i) => i >= 0)
+      const lg = legsFromMatrix(
+        data.matrix.durations,
+        data.matrix.distances,
+        orderedStopIndices,
+        data.matrix.approximate,
+      )
+      const stops: DayPlanStopInput[] = locatedIds
+        .map((id) => stopById.get(id))
+        .filter((s): s is NonNullable<typeof s> => Boolean(s))
+        .map((s) => ({
+          id: s.siteId,
+          name: s.name,
+          postcode: s.postcode,
+          onSiteMinutes: s.onSiteMinutes,
+          services: s.services.map((svc) => ({
+            id: svc.id,
+            label: svc.label,
+            minutes: svc.minutes,
+            learned: svc.learned,
+            sampleSize: svc.sampleSize,
+          })),
+        }))
+      return buildDayPlan(stops, lg, { firstArrival: FIRST_ARRIVAL, workingDay })
+    },
+    [data.matrix, data.locatedStopIds, home, workingDay, stopById],
+  )
+
+  const proposedPlan = useMemo(
+    () => (proposed ? buildPlanFor(proposed.canvasStops.map((s) => s.siteId)) : null),
+    [proposed, buildPlanFor],
+  )
+
+  const canOptimize = Boolean(home) && locatedStops.length >= 2 && Boolean(data.matrix)
+
+  const handleOptimize = () => {
+    if (!home || !data.matrix || locatedStops.length < 2) {
+      toast.error('Need a CDO home postcode and at least two located stops to optimise.')
+      return
+    }
+    startOptimize(async () => {
+      const matrix = data.matrix!
+      const stopsCoords = data.locatedStopIds.map((id) => {
+        const s = stopById.get(id)!
+        return { latitude: s.latitude as number, longitude: s.longitude as number }
+      })
+      const res = await optimizeRouteOrder(home, stopsCoords)
+      // OSRM order (or local heuristic fallback) → located-stop ids in new order.
+      const orderIdx = res.approximate ? optimizeFromMatrix(matrix.durations) : res.order
+      const proposedIds = orderIdx
+        .map((i) => data.locatedStopIds[i])
+        .filter((id): id is string => Boolean(id))
+      const canvas: CanvasStop[] = proposedIds.map((id) => {
+        const s = stopById.get(id)!
+        return {
+          siteId: s.siteId,
+          name: s.name,
+          latitude: s.latitude as number,
+          longitude: s.longitude as number,
+        }
+      })
+      const points = [
+        { latitude: home.latitude, longitude: home.longitude },
+        ...canvas.map((s) => ({ latitude: s.latitude, longitude: s.longitude })),
+        { latitude: home.latitude, longitude: home.longitude },
+      ]
+      const poly = await getRoutePolyline(points)
+      setProposed({
+        canvasStops: canvas,
+        polyline: poly.coordinates,
+        polylineApproximate: poly.approximate,
+        solverApproximate: res.approximate,
+      })
+      setOptimizeOpen(true)
+    })
+  }
+
+  const handleAdopt = () => {
+    if (!proposed) return
+    const proposedIds = proposed.canvasStops.map((s) => s.siteId)
+    const locatedSet = new Set(proposedIds)
+    // Keep any unlocated stops (excluded from routing) at the end, current order.
+    const unlocatedIds = order.filter((id) => !locatedSet.has(id))
+    setOrder([...proposedIds, ...unlocatedIds])
+    setDirty(true)
+    setOptimizeOpen(false)
+    toast.success('Adopted optimised order — review and Save')
+  }
 
   const canvasStops = useMemo<CanvasStop[]>(
     () =>
@@ -259,10 +368,25 @@ export function RouteMapPlanner({ initialData }: { initialData: RouteMapData }) 
             )}
           </div>
 
-          <Button onClick={handleSave} disabled={!dirty || isSaving} className="gap-2">
-            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Save order
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={handleOptimize}
+              disabled={!canOptimize || isOptimizing}
+              className="gap-2"
+            >
+              {isOptimizing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              AI Optimize
+            </Button>
+            <Button onClick={handleSave} disabled={!dirty || isSaving} className="gap-2">
+              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save order
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -407,6 +531,17 @@ export function RouteMapPlanner({ initialData }: { initialData: RouteMapData }) 
           </div>
         </Card>
       </div>
+
+      <RouteOptimizeDialog
+        open={optimizeOpen}
+        onOpenChange={setOptimizeOpen}
+        home={home}
+        color={data.routeColor || '#2563eb'}
+        proposed={proposed}
+        proposedPlan={proposedPlan}
+        currentPlan={plan}
+        onAdopt={handleAdopt}
+      />
     </div>
   )
 }

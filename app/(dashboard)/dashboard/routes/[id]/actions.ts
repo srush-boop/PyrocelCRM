@@ -10,7 +10,7 @@ import {
   type LatLng,
 } from '@/lib/geocode'
 import { getExpectedDurations, expectedMinutesFor } from '@/lib/task-duration'
-import { drivingMatrix, drivingLegs } from '@/lib/routing'
+import { drivingMatrix, drivingLegs, tripOrder } from '@/lib/routing'
 import type { Profile, WorkDayHours } from '@/lib/types/database'
 import type {
   RouteEngineerOption,
@@ -319,4 +319,19 @@ export async function getRoutePolyline(
   if (!auth.ok || points.length < 2) return { coordinates: [], approximate: true }
   const result = await drivingLegs(points)
   return { coordinates: result.coordinates, approximate: result.approximate }
+}
+
+/**
+ * Optimise the visiting order via OSRM's `trip` (TSP) solver, anchored at the
+ * CDO's home. Returns the optimal order as 0-based indices into `stops` (the
+ * located stops in current matrix order). `approximate: true` signals OSRM was
+ * unavailable and the client should fall back to its matrix heuristic.
+ */
+export async function optimizeRouteOrder(
+  home: { latitude: number; longitude: number },
+  stops: { latitude: number; longitude: number }[],
+): Promise<{ order: number[]; approximate: boolean }> {
+  const auth = await requireOfficeOrAdmin()
+  if (!auth.ok) return { order: stops.map((_, i) => i), approximate: true }
+  return tripOrder(home, stops)
 }

@@ -3,8 +3,8 @@ import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { RouteMapPlanner } from '@/components/dashboard/routes/route-map-planner'
-import { getRouteMapData } from './actions'
+import { RouteDetailTabs } from '@/components/dashboard/routes/route-detail-tabs'
+import { getRouteMapData, getRouteActuals } from './actions'
 import type { Profile } from '@/lib/types/database'
 
 export default async function RouteMapPage({
@@ -25,7 +25,10 @@ export default async function RouteMapPage({
     redirect('/dashboard')
   }
 
-  const { data, error } = await getRouteMapData(id)
+  const [{ data, error }, { data: actuals }] = await Promise.all([
+    getRouteMapData(id),
+    getRouteActuals(id),
+  ])
   if (error === 'Route not found') notFound()
   if (!data) redirect('/dashboard/routes')
 
@@ -40,12 +43,37 @@ export default async function RouteMapPage({
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-balance">{data.routeName}</h1>
           <p className="text-muted-foreground">
-            Route map, visit order and working-hours day plan
+            Route map, visit order, working-hours day plan and completion analytics
           </p>
         </div>
       </div>
 
-      <RouteMapPlanner initialData={data} />
+      <RouteDetailTabs
+        mapData={data}
+        actualsData={
+          actuals ?? {
+            routeId: id,
+            weeks: [],
+            mode: 'week',
+            selectedWeek: null,
+            averagedWeeks: 0,
+            visits: [],
+            summary: {
+              visitCount: 0,
+              onSiteMinutes: 0,
+              gapMinutes: 0,
+              dayLengthMinutes: 0,
+              firstArrival: null,
+              lastDeparture: null,
+              plannedOnSiteMinutes: 0,
+              outOfOrderCount: 0,
+            },
+            home: null,
+            polyline: [],
+            polylineApproximate: true,
+          }
+        }
+      />
     </div>
   )
 }

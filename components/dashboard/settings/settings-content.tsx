@@ -8,9 +8,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home, Wrench, HardHat, FileText, Database, PhoneCall } from 'lucide-react'
+import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home, Wrench, HardHat, FileText, Database, PhoneCall, ShieldCheck } from 'lucide-react'
 import type { User as AuthUser } from '@supabase/supabase-js'
 import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType, DocumentTemplate } from '@/lib/types/database'
+import type { LoneWorkerManagedUser } from '@/app/(dashboard)/dashboard/lone-worker/actions'
+import type { LoneWorkerTimings } from '@/lib/lone-worker/types'
 import { CompanySettings } from './company-settings'
 import { DepartmentsSettings } from './departments-settings'
 import { RolesSettings } from './roles-settings'
@@ -22,6 +24,7 @@ import { SignatureManager } from './signature-manager'
 import { AvatarManager } from './avatar-manager'
 import { BulkDataSettings } from './bulk-data-settings'
 import { GlobalConfigSettings } from './global-config-settings'
+import { LoneWorkerSettings } from './lone-worker-settings'
 import { signatureSrc } from '@/lib/blob'
 
 interface SettingsContentProps {
@@ -36,9 +39,12 @@ interface SettingsContentProps {
   poOverdueDays: number
   deadlineReasons: string[]
   engagementStatsEnabled: boolean
+  canManageLoneWorker: boolean
+  loneWorkerUsers: LoneWorkerManagedUser[]
+  loneWorkerTimings: LoneWorkerTimings
 }
 
-export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, engagementStatsEnabled }: SettingsContentProps) {
+export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings }: SettingsContentProps) {
   const isAdmin = profile.role === 'admin'
   // Templates are managed by office/admin (mail-merge letters for client correspondence).
   const canManageTemplates = profile.role === 'admin' || profile.role === 'office'
@@ -174,6 +180,12 @@ export function SettingsContent({ user, profile, company, branches, departments,
           <TabsTrigger value="calls-config" className="gap-2">
             <PhoneCall className="h-4 w-4" />
             Calls
+          </TabsTrigger>
+        )}
+        {canManageLoneWorker && (
+          <TabsTrigger value="lone-worker" className="gap-2">
+            <ShieldCheck className="h-4 w-4" />
+            Lone Worker
           </TabsTrigger>
         )}
       </TabsList>
@@ -389,6 +401,16 @@ export function SettingsContent({ user, profile, company, branches, departments,
             poOverdueDays={poOverdueDays}
             deadlineReasons={deadlineReasons}
             engagementStatsEnabled={engagementStatsEnabled}
+          />
+        </TabsContent>
+      )}
+
+      {canManageLoneWorker && (
+        <TabsContent value="lone-worker" className="space-y-4">
+          <LoneWorkerSettings
+            timings={loneWorkerTimings}
+            users={loneWorkerUsers}
+            isAdmin={isAdmin}
           />
         </TabsContent>
       )}

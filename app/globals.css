@@ -136,6 +136,43 @@
   z-index: 0;
 }
 
+/* Lone worker full-screen escalation takeover. Amber = warning, red = emergency.
+   Strong flashing background so it is unmissable on any screen. */
+@keyframes lw-flash-amber {
+  0%,
+  100% {
+    background-color: #b45309;
+  }
+  50% {
+    background-color: #f59e0b;
+  }
+}
+@keyframes lw-flash-red {
+  0%,
+  100% {
+    background-color: #7f1d1d;
+  }
+  50% {
+    background-color: #ef4444;
+  }
+}
+.lw-flash-amber {
+  animation: lw-flash-amber 1s ease-in-out infinite;
+}
+.lw-flash-red {
+  animation: lw-flash-red 0.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lw-flash-amber {
+    animation: none;
+    background-color: #d97706;
+  }
+  .lw-flash-red {
+    animation: none;
+    background-color: #dc2626;
+  }
+}
+
 /* Print: hide app chrome and use clean white page for labels & reports */
 @media print {
   /* Hide dashboard chrome (sidebar, header) and anything explicitly marked */

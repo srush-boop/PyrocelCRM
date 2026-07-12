@@ -17,6 +17,9 @@ import type {
   RouteMapData,
   RouteMapStop,
   RouteStopService,
+  RouteActualsData,
+  RouteActualVisit,
+  RouteWeekOption,
 } from './types'
 
 async function requireOfficeOrAdmin() {
@@ -334,4 +337,353 @@ export async function optimizeRouteOrder(
   const auth = await requireOfficeOrAdmin()
   if (!auth.ok) return { order: stops.map((_, i) => i), approximate: true }
   return tripOrder(home, stops)
+}
+
+/* ------------------------------------------------------------------ */
+/* Phase 3 — completion analytics (actual vs planned)                 */
+/* ------------------------------------------------------------------ */
+
+/** Monday (local) that starts the ISO week containing `d`, as yyyy-mm-dd. */
+function weekStartOf(d: Date): string {
+  const x = new Date(d)
+  const day = (x.getDay() + 6) % 7 // 0 = Monday
+  x.setDate(x.getDate() - day)
+  x.setHours(0, 0, 0, 0)
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`
+}
+
+function fmtDayMon(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+}
+
+function minutesBetween(aIso: string, bIso: string): number {
+  return Math.round((new Date(bIso).getTime() - new Date(aIso).getTime()) / 60000)
+}
+
+function localDateKey(iso: string): string {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function minuteOfDay(iso: string): number {
+  const d = new Date(iso)
+  return d.getHours() * 60 + d.getMinutes()
+}
+
+interface RawActualTask {
+  id: string
+  site_id: string
+  started_at: string | null
+  completed_at: string | null
+  assigned_engineer_id: string | null
+  site_service: { service_type_id: string | null } | { service_type_id: string | null }[] | null
+}
+
+/**
+ * Actual-vs-planned completion analytics for a route. Reads the route's
+ * COMPLETED tasks (linked via `sites.route_id`) with real `started_at` /
+ * `completed_at` timestamps, derives the actual visit order (by check-in),
+ * actual on-site durations and same-day inter-site gaps (drive + idle), and
+ * builds the actual driven-order polyline. Supports a single past week or an
+ * average across all weeks with data.
+ */
+export async function getRouteActuals(
+  routeId: string,
+  options?: { weekStart?: string | null; mode?: 'week' | 'average' },
+): Promise<{ data: RouteActualsData | null; error: string | null }> {
+  const auth = await requireOfficeOrAdmin()
+  if (!auth.ok) return { data: null, error: auth.error }
+  const { supabase } = auth
+
+  const { data: route } = await supabase
+    .from('routes')
+    .select('id, assigned_engineer_id')
+    .eq('id', routeId)
+    .single()
+  if (!route) return { data: null, error: 'Route not found' }
+
+  // Sites on the route + planned position and coords.
+  const { data: siteRows } = await supabase
+    .from('sites')
+    .select('id, name, postcode, latitude, longitude, route_position')
+    .eq('route_id', routeId)
+
+  type SiteRow = {
+    id: string
+    name: string | null
+    postcode: string | null
+    latitude: number | null
+    longitude: number | null
+    route_position: number | null
+  }
+  const sites = (siteRows || []) as SiteRow[]
+  const siteMap = new Map(sites.map((s) => [s.id, s]))
+  const siteIds = sites.map((s) => s.id)
+
+  const empty: RouteActualsData = {
+    routeId,
+    weeks: [],
+    mode: 'week',
+    selectedWeek: null,
+    averagedWeeks: 0,
+    visits: [],
+    summary: {
+      visitCount: 0,
+      onSiteMinutes: 0,
+      gapMinutes: 0,
+      dayLengthMinutes: 0,
+      firstArrival: null,
+      lastDeparture: null,
+      plannedOnSiteMinutes: 0,
+      outOfOrderCount: 0,
+    },
+    home: null,
+    polyline: [],
+    polylineApproximate: true,
+  }
+  if (siteIds.length === 0) return { data: empty, error: null }
+
+  // Completed tasks with real timestamps on those sites.
+  const { data: taskRows } = await supabase
+    .from('tasks')
+    .select(
+      `id, site_id, started_at, completed_at, assigned_engineer_id,
+       site_service:site_services(service_type_id)`,
+    )
+    .in('site_id', siteIds)
+    .eq('status', 'completed')
+    .not('started_at', 'is', null)
+    .not('completed_at', 'is', null)
+    .order('started_at', { ascending: true })
+
+  const tasks = ((taskRows || []) as unknown as RawActualTask[]).filter(
+    (t) => t.started_at && t.completed_at,
+  )
+  if (tasks.length === 0) return { data: empty, error: null }
+
+  // Engineer name lookup.
+  const engIds = Array.from(
+    new Set(tasks.map((t) => t.assigned_engineer_id).filter((x): x is string => Boolean(x))),
+  )
+  const engNames = new Map<string, string>()
+  if (engIds.length > 0) {
+    const { data: engRows } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .in('id', engIds)
+    for (const e of (engRows || []) as { id: string; full_name: string | null; email: string | null }[]) {
+      engNames.set(e.id, e.full_name || e.email || 'Engineer')
+    }
+  }
+
+  const durations = await getExpectedDurations(supabase)
+  const plannedFor = (t: RawActualTask): number =>
+    expectedMinutesFor(durations, {
+      serviceTypeId: rel(t.site_service)?.service_type_id ?? null,
+    }).minutes
+
+  // Group tasks into weeks.
+  const byWeek = new Map<string, RawActualTask[]>()
+  for (const t of tasks) {
+    const wk = weekStartOf(new Date(t.started_at as string))
+    const list = byWeek.get(wk) ?? []
+    list.push(t)
+    byWeek.set(wk, list)
+  }
+  const weeks: RouteWeekOption[] = Array.from(byWeek.entries())
+    .map(([weekStart, list]) => {
+      const [y, m, d] = weekStart.split('-').map(Number)
+      const end = new Date(y, m - 1, d + 6)
+      const endIso = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`
+      const days = new Set(list.map((t) => localDateKey(t.started_at as string)))
+      return {
+        weekStart,
+        label: `${fmtDayMon(weekStart)} – ${fmtDayMon(endIso)} ${end.getFullYear()}`,
+        taskCount: list.length,
+        dayCount: days.size,
+      }
+    })
+    .sort((a, b) => (a.weekStart < b.weekStart ? 1 : -1))
+
+  const mode: 'week' | 'average' = options?.mode === 'average' ? 'average' : 'week'
+  const selectedWeek =
+    mode === 'week' ? options?.weekStart ?? weeks[0]?.weekStart ?? null : null
+
+  // Engineer home for the map anchor.
+  let home: { latitude: number; longitude: number } | null = null
+  if (route.assigned_engineer_id) {
+    const { data: eng } = await supabase
+      .from('profiles')
+      .select('home_latitude, home_longitude')
+      .eq('id', route.assigned_engineer_id)
+      .single()
+    const e = eng as { home_latitude: number | null; home_longitude: number | null } | null
+    if (e?.home_latitude != null && e?.home_longitude != null) {
+      home = { latitude: e.home_latitude, longitude: e.home_longitude }
+    }
+  }
+
+  const buildVisit = (
+    t: RawActualTask,
+    index: number,
+    next: RawActualTask | null,
+  ): RouteActualVisit => {
+    const site = siteMap.get(t.site_id)
+    const arrival = t.started_at as string
+    const departure = t.completed_at as string
+    // Only count a gap when the next visit is the same calendar day (no overnight).
+    const gap =
+      next && localDateKey(next.started_at as string) === localDateKey(departure)
+        ? Math.max(0, minutesBetween(departure, next.started_at as string))
+        : null
+    return {
+      siteId: t.site_id,
+      siteName: site?.name || 'Site',
+      postcode: site?.postcode ?? null,
+      latitude: site?.latitude ?? null,
+      longitude: site?.longitude ?? null,
+      plannedPosition: site?.route_position ?? null,
+      actualPosition: index + 1,
+      arrival,
+      departure,
+      onSiteMinutes: Math.max(0, minutesBetween(arrival, departure)),
+      plannedMinutes: plannedFor(t),
+      gapToNextMinutes: gap,
+      engineerName: t.assigned_engineer_id ? engNames.get(t.assigned_engineer_id) ?? null : null,
+    }
+  }
+
+  let visits: RouteActualVisit[] = []
+  let averagedWeeks = 0
+
+  if (mode === 'week' && selectedWeek) {
+    const list = (byWeek.get(selectedWeek) ?? []).sort((a, b) =>
+      (a.started_at as string) < (b.started_at as string) ? -1 : 1,
+    )
+    visits = list.map((t, i) => buildVisit(t, i, list[i + 1] ?? null))
+  } else if (mode === 'average') {
+    averagedWeeks = weeks.length
+    // Average on-site minutes + arrival time-of-day per site across all weeks.
+    type Agg = { onSite: number[]; planned: number; arrivalMin: number[]; site: SiteRow | undefined; eng: string | null }
+    const agg = new Map<string, Agg>()
+    for (const t of tasks) {
+      const a = agg.get(t.site_id) ?? {
+        onSite: [],
+        planned: plannedFor(t),
+        arrivalMin: [],
+        site: siteMap.get(t.site_id),
+        eng: t.assigned_engineer_id ? engNames.get(t.assigned_engineer_id) ?? null : null,
+      }
+      a.onSite.push(Math.max(0, minutesBetween(t.started_at as string, t.completed_at as string)))
+      a.arrivalMin.push(minuteOfDay(t.started_at as string))
+      agg.set(t.site_id, a)
+    }
+    const mean = (xs: number[]) => (xs.length ? Math.round(xs.reduce((s, x) => s + x, 0) / xs.length) : 0)
+    const ordered = Array.from(agg.entries())
+      .map(([siteId, a]) => ({ siteId, a, avgArrival: mean(a.arrivalMin) }))
+      .sort((x, y) => x.avgArrival - y.avgArrival)
+    visits = ordered.map(({ siteId, a, avgArrival }, i) => {
+      const hh = String(Math.floor(avgArrival / 60)).padStart(2, '0')
+      const mm = String(avgArrival % 60).padStart(2, '0')
+      return {
+        siteId,
+        siteName: a.site?.name || 'Site',
+        postcode: a.site?.postcode ?? null,
+        latitude: a.site?.latitude ?? null,
+        longitude: a.site?.longitude ?? null,
+        plannedPosition: a.site?.route_position ?? null,
+        actualPosition: i + 1,
+        // Encode avg arrival time-of-day as an ISO on a nominal date for display.
+        arrival: `1970-01-01T${hh}:${mm}:00`,
+        departure: `1970-01-01T${hh}:${mm}:00`,
+        onSiteMinutes: mean(a.onSite),
+        plannedMinutes: a.planned,
+        gapToNextMinutes: null,
+        engineerName: a.eng,
+      }
+    })
+  }
+
+  // Summary.
+  const onSiteMinutes = visits.reduce((s, v) => s + v.onSiteMinutes, 0)
+  const gapMinutes = visits.reduce((s, v) => s + (v.gapToNextMinutes ?? 0), 0)
+  const plannedOnSiteMinutes = visits.reduce((s, v) => s + v.plannedMinutes, 0)
+
+  // Out-of-order: compare actual sequence vs planned position ordering.
+  let outOfOrderCount = 0
+  const withPlanned = visits.filter((v) => v.plannedPosition != null)
+  for (let i = 1; i < withPlanned.length; i++) {
+    if ((withPlanned[i].plannedPosition as number) < (withPlanned[i - 1].plannedPosition as number)) {
+      outOfOrderCount++
+    }
+  }
+
+  // Day length: sum per-day (last departure − first arrival). For averages, use
+  // the mean per-week working span.
+  let dayLengthMinutes = 0
+  let firstArrival: string | null = null
+  let lastDeparture: string | null = null
+  if (mode === 'week' && selectedWeek) {
+    const byDay = new Map<string, RouteActualVisit[]>()
+    for (const v of visits) {
+      const k = localDateKey(v.arrival)
+      const l = byDay.get(k) ?? []
+      l.push(v)
+      byDay.set(k, l)
+    }
+    for (const dayVisits of byDay.values()) {
+      const sorted = dayVisits.slice().sort((a, b) => (a.arrival < b.arrival ? -1 : 1))
+      dayLengthMinutes += minutesBetween(sorted[0].arrival, sorted[sorted.length - 1].departure)
+    }
+    if (byDay.size === 1) {
+      const only = Array.from(byDay.values())[0].slice().sort((a, b) => (a.arrival < b.arrival ? -1 : 1))
+      firstArrival = only[0].arrival
+      lastDeparture = only[only.length - 1].departure
+    }
+  } else if (mode === 'average') {
+    dayLengthMinutes = averagedWeeks > 0 ? Math.round((onSiteMinutes + gapMinutes) / 1) : 0
+  }
+
+  // Actual driven-order polyline through located visits (home → visits → home).
+  const locatedVisits = visits.filter((v) => v.latitude != null && v.longitude != null)
+  let polyline: [number, number][] = []
+  let polylineApproximate = true
+  if (locatedVisits.length > 0) {
+    const pts: LatLng[] = []
+    if (home) pts.push(home)
+    for (const v of locatedVisits) pts.push({ latitude: v.latitude as number, longitude: v.longitude as number })
+    if (home) pts.push(home)
+    if (pts.length >= 2) {
+      const legs = await drivingLegs(pts)
+      polyline = legs.coordinates
+      polylineApproximate = legs.approximate
+    }
+  }
+
+  return {
+    data: {
+      routeId,
+      weeks,
+      mode,
+      selectedWeek,
+      averagedWeeks,
+      visits,
+      summary: {
+        visitCount: visits.length,
+        onSiteMinutes,
+        gapMinutes,
+        dayLengthMinutes,
+        firstArrival,
+        lastDeparture,
+        plannedOnSiteMinutes,
+        outOfOrderCount,
+      },
+      home,
+      polyline,
+      polylineApproximate,
+    },
+    error: null,
+  }
 }

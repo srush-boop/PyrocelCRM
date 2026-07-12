@@ -15,6 +15,9 @@ export interface Role {
   // Whether people with this role must submit timesheets. This is the default
   // applied to users who don't have their own override (see Profile).
   timesheet_required: boolean
+  // Whether people with this role are lone-worker eligible (can start a safety
+  // check-in shift). Defaults to false; enabled per role in Settings → Roles.
+  lone_worker_enabled: boolean
   created_at: string
   updated_at: string
 }
@@ -217,6 +220,14 @@ export interface Profile {
   location_lat: number | null
   location_lng: number | null
   location_updated_at: string | null
+  // Lone-worker per-user controls. `can_manage_lone_worker` nominates a
+  // non-admin who may monitor and disable others. `lone_worker_disabled_until`
+  // temporarily suppresses the feature for this user (e.g. unexpected sick
+  // leave) until the given time; null = active.
+  can_manage_lone_worker: boolean
+  lone_worker_disabled_until: string | null
+  lone_worker_disabled_reason: string | null
+  lone_worker_disabled_by: string | null
   // Engineer discipline / trade. Drives map colour-coding, iconography and the
   // skill match when dispatching a call. NULL for non-engineers.
   discipline: Discipline | null

@@ -25,6 +25,7 @@ import { format } from 'date-fns'
 import type { Profile } from '@/lib/types/database'
 import { getDailyFact } from '@/lib/system-facts'
 import { LocationSharingToggle } from '@/components/dashboard/home/location-sharing-toggle'
+import { LoneWorkerShiftCard } from '@/components/dashboard/lone-worker/lone-worker-shift-card'
 import { getEngineerEngagementStats } from '@/lib/engagement-stats'
 import { EngineerStandingCard } from '@/components/dashboard/home/engineer-standing-card'
 
@@ -154,6 +155,9 @@ export async function EngineerHome({ profile }: { profile: Profile }) {
 
       {/* Encouragement: your standing in the department */}
       {engagementStats && <EngineerStandingCard stats={engagementStats} />}
+
+      {/* Lone worker safety — start/finish shift and check-in frequency */}
+      <LoneWorkerShiftCard />
 
       {/* Today's schedule */}
       <Card>

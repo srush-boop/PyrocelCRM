@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { Loader2, Sparkles, Car, Clock, Route as RouteIcon, TrendingDown } from 'lucide-react'
 import {
@@ -54,6 +55,18 @@ export function RouteOptimizeDialog({
   currentPlan: DayPlan | null
   onAdopt: () => void
 }) {
+  // Only mount the Leaflet map once the dialog has finished its open animation,
+  // so Leaflet measures a fully-sized, settled (non-transformed) container.
+  const [mapReady, setMapReady] = useState(false)
+  useEffect(() => {
+    if (!open) {
+      setMapReady(false)
+      return
+    }
+    const t = window.setTimeout(() => setMapReady(true), 220)
+    return () => clearTimeout(t)
+  }, [open])
+
   const driveSaved =
     currentPlan && proposedPlan ? currentPlan.totalDriveMinutes - proposedPlan.totalDriveMinutes : 0
   const milesSaved =
@@ -105,13 +118,20 @@ export function RouteOptimizeDialog({
         <div className="grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
           {/* Proposed map */}
           <div className="min-h-[360px] overflow-hidden rounded-md border">
-            <RouteMapCanvas
-              home={home}
-              stops={proposed?.canvasStops ?? []}
-              polyline={proposed?.polyline ?? []}
-              approximate={proposed?.polylineApproximate ?? true}
-              color={color}
-            />
+            {mapReady ? (
+              <RouteMapCanvas
+                home={home}
+                stops={proposed?.canvasStops ?? []}
+                polyline={proposed?.polyline ?? []}
+                approximate={proposed?.polylineApproximate ?? true}
+                color={color}
+              />
+            ) : (
+              <div className="flex h-full min-h-[360px] items-center justify-center bg-muted/40 text-muted-foreground">
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Loading map…
+              </div>
+            )}
           </div>
 
           {/* Proposed day plan */}

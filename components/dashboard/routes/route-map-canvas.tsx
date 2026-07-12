@@ -59,6 +59,29 @@ function FitBounds({ points }: { points: [number, number][] }) {
   return null
 }
 
+/**
+ * Leaflet caches the container's size/origin at init. When the map mounts inside
+ * an animating/transformed container (e.g. a Radix dialog) or a flex/grid cell
+ * that resolves its height after paint, that cache is stale and the tile panes
+ * render offset from the actual box. Recompute size after mount, on the next
+ * frames, and on resize to keep the map aligned to its container.
+ */
+function InvalidateSize() {
+  const map = useMap()
+  useEffect(() => {
+    const fix = () => map.invalidateSize({ animate: false })
+    const raf = requestAnimationFrame(fix)
+    const timers = [80, 250, 500].map((ms) => window.setTimeout(fix, ms))
+    window.addEventListener('resize', fix)
+    return () => {
+      cancelAnimationFrame(raf)
+      timers.forEach(clearTimeout)
+      window.removeEventListener('resize', fix)
+    }
+  }, [map])
+  return null
+}
+
 export const RouteMapCanvas = memo(function RouteMapCanvas({
   home,
   stops,
@@ -105,6 +128,7 @@ export const RouteMapCanvas = memo(function RouteMapCanvas({
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
+      <InvalidateSize />
       <FitBounds points={fitPoints} />
 
       {line.length > 1 && (

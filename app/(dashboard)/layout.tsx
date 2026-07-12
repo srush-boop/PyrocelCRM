@@ -4,6 +4,7 @@ import { DashboardSidebar } from '@/components/dashboard/sidebar'
 import { DashboardHeader } from '@/components/dashboard/header'
 import { MobileBottomNav } from '@/components/dashboard/mobile-bottom-nav'
 import { OncallBanner } from '@/components/dashboard/oncall/oncall-banner'
+import { LoneWorkerPrompt } from '@/components/dashboard/lone-worker/lone-worker-prompt'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import type { Profile } from '@/lib/types/database'
 
@@ -52,6 +53,7 @@ export default async function DashboardLayout({
         </main>
         {isEngineer && <MobileBottomNav profile={profile as Profile} />}
       </SidebarInset>
+      <LoneWorkerPrompt />
     </SidebarProvider>
   )
 }

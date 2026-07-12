@@ -48,10 +48,17 @@ interface FormState {
   description: string
   active: boolean
   timesheet_required: boolean
+  lone_worker_enabled: boolean
 }
 
 function emptyForm(): FormState {
-  return { name: '', description: '', active: true, timesheet_required: true }
+  return {
+    name: '',
+    description: '',
+    active: true,
+    timesheet_required: true,
+    lone_worker_enabled: false,
+  }
 }
 
 export function RolesSettings({ roles }: RolesSettingsProps) {
@@ -76,6 +83,7 @@ export function RolesSettings({ roles }: RolesSettingsProps) {
       description: role.description ?? '',
       active: role.active,
       timesheet_required: role.timesheet_required,
+      lone_worker_enabled: role.lone_worker_enabled ?? false,
     })
     setMessage(null)
     setDialogOpen(true)
@@ -92,6 +100,7 @@ export function RolesSettings({ roles }: RolesSettingsProps) {
         description: form.description.trim() || null,
         active: form.active,
         timesheet_required: form.timesheet_required,
+        lone_worker_enabled: form.lone_worker_enabled,
         updated_at: new Date().toISOString(),
       }
       const { error } = form.id
@@ -154,6 +163,7 @@ export function RolesSettings({ roles }: RolesSettingsProps) {
                 <TableHead>Name</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Timesheet</TableHead>
+                <TableHead>Lone worker</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-24" />
               </TableRow>
@@ -161,7 +171,7 @@ export function RolesSettings({ roles }: RolesSettingsProps) {
             <TableBody>
               {roles.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                     No roles yet. Add one to assign it to your team members.
                   </TableCell>
                 </TableRow>
@@ -175,6 +185,11 @@ export function RolesSettings({ roles }: RolesSettingsProps) {
                     <TableCell>
                       <Badge variant={role.timesheet_required ? 'default' : 'outline'}>
                         {role.timesheet_required ? 'Required' : 'Not required'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={role.lone_worker_enabled ? 'default' : 'outline'}>
+                        {role.lone_worker_enabled ? 'Enabled' : 'Off'}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -258,6 +273,20 @@ export function RolesSettings({ roles }: RolesSettingsProps) {
                 Timesheet required
                 <span className="block text-xs text-muted-foreground">
                   Default for users with this role. Can be overridden per user.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.lone_worker_enabled}
+                onChange={(e) => setForm({ ...form, lone_worker_enabled: e.target.checked })}
+                className="mt-0.5 h-4 w-4 rounded border-input"
+              />
+              <span>
+                Lone worker safety
+                <span className="block text-xs text-muted-foreground">
+                  People with this role can start a lone-worker shift and receive safety check-ins.
                 </span>
               </span>
             </label>

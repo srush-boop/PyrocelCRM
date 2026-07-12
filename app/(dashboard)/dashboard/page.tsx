@@ -26,6 +26,7 @@ import Link from 'next/link'
 import { ScanQrButton } from '@/components/dashboard/dampers/scan-qr-button'
 import { AddRequestDialog } from '@/components/dashboard/requests/add-request-dialog'
 import { ApprovalsWidget } from '@/components/dashboard/approvals/approvals-widget'
+import { LoneWorkerDashboardTiles } from '@/components/dashboard/lone-worker/lone-worker-dashboard-tiles'
 import { TileColorPicker } from '@/components/dashboard/home/tile-color-picker'
 import { tileIconStyle, tileAccentStyle } from '@/lib/dashboard-tile-colors'
 import { getVisibleLeaveRequests } from '@/lib/leave-approvals'
@@ -358,6 +359,9 @@ export default async function DashboardPage({
       <Suspense fallback={null}>
         <ApprovalsWidget />
       </Suspense>
+
+      {/* Live lone-worker safety status (0 when healthy; pulses on emergency) */}
+      <LoneWorkerDashboardTiles />
 
       {/* Company overview — one hub per module */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

@@ -396,6 +396,91 @@ export async function disableUserLoneWorker(
   return { error: null }
 }
 
+/** Nominate (or un-nominate) a user as a lone-worker manager (admin only). */
+export async function setUserCanManageLoneWorker(
+  userId: string,
+  canManage: boolean,
+): Promise<{ error: string | null }> {
+  const { profile } = await getCaller()
+  if (profile?.role !== 'admin') return { error: 'Only administrators can nominate managers' }
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from('profiles')
+    .update({ can_manage_lone_worker: canManage })
+    .eq('id', userId)
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard/settings')
+  return { error: null }
+}
+
+export interface LoneWorkerManagedUser {
+  id: string
+  name: string
+  roleName: string | null
+  onShift: boolean
+  disabledUntil: string | null
+  disabledReason: string | null
+  canManage: boolean
+}
+
+/** Admin-only: eligible users (role has lone worker on) + their disable/nominee state. */
+export async function getLoneWorkerAdminData(): Promise<{
+  users: LoneWorkerManagedUser[]
+  timings: MyLoneWorkerState['timings']
+}> {
+  const admin = createAdminClient()
+  const { timings } = await getLoneWorkerConfig(admin)
+
+  const { data: rows } = await admin
+    .from('profiles')
+    .select(
+      'id, full_name, email, status, can_manage_lone_worker, lone_worker_disabled_until, lone_worker_disabled_reason, role_ref:roles!profiles_role_id_fkey(name, lone_worker_enabled)',
+    )
+    .eq('status', 'active')
+    .order('full_name', { ascending: true })
+
+  type Row = {
+    id: string
+    full_name: string | null
+    email: string | null
+    can_manage_lone_worker: boolean
+    lone_worker_disabled_until: string | null
+    lone_worker_disabled_reason: string | null
+    role_ref: { name: string | null; lone_worker_enabled: boolean | null } | null
+  }
+
+  const now = Date.now()
+  const users: LoneWorkerManagedUser[] = ((rows ?? []) as Row[])
+    .filter((r) => r.role_ref?.lone_worker_enabled === true)
+    .map((r) => {
+      const until = r.lone_worker_disabled_until
+      const disabled = until != null && new Date(until).getTime() > now
+      return {
+        id: r.id,
+        name: r.full_name || r.email || 'User',
+        roleName: r.role_ref?.name ?? null,
+        onShift: false,
+        disabledUntil: disabled ? until : null,
+        disabledReason: disabled ? r.lone_worker_disabled_reason : null,
+        canManage: r.can_manage_lone_worker,
+      }
+    })
+
+  // Flag who is currently on shift so the UI can warn before disabling.
+  const ids = users.map((u) => u.id)
+  if (ids.length > 0) {
+    const { data: active } = await admin
+      .from('lone_worker_sessions')
+      .select('user_id')
+      .eq('status', 'active')
+      .in('user_id', ids)
+    const onShift = new Set(((active ?? []) as { user_id: string }[]).map((a) => a.user_id))
+    for (const u of users) u.onShift = onShift.has(u.id)
+  }
+
+  return { users, timings }
+}
+
 export async function enableUserLoneWorker(userId: string): Promise<{ error: string | null }> {
   const { user, profile } = await getCaller()
   if (!user) return { error: 'Not signed in' }

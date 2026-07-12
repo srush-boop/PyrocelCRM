@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import dynamic from 'next/dynamic'
 import useSWR from 'swr'
 import { toast } from 'sonner'
 import {
@@ -13,6 +14,7 @@ import {
   PhoneCall,
   Users,
 } from 'lucide-react'
+import type { AlertPoint } from '@/components/dashboard/lone-worker/lone-worker-monitor-canvas'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -26,6 +28,21 @@ import {
   type LoneWorkerMonitorData,
   type LoneWorkerMonitorRow,
 } from '@/lib/lone-worker/types'
+
+// Leaflet touches `window`, so the canvas must only render on the client.
+const LoneWorkerMonitorCanvas = dynamic(
+  () =>
+    import('./lone-worker-monitor-canvas').then((m) => m.LoneWorkerMonitorCanvas),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full min-h-[320px] items-center justify-center bg-muted/40 text-muted-foreground">
+        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+        Loading map…
+      </div>
+    ),
+  },
+)
 
 function timeAgo(iso: string | null, now: number): string {
   if (!iso) return '—'
@@ -67,6 +84,28 @@ export function LoneWorkerMonitor({ initialData }: { initialData: LoneWorkerMoni
   const rows = data?.rows ?? []
   const warningCount = data?.warningCount ?? 0
   const emergencyCount = data?.emergencyCount ?? 0
+  const hasAlerts = warningCount > 0 || emergencyCount > 0
+
+  // Active alerts (amber/red) that have a captured location, for the map.
+  const alertPoints = useMemo<AlertPoint[]>(
+    () =>
+      rows
+        .filter((r) => r.activeLevel != null && r.lat != null && r.lng != null)
+        .map((r) => ({
+          sessionId: r.sessionId,
+          userName: r.userName,
+          level: r.activeLevel as 'amber' | 'red',
+          lat: r.lat as number,
+          lng: r.lng as number,
+          since: r.activeSince,
+          locationUpdatedAt: r.locationUpdatedAt,
+        })),
+    [rows],
+  )
+  // Alerts still awaiting a GPS fix (so we can note them beneath the map).
+  const alertsAwaitingLocation = rows.filter(
+    (r) => r.activeLevel != null && (r.lat == null || r.lng == null),
+  ).length
 
   const onMadeContact = useCallback(
     async (eventId: string) => {
@@ -107,6 +146,46 @@ export function LoneWorkerMonitor({ initialData }: { initialData: LoneWorkerMoni
           pulse={emergencyCount > 0}
         />
       </div>
+
+      {/* Alert locations map — only shown while there is an active warning or
+          emergency, so the healthy board stays clean. */}
+      {hasAlerts && (
+        <Card
+          className={cn(
+            'overflow-hidden',
+            emergencyCount > 0
+              ? 'border-2 border-destructive/60'
+              : 'border-2 border-amber-500/60',
+          )}
+        >
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <MapPin className="h-4 w-4" />
+              Alert locations
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {alertPoints.length > 0 ? (
+              <div className="h-[360px] w-full overflow-hidden rounded-lg border">
+                <LoneWorkerMonitorCanvas points={alertPoints} />
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-10 text-center">
+                <MapPin className="mb-2 h-8 w-8 text-muted-foreground/40" />
+                <p className="text-sm text-muted-foreground">
+                  Waiting for a location fix from the affected worker&apos;s device.
+                </p>
+              </div>
+            )}
+            {alertPoints.length > 0 && alertsAwaitingLocation > 0 && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                {alertsAwaitingLocation} more alert
+                {alertsAwaitingLocation === 1 ? '' : 's'} awaiting a location fix.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Board */}
       <Card>

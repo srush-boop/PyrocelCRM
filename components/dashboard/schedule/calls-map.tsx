@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { CreateTaskDialog } from '@/components/dashboard/schedule/create-task-dialog'
+import { LoneWorkerHeaderCounters } from '@/components/dashboard/lone-worker/lone-worker-header-counters'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -408,18 +409,23 @@ export function CallsMap({
             nearest work.
           </p>
         </div>
-        {reactiveServiceTypes.length > 0 && (
-          <CreateTaskDialog
-            siteServices={[]}
-            engineers={bookingEngineers}
-            clients={clients}
-            reactiveServiceTypes={reactiveServiceTypes}
-            sites={bookingSites}
-            systemTypes={systemTypes}
-            defaultMode="reactive"
-            onBooked={handleBooked}
-          />
-        )}
+        <div className="flex items-center gap-3">
+          {/* Live lone-worker safety counters — visible while dispatching so a
+              raised warning/emergency is noticed here, not just on the board. */}
+          <LoneWorkerHeaderCounters />
+          {reactiveServiceTypes.length > 0 && (
+            <CreateTaskDialog
+              siteServices={[]}
+              engineers={bookingEngineers}
+              clients={clients}
+              reactiveServiceTypes={reactiveServiceTypes}
+              sites={bookingSites}
+              systemTypes={systemTypes}
+              defaultMode="reactive"
+              onBooked={handleBooked}
+            />
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">

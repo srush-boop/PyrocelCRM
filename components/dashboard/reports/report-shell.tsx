@@ -129,7 +129,6 @@ export function ReportHeader({
                 <img
                   src={logoUrl || '/placeholder.svg'}
                   alt={`${companyName} logo`}
-                  crossOrigin="anonymous"
                   className="h-full w-full object-contain p-1.5"
                 />
               ) : (

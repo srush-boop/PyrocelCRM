@@ -15,6 +15,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
 import { Loader2 } from 'lucide-react'
 import { PostcodeLookup } from '@/components/dashboard/shared/postcode-lookup'
 
@@ -32,6 +33,7 @@ export function AddClientDialog({ open, onOpenChange }: AddClientDialogProps) {
     contact_phone: '',
     address: '',
     notes: '',
+    requires_po: false,
   })
   const router = useRouter()
   const supabase = createClient()
@@ -61,6 +63,7 @@ export function AddClientDialog({ open, onOpenChange }: AddClientDialogProps) {
       contact_phone: formData.contact_phone || null,
       address: formData.address || null,
       notes: formData.notes || null,
+      requires_po: formData.requires_po,
     })
 
     setLoading(false)
@@ -77,6 +80,7 @@ export function AddClientDialog({ open, onOpenChange }: AddClientDialogProps) {
         contact_phone: '',
         address: '',
         notes: '',
+        requires_po: false,
       })
       router.refresh()
     }
@@ -150,6 +154,22 @@ export function AddClientDialog({ open, onOpenChange }: AddClientDialogProps) {
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                 placeholder="Any additional notes about this client"
+              />
+            </div>
+            <div className="flex items-start justify-between gap-3 rounded-md border p-3">
+              <div className="min-w-0">
+                <Label htmlFor="requires_po" className="text-sm font-medium">
+                  Requires PO before invoicing
+                </Label>
+                <p className="mt-0.5 text-xs text-muted-foreground text-pretty">
+                  Chargeable calls for this client can&apos;t be submitted for invoicing until a PO
+                  number is entered (or marked not required on the call).
+                </p>
+              </div>
+              <Switch
+                id="requires_po"
+                checked={formData.requires_po}
+                onCheckedChange={(v) => setFormData({ ...formData, requires_po: v })}
               />
             </div>
           </div>

@@ -91,6 +91,12 @@ interface TaskExecutionProps {
   clientLinks?: ClientLink[]
   engineers?: Profile[]
   panels?: SystemPanel[]
+  /**
+   * Panel-level visit rotation. When present and non-empty, each keyed panel uses
+   * its own checklist template (and level label) on this visit instead of the
+   * single `checklistTemplate`. Absent/empty = every panel uses checklistTemplate.
+   */
+  panelChecklists?: Record<string, { template: ChecklistTemplate; level: string }>
   /** Shared "Before you attend" panel, rendered beneath the site/service header. */
   preAttendance?: ReactNode
 }
@@ -102,8 +108,13 @@ interface TaskExecutionProps {
 function buildInitialResults(
   items: ChecklistItem[],
   panels: SystemPanel[],
+  panelChecklists: Record<string, { template: ChecklistTemplate; level: string }> = {},
 ): ChecklistResult[] {
-  const makeRow = (item: ChecklistItem, panel: SystemPanel | null): ChecklistResult => ({
+  const makeRow = (
+    item: ChecklistItem,
+    panel: SystemPanel | null,
+    level: string | null = null,
+  ): ChecklistResult => ({
     item_id: panel ? `${panel.id}::${item.id}` : item.id,
     label: item.label,
     type: item.type,
@@ -112,9 +123,17 @@ function buildInitialResults(
     notes: '',
     panel_id: panel?.id ?? null,
     panel_name: panel?.name ?? null,
+    panel_level: level,
   })
   if (panels.length === 0) return items.map((item) => makeRow(item, null))
-  return panels.flatMap((panel) => items.map((item) => makeRow(item, panel)))
+  return panels.flatMap((panel) => {
+    // Panel rotation: this panel may use its own template + level on this visit.
+    const rotated = panelChecklists[panel.id]
+    if (rotated) {
+      return rotated.template.items.map((item) => makeRow(item, panel, rotated.level))
+    }
+    return items.map((item) => makeRow(item, panel))
+  })
 }
 
 // A card whose body collapses behind its header. Used to tuck away
@@ -189,6 +208,7 @@ export function TaskExecution({
   clientLinks = [],
   engineers = [],
   panels = [],
+  panelChecklists = {},
   preAttendance,
 }: TaskExecutionProps) {
   const [status, setStatus] = useState(task.status)
@@ -203,7 +223,8 @@ export function TaskExecution({
       return existingResult.checklist_results
     }
     // Initialize from template, repeated per panel when the system has panels.
-    return buildInitialResults(checklistTemplate?.items || [], panels)
+    // With panel rotation, each panel may use its own template + level.
+    return buildInitialResults(checklistTemplate?.items || [], panels, panelChecklists)
   })
   const [engineerNotes, setEngineerNotes] = useState(existingResult?.engineer_notes || '')
   const [testingStartTime, setTestingStartTime] = useState<Date | null>(
@@ -633,14 +654,25 @@ export function TaskExecution({
   // Group checklist rows by panel for rendering. Preserves the order results
   // were built in (per panel, then per item). Legacy results with no panel_id
   // fall into a single untitled group so older reports render unchanged.
+  type ChecklistGroup = {
+    key: string
+    panelName: string | null
+    panelLevel: string | null
+    results: ChecklistResult[]
+  }
   const checklistGroups = (() => {
-    const groups: { key: string; panelName: string | null; results: ChecklistResult[] }[] = []
-    const byKey = new Map<string, { key: string; panelName: string | null; results: ChecklistResult[] }>()
+    const groups: ChecklistGroup[] = []
+    const byKey = new Map<string, ChecklistGroup>()
     for (const result of checklistResults) {
       const key = result.panel_id ?? '__none__'
       let group = byKey.get(key)
       if (!group) {
-        group = { key, panelName: result.panel_name ?? null, results: [] }
+        group = {
+          key,
+          panelName: result.panel_name ?? null,
+          panelLevel: result.panel_level ?? null,
+          results: [],
+        }
         byKey.set(key, group)
         groups.push(group)
       }
@@ -979,6 +1011,9 @@ export function TaskExecution({
                     <div className={`flex items-center gap-2 ${groupIndex > 0 ? 'pt-4' : ''}`}>
                       <Wrench className="h-4 w-4 text-primary" />
                       <h3 className="text-base font-semibold">{group.panelName}</h3>
+                      {group.panelLevel && (
+                        <Badge variant="secondary" className="ml-1">{group.panelLevel}</Badge>
+                      )}
                       {group.results.some((r) => r.type === 'pass_fail' && r.passed === false) && (
                         <Badge variant="destructive" className="ml-1">Defect</Badge>
                       )}

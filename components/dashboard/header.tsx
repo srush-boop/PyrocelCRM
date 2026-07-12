@@ -30,7 +30,9 @@ export function DashboardHeader({ profile }: DashboardHeaderProps) {
   const supabase = createClient()
 
   // The dashboard root is the top-level page, so it has nowhere to go "back" to.
-  const showBack = pathname !== '/dashboard'
+  // Task detail pages render their own contextual Back button (task-header.tsx),
+  // so we suppress the global one there to avoid a duplicate.
+  const showBack = pathname !== '/dashboard' && !pathname.startsWith('/dashboard/tasks/')
 
   const handleBack = () => {
     // 1. Prefer an explicit origin passed by the linking page (?from=). Detail

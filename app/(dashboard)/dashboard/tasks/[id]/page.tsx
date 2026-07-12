@@ -35,6 +35,7 @@ import type {
   Extinguisher,
   ExtinguisherInspection,
   SystemPanel,
+  PanelVisitAssignment,
 } from '@/lib/types/database'
 
 interface PageProps {
@@ -526,6 +527,11 @@ export default async function TaskPage({ params }: PageProps) {
   // every panel. Only relevant to the general flow (the dedicated per-asset
   // flows above return earlier).
   let panels: SystemPanel[] = []
+  // Panel-level visit rotation: when the system spreads the heavy (Annual)
+  // inspection across visits, each panel can get a different checklist on this
+  // visit. panelChecklists maps panel id → { template, level label } for those
+  // panels; absent/empty means every panel uses the single checklistTemplate.
+  const panelChecklists: Record<string, { template: ChecklistTemplate; level: string }> = {}
   if (task.site_service?.site_system_id) {
     const { data: panelsData } = await supabase
       .from('system_panels')
@@ -533,6 +539,43 @@ export default async function TaskPage({ params }: PageProps) {
       .eq('site_system_id', task.site_service.site_system_id)
       .order('position')
     panels = (panelsData || []) as SystemPanel[]
+
+    const { data: systemRow } = await supabase
+      .from('site_systems')
+      .select('panel_rotation_enabled')
+      .eq('id', task.site_service.site_system_id)
+      .maybeSingle()
+
+    if (systemRow?.panel_rotation_enabled && task.visit_type_id && panels.length > 0) {
+      const [{ data: assignmentRows }, { data: visitTypeRows }] = await Promise.all([
+        supabase
+          .from('panel_visit_assignments')
+          .select('*')
+          .eq('site_system_id', task.site_service.site_system_id)
+          .eq('visit_type_id', task.visit_type_id),
+        supabase
+          .from('service_visit_types')
+          .select('id, name')
+          .eq('service_type_id', task.site_service.service_type_id),
+      ])
+      const assignments = (assignmentRows || []) as PanelVisitAssignment[]
+      const visitTypeNames = new Map<string, string>()
+      for (const vt of (visitTypeRows || []) as { id: string; name: string }[]) {
+        visitTypeNames.set(vt.id, vt.name)
+      }
+      for (const panel of panels) {
+        const assignment = assignments.find((a) => a.panel_id === panel.id)
+        // Fall back to this visit's own type when a panel has no explicit cell.
+        const appliedId = assignment?.applied_visit_type_id ?? task.visit_type_id
+        const appliedTemplate = templates.find((t) => t.visit_type_id === appliedId)
+        if (appliedTemplate) {
+          panelChecklists[panel.id] = {
+            template: appliedTemplate as ChecklistTemplate,
+            level: visitTypeNames.get(appliedId) ?? '',
+          }
+        }
+      }
+    }
   }
 
   // Office/admin can quick-assign this call from the summary, so load engineers.
@@ -556,6 +599,7 @@ export default async function TaskPage({ params }: PageProps) {
       clientLinks={clientLinks}
       engineers={engineers}
       panels={panels}
+      panelChecklists={panelChecklists}
       preAttendance={preAttendancePanel}
     />
   )

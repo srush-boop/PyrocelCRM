@@ -17,7 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Printer, Send, Mail, X, CheckCircle, Coins, Loader2, Wrench, Pencil, Receipt } from 'lucide-react'
+import { Printer, Send, Mail, X, CheckCircle, Coins, Loader2, Wrench, Pencil, Receipt, ClipboardCheck } from 'lucide-react'
 import { isDamperService } from '@/lib/dampers'
 import { isExtinguisherService } from '@/lib/extinguishers'
 import { useRouter } from 'next/navigation'
@@ -76,7 +76,6 @@ export function CompletedReportActions({
   const [newEmail, setNewEmail] = useState('')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
-  const [reviewBusy, setReviewBusy] = useState(false)
   // Client Ref
   const [clientRef, setClientRef] = useState(initialClientRef ?? '')
   const [editingRef, setEditingRef] = useState(false)
@@ -96,23 +95,6 @@ export function CompletedReportActions({
     } else {
       toast.success('Client reference saved')
       setEditingRef(false)
-      router.refresh()
-    }
-  }
-
-  const runChargeAction = async (
-    action:
-      | { kind: 'reviewed' }
-      | { kind: 'reopen' }
-      | { kind: 'set_chargeable'; chargeable: boolean },
-  ) => {
-    setReviewBusy(true)
-    const { error } = await setChargeReview(taskId, action)
-    setReviewBusy(false)
-    if (error) {
-      toast.error(error)
-    } else {
-      toast.success('Charge status updated')
       router.refresh()
     }
   }
@@ -204,39 +186,13 @@ export function CompletedReportActions({
                 )}
               </div>
             </div>
-            {canReview && (
-              <div className="flex flex-wrap items-center gap-2">
-                {reviewBusy && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-                {chargeable && chargeReviewStatus === 'pending' && (
-                  <Button
-                    size="sm"
-                    disabled={reviewBusy}
-                    onClick={() => runChargeAction({ kind: 'reviewed' })}
-                    className="gap-2"
-                  >
-                    <CheckCircle className="h-4 w-4" />
-                    Mark reviewed
-                  </Button>
-                )}
-                {chargeable && chargeReviewStatus === 'reviewed' && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={reviewBusy}
-                    onClick={() => runChargeAction({ kind: 'reopen' })}
-                  >
-                    Re-open review
-                  </Button>
-                )}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={reviewBusy}
-                  onClick={() => runChargeAction({ kind: 'set_chargeable', chargeable: !chargeable })}
-                >
-                  {chargeable ? 'Mark not chargeable' : 'Mark chargeable'}
-                </Button>
-              </div>
+            {canReview && !chargeInvoicedAt && (
+              <Button size="sm" asChild className="gap-2">
+                <Link href={`/dashboard/chargeable?review=${taskId}`}>
+                  <ClipboardCheck className="h-4 w-4" />
+                  {chargeReviewStatus === 'reviewed' ? 'Re-review call' : 'Complete review'}
+                </Link>
+              </Button>
             )}
           </div>
 

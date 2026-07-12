@@ -38,31 +38,48 @@ import {
   Pencil,
   Check,
   X,
+  ClipboardCheck,
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { setChargeReview } from '@/lib/actions/charge-review'
 import { PoRequestLog } from '@/components/dashboard/chargeable/po-request-log'
+import { ChargeableReviewDialog } from '@/components/dashboard/chargeable/chargeable-review-dialog'
 import type { PurchaseOrderRequest } from '@/lib/types/database'
 
 export interface ChargeableCall {
   id: string
   referenceNumber: string
   completedAt: string | null
+  respondBy: string | null
   chargeReviewStatus: 'none' | 'pending' | 'reviewed'
   chargeReason: string | null
   chargeReviewedAt: string | null
   chargeInvoicedAt: string | null
+  chargeable: boolean
   clientRef: string | null
+  deadlineFailedReason: string | null
+  deadlineFailedNote: string | null
+  poNotRequired: boolean
   siteName: string
   clientName: string
   serviceName: string
+  systemName: string | null
+  panelName: string | null
   engineerName: string
+  engineerNotes: string | null
   reviewerName: string | null
   partsCount: number
   partsTotalPence: number
   poRequests: PurchaseOrderRequest[]
   hasContactEmail: boolean
   overdueAfterDays: number
+  // Derived review facts (computed server-side; mirrored by computeGates)
+  missedDeadline: boolean
+  clientRequiresPo: boolean
+  poRequired: boolean
+  hasAuthorisedPo: boolean
+  poReadyToReview: boolean
+  followUpLogged: boolean
 }
 
 const REASON_LABELS: Record<string, string> = {
@@ -147,21 +164,28 @@ type StatusFilter = 'pending' | 'reviewed' | 'invoiced' | 'all'
 export function ChargeableCallsTable({
   calls,
   overdueAfterDays = 14,
+  initialReviewId = null,
 }: {
   calls: ChargeableCall[]
   overdueAfterDays?: number
+  // When set (via ?review=<taskId>), opens the guided review dialog on mount —
+  // used to deep-link from a call's report page into its review.
+  initialReviewId?: string | null
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [busyId, setBusyId] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [reviewId, setReviewId] = useState<string | null>(
+    initialReviewId && calls.some((c) => c.id === initialReviewId) ? initialReviewId : null,
+  )
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending')
   const [reasonFilter, setReasonFilter] = useState<string>('all')
 
   const filtered = useMemo(() => {
-    return calls.filter((c) => {
+    const rows = calls.filter((c) => {
       if (statusFilter === 'pending' && (c.chargeReviewStatus !== 'pending' || !!c.chargeInvoicedAt)) return false
       if (statusFilter === 'reviewed' && (c.chargeReviewStatus !== 'reviewed' || !!c.chargeInvoicedAt)) return false
       if (statusFilter === 'invoiced' && !c.chargeInvoicedAt) return false
@@ -173,7 +197,11 @@ export function ChargeableCallsTable({
       }
       return true
     })
+    // Float "PO received — ready to review" calls to the top of the queue.
+    return rows.sort((a, b) => Number(b.poReadyToReview) - Number(a.poReadyToReview))
   }, [calls, statusFilter, reasonFilter, search])
+
+  const reviewCall = calls.find((c) => c.id === reviewId) ?? null
 
   const pendingCount = calls.filter(
     (c) => c.chargeReviewStatus === 'pending' && !c.chargeInvoicedAt,
@@ -314,11 +342,13 @@ export function ChargeableCallsTable({
                       <TableRow
                         key={c.id}
                         className={
-                          poOverdue
-                            ? 'bg-amber-50/60'
-                            : isExpanded
-                              ? 'bg-muted/30'
-                              : undefined
+                          c.poReadyToReview
+                            ? 'bg-emerald-50/70 hover:bg-emerald-50'
+                            : poOverdue
+                              ? 'bg-amber-50/60'
+                              : isExpanded
+                                ? 'bg-muted/30'
+                                : undefined
                         }
                       >
                         {/* Expand toggle */}
@@ -359,6 +389,12 @@ export function ChargeableCallsTable({
                               </span>
                             )}
                           </div>
+                          {c.poReadyToReview && (
+                            <Badge className="mt-1 gap-1 bg-emerald-600 hover:bg-emerald-600 text-xs">
+                              <CheckCircle className="h-3 w-3" />
+                              PO received — ready to review
+                            </Badge>
+                          )}
                         </TableCell>
 
                         <TableCell>{c.siteName}</TableCell>
@@ -449,19 +485,19 @@ export function ChargeableCallsTable({
                                 size="sm"
                                 variant="outline"
                                 className="text-xs"
-                                onClick={() => runAction(c.id, { kind: 'reopen' })}
+                                onClick={() => setReviewId(c.id)}
                               >
-                                Re-open
+                                Re-review
                               </Button>
                             </div>
                           ) : (
                             <Button
                               size="sm"
                               className="gap-1.5"
-                              onClick={() => runAction(c.id, { kind: 'reviewed' })}
+                              onClick={() => setReviewId(c.id)}
                             >
-                              <CheckCircle className="h-3.5 w-3.5" />
-                              Mark reviewed
+                              <ClipboardCheck className="h-3.5 w-3.5" />
+                              Review
                             </Button>
                           )}
                         </TableCell>
@@ -494,6 +530,16 @@ export function ChargeableCallsTable({
           </div>
         )}
       </CardContent>
+
+      {reviewCall && (
+        <ChargeableReviewDialog
+          call={reviewCall}
+          open={!!reviewId}
+          onOpenChange={(o) => {
+            if (!o) setReviewId(null)
+          }}
+        />
+      )}
     </Card>
   )
 }

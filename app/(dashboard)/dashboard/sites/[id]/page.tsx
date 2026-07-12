@@ -9,10 +9,15 @@ import { ArrowLeft, MapPin, Phone, Mail, Building2, Radio, Building, User, Exter
 import { EditSiteButton } from '@/components/dashboard/sites/edit-site-button'
 import { CreateTaskDialog } from '@/components/dashboard/schedule/create-task-dialog'
 import { SiteServicesManager } from '@/components/dashboard/sites/site-services-manager'
+import { SiteBillingCard } from '@/components/dashboard/billing/site-billing-card'
 import { SiteSystemsManager } from '@/components/dashboard/sites/site-systems-manager'
 import { QuotesTable } from '@/components/dashboard/sales/quotes-table'
 import { SiteAssetsTab, type SiteAsset } from '@/components/dashboard/sites/site-assets-tab'
 import { SiteCalls, type SiteCall } from '@/components/dashboard/sites/site-calls'
+import {
+  SiteCallsOverviewCard,
+  type UpcomingVisit,
+} from '@/components/dashboard/sites/site-calls-overview-card'
 import { SiteLogbook } from '@/components/dashboard/sites/site-logbook'
 import { SiteDocuments } from '@/components/dashboard/sites/site-documents'
 import { SiteEngineerInfoTab } from '@/components/dashboard/sites/site-engineer-info-tab'
@@ -43,6 +48,8 @@ import type {
   SystemType,
   PanelFieldDef,
   SystemPanel,
+  ServiceVisitType,
+  PanelVisitAssignment,
   Task,
   TaskResult,
   Damper,
@@ -55,6 +62,7 @@ import type {
   SiteBuildingInfo,
   Quote,
   SiteInternalNote,
+  BillingAccount,
 } from '@/lib/types/database'
 
 interface PageProps {
@@ -186,6 +194,42 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
     : { data: [] }
   const panels = (panelsData || []) as SystemPanel[]
 
+  // Panel-level visit rotation data: the visit types (Annual/Periodic/…) for the
+  // service types used on this site, plus any saved panel→visit assignments. Both
+  // feed the rotation grid in the panels manager.
+  const siteServiceTypeIds = Array.from(
+    new Set(siteServices.map((ss) => ss.service_type_id).filter(Boolean)),
+  ) as string[]
+  const { data: visitTypesData } = siteServiceTypeIds.length > 0
+    ? await supabase
+        .from('service_visit_types')
+        .select('*')
+        .in('service_type_id', siteServiceTypeIds)
+        .order('sort_order')
+    : { data: [] }
+  const serviceVisitTypes = (visitTypesData || []) as ServiceVisitType[]
+
+  const { data: panelAssignmentsData } = siteSystemIds.length > 0
+    ? await supabase
+        .from('panel_visit_assignments')
+        .select('*')
+        .in('site_system_id', siteSystemIds)
+    : { data: [] }
+  const panelAssignments = (panelAssignmentsData || []) as PanelVisitAssignment[]
+
+  // Billing accounts belonging to this site's client (includes sub-clients), used
+  // by the Billing card to show/override which account each service is billed to.
+  const siteClientId = (site as Site).client_id
+  const { data: billingAccountsData } = siteClientId
+    ? await supabase
+        .from('billing_accounts')
+        .select('*')
+        .eq('client_id', siteClientId)
+        .order('is_default', { ascending: false })
+        .order('name', { ascending: true })
+    : { data: [] }
+  const billingAccounts = (billingAccountsData || []) as BillingAccount[]
+
   // Get tasks for this site's services
   const siteServiceIds = siteServices.map(ss => ss.id)
   const { data: tasksData } = siteServiceIds.length > 0 
@@ -278,6 +322,63 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
         .filter((x): x is [string, string] => x !== null),
     ).entries(),
   ).map(([id, name]) => ({ id, name }))
+
+  // ─── Overview "Calls" tile ────────────────────────────────────────────────
+  // Open calls: any active work (pending / in progress / paused).
+  const OPEN_CALL_STATUSES = ['pending', 'in_progress', 'paused']
+  const openCallsCount = allCalls.filter((c) => OPEN_CALL_STATUSES.includes(c.status)).length
+
+  // Awaiting PO: chargeable, not-yet-invoiced calls that have an outstanding
+  // (un-authorised) PO request logged — i.e. we have asked the client for a PO
+  // number and are still waiting on it.
+  const chargeableOpenTaskIds = allCalls
+    .filter((c) => c.chargeable && !c.charge_invoiced_at)
+    .map((c) => c.id)
+  const { data: openPoReqs } = chargeableOpenTaskIds.length > 0
+    ? await supabase
+        .from('po_requests')
+        .select('task_id')
+        .is('authorised_at', null)
+        .in('task_id', chargeableOpenTaskIds)
+    : { data: [] }
+  const awaitingPoCount = new Set(
+    ((openPoReqs || []) as { task_id: string }[]).map((r) => r.task_id),
+  ).size
+
+  // Service calls expected in the next 6 months (pending scheduled visits).
+  const overviewToday = new Date()
+  overviewToday.setHours(0, 0, 0, 0)
+  const overviewHorizon = new Date(overviewToday)
+  overviewHorizon.setMonth(overviewHorizon.getMonth() + 6)
+  const upcomingVisits: UpcomingVisit[] = allCalls
+    .filter((c) => {
+      if (c.status !== 'pending' || !c.scheduled_date) return false
+      const d = new Date(c.scheduled_date)
+      return d >= overviewToday && d <= overviewHorizon
+    })
+    .sort((a, b) => ((a.scheduled_date ?? '') < (b.scheduled_date ?? '') ? -1 : 1))
+    .map((c) => {
+      const system =
+        c.system_type ??
+        c.site_service?.service_type?.system_type ??
+        c.service_type?.system_type ??
+        null
+      const ss = c.site_service
+      const isWeeklyRecurring =
+        !!ss && ss.frequency_unit === 'weeks' && (ss.frequency_value ?? 1) === 1
+      return {
+        id: c.id,
+        serviceName:
+          c.site_service?.service_type?.name ?? c.service_type?.name ?? 'Service visit',
+        systemName: system?.name ?? null,
+        systemColor: system?.color ?? null,
+        systemCode: system?.code ?? null,
+        scheduledDate: c.scheduled_date as string,
+        bookedStartTime: c.booked_start_time ?? null,
+        bookedEndTime: c.booked_end_time ?? null,
+        isWeeklyRecurring,
+      }
+    })
 
   // Filter out service types already added to this site. Reactive / emergency
   // (non-recurring) call types are excluded here — they aren't recurring
@@ -515,6 +616,12 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
 
         <TabsContent value="overview" className="mt-0">
           <div className="grid gap-6 md:grid-cols-2">
+        <SiteCallsOverviewCard
+          siteId={id}
+          openCallsCount={openCallsCount}
+          awaitingPoCount={awaitingPoCount}
+          upcomingVisits={upcomingVisits}
+        />
         {siteClient && (
           <Card className="md:col-span-2">
             <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
@@ -565,6 +672,18 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
               )}
             </CardContent>
           </Card>
+        )}
+        {siteClientId && (
+          <SiteBillingCard
+            siteId={id}
+            siteBillingAccountId={(site as Site).billing_account_id ?? null}
+            services={siteServices.map((ss) => ({
+              id: ss.id,
+              name: ss.service_type?.name ?? 'Service',
+              billing_account_id: ss.billing_account_id ?? null,
+            }))}
+            accounts={billingAccounts}
+          />
         )}
         <Card>
           <CardHeader>
@@ -708,6 +827,8 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
                   siteStatus={(site as Site).status}
                   panelFieldDefs={panelFieldDefs}
                   panels={panels}
+                  serviceVisitTypes={serviceVisitTypes}
+                  panelAssignments={panelAssignments}
                   subcontractors={subcontractors}
                   site={site as Site}
                   engineers={engineers}

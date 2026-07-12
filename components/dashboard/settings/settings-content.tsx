@@ -22,6 +22,7 @@ import { SignatureManager } from './signature-manager'
 import { AvatarManager } from './avatar-manager'
 import { BulkDataSettings } from './bulk-data-settings'
 import { GlobalConfigSettings } from './global-config-settings'
+import { signatureSrc } from '@/lib/blob'
 
 interface SettingsContentProps {
   user: AuthUser
@@ -278,7 +279,7 @@ export function SettingsContent({ user, profile, company, branches, departments,
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <SignatureManager signatureUrl={profile.signature_url} />
+            <SignatureManager signatureUrl={signatureSrc(profile.signature_url)} />
           </CardContent>
         </Card>
       </TabsContent>

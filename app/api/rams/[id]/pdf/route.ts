@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/auth'
 import { getRamsSettings } from '@/lib/rams/actions'
 import { renderRamsPdf } from '@/lib/rams/pdf'
+import { signatureSrc } from '@/lib/blob'
 import type { RamsDocument } from '@/lib/rams/types'
 
 export const dynamic = 'force-dynamic'
@@ -53,7 +54,9 @@ export async function GET(
     siteName: (siteRes.data as { name?: string } | null)?.name ?? null,
     preparedByName: preparer?.full_name ?? null,
     preparedByRole: preparer?.role_ref?.name ?? preparer?.job_title ?? null,
-    preparedBySignatureUrl: preparer?.signature_url ?? null,
+    // @react-pdf fetches this image server-side (no session), so resolve the
+    // private signature pathname to an absolute public delivery URL.
+    preparedBySignatureUrl: signatureSrc(preparer?.signature_url, { absolute: true }),
   })
 
   return new NextResponse(buffer as unknown as BodyInit, {

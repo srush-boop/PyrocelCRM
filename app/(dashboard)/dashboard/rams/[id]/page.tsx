@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { getAuthContext } from '@/lib/auth'
 import { RamsDetail } from '@/components/rams/rams-detail'
+import { signatureSrc } from '@/lib/blob'
 import type {
   RamsDocument,
   RamsEngineerConfirmation,
@@ -104,9 +105,9 @@ export default async function RamsDetailPage({
           (preparerRes.data as { job_title?: string | null } | null)?.job_title ??
           null
         }
-        preparedBySignatureUrl={
-          (preparerRes.data as { signature_url?: string | null } | null)?.signature_url ?? null
-        }
+        preparedBySignatureUrl={signatureSrc(
+          (preparerRes.data as { signature_url?: string | null } | null)?.signature_url,
+        )}
         approvedByName={(approverRes.data as { full_name?: string } | null)?.full_name ?? null}
         confirmations={(confirmations as RamsEngineerConfirmation[]) ?? []}
         signatures={(signatures as RamsSignature[]) ?? []}

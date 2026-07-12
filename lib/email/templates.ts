@@ -1,5 +1,3 @@
-import { TaskResult } from '@/lib/types/database'
-
 export interface ChecklistItem {
   id: string
   label: string
@@ -11,37 +9,6 @@ export interface ChecklistItem {
   type?: 'pass_fail' | 'text' | 'number' | 'checkbox'
   value?: boolean | string | number | null
   notes?: string
-}
-
-// Renders a single checklist row. Pass/fail items get a ✓/✗ result icon;
-// informational items (e.g. damper summary counts like "Failed: 1") render
-// neutrally with their value, so they are never shown as failures.
-const checklistItemHtml = (item: ChecklistItem): string => {
-  // Advisory items are neither pass nor fail — render them neutrally in amber.
-  if (item.advisory) {
-    return `
-      <div class="item advisory">
-        <strong>! ${item.label} (Advisory)</strong>
-        ${item.notes ? `<p>${item.notes}</p>` : ''}
-      </div>
-    `
-  }
-  const isPassFail = item.type === 'pass_fail' || typeof item.passed === 'boolean'
-  if (!isPassFail) {
-    const hasValue = item.value !== undefined && item.value !== null && item.value !== ''
-    return `
-      <div class="item info">
-        <strong>${item.label}${hasValue ? `: ${item.value}` : ''}</strong>
-        ${item.notes ? `<p>${item.notes}</p>` : ''}
-      </div>
-    `
-  }
-  return `
-    <div class="item ${item.passed ? 'pass' : 'fail'}">
-      <strong>${item.passed ? '✓' : '✗'} ${item.label}</strong>
-      ${item.notes ? `<p>${item.notes}</p>` : ''}
-    </div>
-  `
 }
 
 export interface EmailData {
@@ -56,333 +23,360 @@ export interface EmailData {
   engineerName: string
   engineerNotes?: string
   reportUrl?: string
+  // ─── "What happens next" facts (optional; computed at send time) ──────────
+  // A follow-up call/visit has been logged for the further works identified.
+  followUpLogged?: boolean
+  // The client's account requires a PO before chargeable works can be invoiced.
+  poRequired?: boolean
+  // A PO is already on file (client reference recorded or an authorised PO request).
+  poProvided?: boolean
+  // Public link for the client to provide their PO (logged as the first request).
+  poAuthoriseUrl?: string
+  // Remedial/failed items were found and a rectification quote will follow.
+  remedialQuoteToFollow?: boolean
 }
 
-// Pyrocel brand palette (shared across all transactional emails).
+// ─── Brand ───────────────────────────────────────────────────────────────────
+// Pyrocel brand palette + company facts (shared across all transactional emails).
 const BRAND = {
   red: '#c8362b',
   charcoal: '#1f2937',
   ink: '#111827',
+  muted: '#6b7280',
+  slate: '#374151',
+  border: '#e5e7eb',
+  bg: '#f3f4f6',
 }
 
-// Renders a branded "Open report" call-to-action button. Returns an empty
-// string when no URL is available so emails still send without a link.
-const reportButton = (url?: string): string => {
+const COMPANY = {
+  legalName: 'Pyrocel Ltd',
+  tagline: 'Fire & Security Experts since 1989',
+  outOfHours: '01670 707070',
+  website: 'www.pyrocel.co.uk',
+  websiteUrl: 'https://www.pyrocel.co.uk',
+}
+
+// Minimal HTML escaping for interpolated dynamic values (names, notes, refs).
+const esc = (value: unknown): string =>
+  String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+
+const H3 = `margin:24px 0 8px;font-size:15px;font-weight:700;color:${BRAND.ink};`
+
+// ─── Shared building blocks ────────────────────────────────────────────────
+
+// A branded call-to-action button. Returns empty string when no URL is given.
+const ctaButton = (url: string | undefined, label: string, color: string = BRAND.red): string => {
   if (!url) return ''
   return `
-    <div style="text-align: center; margin: 28px 0;">
-      <a href="${url}" style="display: inline-block; background: ${BRAND.red}; color: #ffffff; text-decoration: none; font-weight: bold; padding: 12px 28px; border-radius: 6px;">
-        Open Full Report
-      </a>
-    </div>
-  `
+    <div style="text-align:center;margin:18px 0 6px;">
+      <a href="${url}" style="display:inline-block;background:${color};color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 28px;border-radius:6px;">${label}</a>
+    </div>`
 }
 
-export const generateClientPassEmail = (data: EmailData): { subject: string; html: string } => {
-  const html = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: ${BRAND.red}; color: white; padding: 24px 20px; text-align: center; border-radius: 5px; }
-          .brand { font-size: 22px; font-weight: bold; letter-spacing: 1px; margin: 0 0 4px; }
-          .content { padding: 20px; background: #f9f9f9; margin: 20px 0; border-radius: 5px; }
-          .checklist { margin: 20px 0; }
-          .item { padding: 10px; border-left: 4px solid #2d8659; background: white; margin: 10px 0; }
-    .pass { border-left-color: #28a745; }
-    .fail { border-left-color: #dc3545; }
-    .advisory { border-left-color: #f59e0b; }
-    .info { border-left-color: #6b7280; }
-          .footer { text-align: center; color: #666; font-size: 12px; }
-          .stamp { background: #28a745; color: white; padding: 10px 20px; border-radius: 5px; display: inline-block; font-weight: bold; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <p class="brand">PYROCEL</p>
-            <h1 style="margin: 0; font-size: 18px;">Service Completed Successfully</h1>
-          </div>
-          
-          <div class="content">
-            <p>Dear ${data.clientName},</p>
-            
-            <p>We are pleased to inform you that your ${data.serviceType} service has been completed successfully at ${data.siteName}.</p>
-            
-            <h3>Service Details</h3>
-            <ul>
-              ${data.referenceNumber ? `<li><strong>Inspection Reference:</strong> ${data.referenceNumber}</li>` : ''}
-              <li><strong>Site:</strong> ${data.siteName}</li>
-              <li><strong>Service Type:</strong> ${data.serviceType}</li>
-              <li><strong>Completion Date:</strong> ${data.completedDate}</li>
-              <li><strong>Engineer:</strong> ${data.engineerName}</li>
-            </ul>
-            
-            <h3>Inspection Results</h3>
-            <div class="stamp">✓ ALL ITEMS PASSED</div>
-            
-            <div class="checklist">
-              ${data.checklist.map(checklistItemHtml).join('')}
-            </div>
+// Wraps body content in the branded shell: charcoal header, coloured status
+// ribbon, white content card, and a footer with contact + out-of-hours details.
+const emailShell = (opts: { ribbonLabel: string; ribbonColor: string; body: string }): string => `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>${esc(opts.ribbonLabel)}</title>
+</head>
+<body style="margin:0;padding:0;background:${BRAND.bg};">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BRAND.bg};padding:24px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06);font-family:Arial,Helvetica,sans-serif;color:${BRAND.ink};">
+        <tr><td style="background:${BRAND.charcoal};padding:22px 28px;">
+          <div style="font-size:22px;font-weight:800;letter-spacing:1.5px;color:${BRAND.red};">PYROCEL</div>
+          <div style="margin-top:3px;font-size:12px;color:#9ca3af;letter-spacing:.4px;">${COMPANY.tagline}</div>
+        </td></tr>
+        <tr><td style="background:${opts.ribbonColor};padding:12px 28px;">
+          <span style="color:#ffffff;font-size:15px;font-weight:700;">${esc(opts.ribbonLabel)}</span>
+        </td></tr>
+        <tr><td style="padding:24px 28px;line-height:1.55;font-size:14px;color:${BRAND.slate};">
+          ${opts.body}
+        </td></tr>
+        <tr><td style="background:#f9fafb;border-top:1px solid ${BRAND.border};padding:18px 28px;">
+          <p style="margin:0 0 6px;font-size:12px;color:${BRAND.muted};">
+            <strong style="color:${BRAND.slate};">${COMPANY.legalName}</strong> &middot; Fire &amp; Security Experts &middot; Newcastle &amp; Leeds
+          </p>
+          <p style="margin:0 0 6px;font-size:12px;color:${BRAND.muted};">
+            24/7 out-of-hours support for contracted customers:
+            <a href="tel:${COMPANY.outOfHours.replace(/\s/g, '')}" style="color:${BRAND.red};text-decoration:none;font-weight:600;">${COMPANY.outOfHours}</a>
+            &middot;
+            <a href="${COMPANY.websiteUrl}" style="color:${BRAND.red};text-decoration:none;font-weight:600;">${COMPANY.website}</a>
+          </p>
+          <p style="margin:0;font-size:11px;color:#9ca3af;">This is an automated service report. Please do not reply to this email.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
 
-            ${reportButton(data.reportUrl)}
-            
-            ${data.engineerNotes ? `
-              <h3>Engineer Notes</h3>
-              <p>${data.engineerNotes}</p>
-            ` : ''}
-            
-            <p>If you have any questions about this service, please don't hesitate to contact us.</p>
-            
-            <p>Best regards,<br/>The Pyrocel Team</p>
-          </div>
-          
-          <div class="footer">
-            <p>This is an automated report from Pyrocel. Please do not reply to this email.</p>
-          </div>
-        </div>
-      </body>
-    </html>
-  `
+// Label/value "Service details" panel.
+const detailsPanel = (data: EmailData, attendedLabel = 'Completed'): string => {
+  const row = (label: string, value: string) => `
+    <tr>
+      <td style="padding:4px 0;font-size:14px;color:${BRAND.muted};width:42%;vertical-align:top;">${label}</td>
+      <td style="padding:4px 0;font-size:14px;color:${BRAND.ink};font-weight:600;">${value}</td>
+    </tr>`
+  return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${BRAND.border};border-radius:8px;border-collapse:separate;overflow:hidden;margin:4px 0 8px;">
+      <tr><td style="background:#f9fafb;padding:10px 14px;font-size:13px;font-weight:700;color:${BRAND.slate};border-bottom:1px solid ${BRAND.border};">Service details</td></tr>
+      <tr><td style="padding:8px 14px 10px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+          ${data.referenceNumber ? row('Reference', esc(data.referenceNumber)) : ''}
+          ${row('Site', esc(data.siteName))}
+          ${row('Service', esc(data.serviceType))}
+          ${row(attendedLabel, esc(data.completedDate))}
+          ${row('Engineer', esc(data.engineerName))}
+        </table>
+      </td></tr>
+    </table>`
+}
+
+// Compact coloured summary pills for pass/fail/advisory counts.
+const resultsSummary = (checklist: ChecklistItem[]): string => {
+  let passed = 0
+  let failed = 0
+  let advisory = 0
+  for (const item of checklist) {
+    if (item.advisory) advisory++
+    else if (item.passed === true) passed++
+    else if (item.passed === false) failed++
+  }
+  const pill = (label: string, count: number, bg: string, color: string) =>
+    count > 0
+      ? `<span style="display:inline-block;background:${bg};color:${color};border-radius:999px;padding:4px 12px;font-size:12px;font-weight:700;margin:0 6px 6px 0;">${label} ${count}</span>`
+      : ''
+  const pills = [
+    pill('Passed', passed, '#dcfce7', '#166534'),
+    pill('Requires attention', failed, '#fee2e2', '#991b1b'),
+    pill('Advisory', advisory, '#fef3c7', '#92400e'),
+  ].join('')
+  if (!pills) return ''
+  return `<div style="margin:2px 0 6px;">${pills}</div>`
+}
+
+// Renders a single checklist row with inline styles (email-client safe).
+const checklistItemHtml = (item: ChecklistItem): string => {
+  const wrap = (border: string, title: string, notes?: string) => `
+    <div style="border:1px solid #eef0f2;border-left:4px solid ${border};border-radius:6px;background:#ffffff;padding:9px 12px;margin:8px 0;">
+      <div style="font-size:14px;font-weight:600;color:${BRAND.ink};">${title}</div>
+      ${notes ? `<div style="margin-top:3px;font-size:13px;color:${BRAND.muted};">${esc(notes)}</div>` : ''}
+    </div>`
+
+  if (item.advisory) {
+    return wrap('#f59e0b', `! ${esc(item.label)} (Advisory)`, item.notes)
+  }
+  const isPassFail = item.type === 'pass_fail' || typeof item.passed === 'boolean'
+  if (!isPassFail) {
+    const hasValue = item.value !== undefined && item.value !== null && item.value !== ''
+    return wrap('#6b7280', `${esc(item.label)}${hasValue ? `: ${esc(item.value)}` : ''}`, item.notes)
+  }
+  return wrap(
+    item.passed ? '#28a745' : '#dc3545',
+    `${item.passed ? '&#10003;' : '&times;'} ${esc(item.label)}`,
+    item.notes,
+  )
+}
+
+const engineerNotesHtml = (data: EmailData): string =>
+  data.engineerNotes
+    ? `<h3 style="${H3}">Engineer notes</h3>
+       <p style="margin:0;font-size:14px;color:${BRAND.slate};white-space:pre-line;">${esc(data.engineerNotes)}</p>`
+    : ''
+
+// A single "what happens next" card, tinted by intent.
+const nextStepCard = (opts: {
+  heading: string
+  body: string
+  tint: 'red' | 'amber' | 'blue' | 'green'
+  button?: { url?: string; label: string }
+}): string => {
+  const tints = {
+    red: { bg: '#fef2f2', border: '#fecaca', head: '#991b1b' },
+    amber: { bg: '#fffbeb', border: '#fde68a', head: '#92400e' },
+    blue: { bg: '#eff6ff', border: '#bfdbfe', head: '#1e40af' },
+    green: { bg: '#f0fdf4', border: '#bbf7d0', head: '#166534' },
+  }[opts.tint]
+  return `
+    <div style="border:1px solid ${tints.border};background:${tints.bg};border-radius:8px;padding:14px 16px;margin:10px 0;">
+      <div style="font-size:14px;font-weight:700;color:${tints.head};margin-bottom:4px;">${opts.heading}</div>
+      <div style="font-size:14px;color:${BRAND.slate};line-height:1.5;">${opts.body}</div>
+      ${opts.button ? ctaButton(opts.button.url, opts.button.label) : ''}
+    </div>`
+}
+
+// Builds the dynamic "What happens next" cards from the computed facts.
+// Returns empty string when there is nothing specific to tell the client.
+const buildNextStepCards = (data: EmailData): string => {
+  const cards: string[] = []
+
+  if (data.followUpLogged) {
+    cards.push(
+      nextStepCard({
+        tint: 'blue',
+        heading: 'Follow-up visit arranged',
+        body:
+          'We&rsquo;ve logged a follow-up call to carry out the further works identified during this visit. ' +
+          'Our service desk will be in touch to confirm a convenient date.',
+      }),
+    )
+  }
+
+  if (data.poRequired && !data.poProvided) {
+    cards.push(
+      nextStepCard({
+        tint: 'amber',
+        heading: 'Purchase order required',
+        body:
+          `Your account requires a purchase order number before we can invoice any chargeable works from this visit` +
+          `${data.referenceNumber ? ` (Ref ${esc(data.referenceNumber)})` : ''}. ` +
+          (data.poAuthoriseUrl
+            ? 'Please provide your PO using the button below and we&rsquo;ll log it against this call.'
+            : 'Please reply with your PO number so we can log it against this call.'),
+        button: data.poAuthoriseUrl
+          ? { url: data.poAuthoriseUrl, label: 'Provide your PO number' }
+          : undefined,
+      }),
+    )
+  }
+
+  if (data.remedialQuoteToFollow) {
+    cards.push(
+      nextStepCard({
+        tint: 'red',
+        heading: 'Remedial quote to follow',
+        body:
+          'We will prepare a remedial quote to rectify the items identified and send it to you for ' +
+          'authorisation, usually within 3 working days.',
+      }),
+    )
+  }
+
+  return cards.join('')
+}
+
+// ─── Client-facing templates ───────────────────────────────────────────────
+
+export const generateClientPassEmail = (data: EmailData): { subject: string; html: string } => {
+  const nextCards = buildNextStepCards(data)
+  const body = `
+    <p style="margin:0 0 14px;">Dear ${esc(data.clientName)},</p>
+    <p style="margin:0 0 14px;">
+      We&rsquo;re pleased to confirm that your <strong>${esc(data.serviceType)}</strong> service at
+      <strong>${esc(data.siteName)}</strong> has been completed successfully. All items were found to be
+      satisfactory.
+    </p>
+    ${detailsPanel(data)}
+    <h3 style="${H3}">Results</h3>
+    ${resultsSummary(data.checklist)}
+    <div>${data.checklist.map(checklistItemHtml).join('')}</div>
+    ${engineerNotesHtml(data)}
+    ${ctaButton(data.reportUrl, 'Open Full Report')}
+    <h3 style="${H3}">What happens next</h3>
+    ${
+      nextCards ||
+      `<p style="margin:0;font-size:14px;color:${BRAND.slate};">No further action is required following this visit. If you have any questions, please contact your account manager or our service desk.</p>`
+    }
+    <p style="margin:18px 0 0;">Kind regards,<br/><strong>The Pyrocel Team</strong></p>`
   return {
-    subject: `Service Completed: ${data.serviceType} at ${data.siteName}${data.referenceNumber ? ` (Ref ${data.referenceNumber})` : ''}`,
-    html
+    subject: `Service completed: ${data.serviceType} at ${data.siteName}${data.referenceNumber ? ` (Ref ${data.referenceNumber})` : ''}`,
+    html: emailShell({ ribbonLabel: 'Service completed successfully', ribbonColor: '#16a34a', body }),
   }
 }
 
 export const generateClientFailEmail = (data: EmailData): { subject: string; html: string } => {
-  const failedItems = data.checklist.filter(item => item.passed === false)
-  
-  const html = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: ${BRAND.charcoal}; color: white; padding: 24px 20px; text-align: center; border-radius: 5px; }
-          .brand { font-size: 22px; font-weight: bold; letter-spacing: 1px; margin: 0 0 4px; color: ${'#f87171'}; }
-          .content { padding: 20px; background: #f9f9f9; margin: 20px 0; border-radius: 5px; }
-          .checklist { margin: 20px 0; }
-          .item { padding: 10px; border-left: 4px solid #dc3545; background: white; margin: 10px 0; }
-    .pass { border-left-color: #28a745; }
-    .fail { border-left-color: #dc3545; }
-    .advisory { border-left-color: #f59e0b; }
-    .info { border-left-color: #6b7280; }
-          .footer { text-align: center; color: #666; font-size: 12px; }
-          .stamp { background: #dc3545; color: white; padding: 10px 20px; border-radius: 5px; display: inline-block; font-weight: bold; }
-          .alert { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 12px; border-radius: 5px; margin: 20px 0; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <p class="brand">PYROCEL</p>
-            <h1 style="margin: 0; font-size: 18px;">Service Requires Attention</h1>
-          </div>
-          
-          <div class="content">
-            <p>Dear ${data.clientName},</p>
-            
-            <div class="alert">
-              <strong>Important:</strong> Your ${data.serviceType} service at ${data.siteName} has identified items that require attention.
-            </div>
-            
-            <h3>Service Details</h3>
-            <ul>
-              ${data.referenceNumber ? `<li><strong>Inspection Reference:</strong> ${data.referenceNumber}</li>` : ''}
-              <li><strong>Site:</strong> ${data.siteName}</li>
-              <li><strong>Service Type:</strong> ${data.serviceType}</li>
-              <li><strong>Completion Date:</strong> ${data.completedDate}</li>
-              <li><strong>Engineer:</strong> ${data.engineerName}</li>
-            </ul>
-            
-            <h3>Inspection Results</h3>
-            <div class="stamp">⚠ ITEMS REQUIRE ATTENTION</div>
-            
-            <div class="checklist">
-              ${data.checklist.map(checklistItemHtml).join('')}
-            </div>
-            
-            ${data.engineerNotes ? `
-              <h3>Engineer Notes</h3>
-              <p>${data.engineerNotes}</p>
-            ` : ''}
-            
-            ${reportButton(data.reportUrl)}
-
-            <h3>Next Steps</h3>
-            <p>Please contact us as soon as possible to discuss the failed items and schedule any necessary follow-up work.</p>
-            
-            <p>Best regards,<br/>The Pyrocel Team</p>
-          </div>
-          
-          <div class="footer">
-            <p>This is an automated report from Pyrocel. Please do not reply to this email.</p>
-          </div>
-        </div>
-      </body>
-    </html>
-  `
+  const nextCards = buildNextStepCards(data)
+  const body = `
+    <p style="margin:0 0 14px;">Dear ${esc(data.clientName)},</p>
+    <p style="margin:0 0 14px;">
+      We&rsquo;ve completed your <strong>${esc(data.serviceType)}</strong> service at
+      <strong>${esc(data.siteName)}</strong>. During the visit we identified one or more items that
+      require attention, detailed below.
+    </p>
+    ${detailsPanel(data)}
+    <h3 style="${H3}">Results</h3>
+    ${resultsSummary(data.checklist)}
+    <div>${data.checklist.map(checklistItemHtml).join('')}</div>
+    ${engineerNotesHtml(data)}
+    ${ctaButton(data.reportUrl, 'Open Full Report')}
+    <h3 style="${H3}">What happens next</h3>
+    ${
+      nextCards ||
+      `<p style="margin:0;font-size:14px;color:${BRAND.slate};">Please contact our service desk so we can discuss the items identified and arrange any necessary follow-up works.</p>`
+    }
+    <p style="margin:18px 0 0;">Kind regards,<br/><strong>The Pyrocel Team</strong></p>`
   return {
-    subject: `Attention Required: ${data.serviceType} at ${data.siteName}${data.referenceNumber ? ` (Ref ${data.referenceNumber})` : ''}`,
-    html
+    subject: `Attention required: ${data.serviceType} at ${data.siteName}${data.referenceNumber ? ` (Ref ${data.referenceNumber})` : ''}`,
+    html: emailShell({ ribbonLabel: 'Service requires attention', ribbonColor: BRAND.red, body }),
   }
 }
 
-// Sent when the engineer attended but could not gain access to the site. This
-// is deliberately neutral — it is not a failure or a defect notice, it simply
-// informs the client that the visit could not be completed and will be
-// re-attended.
+// Sent when the engineer attended but could not gain access. Neutral outcome —
+// not a failure or defect notice.
 export const generateClientNoAccessEmail = (data: EmailData): { subject: string; html: string } => {
-  const html = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: ${BRAND.charcoal}; color: white; padding: 24px 20px; text-align: center; border-radius: 5px; }
-          .brand { font-size: 22px; font-weight: bold; letter-spacing: 1px; margin: 0 0 4px; }
-          .content { padding: 20px; background: #f9f9f9; margin: 20px 0; border-radius: 5px; }
-          .footer { text-align: center; color: #666; font-size: 12px; }
-          .stamp { background: #d97706; color: white; padding: 10px 20px; border-radius: 5px; display: inline-block; font-weight: bold; }
-          .notice { background: #fef3c7; border: 1px solid #fde68a; color: #92400e; padding: 12px; border-radius: 5px; margin: 20px 0; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <p class="brand">PYROCEL</p>
-            <h1 style="margin: 0; font-size: 18px;">Visit Could Not Be Completed</h1>
-          </div>
-
-          <div class="content">
-            <p>Dear ${data.clientName},</p>
-
-            <div class="notice">
-              <strong>No access:</strong> Our engineer attended ${data.siteName} for the scheduled
-              ${data.serviceType} but was unable to gain access to carry out the service.
-            </div>
-
-            <h3>Visit Details</h3>
-            <ul>
-              ${data.referenceNumber ? `<li><strong>Reference:</strong> ${data.referenceNumber}</li>` : ''}
-              <li><strong>Site:</strong> ${data.siteName}</li>
-              <li><strong>Service Type:</strong> ${data.serviceType}</li>
-              <li><strong>Attended Date:</strong> ${data.completedDate}</li>
-              <li><strong>Engineer:</strong> ${data.engineerName}</li>
-            </ul>
-
-            <div class="stamp">NO ACCESS — SERVICE NOT CARRIED OUT</div>
-
-            ${data.engineerNotes ? `
-              <h3>Engineer Notes</h3>
-              <p>${data.engineerNotes}</p>
-            ` : ''}
-
-            ${reportButton(data.reportUrl)}
-
-            <h3>Next Steps</h3>
-            <p>Please contact us to arrange access so we can re-attend and complete the service. This visit has not been recorded as a service failure.</p>
-
-            <p>Best regards,<br/>The Pyrocel Team</p>
-          </div>
-
-          <div class="footer">
-            <p>This is an automated report from Pyrocel. Please do not reply to this email.</p>
-          </div>
-        </div>
-      </body>
-    </html>
-  `
+  const nextCards = buildNextStepCards(data)
+  const body = `
+    <p style="margin:0 0 14px;">Dear ${esc(data.clientName)},</p>
+    <p style="margin:0 0 14px;">
+      Our engineer attended <strong>${esc(data.siteName)}</strong> for the scheduled
+      <strong>${esc(data.serviceType)}</strong> but was unable to gain access to carry out the service.
+      This visit has <strong>not</strong> been recorded as a service failure.
+    </p>
+    ${detailsPanel(data, 'Attended')}
+    ${engineerNotesHtml(data)}
+    ${ctaButton(data.reportUrl, 'Open Full Report')}
+    <h3 style="${H3}">What happens next</h3>
+    <p style="margin:0 0 10px;font-size:14px;color:${BRAND.slate};">
+      Please contact our service desk to arrange access so we can re-attend and complete the service.
+    </p>
+    ${nextCards}
+    <p style="margin:18px 0 0;">Kind regards,<br/><strong>The Pyrocel Team</strong></p>`
   return {
-    subject: `No Access: ${data.serviceType} at ${data.siteName}${data.referenceNumber ? ` (Ref ${data.referenceNumber})` : ''}`,
-    html
+    subject: `No access: ${data.serviceType} at ${data.siteName}${data.referenceNumber ? ` (Ref ${data.referenceNumber})` : ''}`,
+    html: emailShell({ ribbonLabel: 'Visit could not be completed', ribbonColor: '#d97706', body }),
   }
 }
 
 export const generateInternalAlertEmail = (data: EmailData): { subject: string; html: string } => {
-  const failedItems = data.checklist.filter(item => item.passed === false)
-  
-  const html = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: ${BRAND.charcoal}; color: white; padding: 24px 20px; text-align: center; border-radius: 5px; }
-          .brand { font-size: 22px; font-weight: bold; letter-spacing: 1px; margin: 0 0 4px; color: #f87171; }
-          .content { padding: 20px; background: #f9f9f9; margin: 20px 0; border-radius: 5px; }
-          .checklist { margin: 20px 0; }
-          .item { padding: 10px; border-left: 4px solid #dc3545; background: white; margin: 10px 0; }
-          .footer { text-align: center; color: #666; font-size: 12px; }
-          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-          th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-          th { background: #f5f5f5; font-weight: bold; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <p class="brand">PYROCEL</p>
-            <h1 style="margin: 0; font-size: 18px;">Internal Alert: Failed Inspection Items</h1>
-          </div>
-          
-          <div class="content">
-            <h3>Failed Items Report</h3>
-            <table>
-              <tr>
-                <th>Reference</th>
-                <th>Site</th>
-                <th>Service Type</th>
-                <th>Client</th>
-                <th>Engineer</th>
-                <th>Date</th>
-              </tr>
-              <tr>
-                <td>${data.referenceNumber || '-'}</td>
-                <td>${data.siteName}</td>
-                <td>${data.serviceType}</td>
-                <td>${data.clientName}</td>
-                <td>${data.engineerName}</td>
-                <td>${data.completedDate}</td>
-              </tr>
-            </table>
-            
-            <h3>Failed Items (${failedItems.length})</h3>
-            <div class="checklist">
-              ${failedItems.map(item => `
-                <div class="item">
-                  <strong>✗ ${item.label}</strong>
-                  ${item.notes ? `<p>${item.notes}</p>` : ''}
-                </div>
-              `).join('')}
-            </div>
-            
-            ${data.engineerNotes ? `
-              <h3>Engineer Notes</h3>
-              <p>${data.engineerNotes}</p>
-            ` : ''}
-            
-            ${reportButton(data.reportUrl)}
-
-            <h3>Action Required</h3>
-            <p>Please review the failed items and contact the client to schedule follow-up work or issue corrective actions.</p>
-          </div>
-          
-          <div class="footer">
-            <p>This is an automated internal alert.</p>
-          </div>
-        </div>
-      </body>
-    </html>
-  `
+  const failedItems = data.checklist.filter((item) => item.passed === false && !item.advisory)
+  const row = (label: string, value: string) => `
+    <tr>
+      <td style="padding:4px 0;font-size:14px;color:${BRAND.muted};width:42%;vertical-align:top;">${label}</td>
+      <td style="padding:4px 0;font-size:14px;color:${BRAND.ink};font-weight:600;">${value}</td>
+    </tr>`
+  const body = `
+    <p style="margin:0 0 14px;">A completed inspection has been flagged with items requiring attention.</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${BRAND.border};border-radius:8px;border-collapse:separate;overflow:hidden;margin:4px 0 8px;">
+      <tr><td style="background:#f9fafb;padding:10px 14px;font-size:13px;font-weight:700;color:${BRAND.slate};border-bottom:1px solid ${BRAND.border};">Call details</td></tr>
+      <tr><td style="padding:8px 14px 10px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+          ${data.referenceNumber ? row('Reference', esc(data.referenceNumber)) : ''}
+          ${row('Site', esc(data.siteName))}
+          ${row('Client', esc(data.clientName))}
+          ${row('Service', esc(data.serviceType))}
+          ${row('Engineer', esc(data.engineerName))}
+          ${row('Date', esc(data.completedDate))}
+        </table>
+      </td></tr>
+    </table>
+    <h3 style="${H3}">Failed items (${failedItems.length})</h3>
+    <div>${failedItems.map(checklistItemHtml).join('') || `<p style="margin:0;color:${BRAND.muted};">None recorded.</p>`}</div>
+    ${engineerNotesHtml(data)}
+    ${ctaButton(data.reportUrl, 'Open Full Report')}
+    <h3 style="${H3}">Action required</h3>
+    <p style="margin:0;font-size:14px;color:${BRAND.slate};">
+      Review the failed items and contact the client to schedule follow-up work or issue corrective actions.
+    </p>`
   return {
-    subject: `[ALERT] Failed Inspection Items - ${data.siteName}${data.referenceNumber ? ` (Ref ${data.referenceNumber})` : ''}`,
-    html
+    subject: `[ALERT] Failed inspection items - ${data.siteName}${data.referenceNumber ? ` (Ref ${data.referenceNumber})` : ''}`,
+    html: emailShell({ ribbonLabel: 'Internal alert: failed inspection items', ribbonColor: BRAND.charcoal, body }),
   }
 }

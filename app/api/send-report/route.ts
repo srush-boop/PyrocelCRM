@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
         *,
         site_service:site_services(
           *,
-          site:sites(*),
+          site:sites(*, client:clients(id, name, requires_po)),
           service_type:service_types(*)
         ),
         assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(*)
@@ -86,6 +86,67 @@ export async function POST(request: NextRequest) {
     if (!baseUrl) {
       console.warn('[v0] Unable to determine base URL — "Open report" link omitted from email.')
     }
+
+    // ─── "What happens next" facts ───────────────────────────────────────────
+    // Tell the client what we've done / intend to do based on the real state of
+    // the call: follow-up logged, PO required but missing, remedial quote to come.
+    const client = (site as { client?: { requires_po?: boolean | null } | null })?.client ?? null
+
+    // Has a follow-up call already been logged for this visit?
+    const { data: followUp } = await supabase
+      .from('follow_up_requests')
+      .select('id')
+      .eq('original_task_id', taskId)
+      .limit(1)
+    const followUpLogged = Array.isArray(followUp) && followUp.length > 0
+
+    // Existing PO requests for this call (to know if a PO is already on file, and
+    // to reuse an outstanding request's authorisation token rather than duplicating).
+    const { data: poRows } = await supabase
+      .from('po_requests')
+      .select('authorisation_token, authorised_at, po_number')
+      .eq('task_id', taskId)
+      .order('created_at', { ascending: false })
+    const poList = (poRows || []) as {
+      authorisation_token: string | null
+      authorised_at: string | null
+      po_number: string | null
+    }[]
+    const authorisedPoExists = poList.some((r) => !!r.authorised_at && !!r.po_number)
+
+    // PO required = client account requires a PO AND this call isn't exempt.
+    const poRequired = !!client?.requires_po && !task.po_not_required
+    // PO satisfied = a client reference is recorded OR an authorised PO exists.
+    const poProvided = !!task.client_ref || authorisedPoExists
+
+    // When a PO is required but missing, offer the client a link to provide it.
+    // Reuse an outstanding (un-authorised) request's token, otherwise create a
+    // new request row (logged as the first request) — the token auto-generates.
+    let poAuthoriseUrl: string | undefined
+    if (poRequired && !poProvided && baseUrl) {
+      let token = poList.find((r) => !r.authorised_at)?.authorisation_token ?? null
+      if (!token) {
+        const { data: createdPo, error: createPoError } = await supabase
+          .from('po_requests')
+          .insert({
+            task_id: taskId,
+            requested_by: user.id,
+            note: 'Awaiting PO — requested via service completion report',
+          })
+          .select('authorisation_token')
+          .single()
+        if (createPoError) {
+          console.warn('[v0] Could not create PO request for report email:', createPoError.message)
+        }
+        token = (createdPo as { authorisation_token: string | null } | null)?.authorisation_token ?? null
+      }
+      if (token) poAuthoriseUrl = `${baseUrl}/po-authorise/${token}`
+    }
+
+    // Remedial quote to follow when there are attention items and we haven't
+    // already logged a follow-up call to carry the works out ourselves.
+    const remedialQuoteToFollow =
+      (overallStatus === 'fail' || overallStatus === 'partial') && !followUpLogged
 
     // Determine recipients.
     // Priority: explicit resend emails > per-service reporting emails (override) >
@@ -142,6 +203,11 @@ export async function POST(request: NextRequest) {
       engineerName: engineer?.full_name || engineer?.email || 'Engineer',
       engineerNotes: taskResult.engineer_notes || undefined,
       reportUrl,
+      followUpLogged,
+      poRequired,
+      poProvided,
+      poAuthoriseUrl,
+      remedialQuoteToFollow,
     }
 
     if (recipients.length === 0) {

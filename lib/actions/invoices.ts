@@ -138,6 +138,8 @@ export interface ReadyGroup {
   accountStatus: string | null
   clientName: string
   onHold: boolean
+  /** Client prefers one invoice per call; UI leads with per-call raising. */
+  invoiceCallsIndividually: boolean
   tasks: ReadyTask[]
   partsTotalPence: number
 }
@@ -157,11 +159,11 @@ export async function getReadyToInvoiceGroups(): Promise<ReadyGroup[]> {
         `
         id, completed_at, client_id, site_id, site_service_id,
         task_result:task_results(reference_number),
-        direct_site:sites!tasks_site_id_fkey(id, name, billing_account_id, client_id, clients(id, name)),
+        direct_site:sites!tasks_site_id_fkey(id, name, billing_account_id, client_id, clients(id, name, invoice_calls_individually)),
         site_service:site_services(
           id, billing_account_id,
           service_type:service_types(name),
-          sites(id, name, billing_account_id, client_id, clients(id, name))
+          sites(id, name, billing_account_id, client_id, clients(id, name, invoice_calls_individually))
         ),
         call_parts(id, quantity, unit_cost_pence, sale_unit_price_pence, chargeable, part:parts(name, sku))
       `,
@@ -236,6 +238,7 @@ export async function getReadyToInvoiceGroups(): Promise<ReadyGroup[]> {
         accountStatus: account?.status ?? null,
         clientName: client?.name || '',
         onHold: !!account && account.status !== 'live',
+        invoiceCallsIndividually: !!client?.invoice_calls_individually,
         tasks: [],
         partsTotalPence: 0,
       }
@@ -285,10 +288,10 @@ export async function createInvoiceFromTasks(
     .from('tasks')
     .select(
       `
-      id, started_at, completed_at, scheduled_date, is_emergency,
+      id, started_at, completed_at, scheduled_date, is_emergency, client_ref,
       task_result:task_results(reference_number),
-      direct_site:sites!tasks_site_id_fkey(name),
-      site_service:site_services(service_type:service_types(name), sites(name)),
+      direct_site:sites!tasks_site_id_fkey(id, name, address, postcode),
+      site_service:site_services(service_type:service_types(name), sites(id, name, address, postcode)),
       call_parts(id, part_id, quantity, unit_cost_pence, sale_unit_price_pence, chargeable, part:parts(name, sku))
     `,
     )
@@ -311,6 +314,36 @@ export async function createInvoiceFromTasks(
     loadBankHolidays(supabase),
   ])
   const rateCard = resolveRateCard(account.rate_card_id, cardsById, defaultCard)
+
+  // Derive each call's PO number + site so we can (a) set invoice-level values
+  // when they're common across all calls, and (b) prefix line descriptions when
+  // they differ (per-line rollup). Site address is a newline-joined snapshot.
+  const rowMeta = new Map<
+    string,
+    { po: string | null; siteId: string | null; siteName: string | null; siteAddress: string | null }
+  >()
+  for (const t of rows) {
+    const siteService = Array.isArray(t.site_service) ? t.site_service[0] : t.site_service
+    const site = siteService?.sites || t.direct_site || null
+    const address = site ? [site.address, site.postcode].filter(Boolean).join('\n') || null : null
+    rowMeta.set(t.id, {
+      po: t.client_ref?.trim() || null,
+      siteId: site?.id ?? null,
+      siteName: site?.name ?? null,
+      siteAddress: address,
+    })
+  }
+  const metas = [...rowMeta.values()]
+  const commonOrNull = <T,>(vals: (T | null)[]): T | null => {
+    const distinct = new Set(vals.map((v) => v ?? ''))
+    return distinct.size === 1 ? (vals[0] ?? null) : null
+  }
+  const commonPo = commonOrNull(metas.map((m) => m.po))
+  const commonSiteId = commonOrNull(metas.map((m) => m.siteId))
+  const commonSiteAddress = commonOrNull(metas.map((m) => m.siteAddress))
+  // Only prefix per-line PO/site when they actually differ between calls.
+  const mixedPo = commonPo === null && metas.some((m) => m.po)
+  const mixedSite = commonSiteId === null && metas.length > 1
 
   // Reserve a per-financial-year sequence number atomically.
   const now = new Date()
@@ -336,6 +369,9 @@ export async function createInvoiceFromTasks(
       billing_account_id: account.id,
       client_id: account.client_id,
       status: 'draft',
+      po_number: commonPo,
+      site_id: commonSiteId,
+      site_address: commonSiteAddress,
       bill_to_name: account.invoice_contact_name || account.name,
       bill_to_address: billToAddress || null,
       bill_to_email: account.invoice_email,
@@ -376,7 +412,12 @@ export async function createInvoiceFromTasks(
         ? t.task_result[0]?.reference_number
         : t.task_result?.reference_number) || ''
 
-    const suffix = `${siteName}${reference ? ` (${reference})` : ''}`
+    // When PO/site differ across the invoice's calls, surface each call's own
+    // PO (and site is already in the suffix) on its line descriptions.
+    const meta = rowMeta.get(t.id)
+    const poPrefix = mixedPo && meta?.po ? `PO ${meta.po} — ` : ''
+    const siteLabel = mixedSite ? meta?.siteName || siteName : siteName
+    const suffix = `${siteLabel}${reference ? ` (${reference})` : ''}`
 
     if (rateCard) {
       // Derive the band from the attendance moment: prefer the actual start /
@@ -412,7 +453,7 @@ export async function createInvoiceFromTasks(
         task_id: t.id,
         part_id: null,
         kind: 'labour',
-        description: `Call-out (${bandLabel}) — ${serviceName} — ${suffix}`,
+        description: `${poPrefix}Call-out (${bandLabel}) — ${serviceName} — ${suffix}`,
         quantity: 1,
         unit_price_pence: priced.attendancePence,
         amount_pence: priced.attendancePence,
@@ -426,7 +467,7 @@ export async function createInvoiceFromTasks(
           task_id: t.id,
           part_id: null,
           kind: 'labour',
-          description: `Labour (${bandLabel}) — ${priced.chargeHours}h @ rate — ${suffix}`,
+          description: `${poPrefix}Labour (${bandLabel}) — ${priced.chargeHours}h @ rate — ${suffix}`,
           quantity: priced.chargeHours,
           unit_price_pence: priced.hourlyRatePence,
           amount_pence: lineAmountPence(priced.chargeHours, priced.hourlyRatePence),
@@ -441,7 +482,7 @@ export async function createInvoiceFromTasks(
         task_id: t.id,
         part_id: null,
         kind: 'labour',
-        description: `${serviceName} — ${suffix}`,
+        description: `${poPrefix}${serviceName} — ${suffix}`,
         quantity: 1,
         unit_price_pence: 0,
         amount_pence: 0,
@@ -459,7 +500,7 @@ export async function createInvoiceFromTasks(
         task_id: t.id,
         part_id: p.part_id ?? null,
         kind: 'part',
-        description: part?.name || part?.sku || 'Part',
+        description: `${poPrefix}${part?.name || part?.sku || 'Part'}`,
         quantity: qty,
         unit_price_pence: unit,
         amount_pence: lineAmountPence(qty, unit),
@@ -642,7 +683,12 @@ export async function deleteInvoiceLine(
 
 export async function updateInvoiceMeta(
   invoiceId: string,
-  input: { notes: string | null; taxRate: number },
+  input: {
+    notes: string | null
+    taxRate: number
+    poNumber?: string | null
+    siteAddress?: string | null
+  },
 ): Promise<{ error: string | null }> {
   const ctx = await requireManager()
   if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
@@ -652,10 +698,16 @@ export async function updateInvoiceMeta(
   if (guard) return { error: guard }
 
   const taxRate = Math.max(0, Math.min(100, Number(input.taxRate) || 0))
-  const { error } = await supabase
-    .from('invoices')
-    .update({ notes: input.notes?.trim() || null, tax_rate: taxRate })
-    .eq('id', invoiceId)
+  const patch: Record<string, unknown> = {
+    notes: input.notes?.trim() || null,
+    tax_rate: taxRate,
+  }
+  // PO and site address are only meaningful in draft; only patch when provided
+  // so callers that just tweak notes/tax don't wipe them.
+  if (input.poNumber !== undefined) patch.po_number = input.poNumber?.trim() || null
+  if (input.siteAddress !== undefined) patch.site_address = input.siteAddress?.trim() || null
+
+  const { error } = await supabase.from('invoices').update(patch).eq('id', invoiceId)
   if (error) return { error: error.message }
 
   await recomputeTotals(supabase, invoiceId)

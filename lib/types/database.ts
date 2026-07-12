@@ -98,6 +98,8 @@ export interface Client {
   login_tagline: string | null
   /** When true, chargeable calls for this client need a PO number before invoicing. */
   requires_po: boolean
+  /** When true, this client's calls are invoiced one-per-call rather than in bulk. */
+  invoice_calls_individually: boolean
   created_at: string
   updated_at: string
 }
@@ -143,7 +145,14 @@ export interface BillingAccount {
 
 // ---- Invoicing (Phase 3) ------------------------------------------------
 export type InvoiceStatus = 'draft' | 'issued' | 'paid' | 'void'
-export type InvoiceLineKind = 'labour' | 'part' | 'other'
+export type InvoiceLineKind =
+  | 'labour'
+  | 'part'
+  | 'other'
+  // Job-sourced lines:
+  | 'job_claim' // works-completed-to-date claim (percent or amount)
+  | 'equipment' // client-issued equipment
+  | 'job_line' // a selected quote line billed directly
 
 // A CRM-owned invoice, built from reviewed chargeable calls grouped under one
 // billing account. Amounts are stored in integer pence.
@@ -154,7 +163,14 @@ export interface Invoice {
   sequence: number
   billing_account_id: string | null
   client_id: string | null
+  /** Source job when this invoice was raised from a job (null for call invoices). */
+  job_id: string | null
   status: InvoiceStatus
+  /** Customer PO number. Set only when common across all covered calls / from the job. */
+  po_number: string | null
+  /** Optional site the work relates to, plus a text snapshot of its address. */
+  site_id: string | null
+  site_address: string | null
   // Bill-to snapshot taken at issue time (the billing account can change later).
   bill_to_name: string | null
   bill_to_address: string | null
@@ -188,6 +204,10 @@ export interface InvoiceLineItem {
   invoice_id: string
   task_id: string | null
   part_id: string | null
+  /** Source job for job-sourced lines. */
+  job_id: string | null
+  /** Source quote line for equipment / job_line kinds (drives dedup). */
+  quote_line_item_id: string | null
   kind: InvoiceLineKind
   description: string
   quantity: number
@@ -195,6 +215,19 @@ export interface InvoiceLineItem {
   amount_pence: number
   sort_order: number
   created_at: string
+}
+
+// A quantity of a job's physical quote line issued/delivered to the client.
+// Drives the "invoice issued equipment" mode; issued-but-un-invoiced qty is
+// the issued total minus quantities already billed on that quote line.
+export interface JobIssuedItem {
+  id: string
+  job_id: string
+  quote_line_item_id: string | null
+  quantity: number
+  note: string | null
+  issued_at: string
+  issued_by: string | null
 }
 
 // A single day's working hours. `start`/`end` are 24h "HH:MM" strings and

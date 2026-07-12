@@ -44,10 +44,13 @@ export function CreateInvoiceGroups({ groups }: { groups: ReadyGroup[] }) {
 
 function GroupCard({ group }: { group: ReadyGroup }) {
   const router = useRouter()
-  const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(group.tasks.map((t) => t.id)),
+  const individual = group.invoiceCallsIndividually
+  const [selected, setSelected] = useState<Set<string>>(() =>
+    // When the client is invoiced per-call, start with nothing bulk-selected.
+    individual ? new Set() : new Set(group.tasks.map((t) => t.id)),
   )
   const [creating, setCreating] = useState(false)
+  const [raisingId, setRaisingId] = useState<string | null>(null)
 
   const allSelected = selected.size === group.tasks.length
   const noneSelected = selected.size === 0
@@ -83,6 +86,23 @@ function GroupCard({ group }: { group: ReadyGroup }) {
     if (res.invoiceId) router.push(`/dashboard/invoices/${res.invoiceId}`)
     else router.refresh()
   }
+
+  // Raise a standalone invoice for a single call (one call = one invoice).
+  const handleRaiseSingle = async (taskId: string) => {
+    if (!group.accountId) return
+    setRaisingId(taskId)
+    const res = await createInvoiceFromTasks(group.accountId, [taskId])
+    setRaisingId(null)
+    if (res.error) {
+      toast.error(res.error)
+      return
+    }
+    toast.success('Draft invoice created')
+    if (res.invoiceId) router.push(`/dashboard/invoices/${res.invoiceId}`)
+    else router.refresh()
+  }
+
+  const canAct = !!group.accountId && !group.onHold
 
   return (
     <Card>
@@ -129,30 +149,35 @@ function GroupCard({ group }: { group: ReadyGroup }) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-10">
-                  <Checkbox
-                    checked={allSelected}
-                    onCheckedChange={toggleAll}
-                    aria-label="Select all calls"
-                  />
-                </TableHead>
+                {!individual && (
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={allSelected}
+                      onCheckedChange={toggleAll}
+                      aria-label="Select all calls"
+                    />
+                  </TableHead>
+                )}
                 <TableHead>Ref</TableHead>
                 <TableHead>Site</TableHead>
                 <TableHead>Service</TableHead>
                 <TableHead className="text-center">Parts</TableHead>
                 <TableHead className="text-right">Parts total</TableHead>
+                <TableHead className="w-32 text-right">Invoice</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {group.tasks.map((t) => (
                 <TableRow key={t.id}>
-                  <TableCell>
-                    <Checkbox
-                      checked={selected.has(t.id)}
-                      onCheckedChange={() => toggle(t.id)}
-                      aria-label={`Select call ${t.reference}`}
-                    />
-                  </TableCell>
+                  {!individual && (
+                    <TableCell>
+                      <Checkbox
+                        checked={selected.has(t.id)}
+                        onCheckedChange={() => toggle(t.id)}
+                        aria-label={`Select call ${t.reference}`}
+                      />
+                    </TableCell>
+                  )}
                   <TableCell className="font-medium">{t.reference}</TableCell>
                   <TableCell>{t.siteName}</TableCell>
                   <TableCell className="text-muted-foreground">{t.serviceName}</TableCell>
@@ -166,6 +191,20 @@ function GroupCard({ group }: { group: ReadyGroup }) {
                   <TableCell className="text-right">
                     {t.partsTotalPence > 0 ? formatPence(t.partsTotalPence) : '—'}
                   </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleRaiseSingle(t.id)}
+                      disabled={!canAct || raisingId !== null || creating}
+                    >
+                      {raisingId === t.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        'Raise invoice'
+                      )}
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -173,19 +212,28 @@ function GroupCard({ group }: { group: ReadyGroup }) {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
-            {selected.size} of {group.tasks.length} call
-            {group.tasks.length === 1 ? '' : 's'} selected. Each call adds a labour
-            line to price up.
-          </p>
-          <Button onClick={handleCreate} disabled={!canCreate || creating}>
-            {creating ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <ReceiptText className="mr-2 h-4 w-4" />
-            )}
-            Create draft invoice
-          </Button>
+          {individual ? (
+            <p className="text-sm text-muted-foreground">
+              This client is invoiced per call — raise each call individually using
+              the buttons above.
+            </p>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                {selected.size} of {group.tasks.length} call
+                {group.tasks.length === 1 ? '' : 's'} selected. Each call adds a labour
+                line to price up.
+              </p>
+              <Button onClick={handleCreate} disabled={!canCreate || creating || raisingId !== null}>
+                {creating ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <ReceiptText className="mr-2 h-4 w-4" />
+                )}
+                Create draft invoice
+              </Button>
+            </>
+          )}
         </div>
       </CardContent>
     </Card>

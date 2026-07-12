@@ -71,6 +71,9 @@ const KIND_LABELS: Record<InvoiceLineKind, string> = {
   labour: 'Labour',
   part: 'Part',
   other: 'Other',
+  job_claim: 'Works to date',
+  equipment: 'Equipment',
+  job_line: 'Job line',
 }
 
 function formatDate(value: string | null): string {
@@ -144,6 +147,22 @@ export function InvoiceDetail({
                 <p className="mt-1 text-xs text-muted-foreground">
                   Sage A/C: {invoice.sage_account_ref}
                 </p>
+              )}
+              {(invoice.po_number || invoice.site_address) && (
+                <div className="mt-3 space-y-1">
+                  {invoice.po_number && (
+                    <p className="text-sm">
+                      <span className="text-muted-foreground">PO number: </span>
+                      <span className="font-medium">{invoice.po_number}</span>
+                    </p>
+                  )}
+                  {invoice.site_address && (
+                    <div className="text-sm">
+                      <span className="text-muted-foreground">Site: </span>
+                      <span className="whitespace-pre-line">{invoice.site_address}</span>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
             <div className="grid grid-cols-2 gap-2 text-sm sm:block sm:space-y-1">
@@ -264,6 +283,8 @@ export function InvoiceDetail({
                 invoiceId={invoice.id}
                 taxRate={invoice.tax_rate}
                 notes={invoice.notes}
+                poNumber={invoice.po_number}
+                siteAddress={invoice.site_address}
               />
             )}
             {!isDraft && invoice.notes && (
@@ -525,14 +546,20 @@ function TaxRateAndNotes({
   invoiceId,
   taxRate,
   notes,
+  poNumber,
+  siteAddress,
 }: {
   invoiceId: string
   taxRate: number
   notes: string | null
+  poNumber: string | null
+  siteAddress: string | null
 }) {
   const router = useRouter()
   const [rate, setRate] = useState(String(taxRate))
   const [note, setNote] = useState(notes ?? '')
+  const [po, setPo] = useState(poNumber ?? '')
+  const [site, setSite] = useState(siteAddress ?? '')
   const [saving, setSaving] = useState(false)
 
   const save = async () => {
@@ -540,6 +567,8 @@ function TaxRateAndNotes({
     const res = await updateInvoiceMeta(invoiceId, {
       notes: note,
       taxRate: Number(rate) || 0,
+      poNumber: po,
+      siteAddress: site,
     })
     setSaving(false)
     if (res.error) {
@@ -551,6 +580,26 @@ function TaxRateAndNotes({
 
   return (
     <div className="space-y-3 border-t pt-3">
+      <div>
+        <Label className="text-xs">PO number</Label>
+        <Input
+          value={po}
+          onChange={(e) => setPo(e.target.value)}
+          onBlur={save}
+          placeholder="Customer purchase order"
+          className="h-8"
+        />
+      </div>
+      <div>
+        <Label className="text-xs">Site address</Label>
+        <Textarea
+          value={site}
+          onChange={(e) => setSite(e.target.value)}
+          onBlur={save}
+          placeholder="Site the work relates to"
+          rows={2}
+        />
+      </div>
       <div>
         <Label className="text-xs">VAT rate (%)</Label>
         <Input

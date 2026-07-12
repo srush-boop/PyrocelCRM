@@ -26,6 +26,9 @@ interface ServiceRow {
   active: boolean | null
   site: { status: string | null } | null
   service_type: { status: string | null; is_recurring: boolean | null } | null
+  // Parent system (null when the service is unassigned). Inactive systems are
+  // excluded from recurring call generation.
+  site_system: { active: boolean | null } | null
 }
 
 interface TaskRow {
@@ -98,7 +101,8 @@ export async function generateMonthlyCalls(
     .select(
       `id, service_type_id, frequency_value, frequency_unit, next_service_date, active,
        site:sites(status),
-       service_type:service_types(status, is_recurring)`,
+       service_type:service_types(status, is_recurring),
+       site_system:site_systems(active)`,
     )
   if (svcError) {
     return { ok: false, error: 'Could not load services.', ...empty }
@@ -109,6 +113,9 @@ export async function generateMonthlyCalls(
       s.active !== false &&
       s.site?.status !== 'dead' &&
       s.service_type?.status !== 'dead' &&
+      // Services under an inactive system are not scheduled (unassigned services
+      // have no parent system and are unaffected).
+      s.site_system?.active !== false &&
       // Reactive / emergency (non-recurring) call types never auto-generate PPM
       // calls — they are logged ad-hoc via "Book Call".
       s.service_type?.is_recurring !== false,

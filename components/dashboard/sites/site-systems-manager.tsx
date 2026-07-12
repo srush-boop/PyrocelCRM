@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
+import { Badge } from '@/components/ui/badge'
 import { SystemBadge, SystemIcon, systemAccentStyle } from '@/lib/system-types'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -47,6 +49,8 @@ import {
   CalendarDays,
   AlertTriangle,
   HardHat,
+  Power,
+  PowerOff,
 } from 'lucide-react'
 import {
   EDITABLE_SITE_FLAG_KEYS,
@@ -146,6 +150,9 @@ export function SiteSystemsManager({
     install_date: '',
     nimbus_url: '',
     default_subcontractor_id: '',
+    // Whether the system is in service. Inactive systems are kept for history but
+    // excluded from recurring call generation.
+    active: true,
     // Per-system attendance overrides, tri-state: null inherits the site default.
     booking_required: null as boolean | null,
     access_required: null as boolean | null,
@@ -193,6 +200,7 @@ export function SiteSystemsManager({
       install_date: '',
       nimbus_url: '',
       default_subcontractor_id: '',
+      active: true,
       booking_required: null,
       access_required: null,
       keys_required: null,
@@ -210,6 +218,7 @@ export function SiteSystemsManager({
       install_date: system.install_date ?? '',
       nimbus_url: system.nimbus_url ?? '',
       default_subcontractor_id: system.default_subcontractor_id ?? '',
+      active: system.active !== false,
       booking_required: system.booking_required ?? null,
       access_required: system.access_required ?? null,
       keys_required: system.keys_required ?? null,
@@ -237,6 +246,7 @@ export function SiteSystemsManager({
         ? form.nimbus_url.trim() || null
         : null,
       default_subcontractor_id: form.default_subcontractor_id || null,
+      active: form.active,
       // Per-system attendance overrides (null = inherit the site default).
       booking_required: form.booking_required,
       access_required: form.access_required,
@@ -254,6 +264,23 @@ export function SiteSystemsManager({
     }
     toast.success(editing ? 'System updated' : 'System added')
     setDialogOpen(false)
+    router.refresh()
+  }
+
+  // Quick active/inactive toggle from the system tile, without opening the full
+  // edit dialog. Inactive systems are kept for history but skipped by recurring
+  // call generation.
+  async function toggleActive(system: SiteSystem) {
+    const next = system.active === false
+    const { error } = await supabase
+      .from('site_systems')
+      .update({ active: next })
+      .eq('id', system.id)
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+    toast.success(next ? 'System marked active' : 'System marked inactive')
     router.refresh()
   }
 
@@ -474,11 +501,15 @@ export function SiteSystemsManager({
             const subName = system.default_subcontractor_id
               ? subcontractors.find((s) => s.id === system.default_subcontractor_id)?.name ?? null
               : null
+            const isInactive = system.active === false
 
             return (
               <Card
                 key={system.id}
-                className={st ? 'border-2 border-l-4' : undefined}
+                className={cn(
+                  st && 'border-2 border-l-4',
+                  isInactive && 'opacity-60',
+                )}
                 style={st ? systemAccentStyle(st.color) : undefined}
               >
                 <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 py-2">
@@ -492,6 +523,12 @@ export function SiteSystemsManager({
                       {systemTitle(system)}
                       {typeLabel && system.system_type_id && st?.code && (
                         <SystemBadge system={st} codeOnly />
+                      )}
+                      {isInactive && (
+                        <Badge variant="secondary" className="gap-1">
+                          <PowerOff className="h-3 w-3" />
+                          Inactive
+                        </Badge>
                       )}
                     </CardTitle>
                     {system.description && (
@@ -571,7 +608,7 @@ export function SiteSystemsManager({
                     )}
                   </div>
                   <div className="flex gap-1">
-                    {reactiveServiceTypes.length > 0 && site && (
+                    {reactiveServiceTypes.length > 0 && site && !isInactive && (
                       <CreateTaskDialog
                         siteServices={[]}
                         engineers={engineers}
@@ -590,6 +627,18 @@ export function SiteSystemsManager({
                         }
                       />
                     )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => toggleActive(system)}
+                      title={isInactive ? 'Mark system active' : 'Mark system inactive'}
+                    >
+                      {isInactive ? <Power className="h-4 w-4" /> : <PowerOff className="h-4 w-4" />}
+                      <span className="sr-only">
+                        {isInactive ? 'Mark system active' : 'Mark system inactive'}
+                      </span>
+                    </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(system)}>
                       <Pencil className="h-4 w-4" />
                       <span className="sr-only">Edit system</span>
@@ -639,11 +688,13 @@ export function SiteSystemsManager({
                     size="sm"
                     className="h-7 px-2 text-xs"
                     onClick={() => openAddServices(system.id)}
-                    disabled={addableForSystem.length === 0}
+                    disabled={addableForSystem.length === 0 || isInactive}
                     title={
-                      addableForSystem.length === 0
-                        ? 'No more service types available for this system type'
-                        : undefined
+                      isInactive
+                        ? 'System is inactive — mark it active to add services'
+                        : addableForSystem.length === 0
+                          ? 'No more service types available for this system type'
+                          : undefined
                     }
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -736,6 +787,22 @@ export function SiteSystemsManager({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="system-active" className="text-sm font-medium">
+                  Active
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Inactive systems are kept for history but excluded from recurring call
+                  generation.
+                </p>
+              </div>
+              <Switch
+                id="system-active"
+                checked={form.active}
+                onCheckedChange={(checked) => setForm({ ...form, active: checked })}
+              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="system-desc">

@@ -110,6 +110,19 @@ export async function getMyLoneWorkerState(): Promise<MyLoneWorkerState | null> 
   }
 }
 
+// Parse a "HH:MM" (24h) time into a Date on the same calendar day as `ref`.
+// Returns null for anything that isn't a valid time-of-day string.
+function timeStringToToday(value: string, ref: Date): Date | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec((value ?? '').trim())
+  if (!m) return null
+  const hours = Number(m[1])
+  const mins = Number(m[2])
+  if (hours > 23 || mins > 59) return null
+  const d = new Date(ref)
+  d.setHours(hours, mins, 0, 0)
+  return d
+}
+
 export async function startShift(input: {
   shiftStart: string
   shiftEnd: string
@@ -138,10 +151,20 @@ export async function startShift(input: {
     timings.redMinutes,
   )
 
+  // The inputs arrive as "HH:MM" strings; anchor them to today so they can be
+  // stored in the timestamptz columns. If the end is at/before the start, treat
+  // it as an overnight shift and roll the end to the next day.
+  const shiftStartTs = timeStringToToday(input.shiftStart, now)
+  const shiftEndTs = timeStringToToday(input.shiftEnd, now)
+  if (!shiftStartTs || !shiftEndTs) return { error: 'Enter valid shift times' }
+  if (shiftEndTs.getTime() <= shiftStartTs.getTime()) {
+    shiftEndTs.setDate(shiftEndTs.getDate() + 1)
+  }
+
   const { error } = await admin.from('lone_worker_sessions').insert({
     user_id: user.id,
-    shift_start: input.shiftStart,
-    shift_end: input.shiftEnd,
+    shift_start: shiftStartTs.toISOString(),
+    shift_end: shiftEndTs.toISOString(),
     checkin_interval_minutes: interval,
     amber_minutes: timings.amberMinutes,
     red_minutes: timings.redMinutes,

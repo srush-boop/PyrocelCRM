@@ -2,6 +2,17 @@ export type LoneWorkerPromptState = 'ok' | 'prompting' | 'amber' | 'red'
 export type LoneWorkerEventLevel = 'amber' | 'red'
 export type LoneWorkerAckVia = 'self' | 'office'
 
+/**
+ * Format a stored shift bound for display as HH:MM. Shift start/end are stored
+ * as full ISO timestamps; this renders just the time. Falls back to the raw
+ * value if it isn't parseable (e.g. a legacy "HH:MM" string).
+ */
+export function formatShiftTime(value: string): string {
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return value
+  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+}
+
 export interface LoneWorkerTimings {
   /** Minutes between check-in prompts. */
   checkinMinutes: number

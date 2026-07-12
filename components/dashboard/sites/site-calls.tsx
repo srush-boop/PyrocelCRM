@@ -55,10 +55,12 @@ type CallServiceType = Pick<ServiceType, 'id' | 'name'> & {
   system_type?: CallSystemType | null
 }
 
-export type SiteCall = Omit<Task, 'service_type' | 'system_type' | 'assigned_engineer' | 'site_service'> & {
+export type SiteCall = Omit<Task, 'service_type' | 'system_type' | 'assigned_engineer' | 'site_service' | 'visit_type'> & {
   site_service: (SiteService & { service_type: CallServiceType | null }) | null
   service_type: CallServiceType | null
   system_type: CallSystemType | null
+  // The scheduled visit sub-type (e.g. "Annual Visit", "Periodic Visit"), when set.
+  visit_type: { id: string; name: string } | null
   assigned_engineer: Profile | null
   task_result: TaskResult | null
   call_parts: { unit_cost_pence: number | null; quantity: number }[]
@@ -125,10 +127,12 @@ function CallCard({ call, onSendReport }: { call: SiteCall; onSendReport?: (c: S
   const serviceName = getServiceName(call)
   const system = getSystem(call)
   const systemName = system?.name ?? null
-  // The site name is implicit on the site page, so lead with the system type and
-  // service (both bold in the tile title), plus a matching system icon so these
-  // tiles share the same layout/dimensions as the all-calls grid tiles.
-  const title = systemName ? `${systemName} · ${serviceName}` : serviceName
+  const visitTypeName = call.visit_type?.name ?? null
+  // The site name is implicit on the site page, so lead with the system type,
+  // service and — where applicable — the visit sub-type (e.g. "Fire Alarm ·
+  // Annual Test and Inspection · Annual Visit"), plus a matching system icon so
+  // these tiles share the same layout/dimensions as the all-calls grid tiles.
+  const title = [systemName, serviceName, visitTypeName].filter(Boolean).join(' · ')
   // Colour-code by the resolved system type (falls back to a neutral slate),
   // matching the all-calls grid: coloured icon tile + left-border accent.
   const systemLike = { name: systemName ?? serviceName, code: system?.code, color: system?.color }

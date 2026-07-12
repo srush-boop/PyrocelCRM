@@ -281,6 +281,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
       site_service:site_services(*, service_type:service_types(*, system_type:system_types(id, name, code, color))),
       service_type:service_types(id, name, system_type:system_types(id, name, code, color)),
       system_type:system_types(id, name, code, color),
+      visit_type:service_visit_types(id, name),
       assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(*),
       task_result:task_results(reference_number, overall_status, email_sent_at),
       call_parts(unit_cost_pence, quantity),

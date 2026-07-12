@@ -54,6 +54,7 @@ type EngineerTask = {
     site: { name: string | null; address: string | null; postcode: string | null } | null
     service_type: { name: string | null } | null
   } | null
+  visit_type: { name: string | null } | null
 }
 
 export async function EngineerHome({ profile }: { profile: Profile }) {
@@ -74,7 +75,8 @@ export async function EngineerHome({ profile }: { profile: Profile }) {
     site_service:site_services(
       site:sites(name, address, postcode),
       service_type:service_types(name)
-    )
+    ),
+    visit_type:service_visit_types(name)
   `
 
   const [{ data: todayRows }, weekAheadCount] = await Promise.all([
@@ -180,7 +182,9 @@ export async function EngineerHome({ profile }: { profile: Profile }) {
                         )}
                       </div>
                       <p className="truncate text-sm text-muted-foreground">
-                        {task.site_service?.service_type?.name || 'Call'}
+                        {[task.site_service?.service_type?.name || 'Call', task.visit_type?.name]
+                          .filter(Boolean)
+                          .join(' · ')}
                       </p>
                       {(site?.address || site?.postcode) && (
                         <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">

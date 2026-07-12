@@ -86,3 +86,149 @@ export async function drivingRoute(points: LatLng[]): Promise<DrivingRoute> {
     return straightLine(points)
   }
 }
+
+export interface DrivingLeg {
+  miles: number
+  minutes: number
+}
+
+export interface DrivingLegsResult {
+  /** Ordered [lat, lng] pairs forming the full route polyline. */
+  coordinates: [number, number][]
+  totalMiles: number
+  totalMinutes: number
+  /** Per-leg driving time/distance between consecutive points (n-1 legs). */
+  legs: DrivingLeg[]
+  approximate: boolean
+}
+
+/** Straight-line fallback that also reports each individual leg. */
+function straightLineLegs(points: LatLng[]): DrivingLegsResult {
+  const legs: DrivingLeg[] = []
+  let totalMiles = 0
+  for (let i = 1; i < points.length; i++) {
+    const miles = distanceMiles(points[i - 1], points[i])
+    totalMiles += miles
+    legs.push({ miles: Math.round(miles * 10) / 10, minutes: Math.round((miles / 30) * 60) })
+  }
+  return {
+    coordinates: points.map((p) => [p.latitude, p.longitude] as [number, number]),
+    totalMiles: Math.round(totalMiles * 10) / 10,
+    totalMinutes: legs.reduce((a, l) => a + l.minutes, 0),
+    legs,
+    approximate: true,
+  }
+}
+
+/**
+ * Like `drivingRoute`, but also returns per-leg driving time/distance (from
+ * OSRM's `legs[]`) so a route timeline can show the drive between each stop.
+ */
+export async function drivingLegs(points: LatLng[]): Promise<DrivingLegsResult> {
+  if (points.length < 2) {
+    return {
+      coordinates: points.map((p) => [p.latitude, p.longitude] as [number, number]),
+      totalMiles: 0,
+      totalMinutes: 0,
+      legs: [],
+      approximate: true,
+    }
+  }
+
+  const coordPath = points.map((p) => `${p.longitude},${p.latitude}`).join(';')
+  const url = `${OSRM_BASE}/${coordPath}?overview=full&geometries=geojson`
+
+  try {
+    const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(6000) })
+    if (!res.ok) return straightLineLegs(points)
+    const data = (await res.json()) as {
+      code: string
+      routes?: Array<{
+        distance: number
+        duration: number
+        geometry: { coordinates: [number, number][] }
+        legs?: Array<{ distance: number; duration: number }>
+      }>
+    }
+    const route = data.code === 'Ok' ? data.routes?.[0] : undefined
+    if (!route) return straightLineLegs(points)
+
+    const legs: DrivingLeg[] = (route.legs ?? []).map((l) => ({
+      miles: Math.round((l.distance / 1000) * KM_TO_MILES * 10) / 10,
+      minutes: Math.round(l.duration / 60),
+    }))
+
+    return {
+      coordinates: route.geometry.coordinates.map((c) => [c[1], c[0]] as [number, number]),
+      totalMiles: Math.round((route.distance / 1000) * KM_TO_MILES * 10) / 10,
+      totalMinutes: Math.round(route.duration / 60),
+      legs,
+      approximate: false,
+    }
+  } catch {
+    return straightLineLegs(points)
+  }
+}
+
+export interface DrivingMatrix {
+  /** NxN driving durations in minutes; [i][j] = from point i to point j. */
+  durations: number[][]
+  /** NxN driving distances in miles. */
+  distances: number[][]
+  approximate: boolean
+}
+
+/** Straight-line NxN fallback matrix (haversine, ~30mph). */
+function straightLineMatrix(points: LatLng[]): DrivingMatrix {
+  const n = points.length
+  const durations: number[][] = []
+  const distances: number[][] = []
+  for (let i = 0; i < n; i++) {
+    durations[i] = []
+    distances[i] = []
+    for (let j = 0; j < n; j++) {
+      const miles = i === j ? 0 : distanceMiles(points[i], points[j])
+      distances[i][j] = Math.round(miles * 10) / 10
+      durations[i][j] = Math.round((miles / 30) * 60)
+    }
+  }
+  return { durations, distances, approximate: true }
+}
+
+/**
+ * Full N×N driving matrix via OSRM's `table` service (one request). Fetched once
+ * per view so the client can recompute leg times instantly when the visit order
+ * changes, without hitting the network on every drag. Falls back to a
+ * straight-line matrix on any failure.
+ */
+export async function drivingMatrix(points: LatLng[]): Promise<DrivingMatrix> {
+  if (points.length < 2) {
+    return { durations: [[0]], distances: [[0]], approximate: true }
+  }
+
+  const coordPath = points.map((p) => `${p.longitude},${p.latitude}`).join(';')
+  const url = `https://router.project-osrm.org/table/v1/driving/${coordPath}?annotations=duration,distance`
+
+  try {
+    const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(8000) })
+    if (!res.ok) return straightLineMatrix(points)
+    const data = (await res.json()) as {
+      code: string
+      durations?: number[][] // seconds
+      distances?: number[][] // metres
+    }
+    if (data.code !== 'Ok' || !data.durations) return straightLineMatrix(points)
+
+    const durations = data.durations.map((row) => row.map((s) => Math.round((s ?? 0) / 60)))
+    const distances = (data.distances ?? []).map((row) =>
+      row.map((m) => Math.round((m ?? 0) / 1000 * KM_TO_MILES * 10) / 10),
+    )
+    // If OSRM omitted distances, approximate them from straight-line.
+    const distancesFilled =
+      distances.length === points.length ? distances : straightLineMatrix(points).distances
+
+    return { durations, distances: distancesFilled, approximate: false }
+  } catch {
+    return straightLineMatrix(points)
+  }
+}

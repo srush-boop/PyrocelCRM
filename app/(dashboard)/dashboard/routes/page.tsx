@@ -35,7 +35,7 @@ export default async function RoutesPage() {
       .select(`
         id, name, route_id, route_position,
         services:site_services(
-          id, route_id, worker_type, active,
+          id, route_id, worker_type, active, frequency_unit,
           service_type:service_types(name),
           site_system:site_systems(name)
         )
@@ -51,6 +51,7 @@ export default async function RoutesPage() {
     route_id: string | null
     worker_type: string | null
     active: boolean | null
+    frequency_unit: string | null
     service_type: NameRel
     site_system: NameRel
   }
@@ -65,10 +66,14 @@ export default async function RoutesPage() {
   const relName = (rel: NameRel, fallback: string): string =>
     (Array.isArray(rel) ? rel[0]?.name : rel?.name) ?? fallback
 
+  // Only weekly/monthly-recurring services belong on a route (annual counts as
+  // monthly). One-off / non-recurring services are excluded as candidates.
+  const isRoutable = (unit: string | null): boolean => unit === 'weeks' || unit === 'months'
+
   // Normalise into the planner shape: each site carries its services so routing
-  // can be managed per service (grouped by system). Only CDO-performed services
-  // are eligible to be added to a route, so filter to `worker_type === 'cdo'`
-  // (still include a service already on a route so it can be removed).
+  // can be managed per service (grouped by system). Only CDO-performed,
+  // recurring services are eligible to be added to a route (still include a
+  // service already on a route so it can be removed).
   const sites: PlannerSite[] = ((sitesResult.data || []) as unknown as RawSite[])
     .map((site) => ({
       id: site.id,
@@ -76,7 +81,11 @@ export default async function RoutesPage() {
       route_id: site.route_id,
       route_position: site.route_position,
       services: (site.services || [])
-        .filter((svc) => svc.active !== false && (svc.worker_type === 'cdo' || svc.route_id))
+        .filter(
+          (svc) =>
+            svc.active !== false &&
+            ((svc.worker_type === 'cdo' && isRoutable(svc.frequency_unit)) || svc.route_id),
+        )
         .map((svc) => ({
           id: svc.id,
           route_id: svc.route_id,

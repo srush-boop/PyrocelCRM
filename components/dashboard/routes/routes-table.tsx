@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import {
@@ -30,7 +31,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Input } from '@/components/ui/input'
-import { MoreHorizontal, Pencil, Trash2, Search, Route as RouteIcon, Building2, MapPin } from 'lucide-react'
+import { MoreHorizontal, Pencil, Trash2, Search, Route as RouteIcon, Building2, MapPin, Map as MapIcon } from 'lucide-react'
 import { PrintButton } from '@/components/ui/print-button'
 import { EditRouteDialog } from './edit-route-dialog'
 import { RoutePlannerDialog, type PlannerSite } from './route-planner-dialog'
@@ -103,7 +104,14 @@ export function RoutesTable({ routes, engineers, sites }: RoutesTableProps) {
             ) : (
               filteredRoutes.map((route) => (
                 <TableRow key={route.id}>
-                  <TableCell className="font-medium">{route.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link
+                      href={`/dashboard/routes/${route.id}`}
+                      className="text-primary underline-offset-4 hover:underline"
+                    >
+                      {route.name}
+                    </Link>
+                  </TableCell>
                   <TableCell className="text-muted-foreground">
                     {route.description || '-'}
                   </TableCell>
@@ -130,6 +138,12 @@ export function RoutesTable({ routes, engineers, sites }: RoutesTableProps) {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem asChild>
+                          <Link href={`/dashboard/routes/${route.id}`}>
+                            <MapIcon className="mr-2 h-4 w-4" />
+                            Open route map
+                          </Link>
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setEditRoute(route)}>
                           <Pencil className="mr-2 h-4 w-4" />
                           Edit

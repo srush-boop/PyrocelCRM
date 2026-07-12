@@ -64,10 +64,7 @@ export async function bookCall(input: BookCallInput): Promise<BookCallResult> {
     .eq('id', user.id)
     .single()
   const role = (profile as { role?: string } | null)?.role
-  // True when the booker is an on-call engineer (not admin/office). On-call
-  // engineers are held to a stricter rule below: Active sites + active systems.
-  const bookingAsOncallEngineer = role !== 'admin' && role !== 'office'
-  if (bookingAsOncallEngineer) {
+  if (role !== 'admin' && role !== 'office') {
     // On-call engineers may log reactive / emergency call-outs during their
     // shift, but only assigned to themselves. Reuse the same shift detection
     // that drives the "You are on call" banner.
@@ -217,50 +214,6 @@ export async function bookCall(input: BookCallInput): Promise<BookCallResult> {
         }
       } catch {
         // Non-fatal — the call is still logged, just without coordinates.
-      }
-    }
-  }
-
-  // --- Site lifecycle + system availability gate --------------------------
-  // Runs for both call modes using the resolved anchors. Dormant (dead) sites
-  // are closed to everyone; on-call engineers are further restricted to Active
-  // (live) sites that have an active system for the call.
-  const gateSiteId = insertRow.site_id as string | null
-  if (gateSiteId) {
-    const { data: gateSite } = await supabase
-      .from('sites')
-      .select('status')
-      .eq('id', gateSiteId)
-      .single()
-    const gateStatus = (gateSite as { status: string | null } | null)?.status ?? null
-
-    if (gateStatus === 'dead') {
-      return { ok: false, error: 'This site is Dormant — calls cannot be logged against it.' }
-    }
-
-    if (bookingAsOncallEngineer) {
-      if (gateStatus !== 'live') {
-        return {
-          ok: false,
-          error: 'As the on-call engineer you can only log calls against Active sites.',
-        }
-      }
-      // Require an active system at the site (scoped to the call's system type
-      // when one is set).
-      const gateSystemTypeId = insertRow.system_type_id as string | null
-      let sysQuery = supabase
-        .from('site_systems')
-        .select('id')
-        .eq('site_id', gateSiteId)
-        .eq('active', true)
-        .limit(1)
-      if (gateSystemTypeId) sysQuery = sysQuery.eq('system_type_id', gateSystemTypeId)
-      const { data: activeSystems } = await sysQuery
-      if ((activeSystems?.length ?? 0) === 0) {
-        return {
-          ok: false,
-          error: 'This call must be logged against an active system at the site.',
-        }
       }
     }
   }

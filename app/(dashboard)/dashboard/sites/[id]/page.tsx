@@ -37,7 +37,6 @@ import { isFireAlarmService } from '@/lib/mcps'
 import { isEmergencyLightService } from '@/lib/emergency-lights'
 import { isExtinguisherService } from '@/lib/extinguishers'
 import { REMOTE_MONITORING_LABELS } from '@/lib/sites'
-import { siteStatusLabel } from '@/lib/site-status'
 import type {
   Profile,
   Site,
@@ -281,7 +280,6 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
       site_service:site_services(*, service_type:service_types(*, system_type:system_types(id, name, code, color))),
       service_type:service_types(id, name, system_type:system_types(id, name, code, color)),
       system_type:system_types(id, name, code, color),
-      visit_type:service_visit_types(id, name),
       assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(*),
       task_result:task_results(reference_number, overall_status, email_sent_at),
       call_parts(unit_cost_pence, quantity),
@@ -558,16 +556,8 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
         </Button>
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
-            <Badge
-              variant={
-                (site as Site).status === 'dead'
-                  ? 'destructive'
-                  : (site as Site).status === 'new'
-                    ? 'secondary'
-                    : 'default'
-              }
-            >
-              {siteStatusLabel((site as Site).status)}
+            <Badge variant={(site as Site).status === 'dead' ? 'destructive' : 'default'}>
+              {(site as Site).status === 'dead' ? 'Dead' : 'Live'}
             </Badge>
             {(site as Site & { route: Route | null }).route && (
               <Badge variant="secondary">

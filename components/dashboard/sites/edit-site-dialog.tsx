@@ -268,12 +268,12 @@ export function EditSiteDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="live">Active</SelectItem>
-                  <SelectItem value="dead">Dormant</SelectItem>
+                  <SelectItem value="live">Live</SelectItem>
+                  <SelectItem value="dead">Dead</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Dormant sites are paused and will not generate any new tasks.
+                Dead sites are paused and will not generate any new tasks.
               </p>
             </div>
             <div className="grid gap-2">

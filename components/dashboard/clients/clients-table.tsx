@@ -34,7 +34,6 @@ import {
 import { MoreHorizontal, Pencil, Trash2, Search, Building, Plus, ChevronRight, ChevronDown, MapPin, ExternalLink, ListChecks, Link2, FileText, Wallet } from 'lucide-react'
 import { PrintButton } from '@/components/ui/print-button'
 import type { Client, Site, SystemType, ServiceType } from '@/lib/types/database'
-import { siteStatusLabel } from '@/lib/site-status'
 import { AddClientDialog } from './add-client-dialog'
 import { EditClientDialog } from './edit-client-dialog'
 import { ClientChecklistDialog } from './client-checklist-dialog'
@@ -247,16 +246,10 @@ export function ClientsTable({
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
                                       <Badge
-                                        variant={
-                                          site.status === 'dead'
-                                            ? 'destructive'
-                                            : site.status === 'new'
-                                              ? 'secondary'
-                                              : 'default'
-                                        }
+                                        variant={site.status === 'dead' ? 'destructive' : 'default'}
                                         className="text-xs"
                                       >
-                                        {siteStatusLabel(site.status)}
+                                        {site.status === 'dead' ? 'Dead' : 'Live'}
                                       </Badge>
                                       <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
                                     </div>

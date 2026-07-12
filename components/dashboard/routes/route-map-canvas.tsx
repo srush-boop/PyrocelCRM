@@ -60,23 +60,27 @@ function FitBounds({ points }: { points: [number, number][] }) {
 }
 
 /**
- * Leaflet caches the container's size/origin at init. When the map mounts inside
- * an animating/transformed container (e.g. a Radix dialog) or a flex/grid cell
- * that resolves its height after paint, that cache is stale and the tile panes
- * render offset from the actual box. Recompute size after mount, on the next
- * frames, and on resize to keep the map aligned to its container.
+ * Leaflet caches the container's size at init. When the map mounts inside an
+ * animating/transformed container (e.g. a Radix dialog) or a cell whose height
+ * only resolves after paint, that cache is stale and the container can size
+ * wrong. A ResizeObserver recomputes exactly once per real size change (rAF
+ * debounced) — no arbitrary timers, so the map never oscillates.
  */
 function InvalidateSize() {
   const map = useMap()
   useEffect(() => {
-    const fix = () => map.invalidateSize({ animate: false })
-    const raf = requestAnimationFrame(fix)
-    const timers = [80, 250, 500].map((ms) => window.setTimeout(fix, ms))
-    window.addEventListener('resize', fix)
+    const container = map.getContainer()
+    let raf = 0
+    const fix = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => map.invalidateSize({ animate: false }))
+    }
+    fix()
+    const ro = new ResizeObserver(fix)
+    ro.observe(container)
     return () => {
       cancelAnimationFrame(raf)
-      timers.forEach(clearTimeout)
-      window.removeEventListener('resize', fix)
+      ro.disconnect()
     }
   }, [map])
   return null

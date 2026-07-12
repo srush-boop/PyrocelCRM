@@ -116,8 +116,9 @@ export function RouteOptimizeDialog({
         </div>
 
         <div className="grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-          {/* Proposed map */}
-          <div className="min-h-[360px] overflow-hidden rounded-md border">
+          {/* Proposed map — definite height so Leaflet never sizes against an
+              indefinite (percentage-of-auto) parent and balloons off-screen. */}
+          <div className="relative h-[360px] overflow-hidden rounded-md border lg:h-[520px]">
             {mapReady ? (
               <RouteMapCanvas
                 home={home}
@@ -127,7 +128,7 @@ export function RouteOptimizeDialog({
                 color={color}
               />
             ) : (
-              <div className="flex h-full min-h-[360px] items-center justify-center bg-muted/40 text-muted-foreground">
+              <div className="flex h-full items-center justify-center bg-muted/40 text-muted-foreground">
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                 Loading map…
               </div>

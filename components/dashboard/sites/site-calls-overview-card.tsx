@@ -26,7 +26,12 @@ import { SystemIcon, getSystemColors } from '@/lib/system-types'
 import { bookExistingCall } from '@/app/(dashboard)/dashboard/schedule/book-call-actions'
 
 export interface UpcomingVisit {
-  id: string
+  /** Stable list key (task id for created calls, synthetic for forecasts). */
+  key: string
+  /** Task id when the call already exists; null for a forecast occurrence. */
+  taskId: string | null
+  /** 'created' = a task row exists; 'forecast' = due to be generated. */
+  status: 'created' | 'forecast'
   serviceName: string
   systemName: string | null
   systemColor: string | null
@@ -36,6 +41,8 @@ export interface UpcomingVisit {
   bookedEndTime: string | null
   /** Weekly recurring PPM calls can't be booked as an individual appointment. */
   isWeeklyRecurring: boolean
+  /** Further occurrences of this same service within the window (ISO dates). */
+  otherDates: string[]
 }
 
 interface SiteCallsOverviewCardProps {
@@ -61,7 +68,7 @@ function BookNowPopover({ visit }: { visit: UpcomingVisit }) {
   const save = async () => {
     setSaving(true)
     const res = await bookExistingCall({
-      taskId: visit.id,
+      taskId: visit.taskId as string,
       scheduledDate: format(date, 'yyyy-MM-dd'),
       bookedStartTime: start || null,
       bookedEndTime: end || null,
@@ -123,22 +130,22 @@ function BookNowPopover({ visit }: { visit: UpcomingVisit }) {
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="grid gap-1.5">
-            <label htmlFor={`start-${visit.id}`} className="text-xs text-muted-foreground">
+            <label htmlFor={`start-${visit.key}`} className="text-xs text-muted-foreground">
               Start time
             </label>
             <Input
-              id={`start-${visit.id}`}
+              id={`start-${visit.key}`}
               type="time"
               value={start}
               onChange={(e) => setStart(e.target.value)}
             />
           </div>
           <div className="grid gap-1.5">
-            <label htmlFor={`end-${visit.id}`} className="text-xs text-muted-foreground">
+            <label htmlFor={`end-${visit.key}`} className="text-xs text-muted-foreground">
               End time
             </label>
             <Input
-              id={`end-${visit.id}`}
+              id={`end-${visit.key}`}
               type="time"
               value={end}
               onChange={(e) => setEnd(e.target.value)}
@@ -248,7 +255,7 @@ export function SiteCallsOverviewCard({
                 )
                 return (
                   <li
-                    key={visit.id}
+                    key={visit.key}
                     className="flex items-center gap-3 p-3 border-l-4"
                     style={{ borderLeftColor: colors.solid }}
                   >
@@ -279,19 +286,35 @@ export function SiteCallsOverviewCard({
                           </>
                         )}
                       </p>
+                      {visit.otherDates.length > 0 && (
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground/80">
+                          {visit.otherDates.length === 1 ? 'Also due ' : `+${visit.otherDates.length} more: `}
+                          {visit.otherDates.map((d) => formatDateUK(d)).join(', ')}
+                        </p>
+                      )}
                     </div>
                     {visit.isWeeklyRecurring ? (
                       <Badge variant="outline" className="shrink-0 text-xs font-normal">
                         Weekly PPM
                       </Badge>
+                    ) : visit.status === 'forecast' ? (
+                      <Badge
+                        variant="secondary"
+                        className="shrink-0 gap-1 text-xs font-normal text-muted-foreground"
+                      >
+                        <CalendarClock className="h-3 w-3" />
+                        Not yet generated
+                      </Badge>
                     ) : (
                       <BookNowPopover visit={visit} />
                     )}
-                    <Button variant="ghost" size="icon" asChild className="shrink-0">
-                      <Link href={`/dashboard/tasks/${visit.id}`} aria-label="View call">
-                        <ArrowRight className="h-4 w-4" />
-                      </Link>
-                    </Button>
+                    {visit.taskId && (
+                      <Button variant="ghost" size="icon" asChild className="shrink-0">
+                        <Link href={`/dashboard/tasks/${visit.taskId}`} aria-label="View call">
+                          <ArrowRight className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                    )}
                   </li>
                 )
               })}

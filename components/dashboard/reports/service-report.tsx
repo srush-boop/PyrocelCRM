@@ -2,6 +2,7 @@
 
   import { Fragment, useMemo } from 'react'
 import Link from 'next/link'
+import { signatureSrc } from '@/lib/blob'
 import {
   PieChart,
   Pie,
@@ -337,7 +338,7 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
                 <div className="mb-1 flex h-12 items-end">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={engineer.signature_url || '/placeholder.svg'}
+                    src={signatureSrc(engineer.signature_url) || '/placeholder.svg'}
                     alt={`Signature of ${engineer.full_name || 'engineer'}`}
                     crossOrigin="anonymous"
                     className="max-h-12 w-auto object-contain"

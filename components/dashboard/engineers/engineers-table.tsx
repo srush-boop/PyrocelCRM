@@ -693,7 +693,7 @@ export function EngineersTable({
         open={!!editUser}
         onOpenChange={(open) => !open && !savingEdit && setEditUser(null)}
       >
-        <DialogContent>
+        <DialogContent className="flex max-h-[90vh] flex-col">
           <DialogHeader>
             <DialogTitle>Edit Profile</DialogTitle>
             <DialogDescription>
@@ -701,7 +701,7 @@ export function EngineersTable({
               <strong>{editUser?.full_name || editUser?.email}</strong>.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="-mx-6 flex-1 space-y-4 overflow-y-auto px-6">
             <div className="space-y-1.5">
               <Label htmlFor="edit-name">Full name</Label>
               <Input

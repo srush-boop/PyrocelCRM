@@ -497,7 +497,7 @@ export function ChargeableCallsTable({
                               onClick={() => setReviewId(c.id)}
                             >
                               <ClipboardCheck className="h-3.5 w-3.5" />
-                              Review
+                              Review now
                             </Button>
                           )}
                         </TableCell>

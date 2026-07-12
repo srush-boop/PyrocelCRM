@@ -32,9 +32,14 @@ import {
   Loader2,
   AlertCircle,
   Mail,
+  X,
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
-import { addPoRequest, sendPoRequestEmail } from '@/lib/actions/po-requests'
+import {
+  addPoRequest,
+  sendPoRequestEmail,
+  getPoRequestPreview,
+} from '@/lib/actions/po-requests'
 import type { PurchaseOrderRequest } from '@/lib/types/database'
 
 interface PoRequestLogProps {
@@ -70,6 +75,12 @@ export function PoRequestLog({
   const [specialNote, setSpecialNote] = useState('')
   const [sending, setSending] = useState(false)
   const [sentId, setSentId] = useState<string | null>(null)
+  // Editable recipient list — seeded from the site/client contacts on file, but
+  // amendable (e.g. when the usual contact is away and the client gives an
+  // alternate address).
+  const [recipients, setRecipients] = useState<string[]>([])
+  const [newRecipient, setNewRecipient] = useState('')
+  const [loadingRecipients, setLoadingRecipients] = useState(false)
 
   const handleAdd = async () => {
     setAdding(true)
@@ -89,13 +100,47 @@ export function PoRequestLog({
     setSendingId(id)
     setSpecialNote('')
     setSentId(null)
+    setNewRecipient('')
+    setRecipients([])
     setSendOpen(true)
+    // Seed the editable recipient list from the site/client contacts on file.
+    setLoadingRecipients(true)
+    getPoRequestPreview(taskId)
+      .then(({ data }) => {
+        if (data) setRecipients(data.recipients)
+      })
+      .finally(() => setLoadingRecipients(false))
+  }
+
+  const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
+
+  const addRecipient = () => {
+    const value = newRecipient.trim()
+    if (!isValidEmail(value)) {
+      toast.error('Enter a valid email address')
+      return
+    }
+    if (recipients.some((r) => r.toLowerCase() === value.toLowerCase())) {
+      toast.error('That address is already in the list')
+      return
+    }
+    setRecipients((prev) => [...prev, value])
+    setNewRecipient('')
+  }
+
+  const removeRecipient = (email: string) => {
+    setRecipients((prev) => prev.filter((r) => r !== email))
   }
 
   const handleSendEmail = async () => {
     if (!sendingId) return
     setSending(true)
-    const { error } = await sendPoRequestEmail(sendingId, taskId, specialNote.trim() || null)
+    const { error } = await sendPoRequestEmail(
+      sendingId,
+      taskId,
+      specialNote.trim() || null,
+      recipients,
+    )
     setSending(false)
     if (error) {
       toast.error(error)
@@ -287,9 +332,8 @@ export function PoRequestLog({
           <DialogHeader>
             <DialogTitle>Send PO Request Email</DialogTitle>
             <DialogDescription>
-              {hasContactEmail
-                ? 'Send the PO request email to the site / client contact email address on file.'
-                : 'No contact email found on this site or client. Please add a contact email first.'}
+              Review and amend the recipient list, then send the PO request email with a secure
+              link for the client to provide their PO number.
             </DialogDescription>
           </DialogHeader>
           {sentId === sendingId ? (
@@ -302,12 +346,69 @@ export function PoRequestLog({
             </div>
           ) : (
             <div className="space-y-4 py-2">
-              {!hasContactEmail && (
-                <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  No email address configured for this site or client.
+              <div className="space-y-1.5">
+                <Label>This email will be sent to</Label>
+                <p className="text-xs text-muted-foreground">
+                  Remove or add addresses as needed — e.g. if the usual contact is away and the
+                  client has given an alternate email.
+                </p>
+                {loadingRecipients ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading contacts…
+                  </div>
+                ) : recipients.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {recipients.map((r) => (
+                      <Badge key={r} variant="secondary" className="gap-1 pr-1">
+                        <Mail className="h-3 w-3" />
+                        {r}
+                        <button
+                          type="button"
+                          onClick={() => removeRecipient(r)}
+                          disabled={sending}
+                          aria-label={`Remove ${r}`}
+                          className="ml-0.5 rounded-full p-0.5 hover:bg-muted-foreground/20 disabled:opacity-50"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    No recipients — add at least one email address below.
+                  </div>
+                )}
+                <div className="flex gap-2 pt-1">
+                  <Input
+                    type="email"
+                    value={newRecipient}
+                    onChange={(e) => setNewRecipient(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                        e.preventDefault()
+                        addRecipient()
+                      }
+                    }}
+                    placeholder="Add another email address…"
+                    disabled={sending}
+                    className="h-9"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addRecipient}
+                    disabled={sending || !newRecipient.trim()}
+                    className="gap-1.5"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add
+                  </Button>
                 </div>
-              )}
+              </div>
               <div className="space-y-1.5">
                 <Label htmlFor="special-note">Special note to client (optional)</Label>
                 <Textarea
@@ -330,7 +431,7 @@ export function PoRequestLog({
                 </Button>
                 <Button
                   onClick={handleSendEmail}
-                  disabled={sending || !hasContactEmail}
+                  disabled={sending || loadingRecipients || recipients.length === 0}
                   className="gap-2 bg-blue-600 hover:bg-blue-700"
                 >
                   {sending ? (

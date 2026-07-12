@@ -3,9 +3,12 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
 /**
- * Upload the current user's signature image. Stored as a PUBLIC blob because it
- * is rendered on generated documents (reports, RAMS, receipts) that may be
- * shared with clients. Each internal user manages only their own signature.
+ * Upload the current user's signature image. The Blob store is PRIVATE, so we
+ * store the object *pathname* in profiles.signature_url (like avatars) and serve
+ * the bytes via the public `/api/signature` delivery route — signatures are
+ * rendered on client-facing documents (public token reports, RAMS PDFs) that are
+ * not behind auth, so they can't use the session-gated /api/blob proxy.
+ * Each internal user manages only their own signature.
  */
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
@@ -32,21 +35,25 @@ export async function POST(request: NextRequest) {
 
     const safeName = file.name.replace(/[^\w.\-]+/g, '_') || 'signature.png'
     const blob = await put(`signatures/${user.id}/${safeName}`, file, {
-      access: 'public',
+      access: 'private',
       addRandomSuffix: true,
     })
 
-    // RLS allows a user to update their own profile row (auth.uid() = id).
+    // Store the pathname (private store); RLS allows a user to update their own
+    // profile row (auth.uid() = id).
     const { error } = await supabase
       .from('profiles')
-      .update({ signature_url: blob.url, updated_at: new Date().toISOString() })
+      .update({ signature_url: blob.pathname, updated_at: new Date().toISOString() })
       .eq('id', user.id)
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ signature_url: blob.url })
+    // Return the delivery URL so the client can render it immediately.
+    return NextResponse.json({
+      signature_url: `/api/signature?pathname=${encodeURIComponent(blob.pathname)}`,
+    })
   } catch (err) {
     console.error('[v0] signature upload error:', err)
     return NextResponse.json({ error: 'Signature upload failed.' }, { status: 500 })

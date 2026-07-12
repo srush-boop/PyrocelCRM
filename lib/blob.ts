@@ -1,3 +1,5 @@
+import { getPublicBaseUrl } from '@/lib/rams/base-url'
+
 /**
  * Converts a stored Blob reference into a usable <img>/<a> src.
  *
@@ -12,4 +14,31 @@ export function blobSrc(ref: string | null | undefined): string | null {
     return ref
   }
   return `/api/blob?pathname=${encodeURIComponent(ref)}`
+}
+
+/**
+ * Like `blobSrc`, but for signatures. Signatures are rendered on CLIENT-FACING,
+ * unauthenticated surfaces (public token reports at /r/[token]) and inside
+ * server-generated RAMS PDFs, so they are streamed through the PUBLIC delivery
+ * route `/api/signature` rather than the session-gated `/api/blob`.
+ *
+ * Pass `absolute` when the URL is consumed off-page (e.g. @react-pdf fetching the
+ * image server-side), which needs a fully-qualified origin.
+ */
+export function signatureSrc(
+  ref: string | null | undefined,
+  opts: { absolute?: boolean } = {},
+): string | null {
+  if (!ref) return null
+  // Legacy rows may hold a full public URL from before the store was private.
+  if (ref.startsWith('http://') || ref.startsWith('https://')) return ref
+
+  const path = ref.startsWith('/api/signature')
+    ? ref
+    : `/api/signature?pathname=${encodeURIComponent(ref)}`
+
+  if (opts.absolute) {
+    return `${getPublicBaseUrl()}${path}`
+  }
+  return path
 }

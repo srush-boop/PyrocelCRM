@@ -10,12 +10,20 @@ export interface ForecastRow {
   clientName: string | null
   serviceTypeName: string
   systemTypeName: string | null
+  systemColor: string | null
+  systemCode: string | null
   visitName: string | null
   routeName: string | null
   date: string
   frequencyLabel: string
+  frequencyValue: number
+  frequencyUnit: 'weeks' | 'months'
   status: 'created' | 'forecast'
   engineerName: string | null
+  /** Task id when the occurrence already exists ('created'); null for forecasts. */
+  taskId: string | null
+  bookedStartTime: string | null
+  bookedEndTime: string | null
 }
 
 interface ServiceRow {
@@ -36,14 +44,17 @@ interface ServiceRow {
   service_type: {
     name: string | null
     status: string | null
-    system_type: { name: string | null } | null
+    system_type: { name: string | null; color: string | null; code: string | null } | null
   } | null
 }
 
 interface TaskRow {
+  id: string
   site_service_id: string
   visit_type_id: string | null
   scheduled_date: string
+  booked_start_time: string | null
+  booked_end_time: string | null
   assigned_engineer: { full_name: string | null } | null
 }
 
@@ -74,7 +85,7 @@ function frequencyLabel(value: number, unit: 'weeks' | 'months'): string {
 export async function forecastCalls(
   fromStr: string,
   toStr: string,
-  opts: { branchId?: string | null } = {},
+  opts: { branchId?: string | null; siteId?: string | null } = {},
 ): Promise<ForecastRow[]> {
   const supabase = await createClient()
 
@@ -82,7 +93,7 @@ export async function forecastCalls(
     `id, service_type_id, frequency_value, frequency_unit, next_service_date, active,
        site:sites(id, name, status, branch_id, client:clients(name)),
        route:routes(name),
-       service_type:service_types(name, status, system_type:system_types(name))`,
+       service_type:service_types(name, status, system_type:system_types(name, color, code))`,
   )
 
   let services = ((serviceData || []) as unknown as ServiceRow[]).filter(
@@ -97,6 +108,10 @@ export async function forecastCalls(
     services = services.filter((s) => s.site?.branch_id === opts.branchId)
   }
 
+  if (opts.siteId) {
+    services = services.filter((s) => s.site?.id === opts.siteId)
+  }
+
   if (services.length === 0) return []
 
   const serviceIds = services.map((s) => s.id)
@@ -104,7 +119,7 @@ export async function forecastCalls(
   // Existing tasks: used to anchor the cadence and to flag created occurrences.
   const { data: taskData } = await supabase
     .from('tasks')
-    .select('site_service_id, visit_type_id, scheduled_date, assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(full_name)')
+    .select('id, site_service_id, visit_type_id, scheduled_date, booked_start_time, booked_end_time, assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(full_name)')
     .in('site_service_id', serviceIds)
   const tasks = (taskData || []) as unknown as TaskRow[]
 
@@ -133,8 +148,11 @@ export async function forecastCalls(
 
   const earliestByService = new Map<string, string>()
   const latestByGroup = new Map<string, string>()
-  // Map of `ssId|visitId|date` -> engineer name for created-call flagging.
-  const createdBySlot = new Map<string, string | null>()
+  // Map of `ssId|visitId|date` -> the created task's details for flagging.
+  const createdBySlot = new Map<
+    string,
+    { taskId: string; start: string | null; end: string | null; engineer: string | null }
+  >()
 
   for (const t of tasks) {
     const prevEarliest = earliestByService.get(t.site_service_id)
@@ -144,7 +162,12 @@ export async function forecastCalls(
     const key = groupKey(t.site_service_id, t.visit_type_id)
     const prev = latestByGroup.get(key)
     if (!prev || t.scheduled_date > prev) latestByGroup.set(key, t.scheduled_date)
-    createdBySlot.set(`${key}|${t.scheduled_date}`, t.assigned_engineer?.full_name ?? null)
+    createdBySlot.set(`${key}|${t.scheduled_date}`, {
+      taskId: t.id,
+      start: t.booked_start_time,
+      end: t.booked_end_time,
+      engineer: t.assigned_engineer?.full_name ?? null,
+    })
   }
 
   const fromDate = parseDateString(fromStr)
@@ -191,7 +214,7 @@ export async function forecastCalls(
         if (d < fromDate) continue
         const dateStr = toDateString(d)
         const slot = createdBySlot.get(`${key}|${dateStr}`)
-        const isCreated = createdBySlot.has(`${key}|${dateStr}`)
+        const isCreated = !!slot
         rows.push({
           siteServiceId: svc.id,
           visitTypeId: g.visitId,
@@ -200,12 +223,19 @@ export async function forecastCalls(
           clientName: svc.site?.client?.name ?? null,
           serviceTypeName: svc.service_type?.name ?? 'Service',
           systemTypeName: svc.service_type?.system_type?.name ?? null,
+          systemColor: svc.service_type?.system_type?.color ?? null,
+          systemCode: svc.service_type?.system_type?.code ?? null,
           visitName: g.name,
           routeName: svc.route?.name ?? null,
           date: dateStr,
           frequencyLabel: label,
+          frequencyValue: svc.frequency_value,
+          frequencyUnit: svc.frequency_unit,
           status: isCreated ? 'created' : 'forecast',
-          engineerName: isCreated ? slot ?? null : null,
+          engineerName: slot?.engineer ?? null,
+          taskId: slot?.taskId ?? null,
+          bookedStartTime: slot?.start ?? null,
+          bookedEndTime: slot?.end ?? null,
         })
       }
     }

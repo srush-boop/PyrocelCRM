@@ -5,14 +5,24 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CheckCircle, Loader2, FileText } from 'lucide-react'
-import { authorisePoRequest } from '@/lib/actions/po-requests'
+import { authorisePoRequest, type PoAuthorisationStatus } from '@/lib/actions/po-requests'
 
 interface PoAuthoriseClientProps {
   token: string
   companyName: string
+  status: PoAuthorisationStatus
 }
 
-export function PoAuthoriseClient({ token, companyName }: PoAuthoriseClientProps) {
+function formatDateUK(iso: string | null | undefined): string {
+  if (!iso) return ''
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(iso))
+}
+
+export function PoAuthoriseClient({ token, companyName, status }: PoAuthoriseClientProps) {
   const [poNumber, setPoNumber] = useState('')
   const [authorisedByName, setAuthorisedByName] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -50,7 +60,47 @@ export function PoAuthoriseClient({ token, companyName }: PoAuthoriseClientProps
         </div>
 
         <div className="px-8 py-8">
-          {done ? (
+          {status.state === 'already_provided' && !done ? (
+            <div className="flex flex-col items-center gap-4 py-2 text-center">
+              <div className="h-14 w-14 rounded-full bg-emerald-100 flex items-center justify-center">
+                <CheckCircle className="h-8 w-8 text-emerald-600" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold">Already authorised</h2>
+                <p className="text-muted-foreground text-sm mt-1 text-pretty">
+                  A purchase order has already been provided for this call
+                  {status.siteName ? ` at ${status.siteName}` : ''} and it has now been closed. No
+                  further action is needed.
+                </p>
+              </div>
+
+              <div className="w-full rounded-lg border bg-muted/40 p-4 text-left">
+                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+                  {status.referenceNumber && (
+                    <>
+                      <dt className="text-muted-foreground">Call reference</dt>
+                      <dd className="font-medium">{status.referenceNumber}</dd>
+                    </>
+                  )}
+                  <dt className="text-muted-foreground">PO number</dt>
+                  <dd className="font-semibold">{status.poNumber || 'Not recorded'}</dd>
+                  <dt className="text-muted-foreground">Provided by</dt>
+                  <dd className="font-medium">{status.authorisedByName || 'Not recorded'}</dd>
+                  {status.authorisedAt && (
+                    <>
+                      <dt className="text-muted-foreground">Authorised on</dt>
+                      <dd className="font-medium">{formatDateUK(status.authorisedAt)}</dd>
+                    </>
+                  )}
+                </dl>
+              </div>
+
+              <p className="text-xs text-muted-foreground text-pretty">
+                If you believe this is incorrect or need to make a change, please contact{' '}
+                {companyName}.
+              </p>
+            </div>
+          ) : done ? (
             <div className="flex flex-col items-center gap-4 py-6 text-center">
               <CheckCircle className="h-14 w-14 text-emerald-600" />
               <h2 className="text-xl font-bold">Thank you!</h2>

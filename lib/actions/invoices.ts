@@ -11,6 +11,15 @@ import {
   formatInvoiceNumber,
   lineAmountPence,
 } from '@/lib/billing/invoices'
+import {
+  computeOnSiteHours,
+  deriveRateBand,
+  priceCall,
+  resolveRateCard,
+  RATE_BAND_LABELS,
+  toLocalISODate,
+  type RateCard,
+} from '@/lib/billing/rate-cards'
 
 // Server actions for Phase 3 invoicing: build CRM invoices from reviewed
 // chargeable calls (grouped by billing account), edit line items, and move
@@ -35,6 +44,72 @@ async function requireManager() {
     return { error: 'Not authorised' as const }
   }
   return { supabase, userId: user.id }
+}
+
+// ---- Rate card loading (for auto-priced labour) -------------------------
+
+interface RateCardRow {
+  id: string
+  name: string
+  is_default: boolean
+  include_travel_time: boolean
+  min_labour_hours: number | string
+  round_increment_hours: number | string
+  active: boolean
+  bands:
+    | {
+        band: string
+        attendance_fee_pence: number
+        attendance_included_hours: number | string
+        hourly_rate_pence: number
+      }[]
+    | null
+}
+
+// numeric columns can arrive as strings; coerce defensively.
+function mapRateCard(row: RateCardRow): RateCard {
+  return {
+    id: row.id,
+    name: row.name,
+    is_default: row.is_default,
+    include_travel_time: row.include_travel_time,
+    min_labour_hours: Number(row.min_labour_hours) || 0,
+    round_increment_hours: Number(row.round_increment_hours) || 0,
+    active: row.active,
+    bands: (row.bands ?? []).map((b) => ({
+      band: b.band as RateCard['bands'][number]['band'],
+      attendance_fee_pence: Number(b.attendance_fee_pence) || 0,
+      attendance_included_hours: Number(b.attendance_included_hours) || 0,
+      hourly_rate_pence: Number(b.hourly_rate_pence) || 0,
+    })),
+  }
+}
+
+async function loadRateCards(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<{ cardsById: Map<string, RateCard>; defaultCard: RateCard | null }> {
+  const { data } = await supabase
+    .from('rate_cards')
+    .select('*, bands:rate_card_bands(band, attendance_fee_pence, attendance_included_hours, hourly_rate_pence)')
+  const cards = ((data ?? []) as RateCardRow[]).map(mapRateCard)
+  const cardsById = new Map(cards.map((c) => [c.id, c]))
+  const defaultCard = cards.find((c) => c.is_default && c.active) ?? null
+  return { cardsById, defaultCard }
+}
+
+// All UK bank holidays as a Set of local yyyy-mm-dd for band derivation.
+async function loadBankHolidays(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<Set<string>> {
+  const { data } = await supabase
+    .from('calendar_entries')
+    .select('start_at')
+    .eq('source', 'uk-bank-holiday')
+  const set = new Set<string>()
+  for (const row of (data ?? []) as { start_at: string | null }[]) {
+    if (row.start_at) set.add(toLocalISODate(new Date(row.start_at)))
+  }
+  return set
 }
 
 // ---- Ready-to-invoice grouping -----------------------------------------
@@ -181,8 +256,10 @@ export async function getReadyToInvoiceGroups(): Promise<ReadyGroup[]> {
 
 /**
  * Create a draft invoice from a set of reviewed chargeable calls under one
- * billing account. Parts become priced line items automatically and each call
- * gets a zero-value labour/attendance line for the office to price up.
+ * billing account. Parts become priced line items automatically, and each call
+ * is auto-priced against the resolved rate card (account override or company
+ * default) into an attendance line plus a labour line for any chargeable hours.
+ * All lines remain editable while the invoice is in draft.
  */
 export async function createInvoiceFromTasks(
   billingAccountId: string,
@@ -208,7 +285,7 @@ export async function createInvoiceFromTasks(
     .from('tasks')
     .select(
       `
-      id,
+      id, started_at, completed_at, scheduled_date, is_emergency,
       task_result:task_results(reference_number),
       direct_site:sites!tasks_site_id_fkey(name),
       site_service:site_services(service_type:service_types(name), sites(name)),
@@ -225,6 +302,15 @@ export async function createInvoiceFromTasks(
   if (rows.length === 0) {
     return { error: 'These calls are no longer available to invoice' }
   }
+
+  // Resolve the rate card (account override or company default) + bank holidays
+  // so each call's labour can be auto-priced. Falls back to null (zero-priced
+  // lines) when no card is configured.
+  const [{ cardsById, defaultCard }, bankHolidays] = await Promise.all([
+    loadRateCards(supabase),
+    loadBankHolidays(supabase),
+  ])
+  const rateCard = resolveRateCard(account.rate_card_id, cardsById, defaultCard)
 
   // Reserve a per-financial-year sequence number atomically.
   const now = new Date()
@@ -266,7 +352,8 @@ export async function createInvoiceFromTasks(
   }
   const invoiceId = invoice.id as string
 
-  // Build line items: one labour line per call, then a line per chargeable part.
+  // Build line items: priced attendance (+ labour) lines per call, then a line
+  // per chargeable part.
   const lines: {
     invoice_id: string
     task_id: string | null
@@ -289,17 +376,78 @@ export async function createInvoiceFromTasks(
         ? t.task_result[0]?.reference_number
         : t.task_result?.reference_number) || ''
 
-    lines.push({
-      invoice_id: invoiceId,
-      task_id: t.id,
-      part_id: null,
-      kind: 'labour',
-      description: `${serviceName} — ${siteName}${reference ? ` (${reference})` : ''}`,
-      quantity: 1,
-      unit_price_pence: 0,
-      amount_pence: 0,
-      sort_order: order++,
-    })
+    const suffix = `${siteName}${reference ? ` (${reference})` : ''}`
+
+    if (rateCard) {
+      // Derive the band from the attendance moment: prefer the actual start /
+      // finish timestamp; fall back to the scheduled date (time unknown).
+      let when: Date
+      let timeKnown = true
+      if (t.started_at) when = new Date(t.started_at)
+      else if (t.completed_at) when = new Date(t.completed_at)
+      else if (t.scheduled_date) {
+        const [y, m, d] = String(t.scheduled_date).split('-').map(Number)
+        when = new Date(y, (m ?? 1) - 1, d ?? 1, 12, 0, 0)
+        timeKnown = false
+      } else {
+        when = new Date()
+        timeKnown = false
+      }
+
+      const band = deriveRateBand(when, {
+        bankHolidays,
+        isEmergency: !!t.is_emergency,
+        timeKnown,
+      })
+      const onSiteHours = computeOnSiteHours(t.started_at, t.completed_at, {
+        minHours: rateCard.min_labour_hours,
+        incrementHours: rateCard.round_increment_hours,
+      })
+      const priced = priceCall({ card: rateCard, band, onSiteHours, travelHours: 0 })
+      const bandLabel = RATE_BAND_LABELS[band]
+
+      // Attendance / call-out line (always present, even at £0).
+      lines.push({
+        invoice_id: invoiceId,
+        task_id: t.id,
+        part_id: null,
+        kind: 'labour',
+        description: `Call-out (${bandLabel}) — ${serviceName} — ${suffix}`,
+        quantity: 1,
+        unit_price_pence: priced.attendancePence,
+        amount_pence: priced.attendancePence,
+        sort_order: order++,
+      })
+
+      // Labour line only when there are chargeable hours beyond the fee.
+      if (priced.chargeHours > 0) {
+        lines.push({
+          invoice_id: invoiceId,
+          task_id: t.id,
+          part_id: null,
+          kind: 'labour',
+          description: `Labour (${bandLabel}) — ${priced.chargeHours}h @ rate — ${suffix}`,
+          quantity: priced.chargeHours,
+          unit_price_pence: priced.hourlyRatePence,
+          amount_pence: lineAmountPence(priced.chargeHours, priced.hourlyRatePence),
+          sort_order: order++,
+        })
+      }
+    } else {
+      // No rate card configured: keep the legacy single £0 labour line for the
+      // office to price up by hand.
+      lines.push({
+        invoice_id: invoiceId,
+        task_id: t.id,
+        part_id: null,
+        kind: 'labour',
+        description: `${serviceName} — ${suffix}`,
+        quantity: 1,
+        unit_price_pence: 0,
+        amount_pence: 0,
+        sort_order: order++,
+      })
+    }
 
     for (const p of (t.call_parts ?? []) as any[]) {
       if (p.chargeable === false || (p.quantity ?? 0) <= 0) continue

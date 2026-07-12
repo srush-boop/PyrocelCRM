@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home, Wrench, HardHat, FileText, Database, PhoneCall, ShieldCheck } from 'lucide-react'
+import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home, Wrench, HardHat, FileText, Database, PhoneCall, ShieldCheck, Receipt } from 'lucide-react'
 import type { User as AuthUser } from '@supabase/supabase-js'
 import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType, DocumentTemplate } from '@/lib/types/database'
 import type { LoneWorkerManagedUser } from '@/app/(dashboard)/dashboard/lone-worker/actions'

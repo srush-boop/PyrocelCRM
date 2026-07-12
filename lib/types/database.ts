@@ -133,6 +133,8 @@ export interface BillingAccount {
   default_nominal_code: string
   /** The client's primary account; at most one per client. */
   is_default: boolean
+  /** Optional rate-card override; null inherits the company default card. */
+  rate_card_id: string | null
   notes: string | null
   created_at: string
   updated_at: string

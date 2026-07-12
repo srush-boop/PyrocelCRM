@@ -15,10 +15,12 @@ import {
   Save,
   Sparkles,
   TriangleAlert,
+  RotateCcw,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -95,12 +97,49 @@ export function RouteMapPlanner({ initialData }: { initialData: RouteMapData }) 
   const [isOptimizing, startOptimize] = useTransition()
   const [optimizeOpen, setOptimizeOpen] = useState(false)
   const [proposed, setProposed] = useState<ProposedRoute | null>(null)
+  // Per-site manual "expected time on site" overrides (minutes), keyed by siteId.
+  // Client-side planning overrides — they replace the learned estimate in every
+  // day-plan calculation so all ETAs/totals recompute live as the user types.
+  const [onSiteOverrides, setOnSiteOverrides] = useState<Record<string, number>>({})
   const dragIndex = useRef<number | null>(null)
 
   const stopById = useMemo(() => {
     const m = new Map(data.stops.map((s) => [s.siteId, s]))
     return m
   }, [data.stops])
+
+  // Effective on-site minutes for a stop: manual override if set, else learned.
+  const effectiveOnSite = useCallback(
+    (siteId: string, base: number) => {
+      const o = onSiteOverrides[siteId]
+      return o != null && Number.isFinite(o) ? o : base
+    },
+    [onSiteOverrides],
+  )
+
+  const setOnSiteOverride = useCallback((siteId: string, raw: string) => {
+    setOnSiteOverrides((prev) => {
+      const next = { ...prev }
+      const trimmed = raw.trim()
+      if (trimmed === '') {
+        delete next[siteId]
+        return next
+      }
+      const n = Math.round(Number(trimmed))
+      if (!Number.isFinite(n) || n < 0) return prev
+      next[siteId] = Math.min(n, 1440)
+      return next
+    })
+  }, [])
+
+  const clearOnSiteOverride = useCallback((siteId: string) => {
+    setOnSiteOverrides((prev) => {
+      if (!(siteId in prev)) return prev
+      const next = { ...prev }
+      delete next[siteId]
+      return next
+    })
+  }, [])
 
   // Ordered stops (site-level), resolved from the current order of ids.
   const orderedStops = useMemo(
@@ -140,7 +179,7 @@ export function RouteMapPlanner({ initialData }: { initialData: RouteMapData }) 
       id: s.siteId,
       name: s.name,
       postcode: s.postcode,
-      onSiteMinutes: s.onSiteMinutes,
+      onSiteMinutes: effectiveOnSite(s.siteId, s.onSiteMinutes),
       services: s.services.map((svc) => ({
         id: svc.id,
         label: svc.label,
@@ -150,7 +189,7 @@ export function RouteMapPlanner({ initialData }: { initialData: RouteMapData }) 
       })),
     }))
     return buildDayPlan(stops, legs, { firstArrival: FIRST_ARRIVAL, workingDay })
-  }, [legs, home, locatedStops, workingDay])
+  }, [legs, home, locatedStops, workingDay, effectiveOnSite])
 
   // Build a day plan for an arbitrary located-stop order (used for the proposed
   // optimised route). Scores against the SAME matrix as the live plan so the
@@ -174,7 +213,7 @@ export function RouteMapPlanner({ initialData }: { initialData: RouteMapData }) 
           id: s.siteId,
           name: s.name,
           postcode: s.postcode,
-          onSiteMinutes: s.onSiteMinutes,
+          onSiteMinutes: effectiveOnSite(s.siteId, s.onSiteMinutes),
           services: s.services.map((svc) => ({
             id: svc.id,
             label: svc.label,
@@ -185,7 +224,7 @@ export function RouteMapPlanner({ initialData }: { initialData: RouteMapData }) 
         }))
       return buildDayPlan(stops, lg, { firstArrival: FIRST_ARRIVAL, workingDay })
     },
-    [data.matrix, data.locatedStopIds, home, workingDay, stopById],
+    [data.matrix, data.locatedStopIds, home, workingDay, stopById, effectiveOnSite],
   )
 
   const proposedPlan = useMemo(
@@ -433,6 +472,9 @@ export function RouteMapPlanner({ initialData }: { initialData: RouteMapData }) 
                   const positionLabel = stop.hasLocation
                     ? locatedStops.findIndex((s) => s.siteId === stop.siteId) + 1
                     : null
+                  const overrideVal = onSiteOverrides[stop.siteId]
+                  const isOverridden = overrideVal != null
+                  const effMinutes = isOverridden ? overrideVal : stop.onSiteMinutes
                   return (
                     <li
                       key={stop.siteId}
@@ -464,9 +506,49 @@ export function RouteMapPlanner({ initialData }: { initialData: RouteMapData }) 
                         </div>
                         <p className="truncate text-xs text-muted-foreground">
                           {stop.services.length} service{stop.services.length === 1 ? '' : 's'} ·{' '}
-                          {formatDuration(stop.onSiteMinutes)} on site
+                          {formatDuration(effMinutes)} on site
+                          {isOverridden ? (
+                            <span className="text-primary"> · custom</span>
+                          ) : (
+                            <span> · est.</span>
+                          )}
                           {stop.postcode ? ` · ${stop.postcode}` : ''}
                         </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <label className="sr-only" htmlFor={`onsite-${stop.siteId}`}>
+                          Expected time on site for {stop.name} in minutes
+                        </label>
+                        <div className="relative">
+                          <Input
+                            id={`onsite-${stop.siteId}`}
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            step={5}
+                            value={overrideVal ?? ''}
+                            placeholder={String(stop.onSiteMinutes)}
+                            onChange={(e) => setOnSiteOverride(stop.siteId, e.target.value)}
+                            onFocus={(e) => e.currentTarget.select()}
+                            className="h-9 w-[4.75rem] pr-8 text-sm tabular-nums"
+                            aria-label={`Expected minutes on site at ${stop.name}`}
+                          />
+                          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                            min
+                          </span>
+                        </div>
+                        {isOverridden && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-9 w-8 text-muted-foreground"
+                            onClick={() => clearOnSiteOverride(stop.siteId)}
+                            aria-label={`Reset time on site for ${stop.name} to estimate`}
+                            title="Reset to estimate"
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                       </div>
                       <div className="flex shrink-0 flex-col">
                         <Button

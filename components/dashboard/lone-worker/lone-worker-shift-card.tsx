@@ -182,6 +182,7 @@ export function LoneWorkerShiftCard() {
                   type="time"
                   value={seededStart}
                   onChange={(e) => setStart(e.target.value)}
+                  className="h-11 text-base tabular-nums"
                 />
               </div>
               <div className="space-y-1.5">
@@ -193,6 +194,7 @@ export function LoneWorkerShiftCard() {
                   type="time"
                   value={seededEnd}
                   onChange={(e) => setEnd(e.target.value)}
+                  className="h-11 text-base tabular-nums"
                 />
               </div>
             </div>

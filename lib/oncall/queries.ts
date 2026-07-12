@@ -417,11 +417,31 @@ export async function getExternalRota(token: string): Promise<ExternalRotaBranch
   })
 }
 
+// On-call engineers may act 1 hour either side of their actual shift window, to
+// cover a call that comes in just before hand-over or runs slightly late.
+const ONCALL_GRACE_MS = 60 * 60 * 1000
+
 /**
- * Whether the signed-in user is on call for the current out-of-hours shift.
- * The evening shift runs into the next morning, so before 09:00 the relevant
- * shift date is still yesterday's. Returns the branch + band when on call, else
- * null. Used for the persistent dashboard reminder banner.
+ * The active on-call window for a shift, in epoch ms. Weekday-evening shifts
+ * start at 17:00; weekend / bank-holiday shifts start at 08:30. Every shift
+ * hands over at 08:30 the following morning (see calendar rendering).
+ */
+function oncallWindow(shiftDateISO: string, band: OncallBand): { start: number; end: number } {
+  const [y, m, d] = shiftDateISO.split('-').map(Number)
+  const startHour = band === 'weekday_evening' ? 17 : 8
+  const startMin = band === 'weekday_evening' ? 0 : 30
+  const start = new Date(y, m - 1, d, startHour, startMin, 0, 0).getTime()
+  const end = new Date(y, m - 1, d + 1, 8, 30, 0, 0).getTime()
+  return { start, end }
+}
+
+/**
+ * Whether the signed-in user is on call RIGHT NOW for an out-of-hours shift,
+ * within a 1-hour grace either side of the shift window. The evening shift runs
+ * into the next morning, so we consider both today's and yesterday's shift and
+ * test each band-specific window. Returns the branch + band when on call, else
+ * null. Drives the reminder banner AND the on-call "Log Call" permission, so the
+ * two always agree.
  */
 export async function getMyCurrentOncall(): Promise<{
   branchName: string
@@ -434,22 +454,32 @@ export async function getMyCurrentOncall(): Promise<{
   } = await supabase.auth.getUser()
   if (!user) return null
 
-  const now = new Date()
+  const now = Date.now()
   const ymd = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  const ref = new Date(now)
-  if (now.getHours() < 9) ref.setDate(ref.getDate() - 1)
-  const shiftDate = ymd(ref)
+  const today = new Date()
+  const yesterday = new Date(today)
+  yesterday.setDate(today.getDate() - 1)
 
   const { data } = await supabase
     .from('oncall_shifts')
     .select('band, shift_date, branch:branches(name)')
     .eq('engineer_id', user.id)
-    .eq('shift_date', shiftDate)
-    .maybeSingle()
-  if (!data) return null
-  const row = data as unknown as { band: OncallBand; shift_date: string; branch: { name: string } | null }
-  return { branchName: row.branch?.name ?? 'your branch', band: row.band, shiftDate: row.shift_date }
+    .in('shift_date', [ymd(yesterday), ymd(today)])
+
+  const rows = (data ?? []) as unknown as {
+    band: OncallBand
+    shift_date: string
+    branch: { name: string } | null
+  }[]
+
+  for (const row of rows) {
+    const { start, end } = oncallWindow(row.shift_date, row.band)
+    if (now >= start - ONCALL_GRACE_MS && now <= end + ONCALL_GRACE_MS) {
+      return { branchName: row.branch?.name ?? 'your branch', band: row.band, shiftDate: row.shift_date }
+    }
+  }
+  return null
 }
 
 /** Re-export a couple of pure helpers for server consumers' convenience. */

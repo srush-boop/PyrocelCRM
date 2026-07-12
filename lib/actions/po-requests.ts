@@ -185,6 +185,7 @@ export async function sendPoRequestEmail(
   poRequestId: string,
   taskId: string,
   specialNote: string | null,
+  recipientsOverride?: string[] | null,
 ): Promise<{ error: string | null }> {
   const ctx = await requireManager()
   if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
@@ -194,7 +195,23 @@ export async function sendPoRequestEmail(
   if (gathered.error !== null) return { error: gathered.error }
   const d = gathered.data
 
-  if (d.recipients.length === 0) {
+  // Use the reviewer-edited recipient list when provided (deduped, trimmed,
+  // valid addresses only); otherwise fall back to the resolved site/client contacts.
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  let recipients = d.recipients
+  if (recipientsOverride && recipientsOverride.length > 0) {
+    const seen = new Set<string>()
+    recipients = recipientsOverride
+      .map((r) => r.trim())
+      .filter((r) => {
+        const key = r.toLowerCase()
+        if (!emailPattern.test(r) || seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+  }
+
+  if (recipients.length === 0) {
     return { error: 'No email address found for this site or client. Please check the site/client contact email.' }
   }
 
@@ -204,7 +221,7 @@ export async function sendPoRequestEmail(
     .from('po_requests')
     .update({
       email_sent_at: new Date().toISOString(),
-      email_sent_to: d.recipients,
+      email_sent_to: recipients,
       special_note: specialNote?.trim() || null,
       updated_at: new Date().toISOString(),
     })
@@ -220,7 +237,7 @@ export async function sendPoRequestEmail(
 
   try {
     const { sendPoRequestEmail: dispatch } = await import('@/lib/email/po-request-email')
-    await dispatch(d.recipients, {
+    await dispatch(recipients, {
       siteName: d.siteName,
       clientName: d.clientName,
       contactName: d.contactName,

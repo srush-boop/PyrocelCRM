@@ -38,6 +38,8 @@ import {
   ArrowLeft,
   Wrench,
   ChevronRight,
+  X,
+  Plus,
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import {
@@ -145,6 +147,11 @@ export function ChargeableReviewDialog({
   const [poView, setPoView] = useState<'idle' | 'preview' | 'sent'>('idle')
   const [preview, setPreview] = useState<PoPreview | null>(null)
   const [specialNote, setSpecialNote] = useState('')
+  // Editable recipient list — seeded from the site/client contacts, but the
+  // reviewer can remove or add addresses (e.g. when a contact is away and the
+  // client provides an alternate email).
+  const [recipients, setRecipients] = useState<string[]>([])
+  const [newRecipient, setNewRecipient] = useState('')
 
   const authorisedPo = useMemo(
     () => call.poRequests.find((r) => !!r.authorised_at && r.po_number),
@@ -243,8 +250,30 @@ export function ChargeableReviewDialog({
         return
       }
       setPreview(data)
+      setRecipients(data.recipients)
+      setNewRecipient('')
       setPoView('preview')
     })
+  }
+
+  const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
+
+  const addRecipient = () => {
+    const value = newRecipient.trim().toLowerCase()
+    if (!isValidEmail(value)) {
+      toast.error('Enter a valid email address')
+      return
+    }
+    if (recipients.some((r) => r.toLowerCase() === value)) {
+      toast.error('That address is already in the list')
+      return
+    }
+    setRecipients((prev) => [...prev, newRecipient.trim()])
+    setNewRecipient('')
+  }
+
+  const removeRecipient = (email: string) => {
+    setRecipients((prev) => prev.filter((r) => r !== email))
   }
 
   const confirmSendPo = () => {
@@ -257,7 +286,12 @@ export function ChargeableReviewDialog({
         toast.error(addErr ?? 'Could not log PO request')
         return
       }
-      const { error } = await sendPoRequestEmail(id, call.id, specialNote.trim() || null)
+      const { error } = await sendPoRequestEmail(
+        id,
+        call.id,
+        specialNote.trim() || null,
+        recipients,
+      )
       setBusy(null)
       if (error) {
         toast.error(error)
@@ -317,22 +351,62 @@ export function ChargeableReviewDialog({
                   Back to review
                 </button>
                 <div className="rounded-lg border bg-muted/20 p-4">
-                  <p className="mb-3 text-sm font-semibold">This email will be sent to:</p>
-                  {preview && preview.recipients.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {preview.recipients.map((r) => (
-                        <Badge key={r} variant="secondary" className="gap-1">
+                  <p className="mb-1 text-sm font-semibold">This email will be sent to:</p>
+                  <p className="mb-3 text-xs text-muted-foreground">
+                    Remove or add addresses as needed — e.g. if the usual contact is away and the
+                    client has given an alternate email.
+                  </p>
+                  {recipients.length > 0 ? (
+                    <div className="mb-3 flex flex-wrap gap-1.5">
+                      {recipients.map((r) => (
+                        <Badge key={r} variant="secondary" className="gap-1 pr-1">
                           <Mail className="h-3 w-3" />
                           {r}
+                          <button
+                            type="button"
+                            onClick={() => removeRecipient(r)}
+                            disabled={busyAny}
+                            aria-label={`Remove ${r}`}
+                            className="ml-0.5 rounded-full p-0.5 hover:bg-muted-foreground/20 disabled:opacity-50"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
                         </Badge>
                       ))}
                     </div>
                   ) : (
-                    <div className="flex items-center gap-2 text-sm text-destructive">
+                    <div className="mb-3 flex items-center gap-2 text-sm text-destructive">
                       <AlertTriangle className="h-4 w-4" />
-                      No contact email on file for this site or client.
+                      No recipients — add at least one email address below.
                     </div>
                   )}
+                  <div className="flex gap-2">
+                    <Input
+                      type="email"
+                      value={newRecipient}
+                      onChange={(e) => setNewRecipient(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                          e.preventDefault()
+                          addRecipient()
+                        }
+                      }}
+                      placeholder="Add another email address…"
+                      disabled={busyAny}
+                      className="h-9"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={addRecipient}
+                      disabled={busyAny || !newRecipient.trim()}
+                      className="gap-1.5"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="space-y-1.5">
@@ -377,7 +451,7 @@ export function ChargeableReviewDialog({
                   <Button
                     className="gap-2 bg-blue-600 hover:bg-blue-700"
                     onClick={confirmSendPo}
-                    disabled={busyAny || !preview || preview.recipients.length === 0}
+                    disabled={busyAny || !preview || recipients.length === 0}
                   >
                     {busy === 'sendpo' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                     Send request

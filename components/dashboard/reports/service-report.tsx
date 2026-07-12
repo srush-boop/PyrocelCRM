@@ -1,8 +1,6 @@
 'use client'
 
-  import { Fragment, useMemo } from 'react'
-import Link from 'next/link'
-import { signatureSrc } from '@/lib/blob'
+import { Fragment, useMemo } from 'react'
 import {
   PieChart,
   Pie,
@@ -11,17 +9,30 @@ import {
   Tooltip,
   Legend,
 } from 'recharts'
-import { Button } from '@/components/ui/button'
-import {
-  ArrowLeft,
-  Printer,
-  CheckCircle2,
-  XCircle,
-  MinusCircle,
-} from 'lucide-react'
-import { formatDateUK } from '@/lib/utils'
+import { CheckCircle2, XCircle, AlertTriangle, MinusCircle, ListChecks } from 'lucide-react'
 import { getServiceIcon } from '@/lib/service-icons'
-import type { TaskWithDetails, TaskResult, ReportTemplate, CompanyInfo } from '@/lib/types/database'
+import { PYROCEL_RED } from '@/lib/service-colors'
+import {
+  ReportActionBar,
+  ReportHeader,
+  ReportMeta,
+  ReportMetaGrid,
+  ReportStatusRibbon,
+  StatCard,
+  SectionHeading,
+  ReportPanel,
+  SignatureBlock,
+  ReportFooter,
+  REPORT_COLORS,
+  getStatusMeta,
+} from './report-shell'
+import type {
+  TaskWithDetails,
+  TaskResult,
+  ChecklistResult,
+  ReportTemplate,
+  CompanyInfo,
+} from '@/lib/types/database'
 
 interface ServiceReportProps {
   task: TaskWithDetails
@@ -30,177 +41,215 @@ interface ServiceReportProps {
   companyInfo?: CompanyInfo | null
 }
 
-const STATUS_META: Record<string, { label: string; color: string }> = {
-  pass: { label: 'Pass', color: '#16a34a' },
-  fail: { label: 'Fail', color: '#dc2626' },
-  partial: { label: 'Partial', color: '#d97706' },
-  no_access: { label: 'No Access', color: '#d97706' },
-  pending: { label: 'Pending', color: '#6b7280' },
+/**
+ * Some services (e.g. emergency lighting) record their outcome as numeric
+ * summary counts — "Passed: 1", "Failed: 0", "Fittings tested: 1" — rather than
+ * individual pass/fail checklist rows. The previous report only ever counted
+ * `pass_fail` items, so those reports always showed 0 passed / 0 failed / 0%.
+ *
+ * This helper detects both shapes and returns a normalised summary so the KPIs
+ * and chart reflect the real result regardless of how it was captured.
+ */
+interface ChecklistStats {
+  mode: 'counts' | 'passfail'
+  registerTotal: number
+  tested: number
+  pass: number
+  fail: number
+  remedial: number
+  advisory: number
+  na: number
+  other: number
+  passRate: number
+}
+
+function normalizeLabel(s: string): string {
+  return s.trim().toLowerCase()
+}
+
+function computeStats(checklist: ChecklistResult[]): ChecklistStats {
+  // Index numeric items by both item_id and normalised label so we can resolve
+  // count summaries no matter how the executor keyed them.
+  const numById: Record<string, number> = {}
+  const numByLabel: Record<string, number> = {}
+  for (const item of checklist) {
+    if (item.type === 'number') {
+      const n = typeof item.value === 'number' ? item.value : Number(item.value) || 0
+      numById[item.item_id] = n
+      numByLabel[normalizeLabel(item.label)] = n
+    }
+  }
+  const getNum = (id: string, ...labels: string[]): number | undefined => {
+    if (id in numById) return numById[id]
+    for (const l of labels) if (l in numByLabel) return numByLabel[l]
+    return undefined
+  }
+
+  const passedN = getNum('passed', 'passed', 'pass')
+  const failedN = getNum('failed', 'failed', 'fail')
+  const remedialN = getNum('remedial', 'remedial')
+  const isCountMode =
+    passedN !== undefined || failedN !== undefined || remedialN !== undefined
+
+  if (isCountMode) {
+    const pass = passedN ?? 0
+    const fail = failedN ?? 0
+    const remedial = remedialN ?? 0
+    const na = getNum('na', 'n/a', 'not applicable') ?? 0
+    const tested =
+      getNum('tested', 'fittings tested', 'units tested', 'tested') ??
+      pass + fail + remedial + na
+    const registerTotal =
+      getNum('total', 'fittings on register', 'on register', 'total', 'register') ?? tested
+    const assessed = pass + fail + remedial
+    const passRate = assessed > 0 ? Math.round((pass / assessed) * 100) : 0
+    return {
+      mode: 'counts',
+      registerTotal,
+      tested,
+      pass,
+      fail,
+      remedial,
+      advisory: 0,
+      na,
+      other: 0,
+      passRate,
+    }
+  }
+
+  // Pass/fail mode: tally individual checklist rows.
+  let pass = 0
+  let fail = 0
+  let advisory = 0
+  let other = 0
+  for (const item of checklist) {
+    if (item.type === 'pass_fail') {
+      if (item.advisory) advisory++
+      else if (item.passed) pass++
+      else fail++
+    } else {
+      other++
+    }
+  }
+  const assessed = pass + fail
+  const passRate = assessed > 0 ? Math.round((pass / assessed) * 100) : 0
+  return {
+    mode: 'passfail',
+    registerTotal: checklist.length,
+    tested: assessed,
+    pass,
+    fail,
+    remedial: 0,
+    advisory,
+    na: 0,
+    other,
+    passRate,
+  }
 }
 
 export function ServiceReport({ task, result, template, companyInfo }: ServiceReportProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
   const engineer = task.assigned_engineer
-  // Header colour is driven by the service type's own colour, falling back to the template/default
-  const headerColor =
-    serviceType?.color || template?.header_color || '#0f172a'
+  // Header colour is driven by the service type's own colour, falling back to
+  // the template/brand default.
+  const headerColor = serviceType?.color || template?.header_color || PYROCEL_RED
   const companyName = companyInfo?.name || template?.company_name || 'Pyrocel Ltd'
   const sections = template?.sections || {}
-  // Company address on the report header comes from central Company Information.
   const companyAddress = companyInfo?.address || sections.company_address || null
+  const companyPhone = companyInfo?.phone || sections.company_phone || null
+  const companyEmail = companyInfo?.email || sections.company_email || null
+  const companyWebsite = companyInfo?.website || null
+  const logoUrl = companyInfo?.logo_url || template?.company_logo_url || null
+  const standards = sections.standards || null
   const ServiceIcon = getServiceIcon(serviceType?.name)
 
   const checklist = result?.checklist_results || []
+  const stats = useMemo(() => computeStats(checklist), [checklist])
 
-  const stats = useMemo(() => {
-    let pass = 0
-    let fail = 0
-    let advisory = 0
-    let other = 0
-    for (const item of checklist) {
-      if (item.type === 'pass_fail') {
-        if (item.advisory) advisory++
-        else if (item.passed) pass++
-        else fail++
-      } else {
-        other++
-      }
-    }
-    const assessed = pass + fail
-    const passRate = assessed > 0 ? Math.round((pass / assessed) * 100) : 0
-    return { pass, fail, advisory, other, total: checklist.length, passRate }
-  }, [checklist])
-
-  const pieData = useMemo(
-    () =>
-      [
-        { name: 'Pass', key: 'pass', value: stats.pass, color: '#16a34a' },
-        { name: 'Advisory', key: 'advisory', value: stats.advisory, color: '#f59e0b' },
-        { name: 'Fail', key: 'fail', value: stats.fail, color: '#dc2626' },
-        { name: 'Other', key: 'other', value: stats.other, color: '#6b7280' },
-      ].filter((d) => d.value > 0),
-    [stats],
-  )
+  const pieData = useMemo(() => {
+    const entries =
+      stats.mode === 'counts'
+        ? [
+            { name: 'Pass', key: 'pass', value: stats.pass, color: REPORT_COLORS.pass },
+            { name: 'Remedial', key: 'remedial', value: stats.remedial, color: REPORT_COLORS.remedial },
+            { name: 'Fail', key: 'fail', value: stats.fail, color: REPORT_COLORS.fail },
+            { name: 'N/A', key: 'na', value: stats.na, color: REPORT_COLORS.na },
+          ]
+        : [
+            { name: 'Pass', key: 'pass', value: stats.pass, color: REPORT_COLORS.pass },
+            { name: 'Advisory', key: 'advisory', value: stats.advisory, color: REPORT_COLORS.advisory },
+            { name: 'Fail', key: 'fail', value: stats.fail, color: REPORT_COLORS.fail },
+            { name: 'Other', key: 'other', value: stats.other, color: REPORT_COLORS.other },
+          ]
+    return entries.filter((d) => d.value > 0)
+  }, [stats])
 
   const completedDate = task.completed_at || task.scheduled_date
   const status = result?.overall_status || 'pending'
-  const statusMeta = STATUS_META[status] || STATUS_META.pending
+  const statusMeta = getStatusMeta(status)
+
+  const docSubtitle = [serviceType?.name, task.visit_type?.name].filter(Boolean).join(' — ')
 
   return (
     <div className="mx-auto max-w-4xl">
-      {/* Action bar */}
-      <div className="mb-6 flex items-center justify-between print:hidden">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href={site ? `/dashboard/sites/${site.id}` : '/dashboard/reports'}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back
-          </Link>
-        </Button>
-        <Button onClick={() => window.print()}>
-          <Printer className="mr-2 h-4 w-4" />
-          Print / Save PDF
-        </Button>
-      </div>
+      <ReportActionBar backHref={site ? `/dashboard/sites/${site.id}` : '/dashboard/reports'} />
 
       <div className="report-page rounded-lg border bg-card p-8 print:border-0 print:p-0">
-        {/* Header */}
-        <header
-          className="-mx-8 -mt-8 mb-8 flex items-center justify-between px-8 py-6 text-white print:mx-0 print:mt-0 print:rounded-none"
-          style={{ backgroundColor: headerColor }}
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg bg-white p-1">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/images/pyrocel-logo.png"
-                alt="Pyrocel logo"
-                crossOrigin="anonymous"
-                className="h-full w-full object-contain"
-              />
-            </div>
-            <div>
-              <p className="text-xl font-extrabold uppercase tracking-wide leading-tight">
-                {companyName}
-              </p>
-              {companyAddress && (
-                <p className="text-xs text-white/80">{companyAddress}</p>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="text-right">
-              <p className="text-sm font-semibold uppercase tracking-wide">Service Report</p>
-              <p className="text-xs text-white/80">
-                {serviceType?.name}
-                {task.visit_type?.name ? ` — ${task.visit_type.name}` : ''}
-              </p>
-              {result?.reference_number && (
-                <p className="mt-1 font-mono text-sm font-bold">{result.reference_number}</p>
-              )}
-            </div>
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white/15 ring-1 ring-white/25">
-              <ServiceIcon className="h-6 w-6" aria-hidden="true" />
-            </div>
-          </div>
-        </header>
+        <ReportHeader
+          headerColor={headerColor}
+          companyName={companyName}
+          logoUrl={logoUrl}
+          address={companyAddress}
+          phone={companyPhone}
+          email={companyEmail}
+          website={companyWebsite}
+          docType="Service Report"
+          docSubtitle={docSubtitle || serviceType?.name}
+          referenceNumber={result?.reference_number}
+          reportDate={completedDate}
+          ServiceIcon={ServiceIcon}
+        />
 
-        {/* Meta */}
-        <section className="mb-8 grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
-          <Meta label="Inspection Reference" value={result?.reference_number} />
-          <Meta label="Report Date" value={formatDateUK(completedDate)} />
-          <Meta label="Site" value={site?.name} />
-          <Meta label="Address" value={site?.address} />
-          <Meta label="Engineer" value={engineer?.full_name || engineer?.email} />
-          <Meta label="Service" value={serviceType?.name} />
-          {task.visit_type?.name && <Meta label="Visit" value={task.visit_type.name} />}
-          {sections.standards && <Meta label="Standards" value={sections.standards} />}
-        </section>
+        <ReportMetaGrid>
+          <ReportMeta label="Inspection Reference" value={result?.reference_number} />
+          <ReportMeta label="Site" value={site?.name} />
+          <ReportMeta label="Engineer" value={engineer?.full_name || engineer?.email} />
+          <ReportMeta label="Address" value={site?.address} />
+          <ReportMeta label="Service" value={serviceType?.name} />
+          {task.visit_type?.name && <ReportMeta label="Visit" value={task.visit_type.name} />}
+        </ReportMetaGrid>
 
-        {/* Overall status banner */}
-        <div
-          className="avoid-break mb-8 flex items-center justify-between rounded-lg border-l-4 px-4 py-3"
-          style={{
-            borderLeftColor: statusMeta.color,
-            backgroundColor: `${statusMeta.color}12`,
-          }}
-        >
-          <span className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            Overall Result
-          </span>
-          <span
-            className="rounded-full px-3 py-1 text-sm font-bold text-white"
-            style={{ backgroundColor: statusMeta.color }}
-          >
-            {statusMeta.label}
-          </span>
-        </div>
+        <ReportStatusRibbon statusLabel={statusMeta.label} color={statusMeta.color} />
 
-        {/* Summary stats + chart */}
+        {/* Summary KPIs + chart */}
         <div className="mb-8 grid gap-6 md:grid-cols-2">
           <div className="grid grid-cols-2 gap-3 self-start">
-            <Stat label="Checks" value={stats.total} />
-            <Stat
-              label="Passed"
-              value={stats.pass}
-              color="#16a34a"
-              icon={<CheckCircle2 className="h-4 w-4" />}
-            />
-            <Stat
-              label="Failed"
-              value={stats.fail}
-              color="#dc2626"
-              icon={<XCircle className="h-4 w-4" />}
-            />
-            <Stat
-              label="Pass Rate"
-              value={`${stats.passRate}%`}
-              color={headerColor}
-            />
+            {stats.mode === 'counts' ? (
+              <>
+                <StatCard label="On Register" value={stats.registerTotal} color={headerColor} icon={<ListChecks className="h-4 w-4" />} />
+                <StatCard label="Tested" value={stats.tested} color={REPORT_COLORS.neutral} />
+                <StatCard label="Passed" value={stats.pass} color={REPORT_COLORS.pass} icon={<CheckCircle2 className="h-4 w-4" />} />
+                <StatCard label="Remedial" value={stats.remedial} color={REPORT_COLORS.remedial} icon={<AlertTriangle className="h-4 w-4" />} />
+                <StatCard label="Failed" value={stats.fail} color={REPORT_COLORS.fail} icon={<XCircle className="h-4 w-4" />} />
+                <StatCard label="Pass Rate" value={`${stats.passRate}%`} color={headerColor} />
+              </>
+            ) : (
+              <>
+                <StatCard label="Checks" value={stats.registerTotal} color={headerColor} icon={<ListChecks className="h-4 w-4" />} />
+                <StatCard label="Passed" value={stats.pass} color={REPORT_COLORS.pass} icon={<CheckCircle2 className="h-4 w-4" />} />
+                <StatCard label="Failed" value={stats.fail} color={REPORT_COLORS.fail} icon={<XCircle className="h-4 w-4" />} />
+                {stats.advisory > 0 ? (
+                  <StatCard label="Advisory" value={stats.advisory} color={REPORT_COLORS.advisory} icon={<AlertTriangle className="h-4 w-4" />} />
+                ) : (
+                  <StatCard label="Other" value={stats.other} color={REPORT_COLORS.na} icon={<MinusCircle className="h-4 w-4" />} />
+                )}
+                <StatCard label="Pass Rate" value={`${stats.passRate}%`} color={headerColor} />
+              </>
+            )}
           </div>
 
-          <div className="avoid-break rounded-lg border p-4">
-            <h3 className="mb-3 text-sm font-semibold">Results Breakdown</h3>
+          <ReportPanel title="Results Breakdown">
             {pieData.length > 0 ? (
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
@@ -225,31 +274,28 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
             ) : (
               <p className="py-12 text-center text-sm text-muted-foreground">No checklist data</p>
             )}
-          </div>
+          </ReportPanel>
         </div>
 
-        {/* Detailed checklist — table may span multiple pages, so the section
-            itself must not be break-inside: avoid (that would clip rows). */}
+        {/* Detailed checklist */}
         <section className="mb-8">
-          <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
+          <SectionHeading index={1} color={headerColor}>
             Checklist Results
-          </h2>
+          </SectionHeading>
           <div className="overflow-hidden rounded-md border">
             <table className="w-full text-left text-xs">
               <thead style={{ backgroundColor: `${headerColor}15` }}>
                 <tr>
-                  <th className="px-3 py-2 font-semibold">Item</th>
-                  <th className="px-3 py-2 font-semibold">Result</th>
-                  <th className="px-3 py-2 font-semibold">Notes</th>
+                  <th className="px-3 py-2 font-semibold uppercase tracking-wide">Item</th>
+                  <th className="px-3 py-2 font-semibold uppercase tracking-wide">Result</th>
+                  <th className="px-3 py-2 font-semibold uppercase tracking-wide">Notes</th>
                 </tr>
               </thead>
               <tbody>
                 {checklist.map((item, index) => {
-                  // When the report covers multiple panels, print a panel header
-                  // row whenever the panel changes so each panel's results are
-                  // clearly grouped in one report.
                   const prev = index > 0 ? checklist[index - 1] : null
-                  const showPanelHeader = !!item.panel_name && item.panel_id !== (prev?.panel_id ?? null)
+                  const showPanelHeader =
+                    !!item.panel_name && item.panel_id !== (prev?.panel_id ?? null)
                   return (
                     <Fragment key={item.item_id || index}>
                       {showPanelHeader && (
@@ -260,27 +306,27 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
                           </td>
                         </tr>
                       )}
-                      <tr className="border-t align-top">
-                        <td className="px-3 py-2">{item.label}</td>
+                      <tr className="border-t align-top odd:bg-muted/30">
+                        <td className="px-3 py-2 font-medium">{item.label}</td>
                         <td className="px-3 py-2">
                           {item.type === 'pass_fail' ? (
                             <span
-                              className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
+                              className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase text-white"
                               style={{
                                 backgroundColor: item.advisory
-                                  ? '#f59e0b'
+                                  ? REPORT_COLORS.advisory
                                   : item.passed
-                                    ? '#16a34a'
-                                    : '#dc2626',
+                                    ? REPORT_COLORS.pass
+                                    : REPORT_COLORS.fail,
                               }}
                             >
                               {item.advisory ? 'Advisory' : item.passed ? 'Pass' : 'Fail'}
                             </span>
                           ) : (
-                            <span className="font-medium">{String(item.value)}</span>
+                            <span className="font-semibold tabular-nums">{String(item.value)}</span>
                           )}
                         </td>
-                        <td className="px-3 py-2 text-muted-foreground">{item.notes || '-'}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{item.notes || '—'}</td>
                       </tr>
                     </Fragment>
                   )
@@ -300,10 +346,10 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
         {/* Engineer notes */}
         {result?.engineer_notes && (
           <section className="mb-8">
-            <h2 className="mb-2 text-base font-bold" style={{ color: headerColor }}>
+            <SectionHeading index={2} color={headerColor}>
               Engineer Notes
-            </h2>
-            <p className="whitespace-pre-wrap rounded-md bg-muted/40 p-3 text-sm">
+            </SectionHeading>
+            <p className="avoid-break whitespace-pre-wrap rounded-md border bg-muted/40 p-3 text-sm leading-relaxed">
               {result.engineer_notes}
             </p>
           </section>
@@ -312,9 +358,9 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
         {/* Photos */}
         {result?.photos && result.photos.length > 0 && (
           <section className="mb-8">
-            <h2 className="mb-3 text-base font-bold" style={{ color: headerColor }}>
+            <SectionHeading index={3} color={headerColor}>
               Photographic Evidence
-            </h2>
+            </SectionHeading>
             <div className="grid grid-cols-3 gap-3">
               {result.photos.map((photo, index) => (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -323,79 +369,35 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
                   src={photo || '/placeholder.svg'}
                   alt={`Report photo ${index + 1}`}
                   crossOrigin="anonymous"
-                  className="h-28 w-full rounded border object-cover"
+                  className="avoid-break h-28 w-full rounded border object-cover"
                 />
               ))}
             </div>
           </section>
         )}
 
-        {/* Signature & footer */}
+        {/* Signature */}
         {template?.include_signature !== false && (
-          <section className="avoid-break mb-6 grid grid-cols-2 gap-8 pt-4 text-sm">
-            <div>
-              {engineer?.signature_url ? (
-                <div className="mb-1 flex h-12 items-end">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={signatureSrc(engineer.signature_url) || '/placeholder.svg'}
-                    alt={`Signature of ${engineer.full_name || 'engineer'}`}
-                    crossOrigin="anonymous"
-                    className="max-h-12 w-auto object-contain"
-                  />
-                </div>
-              ) : (
-                <div className="mb-1 h-12 border-b border-dashed" />
-              )}
-              <p className="font-medium">{sections.signatory_name || engineer?.full_name || ''}</p>
-              <p className="text-xs text-muted-foreground">
-                {engineer?.role_ref?.name || engineer?.job_title || sections.signatory_title || 'Engineer'}
-              </p>
-            </div>
-            <div>
-              <div className="mb-1 h-12 border-b border-dashed" />
-              <p className="text-xs text-muted-foreground">Date: {formatDateUK(completedDate)}</p>
-            </div>
-          </section>
+          <SignatureBlock
+            signatureUrl={engineer?.signature_url}
+            signatoryName={sections.signatory_name || engineer?.full_name || ''}
+            signatoryTitle={
+              engineer?.role_ref?.name ||
+              engineer?.job_title ||
+              sections.signatory_title ||
+              'Engineer'
+            }
+            date={completedDate}
+          />
         )}
 
-        {template?.footer_text && (
-          <footer className="border-t pt-4 text-center text-xs text-muted-foreground">
-            {template.footer_text}
-          </footer>
-        )}
+        <ReportFooter
+          headerColor={headerColor}
+          companyInfo={companyInfo}
+          template={template}
+          standards={standards}
+        />
       </div>
-    </div>
-  )
-}
-
-function Meta({ label, value }: { label: string; value?: string | null }) {
-  return (
-    <div>
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="font-medium">{value || '-'}</p>
-    </div>
-  )
-}
-
-function Stat({
-  label,
-  value,
-  color,
-  icon,
-}: {
-  label: string
-  value: string | number
-  color?: string
-  icon?: React.ReactNode
-}) {
-  return (
-    <div className="avoid-break rounded-lg border p-3 text-center">
-      <div className="flex items-center justify-center gap-1" style={{ color: color || 'inherit' }}>
-        {icon}
-        <span className="text-2xl font-bold">{value}</span>
-      </div>
-      <p className="mt-1 text-xs text-muted-foreground">{label}</p>
     </div>
   )
 }

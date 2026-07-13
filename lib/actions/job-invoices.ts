@@ -262,7 +262,7 @@ export async function createJobInvoice(
 
   const { data: job } = await supabase
     .from('jobs')
-    .select('id, job_number, title, po_number, quote_id, site_id, client_id, status, quoted_subtotal_pence')
+    .select('id, job_number, title, po_number, quote_id, site_id, client_id, status, quoted_subtotal_pence, department_id')
     .eq('id', jobId)
     .single()
   if (!job) return { error: 'Job not found' }
@@ -276,6 +276,7 @@ export async function createJobInvoice(
     client_id: string | null
     status: string
     quoted_subtotal_pence: number | null
+    department_id: string | null
   }
   if (j.status === 'cancelled') return { error: 'Cancelled jobs cannot be invoiced' }
 
@@ -450,6 +451,27 @@ export async function createJobInvoice(
   }
   const invoiceId = (invoice as { id: string }).id
 
+  // Resolve the job's department nominal code (jobs have no service type, so the
+  // department code is the only auto-source here) and snapshot its text.
+  let jobNominalId: string | null = null
+  let jobNominalText: string | null = null
+  if (j.department_id) {
+    const { data: dept } = await supabase
+      .from('departments')
+      .select('nominal_code_id')
+      .eq('id', j.department_id)
+      .single()
+    jobNominalId = (dept as { nominal_code_id: string | null } | null)?.nominal_code_id ?? null
+    if (jobNominalId) {
+      const { data: nc } = await supabase
+        .from('nominal_codes')
+        .select('code')
+        .eq('id', jobNominalId)
+        .single()
+      jobNominalText = (nc as { code: string } | null)?.code ?? null
+    }
+  }
+
   const { error: liError } = await supabase.from('invoice_line_items').insert(
     draftLines.map((l, i) => ({
       invoice_id: invoiceId,
@@ -463,6 +485,8 @@ export async function createJobInvoice(
       unit_price_pence: l.unit_price_pence,
       amount_pence: l.amount_pence,
       sort_order: i,
+      nominal_code_id: jobNominalId,
+      nominal_code: jobNominalText,
     })),
   )
   if (liError) {

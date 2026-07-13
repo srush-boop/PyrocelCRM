@@ -48,13 +48,21 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
-import type { Invoice, InvoiceLineItem, InvoiceLineKind, InvoiceStatus } from '@/lib/types/database'
+import type {
+  Invoice,
+  InvoiceLineItem,
+  InvoiceLineKind,
+  InvoiceStatus,
+  NominalCode,
+} from '@/lib/types/database'
 import { formatPence, financialYearLabel, INVOICE_STATUS_LABELS } from '@/lib/billing/invoices'
+import { NominalCodeSelect } from '@/components/dashboard/billing/nominal-code-select'
 import {
   addInvoiceLine,
   deleteInvoiceLine,
   issueInvoice,
   markInvoicePaid,
+  setInvoiceLineNominal,
   updateInvoiceLine,
   updateInvoiceMeta,
   voidInvoice,
@@ -101,15 +109,19 @@ export function InvoiceDetail({
   invoice,
   lines,
   serviceTypeByLineId = {},
+  nominalCodes = [],
 }: {
   invoice: InvoiceWithNames
   lines: InvoiceLineItem[]
   serviceTypeByLineId?: Record<string, string>
+  nominalCodes?: NominalCode[]
 }) {
   const router = useRouter()
   const isDraft = invoice.status === 'draft'
   const isCreditNote = invoice.document_type === 'credit_note'
   const [busy, setBusy] = useState(false)
+  // Lines still missing an internal nominal code — blocks issuing.
+  const missingNominal = lines.filter((l) => !l.nominal_code_id).length
 
   // Group-by-service-type (presentation only): only when read-only (issued/
   // paid/void) AND the invoice spans two or more service types. Lines with no
@@ -266,6 +278,7 @@ export function InvoiceDetail({
                   <TableRow>
                     <TableHead className="w-24">Type</TableHead>
                     <TableHead>Description</TableHead>
+                    <TableHead className="w-44">Nominal</TableHead>
                     <TableHead className="w-20 text-right">Qty</TableHead>
                     <TableHead className="w-28 text-right">Unit (£)</TableHead>
                     <TableHead className="w-28 text-right">Amount</TableHead>
@@ -276,7 +289,7 @@ export function InvoiceDetail({
                   {lines.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={isDraft ? 6 : 5}
+                        colSpan={isDraft ? 7 : 6}
                         className="py-8 text-center text-muted-foreground"
                       >
                         No line items yet.
@@ -288,7 +301,7 @@ export function InvoiceDetail({
                       return (
                         <Fragment key={serviceName}>
                           <TableRow className="bg-muted/50 hover:bg-muted/50">
-                            <TableCell colSpan={4} className="py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            <TableCell colSpan={5} className="py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                               {serviceName}
                             </TableCell>
                             <TableCell className="py-2 text-right text-xs font-medium text-muted-foreground">
@@ -307,6 +320,7 @@ export function InvoiceDetail({
                         <EditableLineRow
                           key={line.id}
                           line={line}
+                          nominalCodes={nominalCodes}
                           onSaved={() => router.refresh()}
                         />
                       ) : (
@@ -325,6 +339,16 @@ export function InvoiceDetail({
                 time or on-site adjustments before issuing.
               </p>
             )}
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium">Nominal</span> codes are internal accounting references
+              (for Sage) and never appear on the copy sent to the customer.
+              {isDraft && missingNominal > 0 && (
+                <span className="ml-1 font-medium text-amber-700">
+                  {missingNominal} line{missingNominal === 1 ? '' : 's'} still need a code before you
+                  can issue.
+                </span>
+              )}
+            </p>
 
             {isDraft && <AddLineForm invoiceId={invoice.id} onAdded={() => router.refresh()} />}
           </CardContent>
@@ -377,7 +401,10 @@ export function InvoiceDetail({
             {isDraft && (
               <ConfirmButton
                 trigger={
-                  <Button className="w-full" disabled={busy || lines.length === 0 || invoice.on_hold}>
+                  <Button
+                    className="w-full"
+                    disabled={busy || lines.length === 0 || invoice.on_hold || missingNominal > 0}
+                  >
                     <Send className="mr-2 h-4 w-4" />
                     {isCreditNote ? 'Issue credit note' : 'Issue invoice'}
                   </Button>
@@ -477,15 +504,31 @@ export function InvoiceDetail({
 // ---- Editable line row (draft only) ------------------------------------
 function EditableLineRow({
   line,
+  nominalCodes,
   onSaved,
 }: {
   line: InvoiceLineItem
+  nominalCodes: NominalCode[]
   onSaved: () => void
 }) {
   const [description, setDescription] = useState(line.description)
   const [quantity, setQuantity] = useState(String(line.quantity))
   const [unitPounds, setUnitPounds] = useState((line.unit_price_pence / 100).toFixed(2))
   const [saving, setSaving] = useState(false)
+  const [nominalId, setNominalId] = useState<string | null>(line.nominal_code_id)
+  const [nominalSaving, setNominalSaving] = useState(false)
+
+  const saveNominal = async (id: string | null) => {
+    setNominalId(id)
+    setNominalSaving(true)
+    const res = await setInvoiceLineNominal(line.id, line.invoice_id, id)
+    setNominalSaving(false)
+    if (res.error) {
+      toast.error(res.error)
+      return
+    }
+    onSaved()
+  }
 
   const dirty =
     description !== line.description ||
@@ -533,6 +576,16 @@ function EditableLineRow({
           onChange={(e) => setDescription(e.target.value)}
           onBlur={save}
           className="h-8"
+        />
+      </TableCell>
+      <TableCell>
+        <NominalCodeSelect
+          value={nominalId}
+          onChange={saveNominal}
+          codes={nominalCodes}
+          noneLabel="— none —"
+          className={cn('h-8', !nominalId && 'border-amber-400 text-amber-700')}
+          disabled={nominalSaving}
         />
       </TableCell>
       <TableCell>
@@ -789,6 +842,9 @@ function ReadOnlyLineRow({ line }: { line: InvoiceLineItem }) {
         <Badge variant="secondary">{KIND_LABELS[line.kind]}</Badge>
       </TableCell>
       <TableCell>{line.description}</TableCell>
+      <TableCell className="font-mono text-xs text-muted-foreground">
+        {line.nominal_code || '—'}
+      </TableCell>
       <TableCell className="text-right">{line.quantity}</TableCell>
       <TableCell className="text-right">{(line.unit_price_pence / 100).toFixed(2)}</TableCell>
       <TableCell className="text-right font-medium">{formatPence(line.amount_pence)}</TableCell>

@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { NominalCode } from '@/lib/types/database'
+import { cn } from '@/lib/utils'
 
 const NONE = '__none__'
 
@@ -22,6 +23,8 @@ interface NominalCodeSelectProps {
   placeholder?: string
   /** Label for the "no code" option (e.g. "None" or "Auto / inherit"). */
   noneLabel?: string
+  /** Extra classes applied to the trigger. */
+  className?: string
 }
 
 /**
@@ -37,6 +40,7 @@ export function NominalCodeSelect({
   disabled,
   placeholder = 'Select a nominal code',
   noneLabel = 'None',
+  className,
 }: NominalCodeSelectProps) {
   const active = codes.filter((c) => c.active)
   // Ensure the current selection is always present even if inactive.
@@ -50,7 +54,7 @@ export function NominalCodeSelect({
       onValueChange={(v) => onChange(v === NONE ? null : v)}
       disabled={disabled}
     >
-      <SelectTrigger id={id}>
+      <SelectTrigger id={id} className={cn(className)}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>

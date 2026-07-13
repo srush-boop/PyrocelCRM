@@ -28,15 +28,38 @@ import { Plus, Loader2, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { PostcodeLookup } from '@/components/dashboard/shared/postcode-lookup'
 import { SiteClassificationFields } from '@/components/dashboard/sites/site-classification-fields'
-import type { Client, Branch, PropertyType } from '@/lib/types/database'
+import {
+  SystemServicePicker,
+  type SystemServiceSelection,
+} from '@/components/dashboard/sites/system-service-picker'
+import {
+  provisionSiteSystems,
+  findRemoteMonitoringTypeId,
+  type ProvisionSystemSelection,
+} from '@/lib/sites/provision-systems'
+import type {
+  Client,
+  Branch,
+  PropertyType,
+  SystemType,
+  ServiceType,
+} from '@/lib/types/database'
 
 interface AddSiteDialogProps {
   clients: Client[]
   branches?: Branch[]
   propertyTypes?: PropertyType[]
+  systemTypes?: SystemType[]
+  serviceTypes?: ServiceType[]
 }
 
-export function AddSiteDialog({ clients, branches = [], propertyTypes = [] }: AddSiteDialogProps) {
+export function AddSiteDialog({
+  clients,
+  branches = [],
+  propertyTypes = [],
+  systemTypes = [],
+  serviceTypes = [],
+}: AddSiteDialogProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
@@ -61,9 +84,15 @@ export function AddSiteDialog({ clients, branches = [], propertyTypes = [] }: Ad
   })
   const [reportingEmails, setReportingEmails] = useState<string[]>([])
   const [newReportingEmail, setNewReportingEmail] = useState('')
+  // Systems (and their required services) to provision when the site is created.
+  const [systemSelection, setSystemSelection] = useState<SystemServiceSelection>({})
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
+
+  // The "Remote Monitoring" system type, if configured. Its selection in the
+  // picker is driven by the toggle below and locked so it can't be unticked.
+  const rmTypeId = findRemoteMonitoringTypeId(systemTypes)
 
   const handleAddReportingEmail = () => {
     if (newReportingEmail && !reportingEmails.includes(newReportingEmail)) {
@@ -140,11 +169,42 @@ export function AddSiteDialog({ clients, branches = [], propertyTypes = [] }: Ad
       .select('id')
       .single()
 
+    if (insertError || !inserted?.id) {
+      setLoading(false)
+      if (insertError) setError(insertError.message)
+      return
+    }
+
+    // Provision the selected systems + services (and seed tasks for live sites)
+    // before navigating, so the Systems tab is populated on arrival.
+    const selections: ProvisionSystemSelection[] = Object.entries(systemSelection).map(
+      ([systemTypeId, serviceTypeIds]) => ({
+        systemTypeId,
+        systemTypeName: systemTypes.find((t) => t.id === systemTypeId)?.name ?? 'System',
+        serviceTypeIds,
+      }),
+    )
+    if (selections.length > 0) {
+      const { error: provError } = await provisionSiteSystems(supabase, {
+        siteId: inserted.id,
+        selections,
+        serviceTypes,
+        isDead: formData.status === 'dead',
+        startDate: new Date().toISOString().slice(0, 10),
+      })
+      if (provError) {
+        // The site itself was created; log the provisioning issue rather than
+        // blocking navigation (the user can add systems manually).
+        console.log('[v0] provisionSiteSystems error:', provError)
+      }
+    }
+
     setLoading(false)
 
-    if (!insertError) {
+    {
       setOpen(false)
       setError(null)
+      setSystemSelection({})
       setFormData({
         name: '',
         address: '',
@@ -346,6 +406,22 @@ export function AddSiteDialog({ clients, branches = [], propertyTypes = [] }: Ad
                 </div>
               )}
             </div>
+            <div className="grid gap-2">
+              <Label>Systems &amp; Services</Label>
+              <p className="text-xs text-muted-foreground">
+                Select the systems installed at this site and tick the services required for each.
+                They will be added to the Systems tab automatically.
+              </p>
+              <SystemServicePicker
+                systemTypes={systemTypes}
+                serviceTypes={serviceTypes}
+                value={systemSelection}
+                onChange={setSystemSelection}
+                lockedSystemTypeIds={
+                  rmTypeId && formData.has_remote_monitoring ? [rmTypeId] : []
+                }
+              />
+            </div>
             <div className="rounded-lg border p-4">
               <div className="flex items-center justify-between gap-4">
                 <div>
@@ -359,13 +435,22 @@ export function AddSiteDialog({ clients, branches = [], propertyTypes = [] }: Ad
                 <Switch
                   id="has_remote_monitoring"
                   checked={formData.has_remote_monitoring}
-                  onCheckedChange={(checked) =>
+                  onCheckedChange={(checked) => {
                     setFormData({
                       ...formData,
                       has_remote_monitoring: checked,
                       remote_monitoring_type: checked ? formData.remote_monitoring_type : '',
                     })
-                  }
+                    // Auto-add / remove the Remote Monitoring system in the picker.
+                    if (rmTypeId) {
+                      setSystemSelection((prev) => {
+                        const next = { ...prev }
+                        if (checked) next[rmTypeId] = next[rmTypeId] ?? []
+                        else delete next[rmTypeId]
+                        return next
+                      })
+                    }
+                  }}
                 />
               </div>
               {formData.has_remote_monitoring && (

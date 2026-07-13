@@ -653,7 +653,11 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
               revalidatePath={`/dashboard/sites/${id}`}
             />
           )}
-          <EditSiteButton site={site as Site & { route: Route | null }} clients={clients} />
+          <EditSiteButton
+            site={site as Site & { route: Route | null }}
+            clients={clients}
+            systemTypes={systemTypes}
+          />
         </div>
       </div>
 

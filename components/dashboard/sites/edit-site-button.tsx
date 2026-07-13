@@ -4,14 +4,15 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Pencil } from 'lucide-react'
 import { EditSiteDialog } from './edit-site-dialog'
-import type { Site, Route, Client } from '@/lib/types/database'
+import type { Site, Route, Client, SystemType } from '@/lib/types/database'
 
 interface EditSiteButtonProps {
   site: Site & { route: Route | null; client?: Client | null }
   clients: Client[]
+  systemTypes?: SystemType[]
 }
 
-export function EditSiteButton({ site, clients }: EditSiteButtonProps) {
+export function EditSiteButton({ site, clients, systemTypes = [] }: EditSiteButtonProps) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -20,7 +21,13 @@ export function EditSiteButton({ site, clients }: EditSiteButtonProps) {
         <Pencil className="h-4 w-4" />
         Edit Site
       </Button>
-      <EditSiteDialog site={site} clients={clients} open={open} onOpenChange={setOpen} />
+      <EditSiteDialog
+        site={site}
+        clients={clients}
+        systemTypes={systemTypes}
+        open={open}
+        onOpenChange={setOpen}
+      />
     </>
   )
 }

@@ -7,8 +7,34 @@ import { NextResponse } from 'next/server'
  * phone, website, postcode, coordinates) so callers don't need a follow-up
  * Place Details request. Used by the site / client / quote-prospect finders.
  *
- * Requires GOOGLE_MAPS_API_KEY with the "Places API (New)" enabled.
+ * Requires a Google API key with the "Places API (New)" enabled. We read the
+ * first non-empty value from a small list of accepted variable names, because
+ * the key has historically been saved under suffixed/alternate names
+ * (GOOGLE_MAPS_API_KEY_2, GCP_API_KEY, ...) rather than the canonical one.
  */
+
+// Accepted env var names for the Google key, in priority order. The canonical
+// name wins; the alternates are fallbacks so a valid key saved under a
+// suffixed name still works without a code change.
+const API_KEY_ENV_NAMES = [
+  'GOOGLE_MAPS_API_KEY',
+  'GOOGLE_MAPS_API_KEY_2',
+  'GOOGLE_MAPS_API_KEY_3',
+  'GCP_API_KEY',
+  'GCP_API_KEY_2',
+  'GCP_API_KEY_3',
+]
+
+function resolveApiKey(): string | undefined {
+  for (const name of API_KEY_ENV_NAMES) {
+    const value = process.env[name]?.trim()
+    // A real Google key starts with "AIza"; skip obviously-invalid values so a
+    // stale placeholder under the canonical name can't shadow a good fallback.
+    if (value && value.startsWith('AIza')) return value
+  }
+  // Last resort: any non-empty canonical value (covers non-standard key formats).
+  return process.env.GOOGLE_MAPS_API_KEY?.trim() || undefined
+}
 
 export interface PlaceResult {
   placeId: string
@@ -31,10 +57,10 @@ function extractPostcode(
 }
 
 export async function GET(request: Request) {
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY
+  const apiKey = resolveApiKey()
   if (!apiKey) {
     return NextResponse.json(
-      { error: 'Address finder is not configured (missing GOOGLE_MAPS_API_KEY).' },
+      { error: 'Address finder is not configured (missing Google Maps API key).' },
       { status: 500 },
     )
   }

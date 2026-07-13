@@ -381,9 +381,6 @@ export function SystemPanelsManager({
                       {orderedVisitTypes.map((vt, i) => (
                         <th key={vt.id} className="p-2 text-center font-medium">
                           Visit {i + 1}
-                          <span className="block text-xs font-normal text-muted-foreground">
-                            {vt.name}
-                          </span>
                         </th>
                       ))}
                     </tr>
@@ -405,8 +402,8 @@ export function SystemPanelsManager({
                                 <SelectTrigger
                                   className={
                                     isHeavy
-                                      ? 'h-8 justify-center border-primary/40 bg-primary/5 text-xs font-medium'
-                                      : 'h-8 justify-center text-xs'
+                                      ? 'mx-auto h-8 w-28 justify-center border-primary/40 bg-primary/5 text-xs font-medium'
+                                      : 'mx-auto h-8 w-28 justify-center text-xs'
                                   }
                                 >
                                   <SelectValue />

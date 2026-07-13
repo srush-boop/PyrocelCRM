@@ -460,38 +460,6 @@ export function ServiceChargeDialog({
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
-                <Label htmlFor="sc-qty">Quantity</Label>
-                <Input
-                  id="sc-qty"
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label>Total per invoice</Label>
-                <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm">
-                  {formatPence(perInvoicePence * (Number.parseInt(quantity, 10) || 1))}
-                </div>
-              </div>
-            </div>
-
-            {pricePounds.trim() !== '' && (
-              <p className="text-xs text-muted-foreground">
-                {priceBasis === 'annual'
-                  ? `Bills ${formatPence(perInvoicePence)} each ${RECURRING_FREQUENCY_LABELS[
-                      frequency
-                    ].toLowerCase()} period (${annualOccurrences(frequency)}× per year).`
-                  : `Annual total ${formatPence(
-                      annualFromPerPeriod(penceFromPounds(pricePounds), frequency),
-                    )} (${annualOccurrences(frequency)}× per year).`}
-              </p>
-            )}
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="grid gap-1.5">
                 <Label htmlFor="sc-freq">Invoice frequency</Label>
                 <Select
                   value={frequency}
@@ -524,6 +492,47 @@ export function ServiceChargeDialog({
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="sc-qty">Quantity</Label>
+              <Input
+                id="sc-qty"
+                type="number"
+                min={1}
+                step={1}
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                className="sm:max-w-[8rem]"
+              />
+            </div>
+
+            {/* The headline the user is looking for: what actually gets billed on
+                each invoice at the chosen frequency. */}
+            <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/40 px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Amount per invoice</p>
+                <p className="text-xs text-muted-foreground">
+                  {pricePounds.trim() === ''
+                    ? 'Enter a value to see the per-invoice amount.'
+                    : priceBasis === 'annual'
+                      ? `${formatPence(
+                          annualFromPerPeriod(penceFromPounds(pricePounds), frequency) *
+                            (Number.parseInt(quantity, 10) || 1),
+                        )}/yr split across ${annualOccurrences(frequency)} ${RECURRING_FREQUENCY_LABELS[
+                          frequency
+                        ].toLowerCase()} invoice${annualOccurrences(frequency) === 1 ? '' : 's'}.`
+                      : `${formatPence(
+                          annualFromPerPeriod(penceFromPounds(pricePounds), frequency) *
+                            (Number.parseInt(quantity, 10) || 1),
+                        )}/yr across ${annualOccurrences(frequency)} invoice${
+                          annualOccurrences(frequency) === 1 ? '' : 's'
+                        }.`}
+                </p>
+              </div>
+              <span className="whitespace-nowrap text-lg font-semibold tabular-nums">
+                {formatPence(perInvoicePence * (Number.parseInt(quantity, 10) || 1))}
+              </span>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">

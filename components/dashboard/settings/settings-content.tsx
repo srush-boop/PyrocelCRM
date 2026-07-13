@@ -180,12 +180,6 @@ export function SettingsContent({ user, profile, company, branches, departments,
             Documents
           </TabsTrigger>
         )}
-        {canManageTags && (
-          <TabsTrigger value="tags" className="gap-2">
-            <Tags className="h-4 w-4" />
-            Tags
-          </TabsTrigger>
-        )}
         {isAdmin && (
           <TabsTrigger value="data" className="gap-2">
             <Database className="h-4 w-4" />
@@ -414,12 +408,6 @@ export function SettingsContent({ user, profile, company, branches, departments,
       {canManageTemplates && (
         <TabsContent value="templates" className="space-y-4">
           <DocumentTemplatesSettings templates={documentTemplates} />
-        </TabsContent>
-      )}
-
-      {canManageTags && (
-        <TabsContent value="tags" className="space-y-4">
-          <DocumentTagsSettings tags={documentTags} />
         </TabsContent>
       )}
 

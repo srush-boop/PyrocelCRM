@@ -4,7 +4,16 @@ import { SitesTable } from '@/components/dashboard/sites/sites-table'
 import { AddSiteDialog } from '@/components/dashboard/sites/add-site-dialog'
 import { BranchFilter } from '@/components/dashboard/branch-filter'
 import { getBranchScope } from '@/lib/branches'
-import type { Profile, Site, Route, Client, Branch, PropertyType } from '@/lib/types/database'
+import type {
+  Profile,
+  Site,
+  Route,
+  Client,
+  Branch,
+  PropertyType,
+  SystemType,
+  ServiceType,
+} from '@/lib/types/database'
 
 export default async function SitesPage({
   searchParams,
@@ -43,11 +52,20 @@ export default async function SitesPage({
     sitesQuery = sitesQuery.eq('branch_id', scope.activeBranchId)
   }
 
-  const [sitesResult, routesResult, clientsResult, propertyTypesResult] = await Promise.all([
+  const [
+    sitesResult,
+    routesResult,
+    clientsResult,
+    propertyTypesResult,
+    systemTypesResult,
+    serviceTypesResult,
+  ] = await Promise.all([
     sitesQuery,
     supabase.from('routes').select('*').order('name'),
     supabase.from('clients').select('*').order('name'),
     supabase.from('property_types').select('*').eq('active', true).order('name'),
+    supabase.from('system_types').select('*').eq('active', true).order('name'),
+    supabase.from('service_types').select('*').order('name'),
   ])
 
   const sites = (sitesResult.data || []) as (Site & {
@@ -58,6 +76,8 @@ export default async function SitesPage({
   const routes = (routesResult.data || []) as Route[]
   const clients = (clientsResult.data || []) as Client[]
   const propertyTypes = (propertyTypesResult.data || []) as PropertyType[]
+  const systemTypes = (systemTypesResult.data || []) as SystemType[]
+  const serviceTypes = (serviceTypesResult.data || []) as ServiceType[]
 
   return (
     <div className="space-y-6">
@@ -70,7 +90,13 @@ export default async function SitesPage({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <BranchFilter branches={scope.branches} activeBranchId={scope.activeBranchId} />
-          <AddSiteDialog clients={clients} branches={scope.branches} propertyTypes={propertyTypes} />
+          <AddSiteDialog
+            clients={clients}
+            branches={scope.branches}
+            propertyTypes={propertyTypes}
+            systemTypes={systemTypes}
+            serviceTypes={serviceTypes}
+          />
         </div>
       </div>
 
@@ -80,6 +106,7 @@ export default async function SitesPage({
         clients={clients}
         branches={scope.branches}
         propertyTypes={propertyTypes}
+        systemTypes={systemTypes}
       />
     </div>
   )

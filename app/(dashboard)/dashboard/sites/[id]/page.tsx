@@ -122,6 +122,18 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
     notFound()
   }
 
+  // Who set the site up (small print on the overview). Separate query to avoid
+  // FK-embed ambiguity; null for legacy/system-created sites.
+  let createdByName: string | null = null
+  if ((site as Site).created_by) {
+    const { data: creator } = await supabase
+      .from('profiles')
+      .select('full_name, email')
+      .eq('id', (site as Site).created_by as string)
+      .single()
+    createdByName = creator?.full_name || creator?.email || null
+  }
+
   const [siteServicesResult, serviceTypesResult, engineersResult, routesResult, areasResult, subcontractorsResult, clientsResult, siteSystemsResult, systemTypesResult, quotesResult, panelFieldDefsResult] = await Promise.all([
     supabase
       .from('site_services')
@@ -653,7 +665,11 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
               revalidatePath={`/dashboard/sites/${id}`}
             />
           )}
-          <EditSiteButton site={site as Site & { route: Route | null }} clients={clients} />
+          <EditSiteButton
+            site={site as Site & { route: Route | null }}
+            clients={clients}
+            systemTypes={systemTypes}
+          />
         </div>
       </div>
 
@@ -863,6 +879,17 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
           </CardContent>
         </Card>
           </div>
+          <p className="mt-4 text-center text-xs text-muted-foreground">
+            Site set up
+            {createdByName ? ` by ${createdByName}` : ''}
+            {site.created_at
+              ? ` on ${new Date(site.created_at).toLocaleDateString('en-GB', {
+                  day: 'numeric',
+                  month: 'long',
+                  year: 'numeric',
+                })}`
+              : ''}
+          </p>
         </TabsContent>
 
         <TabsContent value="calls" className="mt-0">

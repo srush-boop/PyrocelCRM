@@ -757,6 +757,8 @@ export interface Site {
   geocoded_at: string | null
   created_at: string
   updated_at: string
+  // Staff member who set the site up (null for legacy/system-created sites).
+  created_by: string | null
   route?: Route
   client?: Client
   branch?: Branch | null

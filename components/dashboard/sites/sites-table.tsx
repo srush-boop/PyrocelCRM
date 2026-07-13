@@ -41,7 +41,7 @@ import { GridToolbar, GridSearch, GridClearButton } from '@/components/dashboard
 import { MoreHorizontal, Pencil, Trash2, Building2 } from 'lucide-react'
 import { PrintButton } from '@/components/ui/print-button'
 import { EditSiteDialog } from './edit-site-dialog'
-import type { Site, Route, Client, Branch, PropertyType } from '@/lib/types/database'
+import type { Site, Route, Client, Branch, PropertyType, SystemType } from '@/lib/types/database'
 import Link from 'next/link'
 
 interface SitesTableProps {
@@ -50,9 +50,17 @@ interface SitesTableProps {
   clients: Client[]
   branches?: Branch[]
   propertyTypes?: PropertyType[]
+  systemTypes?: SystemType[]
 }
 
-export function SitesTable({ sites, routes, clients, branches = [], propertyTypes = [] }: SitesTableProps) {
+export function SitesTable({
+  sites,
+  routes,
+  clients,
+  branches = [],
+  propertyTypes = [],
+  systemTypes = [],
+}: SitesTableProps) {
   const [search, setSearch] = useState('')
   const [selectedRoute, setSelectedRoute] = useState<string>('all')
   const [selectedClient, setSelectedClient] = useState<string>('all')
@@ -274,6 +282,7 @@ export function SitesTable({ sites, routes, clients, branches = [], propertyType
           clients={clients}
           branches={branches}
           propertyTypes={propertyTypes}
+          systemTypes={systemTypes}
           open={!!editSite}
           onOpenChange={() => setEditSite(null)}
         />

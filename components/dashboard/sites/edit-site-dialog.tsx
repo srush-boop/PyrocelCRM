@@ -27,13 +27,22 @@ import { Loader2, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { PostcodeLookup } from '@/components/dashboard/shared/postcode-lookup'
 import { SiteClassificationFields } from '@/components/dashboard/sites/site-classification-fields'
-import type { Site, Route, Client, Branch, PropertyType } from '@/lib/types/database'
+import { ensureRemoteMonitoringSystem } from '@/lib/sites/provision-systems'
+import type {
+  Site,
+  Route,
+  Client,
+  Branch,
+  PropertyType,
+  SystemType,
+} from '@/lib/types/database'
 
 interface EditSiteDialogProps {
   site: Site & { route: Route | null; client?: Client | null }
   clients: Client[]
   branches?: Branch[]
   propertyTypes?: PropertyType[]
+  systemTypes?: SystemType[]
   open: boolean
   onOpenChange: (open: boolean) => void
 }
@@ -43,6 +52,7 @@ export function EditSiteDialog({
   clients,
   branches = [],
   propertyTypes = [],
+  systemTypes = [],
   open,
   onOpenChange,
 }: EditSiteDialogProps) {
@@ -151,13 +161,26 @@ export function EditSiteDialog({
       })
       .eq('id', site.id)
 
-    setLoading(false)
-
-    if (!updateError) {
-      setError(null)
-      onOpenChange(false)
-      router.refresh()
+    if (updateError) {
+      setLoading(false)
+      setError(updateError.message)
+      return
     }
+
+    // When Remote Monitoring is enabled, make sure the site has a matching
+    // system attached (insert-if-missing, so re-saving never duplicates it).
+    if (formData.has_remote_monitoring) {
+      const { error: rmError } = await ensureRemoteMonitoringSystem(supabase, {
+        siteId: site.id,
+        systemTypes,
+      })
+      if (rmError) console.log('[v0] ensureRemoteMonitoringSystem error:', rmError)
+    }
+
+    setLoading(false)
+    setError(null)
+    onOpenChange(false)
+    router.refresh()
   }
 
   return (

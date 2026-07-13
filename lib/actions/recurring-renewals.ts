@@ -34,7 +34,7 @@ async function requireManager() {
   return { supabase, userId: user.id }
 }
 
-export interface RenewalRow extends RecurringCharge {
+export interface RenewalRow extends Omit<RecurringCharge, 'billing_account'> {
   billing_account: {
     id: string
     name: string

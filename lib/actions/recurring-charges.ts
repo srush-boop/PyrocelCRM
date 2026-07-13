@@ -79,6 +79,64 @@ function sanitize(input: RecurringChargeInput) {
   }
 }
 
+export interface LinkableService {
+  site_service_id: string
+  site_id: string
+  site_name: string
+  service_type_name: string
+  /** Human cadence label, e.g. "Every 12 months". */
+  frequency_label: string
+}
+
+/**
+ * Services a recurring charge can be linked to for a billing account: all
+ * active services on sites belonging to the account's client. Returns a
+ * readable "{Site} — {Service type}" shape for the picker.
+ */
+export async function getLinkableServices(clientId: string | null): Promise<LinkableService[]> {
+  if (!clientId) return []
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('site_services')
+    .select(
+      'id, site_id, frequency_value, frequency_unit, active, site:sites!inner(name, client_id), service_type:service_types(name)',
+    )
+    .eq('active', true)
+    .eq('sites.client_id', clientId)
+
+  type Row = {
+    id: string
+    site_id: string
+    frequency_value: number | null
+    frequency_unit: string | null
+    site: { name: string; client_id: string } | { name: string; client_id: string }[] | null
+    service_type: { name: string } | { name: string }[] | null
+  }
+
+  const rows = (data ?? []) as Row[]
+  const out: LinkableService[] = rows.map((r) => {
+    const site = Array.isArray(r.site) ? r.site[0] : r.site
+    const st = Array.isArray(r.service_type) ? r.service_type[0] : r.service_type
+    const freq =
+      r.frequency_value && r.frequency_unit
+        ? `Every ${r.frequency_value} ${r.frequency_unit}${r.frequency_value === 1 ? '' : ''}`
+        : '—'
+    return {
+      site_service_id: r.id,
+      site_id: r.site_id,
+      site_name: site?.name ?? 'Unknown site',
+      service_type_name: st?.name ?? 'Service',
+      frequency_label: freq,
+    }
+  })
+  out.sort(
+    (a, b) =>
+      a.site_name.localeCompare(b.site_name) ||
+      a.service_type_name.localeCompare(b.service_type_name),
+  )
+  return out
+}
+
 export async function getRecurringChargesForAccount(
   billingAccountId: string,
 ): Promise<RecurringCharge[]> {

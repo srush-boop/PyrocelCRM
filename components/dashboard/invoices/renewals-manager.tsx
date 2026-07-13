@@ -247,7 +247,7 @@ export function RenewalsManager({ rows, month }: RenewalsManagerProps) {
                 </p>
               )}
               {group.charges.map((c) => {
-                const margin = marginPct(c.unit_price_pence, c.subcontract_price_pence)
+                const margin = marginPct(c)
                 return (
                   <div
                     key={c.id}

@@ -17,6 +17,24 @@ export interface GenerateMonthlyCallsResult {
   monthLabel: string
 }
 
+/** A single call the generator would create, enriched for preview display. */
+export interface PlannedCall {
+  siteServiceId: string
+  visitTypeId: string | null
+  scheduledDate: string
+  siteName: string
+  serviceTypeName: string
+  visitLabel: string | null
+}
+
+export interface PreviewMonthlyCallsResult {
+  ok: boolean
+  error?: string
+  calls: PlannedCall[]
+  skipped: number
+  monthLabel: string
+}
+
 interface ServiceRow {
   id: string
   service_type_id: string
@@ -24,8 +42,8 @@ interface ServiceRow {
   frequency_unit: 'weeks' | 'months'
   next_service_date: string | null
   active: boolean | null
-  site: { status: string | null } | null
-  service_type: { status: string | null; is_recurring: boolean | null } | null
+  site: { status: string | null; name: string | null } | null
+  service_type: { status: string | null; is_recurring: boolean | null; name: string | null } | null
 }
 
 interface TaskRow {
@@ -42,35 +60,49 @@ function addFrequency(base: Date, value: number, unit: 'weeks' | 'months'): Date
   return next
 }
 
+interface MonthPlan {
+  ok: boolean
+  error?: string
+  monthLabel: string
+  rows: TaskRow[]
+  skipped: number
+  /** Name lookups so callers can enrich rows for display. */
+  siteNameByService: Map<string, string>
+  serviceTypeNameByService: Map<string, string>
+  visitLabelById: Map<string, string>
+}
+
 /**
- * Generate the recurring "calls" (tasks) that fall due in a given month.
+ * Shared planning step for the monthly call generator. Authorises the caller,
+ * loads live services and their history, then computes exactly which recurring
+ * calls fall due in the target month (by frequency rollover) WITHOUT writing
+ * anything. Both the preview and the generate actions build on this so the two
+ * always agree.
  *
- * Intended for the end-of-month office workflow: create next month's calls in
- * one click. It is a SUPPLEMENT to the existing on-completion auto-creation —
- * it only fills gaps and never duplicates a call that already exists for a
- * service+visit in the target month, so it is safe to run repeatedly.
- *
- * Due dates are computed by FREQUENCY ROLLOVER: for each live service (and each
- * of its visit types) we take the most recent scheduled call and roll its fixed
- * cadence forward until it lands in the target month.
- *
- * @param year  Full target year (e.g. 2026)
- * @param month 1-12 target month
+ * Retrospective months are fully supported: the cadence anchor is rolled
+ * forward OR backward to land in the target month, so a contract that arrived
+ * late in the month, or a site that was dormant and missed a generate, can be
+ * back-filled by selecting a current or past month.
  */
-export async function generateMonthlyCalls(
-  year: number,
-  month: number,
-): Promise<GenerateMonthlyCallsResult> {
+async function planMonthlyCalls(year: number, month: number): Promise<MonthPlan> {
   const monthStart = new Date(year, month - 1, 1)
   const monthEnd = new Date(year, month, 0) // last day of target month
   const monthLabel = monthStart.toLocaleDateString('en-GB', {
     month: 'long',
     year: 'numeric',
   })
-  const empty = { created: 0, skipped: 0, monthLabel }
+  const base: MonthPlan = {
+    ok: true,
+    monthLabel,
+    rows: [],
+    skipped: 0,
+    siteNameByService: new Map(),
+    serviceTypeNameByService: new Map(),
+    visitLabelById: new Map(),
+  }
 
   if (!Number.isInteger(year) || month < 1 || month > 12) {
-    return { ok: false, error: 'Invalid month selected.', ...empty }
+    return { ...base, ok: false, error: 'Invalid month selected.' }
   }
 
   const supabase = await createClient()
@@ -79,7 +111,7 @@ export async function generateMonthlyCalls(
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return { ok: false, error: 'Not authenticated.', ...empty }
+  if (!user) return { ...base, ok: false, error: 'Not authenticated.' }
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -89,7 +121,7 @@ export async function generateMonthlyCalls(
 
   const role = (profile as { role?: string } | null)?.role
   if (role !== 'admin' && role !== 'office') {
-    return { ok: false, error: 'You do not have permission to generate calls.', ...empty }
+    return { ...base, ok: false, error: 'You do not have permission to generate calls.' }
   }
 
   // Load live services (site + service type not "dead").
@@ -97,11 +129,11 @@ export async function generateMonthlyCalls(
     .from('site_services')
     .select(
       `id, service_type_id, frequency_value, frequency_unit, next_service_date, active,
-       site:sites(status),
-       service_type:service_types(status, is_recurring)`,
+       site:sites(status, name),
+       service_type:service_types(status, is_recurring, name)`,
     )
   if (svcError) {
-    return { ok: false, error: 'Could not load services.', ...empty }
+    return { ...base, ok: false, error: 'Could not load services.' }
   }
 
   const services = ((serviceData || []) as unknown as ServiceRow[]).filter(
@@ -114,7 +146,12 @@ export async function generateMonthlyCalls(
       s.service_type?.is_recurring !== false,
   )
   if (services.length === 0) {
-    return { ok: true, ...empty }
+    return base
+  }
+
+  for (const s of services) {
+    base.siteNameByService.set(s.id, s.site?.name ?? 'Site')
+    base.serviceTypeNameByService.set(s.id, s.service_type?.name ?? 'Service')
   }
 
   const serviceIds = services.map((s) => s.id)
@@ -126,17 +163,27 @@ export async function generateMonthlyCalls(
     .select('site_service_id, visit_type_id, scheduled_date')
     .in('site_service_id', serviceIds)
   if (taskError) {
-    return { ok: false, error: 'Could not load existing calls.', ...empty }
+    return { ...base, ok: false, error: 'Could not load existing calls.' }
   }
   const tasks = (taskData || []) as TaskRow[]
 
   // Authoritative visit types per service type (ordered by sort_order). This is
   // what lets us generate a visit that was deferred at setup and therefore has
   // no task history yet.
-  const visitsByServiceType = await fetchVisitsByServiceType(
-    supabase,
-    services.map((s) => s.service_type_id),
-  )
+  const serviceTypeIds = services.map((s) => s.service_type_id)
+  const visitsByServiceType = await fetchVisitsByServiceType(supabase, serviceTypeIds)
+
+  // Visit-type names for preview labels.
+  const uniqueTypeIds = Array.from(new Set(serviceTypeIds))
+  if (uniqueTypeIds.length > 0) {
+    const { data: visitRows } = await supabase
+      .from('service_visit_types')
+      .select('id, name')
+      .in('service_type_id', uniqueTypeIds)
+    for (const v of (visitRows ?? []) as { id: string; name: string | null }[]) {
+      base.visitLabelById.set(v.id, v.name ?? 'Visit')
+    }
+  }
 
   const groupKey = (ssId: string, visitId: string | null) => `${ssId}|${visitId ?? 'none'}`
 
@@ -226,11 +273,81 @@ export async function generateMonthlyCalls(
     }
   }
 
-  if (newRows.length === 0) {
-    return { ok: true, created: 0, skipped, monthLabel }
+  return { ...base, rows: newRows, skipped }
+}
+
+/** Enrich raw plan rows into display-ready calls, sorted by date then site. */
+function enrichPlan(plan: MonthPlan): PlannedCall[] {
+  return plan.rows
+    .map((r) => ({
+      siteServiceId: r.site_service_id,
+      visitTypeId: r.visit_type_id,
+      scheduledDate: r.scheduled_date,
+      siteName: plan.siteNameByService.get(r.site_service_id) ?? 'Site',
+      serviceTypeName: plan.serviceTypeNameByService.get(r.site_service_id) ?? 'Service',
+      visitLabel: r.visit_type_id ? plan.visitLabelById.get(r.visit_type_id) ?? null : null,
+    }))
+    .sort(
+      (a, b) =>
+        a.scheduledDate.localeCompare(b.scheduledDate) || a.siteName.localeCompare(b.siteName),
+    )
+}
+
+/**
+ * Dry run: return the calls that WOULD be created for the target month without
+ * writing anything. Powers the preview list in the Generate Calls dialog.
+ */
+export async function previewMonthlyCalls(
+  year: number,
+  month: number,
+): Promise<PreviewMonthlyCallsResult> {
+  const plan = await planMonthlyCalls(year, month)
+  if (!plan.ok) {
+    return {
+      ok: false,
+      error: plan.error,
+      calls: [],
+      skipped: plan.skipped,
+      monthLabel: plan.monthLabel,
+    }
+  }
+  return {
+    ok: true,
+    calls: enrichPlan(plan),
+    skipped: plan.skipped,
+    monthLabel: plan.monthLabel,
+  }
+}
+
+/**
+ * Generate the recurring "calls" (tasks) that fall due in a given month.
+ *
+ * Intended for the end-of-month office workflow: create next month's calls in
+ * one click, and also to back-fill a current/past month that missed its
+ * generate. It is a SUPPLEMENT to the existing on-completion auto-creation —
+ * it only fills gaps and never duplicates a call that already exists for a
+ * service+visit in the target month, so it is safe to run repeatedly.
+ *
+ * @param year  Full target year (e.g. 2026)
+ * @param month 1-12 target month
+ */
+export async function generateMonthlyCalls(
+  year: number,
+  month: number,
+): Promise<GenerateMonthlyCallsResult> {
+  const plan = await planMonthlyCalls(year, month)
+  const empty = { created: 0, skipped: plan.skipped, monthLabel: plan.monthLabel }
+
+  if (!plan.ok) {
+    return { ok: false, error: plan.error, ...empty }
   }
 
-  const insertRows = newRows.map((r) => ({
+  if (plan.rows.length === 0) {
+    return { ok: true, created: 0, skipped: plan.skipped, monthLabel: plan.monthLabel }
+  }
+
+  const supabase = await createClient()
+  const insertRows = plan.rows.map((r) => ({
     site_service_id: r.site_service_id,
     visit_type_id: r.visit_type_id,
     scheduled_date: r.scheduled_date,
@@ -243,5 +360,10 @@ export async function generateMonthlyCalls(
   }
 
   revalidatePath('/dashboard/schedule')
-  return { ok: true, created: insertRows.length, skipped, monthLabel }
+  return {
+    ok: true,
+    created: insertRows.length,
+    skipped: plan.skipped,
+    monthLabel: plan.monthLabel,
+  }
 }

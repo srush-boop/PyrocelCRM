@@ -17,21 +17,47 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { setGlobalConfig } from '@/lib/actions/global-config'
-import { Loader2, Plus, Trash2, Save, Crown } from 'lucide-react'
+import { OPENING_HOURS_KEY, type OpeningHours } from '@/lib/oncall/opening-hours'
+import { Loader2, Plus, Trash2, Save, Crown, Clock } from 'lucide-react'
 
 interface GlobalConfigSettingsProps {
   poOverdueDays: number
   deadlineReasons: string[]
   engagementStatsEnabled: boolean
+  openingHours: OpeningHours
 }
 
 export function GlobalConfigSettings({
   poOverdueDays: initialOverdueDays,
   deadlineReasons: initialReasons,
   engagementStatsEnabled: initialEngagementEnabled,
+  openingHours: initialOpeningHours,
 }: GlobalConfigSettingsProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+
+  // Company opening hours — drives on-call windows and "out of hours" logic.
+  const [openTime, setOpenTime] = useState(initialOpeningHours.open)
+  const [closeTime, setCloseTime] = useState(initialOpeningHours.close)
+  const [weekendWorking, setWeekendWorking] = useState(initialOpeningHours.weekendWorking)
+  const [savingHours, setSavingHours] = useState(false)
+
+  const saveOpeningHours = async () => {
+    if (openTime >= closeTime) {
+      toast.error('Closing time must be after opening time')
+      return
+    }
+    setSavingHours(true)
+    const value: OpeningHours = { open: openTime, close: closeTime, weekendWorking }
+    const { error } = await setGlobalConfig(OPENING_HOURS_KEY, value)
+    setSavingHours(false)
+    if (error) {
+      toast.error(error)
+    } else {
+      toast.success('Opening hours saved')
+      startTransition(() => router.refresh())
+    }
+  }
 
   // Engineer encouragement / standings feature
   const [engagementEnabled, setEngagementEnabled] = useState(initialEngagementEnabled)
@@ -110,6 +136,72 @@ export function GlobalConfigSettings({
 
   return (
     <div className="space-y-6">
+      {/* Company opening hours */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="h-5 w-5 text-primary" />
+            Opening Hours
+          </CardTitle>
+          <CardDescription>
+            Your standard weekday opening and closing times. These define when the business is
+            &quot;out of hours&quot;: evening on-call cover starts at closing time and hands over
+            at the next opening time. Used by the on-call rota and out-of-hours logic.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="opening-open">Opens (Mon&ndash;Fri)</Label>
+              <Input
+                id="opening-open"
+                type="time"
+                value={openTime}
+                onChange={(e) => setOpenTime(e.target.value)}
+                className="w-36"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="opening-close">Closes (Mon&ndash;Fri)</Label>
+              <Input
+                id="opening-close"
+                type="time"
+                value={closeTime}
+                onChange={(e) => setCloseTime(e.target.value)}
+                className="w-36"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-3 max-w-md">
+            <div className="space-y-0.5">
+              <Label htmlFor="weekend-working" className="text-sm font-medium">
+                Weekends are working days
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {weekendWorking
+                  ? 'Sat & Sun use the same opening hours'
+                  : 'Sat & Sun are treated as fully out of hours'}
+              </p>
+            </div>
+            <Switch
+              id="weekend-working"
+              checked={weekendWorking}
+              onCheckedChange={setWeekendWorking}
+            />
+          </div>
+
+          <Button onClick={saveOpeningHours} disabled={savingHours} className="gap-2">
+            {savingHours ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            Save opening hours
+          </Button>
+        </CardContent>
+      </Card>
+
       {/* Engineer encouragement / standings */}
       <Card>
         <CardHeader>

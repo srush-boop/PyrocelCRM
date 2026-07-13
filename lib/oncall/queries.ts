@@ -12,6 +12,13 @@ import {
   deriveBand,
   rateForBand,
 } from './types'
+import {
+  OPENING_HOURS_KEY,
+  DEFAULT_OPENING_HOURS,
+  parseOpeningHours,
+  parseTime,
+  type OpeningHours,
+} from './opening-hours'
 
 export interface BranchRef {
   id: string
@@ -422,16 +429,25 @@ export async function getExternalRota(token: string): Promise<ExternalRotaBranch
 const ONCALL_GRACE_MS = 60 * 60 * 1000
 
 /**
- * The active on-call window for a shift, in epoch ms. Weekday-evening shifts
- * start at 17:00; weekend / bank-holiday shifts start at 08:30. Every shift
- * hands over at 08:30 the following morning (see calendar rendering).
+ * The active on-call window for a shift, in epoch ms, driven by the company
+ * opening hours. Weekday-evening cover starts at closing time; weekend /
+ * bank-holiday cover starts at opening time (out-of-hours cover spans the whole
+ * day). Every shift hands over at the next morning's opening time.
  */
-function oncallWindow(shiftDateISO: string, band: OncallBand): { start: number; end: number } {
+function oncallWindow(
+  shiftDateISO: string,
+  band: OncallBand,
+  hours: OpeningHours,
+): { start: number; end: number } {
   const [y, m, d] = shiftDateISO.split('-').map(Number)
-  const startHour = band === 'weekday_evening' ? 17 : 8
-  const startMin = band === 'weekday_evening' ? 0 : 30
-  const start = new Date(y, m - 1, d, startHour, startMin, 0, 0).getTime()
-  const end = new Date(y, m - 1, d + 1, 8, 30, 0, 0).getTime()
+  const { h: openH, m: openM } = parseTime(hours.open, DEFAULT_OPENING_HOURS.open)
+  const { h: closeH, m: closeM } = parseTime(hours.close, DEFAULT_OPENING_HOURS.close)
+  // Weekday-evening shifts begin at close; weekend/bank-holiday shifts begin at
+  // the day's opening time (cover runs from morning).
+  const startH = band === 'weekday_evening' ? closeH : openH
+  const startM = band === 'weekday_evening' ? closeM : openM
+  const start = new Date(y, m - 1, d, startH, startM, 0, 0).getTime()
+  const end = new Date(y, m - 1, d + 1, openH, openM, 0, 0).getTime()
   return { start, end }
 }
 
@@ -473,8 +489,15 @@ export async function getMyCurrentOncall(): Promise<{
     branch: { name: string } | null
   }[]
 
+  const { data: hoursRow } = await supabase
+    .from('global_config')
+    .select('value')
+    .eq('key', OPENING_HOURS_KEY)
+    .maybeSingle()
+  const hours = parseOpeningHours((hoursRow as { value: unknown } | null)?.value)
+
   for (const row of rows) {
-    const { start, end } = oncallWindow(row.shift_date, row.band)
+    const { start, end } = oncallWindow(row.shift_date, row.band, hours)
     if (now >= start - ONCALL_GRACE_MS && now <= end + ONCALL_GRACE_MS) {
       return { branchName: row.branch?.name ?? 'your branch', band: row.band, shiftDate: row.shift_date }
     }

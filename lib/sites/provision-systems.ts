@@ -31,6 +31,11 @@ export function findRemoteMonitoringTypeId(systemTypes: Pick<SystemType, 'id' | 
  * next_service_date. `supabase` is typed loosely so the browser client works
  * without fighting its generics.
  */
+export interface ProvisionedService {
+  id: string
+  service_type_id: string
+}
+
 export async function provisionSiteSystems(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
@@ -41,9 +46,9 @@ export async function provisionSiteSystems(
     isDead: boolean
     startDate: string
   },
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; services: ProvisionedService[] }> {
   const { siteId, selections, serviceTypes, isDead, startDate } = opts
-  if (selections.length === 0) return {}
+  if (selections.length === 0) return { services: [] }
 
   // 1. Insert the systems and get their ids back (keyed to preserve the link
   //    between each system and the services chosen for it).
@@ -56,7 +61,7 @@ export async function provisionSiteSystems(
     .from('site_systems')
     .insert(systemPayload)
     .select('id, system_type_id')
-  if (systemError) return { error: systemError.message }
+  if (systemError) return { error: systemError.message, services: [] }
 
   const systems = (insertedSystems ?? []) as { id: string; system_type_id: string }[]
 
@@ -78,13 +83,13 @@ export async function provisionSiteSystems(
     })
   })
 
-  if (serviceRows.length === 0) return {}
+  if (serviceRows.length === 0) return { services: [] }
 
   const { data: insertedServices, error: serviceError } = await supabase
     .from('site_services')
     .insert(serviceRows)
     .select('id, service_type_id, frequency_value, frequency_unit')
-  if (serviceError) return { error: serviceError.message }
+  if (serviceError) return { error: serviceError.message, services: [] }
 
   // 3. Live sites get seeded tasks for the setup month (multi-visit services
   //    spread across the cycle, handled by buildSeedTaskRows).
@@ -105,7 +110,8 @@ export async function provisionSiteSystems(
     }
   }
 
-  return {}
+  const services = (insertedServices ?? []) as ProvisionedService[]
+  return { services }
 }
 
 /**

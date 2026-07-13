@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getDocumentAuth } from '@/lib/documents/auth'
 import { extractDocumentText } from '@/lib/ai/parse-document'
+import { resolveOrCreateTagIds, setFileTagRows } from '@/lib/documents/tags'
 import type { DocumentOwnerType } from '@/lib/types/database'
 
 const OWNER_TYPES: DocumentOwnerType[] = [
@@ -34,11 +35,33 @@ export async function POST(request: NextRequest) {
     const systemTypeIdRaw = (formData.get('system_type_id') as string | null)?.trim()
     const systemTypeId = systemTypeIdRaw && systemTypeIdRaw !== 'null' ? systemTypeIdRaw : null
 
+    // Tags: existing ids + brand-new names, sent as JSON arrays. System
+    // references are exempt from the tagging requirement.
+    const parseJsonArray = (raw: FormDataEntryValue | null): string[] => {
+      if (typeof raw !== 'string' || !raw) return []
+      try {
+        const parsed = JSON.parse(raw)
+        return Array.isArray(parsed) ? parsed.filter((v) => typeof v === 'string') : []
+      } catch {
+        return []
+      }
+    }
+    const tagIds = parseJsonArray(formData.get('tag_ids'))
+    const newTagNames = parseJsonArray(formData.get('new_tags'))
+
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
     if (!ownerType || !OWNER_TYPES.includes(ownerType) || !ownerId) {
       return NextResponse.json({ error: 'Invalid owner' }, { status: 400 })
+    }
+
+    // Every uploaded document must carry at least one tag (except system refs).
+    if (!isSystemReference && tagIds.length === 0 && newTagNames.length === 0) {
+      return NextResponse.json(
+        { error: 'Please add at least one tag to this document.' },
+        { status: 400 },
+      )
     }
 
     // Permission by store: engineers -> shared engineer folder only;
@@ -97,6 +120,20 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    // Resolve + attach tags (creating any brand-new ones). Non-fatal on failure
+    // so the upload itself isn't lost, but report so the client can warn.
+    if (!isSystemReference && (tagIds.length > 0 || newTagNames.length > 0)) {
+      const resolved = await resolveOrCreateTagIds(
+        supabase,
+        tagIds,
+        newTagNames,
+        auth.profile?.id ?? null,
+      )
+      if (resolved && resolved.length > 0) {
+        await setFileTagRows(supabase, data.id, resolved)
+      }
     }
 
     return NextResponse.json({ document: data })

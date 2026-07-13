@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home, Wrench, HardHat, FileText, Database, PhoneCall, ShieldCheck } from 'lucide-react'
+import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home, Wrench, HardHat, FileText, Database, PhoneCall, ShieldCheck, Receipt, Tags } from 'lucide-react'
 import type { User as AuthUser } from '@supabase/supabase-js'
 import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType, DocumentTemplate } from '@/lib/types/database'
 import type { LoneWorkerManagedUser } from '@/app/(dashboard)/dashboard/lone-worker/actions'
@@ -25,6 +25,10 @@ import { AvatarManager } from './avatar-manager'
 import { BulkDataSettings } from './bulk-data-settings'
 import { GlobalConfigSettings } from './global-config-settings'
 import { LoneWorkerSettings } from './lone-worker-settings'
+import { RateCardsSettings } from './rate-cards-settings'
+import { DocumentTagsSettings } from './document-tags-settings'
+import type { RateCard } from '@/lib/billing/rate-cards'
+import type { TagWithUsage } from '@/lib/actions/document-tags'
 import { signatureSrc } from '@/lib/blob'
 
 interface SettingsContentProps {
@@ -42,9 +46,13 @@ interface SettingsContentProps {
   canManageLoneWorker: boolean
   loneWorkerUsers: LoneWorkerManagedUser[]
   loneWorkerTimings: LoneWorkerTimings
+  canManageRates: boolean
+  rateCards: RateCard[]
+  canManageTags: boolean
+  documentTags: TagWithUsage[]
 }
 
-export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings }: SettingsContentProps) {
+export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards, canManageTags, documentTags }: SettingsContentProps) {
   const isAdmin = profile.role === 'admin'
   // Templates are managed by office/admin (mail-merge letters for client correspondence).
   const canManageTemplates = profile.role === 'admin' || profile.role === 'office'
@@ -170,6 +178,12 @@ export function SettingsContent({ user, profile, company, branches, departments,
             Documents
           </TabsTrigger>
         )}
+        {canManageTags && (
+          <TabsTrigger value="tags" className="gap-2">
+            <Tags className="h-4 w-4" />
+            Tags
+          </TabsTrigger>
+        )}
         {isAdmin && (
           <TabsTrigger value="data" className="gap-2">
             <Database className="h-4 w-4" />
@@ -186,6 +200,18 @@ export function SettingsContent({ user, profile, company, branches, departments,
           <TabsTrigger value="lone-worker" className="gap-2">
             <ShieldCheck className="h-4 w-4" />
             Lone Worker
+          </TabsTrigger>
+        )}
+        {canManageRates && (
+          <TabsTrigger value="rates" className="gap-2">
+            <Receipt className="h-4 w-4" />
+            Rates
+          </TabsTrigger>
+        )}
+        {canManageTags && (
+          <TabsTrigger value="tags" className="gap-2">
+            <Tags className="h-4 w-4" />
+            Tags
           </TabsTrigger>
         )}
       </TabsList>
@@ -389,6 +415,12 @@ export function SettingsContent({ user, profile, company, branches, departments,
         </TabsContent>
       )}
 
+      {canManageTags && (
+        <TabsContent value="tags" className="space-y-4">
+          <DocumentTagsSettings tags={documentTags} />
+        </TabsContent>
+      )}
+
       {isAdmin && (
         <TabsContent value="data" className="space-y-4">
           <BulkDataSettings />
@@ -412,6 +444,18 @@ export function SettingsContent({ user, profile, company, branches, departments,
             users={loneWorkerUsers}
             isAdmin={isAdmin}
           />
+        </TabsContent>
+      )}
+
+      {canManageRates && (
+        <TabsContent value="rates" className="space-y-4">
+          <RateCardsSettings rateCards={rateCards} />
+        </TabsContent>
+      )}
+
+      {canManageTags && (
+        <TabsContent value="tags" className="space-y-4">
+          <DocumentTagsSettings tags={documentTags} />
         </TabsContent>
       )}
 

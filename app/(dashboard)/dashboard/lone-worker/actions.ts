@@ -211,6 +211,23 @@ export async function confirmSafe(): Promise<{ error: string | null }> {
   return { error: null }
 }
 
+/**
+ * Whether the caller must start a lone-worker shift before they are allowed to
+ * begin working a call. True only when lone-worker check-ins are active for
+ * this person (eligible: role on, not disabled, not on leave) AND they have no
+ * active shift. Office/admin and ineligible users are never gated.
+ */
+export async function mustStartShiftBeforeWork(): Promise<boolean> {
+  const { user } = await getCaller()
+  if (!user) return false
+  const admin = createAdminClient()
+  const { absenceTypes } = await getLoneWorkerConfig(admin)
+  const elig = await evaluateEligibility(admin, user.id, { absenceTypes })
+  if (!elig.eligible) return false
+  const session = await activeSessionFor(admin, user.id)
+  return !session
+}
+
 export async function setCheckinInterval(minutes: number): Promise<{ error: string | null }> {
   const { user } = await getCaller()
   if (!user) return { error: 'Not signed in' }
@@ -218,7 +235,10 @@ export async function setCheckinInterval(minutes: number): Promise<{ error: stri
   const session = await activeSessionFor(admin, user.id)
   if (!session) return { error: 'No active shift' }
 
-  const interval = Math.min(240, Math.max(5, Math.round(minutes)))
+  // Engineers may only REDUCE the interval (check in more often) — never extend
+  // it beyond the configured default. Clamp the upper bound to the default.
+  const { timings } = await getLoneWorkerConfig(admin)
+  const interval = Math.min(timings.checkinMinutes, Math.max(5, Math.round(minutes)))
   // Recompute deadlines from the last check-in so a shorter interval bites now.
   const { nextPromptAt, amberAt, redAt } = computeDeadlines(
     new Date(session.last_checkin_at),

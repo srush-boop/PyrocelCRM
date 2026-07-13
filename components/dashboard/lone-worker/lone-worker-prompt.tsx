@@ -176,7 +176,9 @@ export function LoneWorkerPrompt() {
     // Subtle "on shift" pill with the next check-in countdown.
     if (data?.session?.status === 'active' && display === 'ok') {
       return (
-        <div className="fixed bottom-24 right-4 z-[80] lg:bottom-6">
+        // z-40 keeps this subtle status pill BEHIND any page action bar (z-50)
+        // so it never covers a primary button like "Complete & Submit".
+        <div className="pointer-events-none fixed bottom-24 right-4 z-40 lg:bottom-6">
           <div className="flex items-center gap-2 rounded-full border border-border bg-card/95 px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur">
             <ShieldCheck className="h-3.5 w-3.5 text-primary" aria-hidden />
             <span className="text-muted-foreground">Next check-in</span>
@@ -188,10 +190,11 @@ export function LoneWorkerPrompt() {
     return null
   }
 
-  // Floating pulsing button while prompting (non-blocking).
+  // Floating pulsing button while prompting (non-blocking). Sits high enough to
+  // clear a page action bar so it stays tappable during an in-progress task.
   if (display === 'prompting') {
     return (
-      <div className="fixed bottom-24 right-4 z-[90] lg:bottom-6">
+      <div className="fixed bottom-40 right-4 z-[90] lg:bottom-6">
         <button
           onClick={onConfirm}
           disabled={confirming}

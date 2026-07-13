@@ -19,6 +19,8 @@ import { CreateDocumentButton } from '@/components/documents/create-document-dia
 import { AddRequestButton } from '@/components/dashboard/requests/add-request-button'
 import { EntityRequestsCard } from '@/components/dashboard/requests/entity-requests-card'
 import { BookJobCallButton } from '@/components/dashboard/jobs/book-job-call-button'
+import { RaiseJobInvoiceButton } from '@/components/dashboard/jobs/raise-job-invoice-button'
+import { RecordIssuedEquipmentButton } from '@/components/dashboard/jobs/record-issued-equipment-button'
 import { JobStagePanel, JobContractReview } from '@/components/dashboard/jobs/job-controls'
 import { JobPurchasing } from '@/components/dashboard/jobs/job-purchasing'
 import { jobStageMeta, jobStatusMeta } from '@/lib/jobs/stages'
@@ -149,6 +151,12 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
               poNumber={typedJob.po_number ?? null}
               jobNotes={typedJob.notes ?? null}
             />
+            {typedJob.status !== 'cancelled' && (
+              <>
+                <RecordIssuedEquipmentButton jobId={typedJob.id} />
+                <RaiseJobInvoiceButton jobId={typedJob.id} />
+              </>
+            )}
             <AddRequestButton
               entityType="job"
               entityId={typedJob.id}

@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { getOwnerDocuments, getSystemReferences } from '@/lib/documents/data'
+import { getAllDocumentTags, getOwnerDocuments, getSystemReferences } from '@/lib/documents/data'
 import { DocumentsExplorer } from '@/components/documents/documents-explorer'
 import type { SystemTypeLite } from '@/components/documents/system-references-manager'
 import type {
@@ -45,6 +45,7 @@ export default async function DocumentsPage({ searchParams }: PageProps) {
     { data: siteServices },
     { data: systemTypeRows },
     systemReferences,
+    allTags,
   ] = await Promise.all([
     supabase.from('clients').select('id, name').order('name'),
     supabase.from('sites').select('id, name, client_id').order('name'),
@@ -58,6 +59,7 @@ export default async function DocumentsPage({ searchParams }: PageProps) {
       .eq('active', true)
       .order('position'),
     getSystemReferences(),
+    getAllDocumentTags(),
   ])
 
   const systemTypes = (systemTypeRows ?? []) as SystemTypeLite[]
@@ -100,6 +102,7 @@ export default async function DocumentsPage({ searchParams }: PageProps) {
         siteServices={normalizedServices}
         selected={selected}
         canManage={canManage}
+        allTags={allTags}
         systemTypes={systemTypes}
         systemReferences={systemReferences}
         canManageReferences={canManageReferences}

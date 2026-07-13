@@ -4,6 +4,8 @@ import { SettingsContent } from '@/components/dashboard/settings/settings-conten
 import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType, DocumentTemplate } from '@/lib/types/database'
 import { getGlobalConfigs } from '@/lib/actions/global-config'
 import { getLoneWorkerAdminData } from '@/app/(dashboard)/dashboard/lone-worker/actions'
+import { getRateCards } from '@/lib/actions/rate-cards'
+import { listTagsWithUsage } from '@/lib/actions/document-tags'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -38,6 +40,13 @@ export default async function SettingsPage() {
   const templatesResult = canManageTemplates
     ? await supabase.from('document_templates').select('*').order('name')
     : { data: [] }
+
+  // Rate cards (call-out + labour pricing) are managed by office/admin.
+  const canManageRates = role === 'admin' || role === 'office'
+  const rateCards = canManageRates ? await getRateCards() : []
+
+  // Document tags (shared vocabulary) are managed by office/admin.
+  const documentTags = canManageTemplates ? await listTagsWithUsage() : []
 
   const globalConfig = isAdmin
     ? await getGlobalConfigs([
@@ -83,6 +92,10 @@ export default async function SettingsPage() {
         canManageLoneWorker={canManageLoneWorker}
         loneWorkerUsers={loneWorkerData.users}
         loneWorkerTimings={loneWorkerData.timings}
+        canManageRates={canManageRates}
+        rateCards={rateCards}
+        canManageTags={canManageTemplates}
+        documentTags={documentTags}
       />
     </div>
   )

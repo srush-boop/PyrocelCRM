@@ -36,6 +36,7 @@ export function EditClientDialog({ client, open, onOpenChange }: EditClientDialo
     address: client.address || '',
     notes: client.notes || '',
     requires_po: client.requires_po ?? false,
+    invoice_calls_individually: client.invoice_calls_individually ?? false,
   })
   const router = useRouter()
   const supabase = createClient()
@@ -67,6 +68,7 @@ export function EditClientDialog({ client, open, onOpenChange }: EditClientDialo
         address: formData.address || null,
         notes: formData.notes || null,
         requires_po: formData.requires_po,
+        invoice_calls_individually: formData.invoice_calls_individually,
         updated_at: new Date().toISOString(),
       })
       .eq('id', client.id)
@@ -160,6 +162,24 @@ export function EditClientDialog({ client, open, onOpenChange }: EditClientDialo
                 id="requires_po"
                 checked={formData.requires_po}
                 onCheckedChange={(v) => setFormData({ ...formData, requires_po: v })}
+              />
+            </div>
+            <div className="flex items-start justify-between gap-3 rounded-md border p-3">
+              <div className="min-w-0">
+                <Label htmlFor="invoice_calls_individually" className="text-sm font-medium">
+                  Invoice calls individually
+                </Label>
+                <p className="mt-0.5 text-xs text-muted-foreground text-pretty">
+                  Raise one invoice per call for this client instead of grouping calls into a
+                  single bulk invoice.
+                </p>
+              </div>
+              <Switch
+                id="invoice_calls_individually"
+                checked={formData.invoice_calls_individually}
+                onCheckedChange={(v) =>
+                  setFormData({ ...formData, invoice_calls_individually: v })
+                }
               />
             </div>
           </div>

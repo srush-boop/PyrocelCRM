@@ -9,16 +9,25 @@ import {
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { DocumentBrowser } from '@/components/documents/document-browser'
-import type { DocumentFile, DocumentFolder } from '@/lib/types/database'
+import type { DocumentFile, DocumentFolder, DocumentTag } from '@/lib/types/database'
 
 interface SiteDocumentsProps {
   siteId: string
   folders: DocumentFolder[]
   files: DocumentFile[]
   canManage: boolean
+  allTags?: DocumentTag[]
+  usedTags?: DocumentTag[]
 }
 
-export function SiteDocuments({ siteId, folders, files, canManage }: SiteDocumentsProps) {
+export function SiteDocuments({
+  siteId,
+  folders,
+  files,
+  canManage,
+  allTags = [],
+  usedTags = [],
+}: SiteDocumentsProps) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-start justify-between gap-4">
@@ -44,6 +53,9 @@ export function SiteDocuments({ siteId, folders, files, canManage }: SiteDocumen
           folders={folders}
           files={files}
           canManage={canManage}
+          allTags={allTags}
+          usedTags={usedTags}
+          revalidatePath={`/dashboard/sites/${siteId}`}
         />
       </CardContent>
     </Card>

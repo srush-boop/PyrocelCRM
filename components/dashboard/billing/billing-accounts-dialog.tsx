@@ -51,8 +51,12 @@ const EMPTY_FORM: BillingAccountInput = {
   payment_terms_days: 30,
   default_tax_code: 'T1',
   default_nominal_code: '4000',
+  rate_card_id: null,
   notes: '',
 }
+
+// Select sentinel: an empty string value isn't allowed by Radix Select.
+const INHERIT_DEFAULT = '__default__'
 
 export function BillingAccountsDialog({ client, open, onOpenChange }: BillingAccountsDialogProps) {
   const supabase = createClient()
@@ -63,6 +67,20 @@ export function BillingAccountsDialog({ client, open, onOpenChange }: BillingAcc
   // null = form hidden; 'new' = adding; otherwise the id being edited.
   const [editing, setEditing] = useState<string | null>(null)
   const [form, setForm] = useState<BillingAccountInput>(EMPTY_FORM)
+  // Active rate cards for the override picker (label + which one is the default).
+  const [rateCards, setRateCards] = useState<{ id: string; name: string; is_default: boolean }[]>(
+    [],
+  )
+
+  const loadRateCards = useCallback(async () => {
+    const { data } = await supabase
+      .from('rate_cards')
+      .select('id, name, is_default')
+      .eq('active', true)
+      .order('is_default', { ascending: false })
+      .order('name')
+    setRateCards((data ?? []) as { id: string; name: string; is_default: boolean }[])
+  }, [supabase])
 
   const loadAccounts = useCallback(async () => {
     setLoading(true)
@@ -83,10 +101,11 @@ export function BillingAccountsDialog({ client, open, onOpenChange }: BillingAcc
   useEffect(() => {
     if (open) {
       loadAccounts()
+      loadRateCards()
       setEditing(null)
       setForm(EMPTY_FORM)
     }
-  }, [open, loadAccounts])
+  }, [open, loadAccounts, loadRateCards])
 
   function set<K extends keyof BillingAccountInput>(key: K, value: BillingAccountInput[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -109,6 +128,7 @@ export function BillingAccountsDialog({ client, open, onOpenChange }: BillingAcc
       payment_terms_days: account.payment_terms_days,
       default_tax_code: account.default_tax_code,
       default_nominal_code: account.default_nominal_code,
+      rate_card_id: account.rate_card_id ?? null,
       notes: account.notes ?? '',
     })
     setEditing(account.id)
@@ -412,6 +432,38 @@ export function BillingAccountsDialog({ client, open, onOpenChange }: BillingAcc
                   placeholder="4000"
                 />
               </div>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="ba-rate-card">
+                Rate card <span className="text-muted-foreground">(labour pricing)</span>
+              </Label>
+              <Select
+                value={form.rate_card_id ?? INHERIT_DEFAULT}
+                onValueChange={(v) => set('rate_card_id', v === INHERIT_DEFAULT ? null : v)}
+              >
+                <SelectTrigger id="ba-rate-card">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={INHERIT_DEFAULT}>
+                    Company default
+                    {rateCards.find((c) => c.is_default)
+                      ? ` (${rateCards.find((c) => c.is_default)!.name})`
+                      : ''}
+                  </SelectItem>
+                  {rateCards
+                    .filter((c) => !c.is_default)
+                    .map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Used to auto-price call-out and labour lines on invoices for this account.
+              </p>
             </div>
 
             <div className="grid gap-2">

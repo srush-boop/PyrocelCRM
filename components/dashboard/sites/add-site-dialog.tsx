@@ -422,7 +422,21 @@ export function AddSiteDialog({
                 systemTypes={systemTypes}
                 serviceTypes={serviceTypes}
                 value={systemSelection}
-                onChange={setSystemSelection}
+                onChange={(next) => {
+                  setSystemSelection(next)
+                  // Keep the Remote Monitoring toggle in sync: ticking the RM
+                  // system switches the toggle on, unticking switches it off.
+                  if (rmTypeId) {
+                    const rmSelected = Object.prototype.hasOwnProperty.call(next, rmTypeId)
+                    if (rmSelected !== formData.has_remote_monitoring) {
+                      setFormData((prev) => ({
+                        ...prev,
+                        has_remote_monitoring: rmSelected,
+                        remote_monitoring_type: rmSelected ? prev.remote_monitoring_type : '',
+                      }))
+                    }
+                  }
+                }}
                 lockedSystemTypeIds={
                   rmTypeId && formData.has_remote_monitoring ? [rmTypeId] : []
                 }

@@ -5,7 +5,9 @@ import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 import { getReadyToInvoiceGroups } from '@/lib/actions/invoices'
+import { getRecurringDue } from '@/lib/actions/recurring-invoices'
 import { CreateInvoiceGroups } from '@/components/dashboard/invoices/create-invoice-groups'
+import { RecurringDueGroups } from '@/components/dashboard/invoices/recurring-due-groups'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,7 +27,10 @@ export default async function NewInvoicePage() {
   const role = (profile as Profile | null)?.role
   if (role !== 'admin' && role !== 'office') redirect('/dashboard')
 
-  const groups = await getReadyToInvoiceGroups()
+  const [groups, recurringGroups] = await Promise.all([
+    getReadyToInvoiceGroups(),
+    getRecurringDue(),
+  ])
 
   return (
     <div className="space-y-6">
@@ -43,7 +48,17 @@ export default async function NewInvoicePage() {
         </p>
       </div>
 
-      <CreateInvoiceGroups groups={groups} />
+      <RecurringDueGroups groups={recurringGroups} />
+
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">Ad-hoc calls</h2>
+          <p className="text-sm text-muted-foreground">
+            Reviewed chargeable calls, grouped by billing account.
+          </p>
+        </div>
+        <CreateInvoiceGroups groups={groups} />
+      </div>
     </div>
   )
 }

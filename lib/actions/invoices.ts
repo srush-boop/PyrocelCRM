@@ -369,6 +369,7 @@ export async function createInvoiceFromTasks(
       billing_account_id: account.id,
       client_id: account.client_id,
       status: 'draft',
+      origin: 'adhoc',
       po_number: commonPo,
       site_id: commonSiteId,
       site_address: commonSiteAddress,
@@ -598,6 +599,21 @@ export async function addInvoiceLine(
   const guard = await assertDraft(supabase, invoiceId)
   if (guard) return { error: guard }
   if (!input.description?.trim()) return { error: 'Description is required' }
+
+  // Segregation: a recurring-origin invoice may only take manual "other"
+  // adjustment lines — never call/part/job lines (those belong on ad-hoc
+  // invoices). Recurring-charge lines are added at creation time.
+  const { data: originRow } = await supabase
+    .from('invoices')
+    .select('origin')
+    .eq('id', invoiceId)
+    .single()
+  const origin = (originRow as { origin: string } | null)?.origin
+  if (origin === 'recurring' && input.kind !== 'other') {
+    return {
+      error: 'Recurring invoices can only take manual adjustment lines, not call or job lines.',
+    }
+  }
 
   const { data: last } = await supabase
     .from('invoice_line_items')

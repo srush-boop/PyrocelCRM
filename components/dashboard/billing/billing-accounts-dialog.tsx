@@ -26,6 +26,7 @@ import { Loader2, Plus, Pencil, Star, Building2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Client, BillingAccount, BillingAccountStatus } from '@/lib/types/database'
 import { BillingStatusBadge } from './billing-status-badge'
+import { RecurringChargesManager } from './recurring-charges-manager'
 import {
   createBillingAccount,
   updateBillingAccount,
@@ -285,6 +286,7 @@ export function BillingAccountsDialog({ client, open, onOpenChange }: BillingAcc
                         <SelectItem value="dead">Closed</SelectItem>
                       </SelectContent>
                     </Select>
+                    <RecurringChargesManager account={account} />
                     {!account.is_default && (
                       <Button
                         variant="outline"

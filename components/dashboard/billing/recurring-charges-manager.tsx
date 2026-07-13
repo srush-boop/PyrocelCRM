@@ -1,0 +1,572 @@
+'use client'
+
+import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import { Badge } from '@/components/ui/badge'
+import {
+  Loader2,
+  Plus,
+  Pencil,
+  X,
+  Repeat,
+  Power,
+  Trash2,
+} from 'lucide-react'
+import { toast } from 'sonner'
+import type {
+  BillingAccount,
+  RecurringCharge,
+  RecurringFrequency,
+  RecurringTiming,
+} from '@/lib/types/database'
+import {
+  RECURRING_FREQUENCY_LABELS,
+  RECURRING_TIMING_LABELS,
+  MONTH_LABELS,
+  marginPct,
+} from '@/lib/billing/recurring'
+import { formatPence } from '@/lib/billing/invoices'
+import {
+  getRecurringChargesForAccount,
+  createRecurringCharge,
+  updateRecurringCharge,
+  setRecurringChargeActive,
+  deleteRecurringCharge,
+  type RecurringChargeInput,
+} from '@/lib/actions/recurring-charges'
+
+interface RecurringChargesManagerProps {
+  account: BillingAccount
+}
+
+interface FormState {
+  description: string
+  poundsPrice: string
+  quantity: string
+  frequency: RecurringFrequency
+  timing: RecurringTiming
+  renewalMonth: string // '' = none, else '1'..'12'
+  groupKey: string
+  isSubcontracted: boolean
+  poundsSubcontract: string
+  taxCode: string
+  nominalCode: string
+}
+
+const EMPTY_FORM: FormState = {
+  description: '',
+  poundsPrice: '',
+  quantity: '1',
+  frequency: 'annual',
+  timing: 'arrears',
+  renewalMonth: '',
+  groupKey: '',
+  isSubcontracted: false,
+  poundsSubcontract: '',
+  taxCode: '',
+  nominalCode: '',
+}
+
+const NO_RENEWAL = '__none__'
+
+function poundsToPence(pounds: string): number {
+  const n = Number.parseFloat(pounds)
+  return Number.isFinite(n) ? Math.round(n * 100) : 0
+}
+
+function penceToPounds(pence: number | null | undefined): string {
+  if (pence == null) return ''
+  return (pence / 100).toFixed(2)
+}
+
+export function RecurringChargesManager({ account }: RecurringChargesManagerProps) {
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const [charges, setCharges] = useState<RecurringCharge[]>([])
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [editing, setEditing] = useState<string | null>(null) // null hidden | 'new' | id
+  const [form, setForm] = useState<FormState>(EMPTY_FORM)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const rows = await getRecurringChargesForAccount(account.id)
+    setCharges(rows)
+    setLoading(false)
+  }, [account.id])
+
+  useEffect(() => {
+    if (open) {
+      load()
+      setEditing(null)
+      setForm(EMPTY_FORM)
+    }
+  }, [open, load])
+
+  function set<K extends keyof FormState>(key: K, value: FormState[K]) {
+    setForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  function startAdd() {
+    setForm({ ...EMPTY_FORM, taxCode: account.default_tax_code, nominalCode: account.default_nominal_code })
+    setEditing('new')
+  }
+
+  function startEdit(charge: RecurringCharge) {
+    setForm({
+      description: charge.description,
+      poundsPrice: penceToPounds(charge.unit_price_pence),
+      quantity: String(charge.quantity ?? 1),
+      frequency: charge.frequency,
+      timing: charge.timing,
+      renewalMonth: charge.renewal_month ? String(charge.renewal_month) : '',
+      groupKey: charge.group_key ?? '',
+      isSubcontracted: charge.is_subcontracted,
+      poundsSubcontract: penceToPounds(charge.subcontract_price_pence),
+      taxCode: charge.tax_code ?? '',
+      nominalCode: charge.nominal_code ?? '',
+    })
+    setEditing(charge.id)
+  }
+
+  function buildInput(): RecurringChargeInput {
+    return {
+      billing_account_id: account.id,
+      client_id: account.client_id,
+      description: form.description,
+      unit_price_pence: poundsToPence(form.poundsPrice),
+      quantity: Number.parseFloat(form.quantity) || 1,
+      tax_code: form.taxCode || null,
+      nominal_code: form.nominalCode || null,
+      timing: form.timing,
+      frequency: form.frequency,
+      renewal_month: form.renewalMonth ? Number(form.renewalMonth) : null,
+      group_key: form.groupKey || null,
+      is_subcontracted: form.isSubcontracted,
+      subcontract_price_pence: form.isSubcontracted ? poundsToPence(form.poundsSubcontract) : null,
+    }
+  }
+
+  async function handleSave() {
+    if (!form.description.trim()) {
+      toast.error('Enter a description')
+      return
+    }
+    setSaving(true)
+    const input = buildInput()
+    const result =
+      editing === 'new'
+        ? await createRecurringCharge(input)
+        : await updateRecurringCharge(editing as string, input)
+    setSaving(false)
+    if (result.error) {
+      toast.error(result.error)
+      return
+    }
+    toast.success(editing === 'new' ? 'Recurring charge added' : 'Recurring charge updated')
+    setEditing(null)
+    setForm(EMPTY_FORM)
+    load()
+    router.refresh()
+  }
+
+  async function handleToggleActive(charge: RecurringCharge) {
+    const result = await setRecurringChargeActive(charge.id, !charge.active)
+    if (result.error) {
+      toast.error(result.error)
+      return
+    }
+    load()
+    router.refresh()
+  }
+
+  async function handleDelete(charge: RecurringCharge) {
+    if (!window.confirm(`Delete "${charge.description}"? This cannot be undone.`)) return
+    const result = await deleteRecurringCharge(charge.id)
+    if (result.error) {
+      toast.error(result.error)
+      return
+    }
+    toast.success('Recurring charge deleted')
+    load()
+    router.refresh()
+  }
+
+  // Live margin readout for the form.
+  const liveMargin = form.isSubcontracted
+    ? marginPct({
+        is_subcontracted: true,
+        unit_price_pence: poundsToPence(form.poundsPrice),
+        subcontract_price_pence: poundsToPence(form.poundsSubcontract),
+      })
+    : null
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="gap-1.5"
+        onClick={() => setOpen(true)}
+      >
+        <Repeat className="h-3.5 w-3.5" />
+        Recurring charges
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[720px]">
+          <DialogHeader>
+            <DialogTitle>Recurring charges — {account.name}</DialogTitle>
+            <DialogDescription>
+              Standing charges billed on a cadence (service contracts, monitoring, rentals).
+              These are invoiced separately from ad-hoc call charges.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            {loading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+              </div>
+            ) : charges.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-8 text-center">
+                <Repeat className="h-7 w-7 text-muted-foreground/50" />
+                <p className="text-sm text-muted-foreground">No recurring charges yet.</p>
+              </div>
+            ) : (
+              <ul className="space-y-2">
+                {charges.map((charge) => {
+                  const pct = marginPct(charge)
+                  return (
+                    <li
+                      key={charge.id}
+                      className={`rounded-md border p-3 ${charge.active ? '' : 'opacity-60'}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium">{charge.description}</span>
+                            {!charge.active && (
+                              <Badge variant="secondary" className="text-xs">
+                                Inactive
+                              </Badge>
+                            )}
+                            {charge.is_subcontracted && (
+                              <Badge variant="outline" className="text-xs">
+                                Subcontracted
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
+                            <span className="font-medium text-foreground">
+                              {formatPence(charge.unit_price_pence)}
+                              {charge.quantity !== 1 ? ` × ${charge.quantity}` : ''}
+                            </span>
+                            <span>{RECURRING_FREQUENCY_LABELS[charge.frequency]}</span>
+                            <span>{RECURRING_TIMING_LABELS[charge.timing]}</span>
+                            {charge.renewal_month && (
+                              <span>Renews {MONTH_LABELS[charge.renewal_month - 1]}</span>
+                            )}
+                            {charge.group_key && <span>Group: {charge.group_key}</span>}
+                          </div>
+                          {charge.is_subcontracted && (
+                            <div className="flex flex-wrap items-center gap-2 text-xs">
+                              <span className="text-muted-foreground">
+                                Buy {formatPence(charge.subcontract_price_pence ?? 0)}
+                              </span>
+                              {pct != null && (
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    pct >= 30
+                                      ? 'border-green-600/40 text-green-700 dark:text-green-400'
+                                      : pct >= 10
+                                        ? 'border-amber-600/40 text-amber-700 dark:text-amber-400'
+                                        : 'border-red-600/40 text-red-700 dark:text-red-400'
+                                  }
+                                >
+                                  {pct.toFixed(1)}% margin
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            aria-label={`Edit ${charge.description}`}
+                            onClick={() => startEdit(charge)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            aria-label={charge.active ? 'Deactivate' : 'Reactivate'}
+                            onClick={() => handleToggleActive(charge)}
+                          >
+                            <Power className="h-4 w-4" />
+                          </Button>
+                          {!charge.last_invoiced_date && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive"
+                              aria-label={`Delete ${charge.description}`}
+                              onClick={() => handleDelete(charge)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+
+            {editing === null && (
+              <Button onClick={startAdd} variant="outline" className="gap-2">
+                <Plus className="h-4 w-4" />
+                Add recurring charge
+              </Button>
+            )}
+          </div>
+
+          {editing !== null && (
+            <div className="space-y-4 rounded-md border bg-muted/30 p-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium">
+                  {editing === 'new' ? 'Add recurring charge' : 'Edit recurring charge'}
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  aria-label="Cancel"
+                  onClick={() => {
+                    setEditing(null)
+                    setForm(EMPTY_FORM)
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="rc-desc">Description</Label>
+                <Input
+                  id="rc-desc"
+                  value={form.description}
+                  onChange={(e) => set('description', e.target.value)}
+                  placeholder="e.g. Annual fire alarm maintenance contract"
+                />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="grid gap-2">
+                  <Label htmlFor="rc-price">Sell price (£)</Label>
+                  <Input
+                    id="rc-price"
+                    inputMode="decimal"
+                    value={form.poundsPrice}
+                    onChange={(e) => set('poundsPrice', e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="rc-qty">Quantity</Label>
+                  <Input
+                    id="rc-qty"
+                    inputMode="decimal"
+                    value={form.quantity}
+                    onChange={(e) => set('quantity', e.target.value)}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="rc-freq">Frequency</Label>
+                  <Select
+                    value={form.frequency}
+                    onValueChange={(v) => set('frequency', v as RecurringFrequency)}
+                  >
+                    <SelectTrigger id="rc-freq">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(RECURRING_FREQUENCY_LABELS) as RecurringFrequency[]).map((f) => (
+                        <SelectItem key={f} value={f}>
+                          {RECURRING_FREQUENCY_LABELS[f]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="grid gap-2">
+                  <Label htmlFor="rc-timing">Billing timing</Label>
+                  <Select
+                    value={form.timing}
+                    onValueChange={(v) => set('timing', v as RecurringTiming)}
+                  >
+                    <SelectTrigger id="rc-timing">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(RECURRING_TIMING_LABELS) as RecurringTiming[]).map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {RECURRING_TIMING_LABELS[t]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="rc-renewal">Renewal month</Label>
+                  <Select
+                    value={form.renewalMonth || NO_RENEWAL}
+                    onValueChange={(v) => set('renewalMonth', v === NO_RENEWAL ? '' : v)}
+                  >
+                    <SelectTrigger id="rc-renewal">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_RENEWAL}>None</SelectItem>
+                      {MONTH_LABELS.map((label, i) => (
+                        <SelectItem key={label} value={String(i + 1)}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="rc-group">
+                    Group key <span className="text-muted-foreground">(optional)</span>
+                  </Label>
+                  <Input
+                    id="rc-group"
+                    value={form.groupKey}
+                    onChange={(e) => set('groupKey', e.target.value)}
+                    placeholder="Separate invoice label"
+                  />
+                </div>
+              </div>
+
+              {/* Subcontract */}
+              <div className="space-y-3 rounded-md border bg-background p-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="rc-subc" className="text-sm font-medium">
+                      Subcontracted
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Record the buy price to track profit margin.
+                    </p>
+                  </div>
+                  <Switch
+                    id="rc-subc"
+                    checked={form.isSubcontracted}
+                    onCheckedChange={(v) => set('isSubcontracted', v)}
+                  />
+                </div>
+                {form.isSubcontracted && (
+                  <div className="flex flex-wrap items-end gap-3">
+                    <div className="grid gap-2">
+                      <Label htmlFor="rc-buy">Subcontract price (£)</Label>
+                      <Input
+                        id="rc-buy"
+                        inputMode="decimal"
+                        value={form.poundsSubcontract}
+                        onChange={(e) => set('poundsSubcontract', e.target.value)}
+                        placeholder="0.00"
+                        className="w-40"
+                      />
+                    </div>
+                    {liveMargin != null && (
+                      <Badge
+                        variant="outline"
+                        className={
+                          liveMargin >= 30
+                            ? 'border-green-600/40 text-green-700 dark:text-green-400'
+                            : liveMargin >= 10
+                              ? 'border-amber-600/40 text-amber-700 dark:text-amber-400'
+                              : 'border-red-600/40 text-red-700 dark:text-red-400'
+                        }
+                      >
+                        {liveMargin.toFixed(1)}% margin
+                      </Badge>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="rc-tax">
+                    Tax code <span className="text-muted-foreground">(optional)</span>
+                  </Label>
+                  <Input
+                    id="rc-tax"
+                    value={form.taxCode}
+                    onChange={(e) => set('taxCode', e.target.value)}
+                    placeholder={account.default_tax_code}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="rc-nominal">
+                    Nominal code <span className="text-muted-foreground">(optional)</span>
+                  </Label>
+                  <Input
+                    id="rc-nominal"
+                    value={form.nominalCode}
+                    onChange={(e) => set('nominalCode', e.target.value)}
+                    placeholder={account.default_nominal_code}
+                  />
+                </div>
+              </div>
+
+              <Button
+                onClick={handleSave}
+                disabled={saving || !form.description.trim()}
+                className="gap-2"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                {editing === 'new' ? 'Add charge' : 'Save changes'}
+              </Button>
+            </div>
+          )}
+
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Done
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}

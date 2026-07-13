@@ -145,10 +145,16 @@ export function AddSiteDialog({
 
     setLoading(true)
 
+    // Record who set the site up (shown in small print on the site overview).
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
     const { data: inserted, error: insertError } = await supabase
       .from('sites')
       .insert({
       ...formData,
+      created_by: user?.id ?? null,
       client_id: formData.client_id || null,
       branch_id: formData.branch_id || null,
       property_type_id: formData.property_type_id || null,
@@ -409,8 +415,8 @@ export function AddSiteDialog({
             <div className="grid gap-2">
               <Label>Systems &amp; Services</Label>
               <p className="text-xs text-muted-foreground">
-                Select the systems installed at this site and tick the services required for each.
-                They will be added to the Systems tab automatically.
+                Select the systems installed at this site, then optionally tick the services
+                required for each &mdash; you can add or change services later from the Systems tab.
               </p>
               <SystemServicePicker
                 systemTypes={systemTypes}

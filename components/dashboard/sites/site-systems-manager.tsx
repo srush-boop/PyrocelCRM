@@ -154,12 +154,20 @@ export function SiteSystemsManager({
   const pathname = usePathname()
   const supabase = createClient()
   const [togglingServiceId, setTogglingServiceId] = useState<string | null>(null)
+  // Lets the user dismiss ("do later") the set-up-charges prompt for this visit.
+  const [chargePromptDismissed, setChargePromptDismissed] = useState(false)
 
   // Annualised recurring value (pence) for one service, and for a list of them.
   const serviceValue = (serviceId: string) => annualValueByServiceId[serviceId] ?? 0
   const sumServiceValue = (svcs: ServiceWithType[]) =>
     svcs.reduce((acc, s) => acc + serviceValue(s.id), 0)
   const siteTotalValue = sumServiceValue(siteServices)
+
+  // Active services across the whole site with no recurring charge set up. Drives
+  // the "set up service charges" prompt shown after systems/services are added.
+  const siteChargelessServices = siteServices.filter(
+    (s) => s.active !== false && serviceValue(s.id) <= 0,
+  )
 
   // Off-contract sites (Dead, or New/auto-created from a won prospect quote) do
   // not auto-schedule visits when services are added.
@@ -480,6 +488,49 @@ export function SiteSystemsManager({
           </Button>
         </div>
       </div>
+
+      {/* Prompt to set up recurring charges once services exist but some have no
+          price yet. Each "Add charge" opens the charge dialog for that service;
+          prices can always be overridden per service. The user can defer it. */}
+      {!chargePromptDismissed && siteChargelessServices.length > 0 && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2">
+              <Coins className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+              <div>
+                <p className="text-sm font-medium text-amber-900">Set up service charges</p>
+                <p className="text-xs text-amber-800">
+                  {siteChargelessServices.length} service
+                  {siteChargelessServices.length === 1 ? ' has' : 's have'} no charge yet. Add a
+                  charge so this work is invoiced &mdash; you can override the price for each service.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 shrink-0 text-amber-800 hover:bg-amber-100 hover:text-amber-900"
+              onClick={() => setChargePromptDismissed(true)}
+            >
+              Do later
+            </Button>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5 pl-6">
+            {siteChargelessServices.map((svc) => (
+              <Button
+                key={svc.id}
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1 border-amber-300 bg-background px-2 text-xs text-amber-800 hover:bg-amber-100"
+                onClick={() => openServiceCharge(svc.id)}
+              >
+                <Plus className="h-3 w-3" />
+                {svc.service_type?.name ?? 'Service'}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {siteSystems.length === 0 ? (
         <Card>

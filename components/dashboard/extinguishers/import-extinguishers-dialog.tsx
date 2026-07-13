@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import * as XLSX from 'xlsx'
+import { loadXlsx } from '@/lib/xlsx-client'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -88,6 +88,7 @@ export function ImportExtinguishersDialog({ siteId }: ImportExtinguishersDialogP
     setError(null)
     setFileName(file.name)
     try {
+      const XLSX = await loadXlsx()
       const buffer = await file.arrayBuffer()
       const workbook = XLSX.read(buffer, { type: 'array' })
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
@@ -148,7 +149,8 @@ export function ImportExtinguishersDialog({ siteId }: ImportExtinguishersDialogP
     router.refresh()
   }
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
+    const XLSX = await loadXlsx()
     const ws = XLSX.utils.aoa_to_sheet([
       ['Reference', 'Floor', 'Location', 'Type', 'Capacity', 'Serial', 'Notes'],
       ['EXT-001', 'Ground', 'Reception by main door', 'Water', '6 litre', 'SN12345', ''],

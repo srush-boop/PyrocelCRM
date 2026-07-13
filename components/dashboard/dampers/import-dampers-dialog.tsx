@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import * as XLSX from 'xlsx'
+import { loadXlsx } from '@/lib/xlsx-client'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -78,6 +78,7 @@ export function ImportDampersDialog({ siteId }: ImportDampersDialogProps) {
     setError(null)
     setFileName(file.name)
     try {
+      const XLSX = await loadXlsx()
       const buffer = await file.arrayBuffer()
       const workbook = XLSX.read(buffer, { type: 'array' })
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
@@ -136,7 +137,8 @@ export function ImportDampersDialog({ siteId }: ImportDampersDialogProps) {
     router.refresh()
   }
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
+    const XLSX = await loadXlsx()
     const ws = XLSX.utils.aoa_to_sheet([
       ['Reference', 'Floor', 'Location', 'Type', 'Size', 'Notes'],
       ['FD-001', 'Ground', 'Plant Room AHU-1', 'Fire', '300x300', 'Behind access panel'],

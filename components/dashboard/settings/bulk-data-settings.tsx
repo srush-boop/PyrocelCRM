@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useRef, useState } from 'react'
-import * as XLSX from 'xlsx'
+import { loadXlsx } from '@/lib/xlsx-client'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -75,6 +75,7 @@ export function BulkDataSettings() {
         toast.error(res.error ?? 'Could not download that data.')
         return
       }
+      const XLSX = await loadXlsx()
       const ws = XLSX.utils.json_to_sheet(res.rows, { header: res.headers })
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, dataset.label.slice(0, 31))
@@ -85,7 +86,7 @@ export function BulkDataSettings() {
     }
   }
 
-  function handleDownloadTemplate() {
+  async function handleDownloadTemplate() {
     const headers = [ID_HEADER, ...dataset.columns.map((c) => c.header)]
     const example: SheetRow = { [ID_HEADER]: '' }
     for (const col of dataset.columns) {
@@ -96,6 +97,7 @@ export function BulkDataSettings() {
             ? formatScalarForExport(col.example, 'boolean')
             : col.example
     }
+    const XLSX = await loadXlsx()
     const ws = XLSX.utils.json_to_sheet([example], { header: headers })
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, dataset.label.slice(0, 31))
@@ -107,6 +109,7 @@ export function BulkDataSettings() {
     setFileName(file.name)
     let rows: SheetRow[]
     try {
+      const XLSX = await loadXlsx()
       const buffer = await file.arrayBuffer()
       const wb = XLSX.read(buffer, { type: 'array' })
       const sheet = wb.Sheets[wb.SheetNames[0]]

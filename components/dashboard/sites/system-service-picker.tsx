@@ -2,11 +2,15 @@
 
 import { useMemo } from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import type { ServiceType, SystemType } from '@/lib/types/database'
 
 /** Map of selected system type id -> chosen service type ids for that system. */
 export type SystemServiceSelection = Record<string, string[]>
+
+/** Map of service type id -> entered charge value (pounds, as a string). */
+export type ServiceValueMap = Record<string, string>
 
 interface SystemServicePickerProps {
   systemTypes: Pick<SystemType, 'id' | 'name'>[]
@@ -15,6 +19,9 @@ interface SystemServicePickerProps {
   onChange: (next: SystemServiceSelection) => void
   /** System type ids that cannot be unticked (e.g. auto-managed by a toggle). */
   lockedSystemTypeIds?: string[]
+  /** When set, shows a per-service charge value (£) input beside ticked services. */
+  serviceValues?: ServiceValueMap
+  onServiceValueChange?: (serviceTypeId: string, value: string) => void
 }
 
 /**
@@ -28,7 +35,10 @@ export function SystemServicePicker({
   value,
   onChange,
   lockedSystemTypeIds = [],
+  serviceValues,
+  onServiceValueChange,
 }: SystemServicePickerProps) {
+  const showValues = !!serviceValues && !!onServiceValueChange
   const servicesBySystem = useMemo(() => {
     const map = new Map<string, Pick<ServiceType, 'id' | 'name' | 'system_type_id'>[]>()
     for (const st of serviceTypes) {
@@ -115,15 +125,36 @@ export function SystemServicePicker({
                 ) : (
                   <div className="grid gap-1.5">
                     <p className="text-xs text-muted-foreground">Services required:</p>
-                    {services.map((svc) => (
-                      <label key={svc.id} className="flex cursor-pointer items-center gap-2">
-                        <Checkbox
-                          checked={chosen.includes(svc.id)}
-                          onCheckedChange={(c) => toggleService(system.id, svc.id, c === true)}
-                        />
-                        <span className="text-sm">{svc.name}</span>
-                      </label>
-                    ))}
+                    {services.map((svc) => {
+                      const ticked = chosen.includes(svc.id)
+                      return (
+                        <div key={svc.id} className="flex items-center gap-2">
+                          <label className="flex flex-1 cursor-pointer items-center gap-2">
+                            <Checkbox
+                              checked={ticked}
+                              onCheckedChange={(c) => toggleService(system.id, svc.id, c === true)}
+                            />
+                            <span className="text-sm">{svc.name}</span>
+                          </label>
+                          {showValues && ticked && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-muted-foreground">£</span>
+                              <Input
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                inputMode="decimal"
+                                aria-label={`Charge value for ${svc.name}`}
+                                placeholder="0.00"
+                                className="h-7 w-24 text-sm"
+                                value={serviceValues?.[svc.id] ?? ''}
+                                onChange={(e) => onServiceValueChange?.(svc.id, e.target.value)}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>

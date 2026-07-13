@@ -229,9 +229,10 @@ export function ServiceChargeDialog({
         setError(res.error)
         return
       }
-      await load() // refresh the existing-charges list
+      // Charge saved — refresh the underlying data and close the dialog.
       resetForm(ctx)
       router.refresh()
+      onOpenChange(false)
     })()
   }
 

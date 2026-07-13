@@ -13,6 +13,7 @@ import type {
   PropertyType,
   SystemType,
   ServiceType,
+  ChargeTemplate,
 } from '@/lib/types/database'
 
 export default async function SitesPage({
@@ -59,6 +60,7 @@ export default async function SitesPage({
     propertyTypesResult,
     systemTypesResult,
     serviceTypesResult,
+    chargeTemplatesResult,
   ] = await Promise.all([
     sitesQuery,
     supabase.from('routes').select('*').order('name'),
@@ -66,6 +68,7 @@ export default async function SitesPage({
     supabase.from('property_types').select('*').eq('active', true).order('name'),
     supabase.from('system_types').select('*').eq('active', true).order('name'),
     supabase.from('service_types').select('*').order('name'),
+    supabase.from('charge_templates').select('*').eq('active', true).order('name'),
   ])
 
   const sites = (sitesResult.data || []) as (Site & {
@@ -78,6 +81,7 @@ export default async function SitesPage({
   const propertyTypes = (propertyTypesResult.data || []) as PropertyType[]
   const systemTypes = (systemTypesResult.data || []) as SystemType[]
   const serviceTypes = (serviceTypesResult.data || []) as ServiceType[]
+  const chargeTemplates = (chargeTemplatesResult.data || []) as ChargeTemplate[]
 
   return (
     <div className="space-y-6">
@@ -96,6 +100,7 @@ export default async function SitesPage({
             propertyTypes={propertyTypes}
             systemTypes={systemTypes}
             serviceTypes={serviceTypes}
+            chargeTemplates={chargeTemplates}
           />
         </div>
       </div>

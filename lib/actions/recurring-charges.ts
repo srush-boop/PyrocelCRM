@@ -13,6 +13,7 @@ import type {
   RecurringTiming,
 } from '@/lib/types/database'
 import { resolveBillingAccount } from '@/lib/billing/resolve-billing-account'
+import { perPeriodFromAnnual } from '@/lib/billing/recurring'
 
 // Server actions for recurring charges (Phase A). Office/admin only; RLS
 // (is_billing_manager) also enforces this at the database level. Every price
@@ -254,6 +255,137 @@ export async function getServiceChargeContext(
     nominalCodes: (nominalRows ?? []) as NominalCode[],
     serviceTypeNominalCodeId: serviceType?.nominal_code_id ?? null,
   }
+}
+
+export interface SetupServiceCharge {
+  siteServiceId: string
+  /** Value the user entered for this service, in pence. */
+  valuePence: number
+}
+
+/**
+ * Bulk-create recurring charges during site setup. Applies one site-wide billing
+ * config (template defaults, frequency, timing, renewal month, price basis) to
+ * every service that has a value entered. The billing account is inherited
+ * (site override → client default). Services with no value are skipped so the
+ * "set up service charges" prompt can catch them later. Safe to call with an
+ * empty list.
+ */
+export async function createSetupCharges(opts: {
+  siteId: string
+  templateId?: string | null
+  priceBasis: RecurringPriceBasis
+  frequency: RecurringFrequency
+  timing: RecurringTiming
+  renewalMonth?: number | null
+  services: SetupServiceCharge[]
+}): Promise<{ error?: string; created: number }> {
+  const auth = await requireManager()
+  if ('error' in auth) return { error: auth.error, created: 0 }
+  const { supabase, userId } = auth
+
+  const priced = opts.services.filter((s) => s.valuePence > 0)
+  if (priced.length === 0) return { created: 0 }
+
+  // Resolve the inherited billing account for this site (site override → client
+  // default). Without one we cannot bill, so skip silently.
+  const { data: site } = await supabase
+    .from('sites')
+    .select('id, client_id, billing_account_id')
+    .eq('id', opts.siteId)
+    .single()
+  const clientId = (site as { client_id: string | null } | null)?.client_id ?? null
+  if (!clientId) return { created: 0 }
+
+  const { data: accountRows } = await supabase
+    .from('billing_accounts')
+    .select('*')
+    .eq('client_id', clientId)
+    .order('is_default', { ascending: false })
+    .order('name')
+  const accounts = (accountRows ?? []) as BillingAccount[]
+  const clientDefault = accounts.find((a) => a.is_default) ?? null
+  const resolved = resolveBillingAccount(
+    { billing_account_id: null },
+    { billing_account_id: (site as { billing_account_id: string | null }).billing_account_id },
+    clientDefault,
+    accounts,
+  )
+  const billingAccountId = resolved.account?.id ?? null
+  if (!billingAccountId) return { created: 0 }
+
+  // Template defaults (description/tax/nominal), if a preconfigured charge was picked.
+  const template = opts.templateId
+    ? ((
+        await supabase.from('charge_templates').select('*').eq('id', opts.templateId).single()
+      ).data as ChargeTemplate | null)
+    : null
+
+  // Service type names + nominal codes for description/nominal fallbacks.
+  const { data: svcRows } = await supabase
+    .from('site_services')
+    .select('id, service_type:service_types(name, nominal_code_id)')
+    .in(
+      'id',
+      priced.map((s) => s.siteServiceId),
+    )
+  type SvcRow = {
+    id: string
+    service_type:
+      | { name: string; nominal_code_id: string | null }
+      | { name: string; nominal_code_id: string | null }[]
+      | null
+  }
+  const svcById = new Map<string, { name: string; nominalId: string | null }>()
+  for (const r of (svcRows ?? []) as SvcRow[]) {
+    const st = Array.isArray(r.service_type) ? r.service_type[0] : r.service_type
+    svcById.set(r.id, { name: st?.name ?? 'Service', nominalId: st?.nominal_code_id ?? null })
+  }
+
+  let created = 0
+  for (const svc of priced) {
+    const meta = svcById.get(svc.siteServiceId)
+    const unitPrice =
+      opts.priceBasis === 'annual'
+        ? perPeriodFromAnnual(svc.valuePence, opts.frequency)
+        : svc.valuePence
+    const values = sanitize({
+      billing_account_id: billingAccountId,
+      site_service_id: svc.siteServiceId,
+      site_id: opts.siteId,
+      client_id: clientId,
+      description: template?.name || meta?.name || 'Recurring charge',
+      unit_price_pence: unitPrice,
+      price_basis: opts.priceBasis,
+      quantity: 1,
+      tax_code: template?.default_tax_code ?? null,
+      nominal_code_id: template?.nominal_code_id ?? meta?.nominalId ?? null,
+      timing: opts.timing,
+      frequency: opts.frequency,
+      renewal_month: opts.renewalMonth ?? null,
+      is_subcontracted: false,
+    })
+    const { data: inserted, error } = await supabase
+      .from('recurring_charges')
+      .insert({ ...values, created_by: userId })
+      .select('id')
+      .single()
+    if (error) continue
+    const newId = (inserted as { id: string } | null)?.id
+    if (newId) {
+      await supabase.from('recurring_charge_price_history').insert({
+        recurring_charge_id: newId,
+        old_price_pence: null,
+        new_price_pence: values.unit_price_pence,
+        reason: 'Initial price (site setup)',
+        changed_by: userId,
+      })
+      created += 1
+    }
+  }
+
+  revalidatePath('/dashboard/invoices')
+  return { created }
 }
 
 export async function createRecurringCharge(input: RecurringChargeInput) {

@@ -31,18 +31,28 @@ import { SiteClassificationFields } from '@/components/dashboard/sites/site-clas
 import {
   SystemServicePicker,
   type SystemServiceSelection,
+  type ServiceValueMap,
 } from '@/components/dashboard/sites/system-service-picker'
 import {
   provisionSiteSystems,
   findRemoteMonitoringTypeId,
   type ProvisionSystemSelection,
 } from '@/lib/sites/provision-systems'
+import { createSetupCharges } from '@/lib/actions/recurring-charges'
+import {
+  RECURRING_FREQUENCY_LABELS,
+  RECURRING_TIMING_LABELS,
+  MONTH_LABELS,
+} from '@/lib/billing/recurring'
 import type {
   Client,
   Branch,
   PropertyType,
   SystemType,
   ServiceType,
+  ChargeTemplate,
+  RecurringFrequency,
+  RecurringTiming,
 } from '@/lib/types/database'
 
 interface AddSiteDialogProps {
@@ -51,7 +61,13 @@ interface AddSiteDialogProps {
   propertyTypes?: PropertyType[]
   systemTypes?: SystemType[]
   serviceTypes?: ServiceType[]
+  chargeTemplates?: ChargeTemplate[]
 }
+
+const NO_TEMPLATE = '__custom__'
+const NO_RENEWAL = '__none__'
+const FREQUENCIES = Object.keys(RECURRING_FREQUENCY_LABELS) as RecurringFrequency[]
+const TIMINGS = Object.keys(RECURRING_TIMING_LABELS) as RecurringTiming[]
 
 export function AddSiteDialog({
   clients,
@@ -59,6 +75,7 @@ export function AddSiteDialog({
   propertyTypes = [],
   systemTypes = [],
   serviceTypes = [],
+  chargeTemplates = [],
 }: AddSiteDialogProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -86,6 +103,8 @@ export function AddSiteDialog({
   const [newReportingEmail, setNewReportingEmail] = useState('')
   // Systems (and their required services) to provision when the site is created.
   const [systemSelection, setSystemSelection] = useState<SystemServiceSelection>({})
+  // Per-service annual charge values (£) entered in the picker, keyed by service type id.
+  const [serviceValues, setServiceValues] = useState<ServiceValueMap>({})
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
@@ -93,6 +112,23 @@ export function AddSiteDialog({
   // The "Remote Monitoring" system type, if configured. Its selection in the
   // picker is driven by the toggle below and locked so it can't be unticked.
   const rmTypeId = findRemoteMonitoringTypeId(systemTypes)
+
+  // Default the preconfigured charge to "Annual Maintenance" when it exists.
+  const annualMaintenanceTemplateId =
+    chargeTemplates.find((t) => t.name.trim().toLowerCase() === 'annual maintenance')?.id ?? null
+  // Site-wide billing defaults applied to every service charge created at setup.
+  const [chargeTemplateId, setChargeTemplateId] = useState<string>(
+    annualMaintenanceTemplateId ?? NO_TEMPLATE,
+  )
+  const [chargeFrequency, setChargeFrequency] = useState<RecurringFrequency>('annual')
+  const [chargeTiming, setChargeTiming] = useState<RecurringTiming>('advance')
+  const [chargeRenewalMonth, setChargeRenewalMonth] = useState<string>(NO_RENEWAL)
+
+  const setServiceValue = (serviceTypeId: string, v: string) =>
+    setServiceValues((prev) => ({ ...prev, [serviceTypeId]: v }))
+
+  // Whether any service is ticked (drives the billing-config section visibility).
+  const anyServiceSelected = Object.values(systemSelection).some((ids) => ids.length > 0)
 
   const handleAddReportingEmail = () => {
     if (newReportingEmail && !reportingEmails.includes(newReportingEmail)) {
@@ -191,7 +227,10 @@ export function AddSiteDialog({
       }),
     )
     if (selections.length > 0) {
-      const { error: provError } = await provisionSiteSystems(supabase, {
+      const {
+        error: provError,
+        services: provisioned,
+      } = await provisionSiteSystems(supabase, {
         siteId: inserted.id,
         selections,
         serviceTypes,
@@ -203,6 +242,32 @@ export function AddSiteDialog({
         // blocking navigation (the user can add systems manually).
         console.log('[v0] provisionSiteSystems error:', provError)
       }
+
+      // Auto-create recurring charges for services with a value entered, applying
+      // the site-wide billing config. Services left blank are skipped (the Systems
+      // tab prompt will flag them). Values are entered as annual totals.
+      const chargeServices = provisioned
+        .map((svc) => ({
+          siteServiceId: svc.id,
+          valuePence: Math.max(
+            0,
+            Math.round((Number.parseFloat(serviceValues[svc.service_type_id] ?? '') || 0) * 100),
+          ),
+        }))
+        .filter((s) => s.valuePence > 0)
+      if (chargeServices.length > 0) {
+        const res = await createSetupCharges({
+          siteId: inserted.id,
+          templateId: chargeTemplateId === NO_TEMPLATE ? null : chargeTemplateId,
+          priceBasis: 'annual',
+          frequency: chargeFrequency,
+          timing: chargeTiming,
+          renewalMonth:
+            chargeRenewalMonth === NO_RENEWAL ? null : Number.parseInt(chargeRenewalMonth, 10),
+          services: chargeServices,
+        })
+        if (res.error) console.log('[v0] createSetupCharges error:', res.error)
+      }
     }
 
     setLoading(false)
@@ -211,6 +276,11 @@ export function AddSiteDialog({
       setOpen(false)
       setError(null)
       setSystemSelection({})
+      setServiceValues({})
+      setChargeTemplateId(annualMaintenanceTemplateId ?? NO_TEMPLATE)
+      setChargeFrequency('annual')
+      setChargeTiming('advance')
+      setChargeRenewalMonth(NO_RENEWAL)
       setFormData({
         name: '',
         address: '',
@@ -416,17 +486,121 @@ export function AddSiteDialog({
               <Label>Systems &amp; Services</Label>
               <p className="text-xs text-muted-foreground">
                 Select the systems installed at this site, then optionally tick the services
-                required for each &mdash; you can add or change services later from the Systems tab.
+                required for each and enter the annual charge (£) &mdash; you can add or change
+                these later from the Systems tab.
               </p>
               <SystemServicePicker
                 systemTypes={systemTypes}
                 serviceTypes={serviceTypes}
                 value={systemSelection}
-                onChange={setSystemSelection}
+                onChange={(next) => {
+                  setSystemSelection(next)
+                  // Keep the Remote Monitoring toggle in sync: ticking the RM
+                  // system switches the toggle on, unticking switches it off.
+                  if (rmTypeId) {
+                    const rmSelected = Object.prototype.hasOwnProperty.call(next, rmTypeId)
+                    if (rmSelected !== formData.has_remote_monitoring) {
+                      setFormData((prev) => ({
+                        ...prev,
+                        has_remote_monitoring: rmSelected,
+                        remote_monitoring_type: rmSelected ? prev.remote_monitoring_type : '',
+                      }))
+                    }
+                  }
+                }}
                 lockedSystemTypeIds={
                   rmTypeId && formData.has_remote_monitoring ? [rmTypeId] : []
                 }
+                serviceValues={serviceValues}
+                onServiceValueChange={setServiceValue}
               />
+
+              {anyServiceSelected && (
+                <div className="mt-1 grid gap-3 rounded-md border bg-muted/30 p-3">
+                  <p className="text-xs text-muted-foreground">
+                    Billing applied to the service charges above. The billing account is inherited
+                    from the client; values entered are treated as the annual total.
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="setup-template" className="text-xs">
+                        Preconfigured charge
+                      </Label>
+                      <Select value={chargeTemplateId} onValueChange={setChargeTemplateId}>
+                        <SelectTrigger id="setup-template">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_TEMPLATE}>Custom charge…</SelectItem>
+                          {chargeTemplates.map((t) => (
+                            <SelectItem key={t.id} value={t.id}>
+                              {t.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="setup-renewal" className="text-xs">
+                        Renewal month
+                      </Label>
+                      <Select value={chargeRenewalMonth} onValueChange={setChargeRenewalMonth}>
+                        <SelectTrigger id="setup-renewal">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_RENEWAL}>None</SelectItem>
+                          {MONTH_LABELS.map((m, i) => (
+                            <SelectItem key={m} value={String(i + 1)}>
+                              {m}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="setup-freq" className="text-xs">
+                        Invoice frequency
+                      </Label>
+                      <Select
+                        value={chargeFrequency}
+                        onValueChange={(v) => setChargeFrequency(v as RecurringFrequency)}
+                      >
+                        <SelectTrigger id="setup-freq">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {FREQUENCIES.map((f) => (
+                            <SelectItem key={f} value={f}>
+                              {RECURRING_FREQUENCY_LABELS[f]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="setup-timing" className="text-xs">
+                        Billed
+                      </Label>
+                      <Select
+                        value={chargeTiming}
+                        onValueChange={(v) => setChargeTiming(v as RecurringTiming)}
+                      >
+                        <SelectTrigger id="setup-timing">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TIMINGS.map((t) => (
+                            <SelectItem key={t} value={t}>
+                              {RECURRING_TIMING_LABELS[t]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="rounded-lg border p-4">
               <div className="flex items-center justify-between gap-4">

@@ -5,6 +5,7 @@ import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { Profile } from '@/lib/types/database'
 import { getParts, getProductSuppliers } from '@/lib/stock'
+import { getNominalCodes } from '@/lib/actions/nominal-codes'
 import { PartsTable } from '@/components/dashboard/stock/parts-table'
 import { AddPartDialog } from '@/components/dashboard/stock/add-part-dialog'
 
@@ -28,7 +29,11 @@ export default async function PartsPage() {
     redirect('/dashboard/stock')
   }
 
-  const [parts, productSuppliers] = await Promise.all([getParts(), getProductSuppliers()])
+  const [parts, productSuppliers, nominalCodes] = await Promise.all([
+    getParts(),
+    getProductSuppliers(),
+    getNominalCodes(),
+  ])
 
   return (
     <div className="space-y-6">
@@ -46,11 +51,11 @@ export default async function PartsPage() {
               Define the parts you hold, their unit cost and default minimum level
             </p>
           </div>
-          <AddPartDialog suppliers={productSuppliers} />
+          <AddPartDialog suppliers={productSuppliers} nominalCodes={nominalCodes} />
         </div>
       </div>
 
-      <PartsTable parts={parts} suppliers={productSuppliers} />
+      <PartsTable parts={parts} suppliers={productSuppliers} nominalCodes={nominalCodes} />
     </div>
   )
 }

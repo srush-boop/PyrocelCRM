@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import type {
   BillingAccount,
   ChargeTemplate,
+  NominalCode,
   Profile,
   RecurringCharge,
   RecurringFrequency,
@@ -46,6 +47,7 @@ export interface RecurringChargeInput {
   quantity: number
   tax_code?: string | null
   nominal_code?: string | null
+  nominal_code_id?: string | null
   timing: RecurringTiming
   frequency: RecurringFrequency
   renewal_month?: number | null
@@ -68,6 +70,7 @@ function sanitize(input: RecurringChargeInput) {
     quantity: input.quantity > 0 ? input.quantity : 1,
     tax_code: input.tax_code?.trim() || null,
     nominal_code: input.nominal_code?.trim() || null,
+    nominal_code_id: input.nominal_code_id ?? null,
     timing: input.timing,
     frequency: input.frequency,
     renewal_month: input.renewal_month ?? null,
@@ -166,6 +169,10 @@ export interface ServiceChargeContext {
   chargeTemplates: ChargeTemplate[]
   /** Existing recurring charges already linked to this service. */
   existingCharges: RecurringCharge[]
+  /** Active nominal codes for the managed picker. */
+  nominalCodes: NominalCode[]
+  /** This service type's nominal code — the auto-select fallback for charges. */
+  serviceTypeNominalCodeId: string | null
 }
 
 /**
@@ -184,7 +191,7 @@ export async function getServiceChargeContext(
   const { data: svc } = await supabase
     .from('site_services')
     .select(
-      'id, site_id, billing_account_id, service_type:service_types(name), site:sites(id, client_id, billing_account_id)',
+      'id, site_id, billing_account_id, service_type:service_types(name, nominal_code_id), site:sites(id, client_id, billing_account_id)',
     )
     .eq('id', siteServiceId)
     .single()
@@ -216,15 +223,18 @@ export async function getServiceChargeContext(
     billingAccounts,
   )
 
-  const [{ data: templateRows }, { data: existingRows }] = await Promise.all([
-    supabase.from('charge_templates').select('*').eq('active', true).order('name'),
-    supabase
-      .from('recurring_charges')
-      .select('*')
-      .eq('site_service_id', siteServiceId)
-      .order('active', { ascending: false })
-      .order('description'),
-  ])
+  const [{ data: templateRows }, { data: existingRows }, { data: nominalRows }] = await Promise.all(
+    [
+      supabase.from('charge_templates').select('*').eq('active', true).order('name'),
+      supabase
+        .from('recurring_charges')
+        .select('*')
+        .eq('site_service_id', siteServiceId)
+        .order('active', { ascending: false })
+        .order('description'),
+      supabase.from('nominal_codes').select('*').eq('active', true).order('code'),
+    ],
+  )
 
   return {
     siteServiceId,
@@ -235,6 +245,8 @@ export async function getServiceChargeContext(
     defaultBillingAccountId: resolved.account?.id ?? null,
     chargeTemplates: (templateRows ?? []) as ChargeTemplate[],
     existingCharges: (existingRows ?? []) as RecurringCharge[],
+    nominalCodes: (nominalRows ?? []) as NominalCode[],
+    serviceTypeNominalCodeId: serviceType?.nominal_code_id ?? null,
   }
 }
 

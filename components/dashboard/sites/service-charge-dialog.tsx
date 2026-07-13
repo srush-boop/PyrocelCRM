@@ -32,6 +32,8 @@ import {
   RECURRING_TIMING_LABELS,
   MONTH_LABELS,
 } from '@/lib/billing/recurring'
+import { resolveNominalCode, nominalSourceLabel } from '@/lib/billing/nominal-codes'
+import { NominalCodeSelect } from '@/components/dashboard/billing/nominal-code-select'
 import type { RecurringFrequency, RecurringTiming } from '@/lib/types/database'
 
 interface ServiceChargeDialogProps {
@@ -73,7 +75,10 @@ export function ServiceChargeDialog({
   const [renewalMonth, setRenewalMonth] = useState<string>(NO_RENEWAL)
   const [billingAccountId, setBillingAccountId] = useState<string>('')
   const [taxCode, setTaxCode] = useState('')
-  const [nominalCode, setNominalCode] = useState('')
+  // Managed nominal code. `nominalManual` tracks whether the user overrode the
+  // auto-resolved value, so switching templates doesn't clobber a manual pick.
+  const [nominalCodeId, setNominalCodeId] = useState<string | null>(null)
+  const [nominalManual, setNominalManual] = useState(false)
 
   const resetForm = useCallback((c: ServiceChargeContext | null) => {
     setTemplateId(NO_TEMPLATE)
@@ -85,7 +90,9 @@ export function ServiceChargeDialog({
     setRenewalMonth(NO_RENEWAL)
     setBillingAccountId(c?.defaultBillingAccountId ?? '')
     setTaxCode('')
-    setNominalCode('')
+    // Auto-resolve to the service type's nominal code (no dept context here).
+    setNominalCodeId(c?.serviceTypeNominalCodeId ?? null)
+    setNominalManual(false)
   }, [])
 
   const load = useCallback(async () => {
@@ -111,8 +118,18 @@ export function ServiceChargeDialog({
     setDescription(t.name)
     setPricePounds(poundsFromPence(t.default_unit_price_pence))
     setTaxCode(t.default_tax_code ?? '')
-    setNominalCode(t.default_nominal_code ?? '')
+    // Only auto-move the nominal if the user hasn't manually overridden it.
+    // The template's own code wins, else fall back to the service type's.
+    if (!nominalManual) {
+      setNominalCodeId(t.nominal_code_id ?? ctx?.serviceTypeNominalCodeId ?? null)
+    }
   }
+
+  // Which fallback the current auto value came from (for the hint under the field).
+  const resolvedSource = resolveNominalCode({
+    explicitId: templateId !== NO_TEMPLATE ? ctx?.chargeTemplates.find((x) => x.id === templateId)?.nominal_code_id ?? null : null,
+    serviceTypeId: ctx?.serviceTypeNominalCodeId ?? null,
+  }).source
 
   function handleSave() {
     if (!ctx) return
@@ -136,7 +153,7 @@ export function ServiceChargeDialog({
         unit_price_pence: penceFromPounds(pricePounds),
         quantity: Number.parseInt(quantity, 10) || 1,
         tax_code: taxCode || null,
-        nominal_code: nominalCode || null,
+        nominal_code_id: nominalCodeId,
         timing,
         frequency,
         renewal_month: renewalMonth === NO_RENEWAL ? null : Number.parseInt(renewalMonth, 10),
@@ -356,12 +373,21 @@ export function ServiceChargeDialog({
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="sc-nominal">Nominal code</Label>
-                <Input
+                <NominalCodeSelect
                   id="sc-nominal"
-                  value={nominalCode}
-                  onChange={(e) => setNominalCode(e.target.value)}
-                  placeholder="Account default"
+                  value={nominalCodeId}
+                  onChange={(id) => {
+                    setNominalCodeId(id)
+                    setNominalManual(true)
+                  }}
+                  codes={ctx.nominalCodes}
+                  noneLabel="None"
                 />
+                {!nominalManual && resolvedSource && (
+                  <p className="text-xs text-muted-foreground">
+                    Auto {nominalSourceLabel(resolvedSource)}
+                  </p>
+                )}
               </div>
             </div>
 

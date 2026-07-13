@@ -462,7 +462,7 @@ export function SettingsContent({ user, profile, company, branches, departments,
         )}
         {canManageRates && (
           <TabsContent value="charges" className="space-y-4">
-            <ChargeTemplatesSettings chargeTemplates={chargeTemplates} />
+            <ChargeTemplatesSettings chargeTemplates={chargeTemplates} nominalCodes={nominalCodes} />
           </TabsContent>
         )}
         {canManageRates && (

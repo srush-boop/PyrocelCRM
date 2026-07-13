@@ -292,11 +292,12 @@ export function ChargeTemplatesSettings({
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="ct-nominal">Nominal code</Label>
-                <Input
+                <NominalCodeSelect
                   id="ct-nominal"
-                  value={form.nominalCode}
-                  onChange={(e) => setForm({ ...form, nominalCode: e.target.value })}
-                  placeholder="e.g. 4000"
+                  value={form.nominalCodeId}
+                  onChange={(id) => setForm({ ...form, nominalCodeId: id })}
+                  codes={nominalCodes}
+                  noneLabel="None"
                 />
               </div>
             </div>

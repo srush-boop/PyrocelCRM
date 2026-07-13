@@ -36,7 +36,8 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Plus, Trash2, Wrench, Loader2, Calendar as CalendarIcon, Edit2, Clock, X, MapPin, MapPinned, User, HardHat, Power, PowerOff, ShieldCheck } from 'lucide-react'
+import { Plus, Trash2, Wrench, Loader2, Calendar as CalendarIcon, Edit2, Clock, X, MapPin, MapPinned, User, HardHat, Power, PowerOff, ShieldCheck, Coins } from 'lucide-react'
+import { ServiceChargeDialog } from './service-charge-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -90,6 +91,8 @@ export function SiteServicesManager({
   const [initialVisitDate, setInitialVisitDate] = useState<Date>(new Date())
   const [adding, setAdding] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  // Site service whose "Add charge" dialog is open (null = closed).
+  const [chargeServiceId, setChargeServiceId] = useState<string | null>(null)
 
   // Edit service state
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -572,6 +575,15 @@ export function SiteServicesManager({
                       <Button
                         variant="ghost"
                         size="icon"
+                        onClick={() => setChargeServiceId(ss.id)}
+                        className="text-muted-foreground hover:text-foreground"
+                        title="Add recurring charge"
+                      >
+                        <Coins className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => openEditDialog(ss)}
                         className="text-muted-foreground hover:text-foreground"
                         title="Edit Service"
@@ -806,6 +818,14 @@ export function SiteServicesManager({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {chargeServiceId && (
+        <ServiceChargeDialog
+          open={!!chargeServiceId}
+          onOpenChange={(open) => !open && setChargeServiceId(null)}
+          siteServiceId={chargeServiceId}
+        />
+      )}
 
       {/* Edit Service Dialog */}
       <Dialog

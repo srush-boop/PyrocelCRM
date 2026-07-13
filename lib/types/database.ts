@@ -286,6 +286,22 @@ export interface RecurringCharge {
   site_service?: SiteService | null
 }
 
+// A reusable, preconfigured charge in the catalog (Settings → Charges).
+// Picking one prefills a recurring charge's description, price and codes; the
+// values can then be overridden per site service. Amounts in integer pence.
+export interface ChargeTemplate {
+  id: string
+  name: string
+  description: string | null
+  default_unit_price_pence: number
+  default_tax_code: string | null
+  default_nominal_code: string | null
+  active: boolean
+  created_at: string
+  created_by: string | null
+  updated_at: string
+}
+
 export interface RecurringChargePriceHistory {
   id: string
   recurring_charge_id: string

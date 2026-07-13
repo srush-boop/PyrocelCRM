@@ -260,6 +260,10 @@ export function SiteCalls({ calls, engineers, serviceTypes, reportingEmails = []
   const [dateFrom, setDateFrom] = useState<Date | undefined>()
   const [dateTo, setDateTo] = useState<Date | undefined>()
 
+  // Whether any call lacks an assigned engineer, so the "Assigned to" filter can
+  // offer an Unassigned option even when no engineers are assigned yet.
+  const hasUnassigned = useMemo(() => calls.some((c) => !c.assigned_engineer), [calls])
+
   const filtered = useMemo(() => {
     return calls.filter((call) => {
       // Text search
@@ -284,8 +288,12 @@ export function SiteCalls({ calls, engineers, serviceTypes, reportingEmails = []
         }
       }
 
-      // Engineer
-      if (engineerFilter !== 'all' && call.assigned_engineer?.id !== engineerFilter) return false
+      // Assigned to (engineer / unassigned)
+      if (engineerFilter === 'unassigned') {
+        if (call.assigned_engineer) return false
+      } else if (engineerFilter !== 'all' && call.assigned_engineer?.id !== engineerFilter) {
+        return false
+      }
 
       // Service
       if (serviceFilter !== 'all') {
@@ -373,13 +381,14 @@ export function SiteCalls({ calls, engineers, serviceTypes, reportingEmails = []
           </SelectContent>
         </Select>
 
-        {engineers.length > 1 && (
+        {(engineers.length > 0 || hasUnassigned) && (
           <Select value={engineerFilter} onValueChange={setEngineerFilter}>
             <SelectTrigger className="w-[150px]">
-              <SelectValue placeholder="Engineer" />
+              <SelectValue placeholder="Assigned to" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All engineers</SelectItem>
+              <SelectItem value="all">Anyone</SelectItem>
+              {hasUnassigned && <SelectItem value="unassigned">Unassigned</SelectItem>}
               {engineers.map((e) => (
                 <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
               ))}

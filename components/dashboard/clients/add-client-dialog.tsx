@@ -20,6 +20,7 @@ import { Loader2 } from 'lucide-react'
 import { PostcodeLookup } from '@/components/dashboard/shared/postcode-lookup'
 import { AddressFinder } from '@/components/dashboard/shared/address-finder'
 import type { PlaceResult } from '@/app/api/places-search/route'
+import { createBillingAccount } from '@/lib/actions/billing-accounts'
 
 interface AddClientDialogProps {
   open: boolean
@@ -48,6 +49,9 @@ const EMPTY_SITE = {
 export function AddClientDialog({ open, onOpenChange }: AddClientDialogProps) {
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({ ...EMPTY_FORM })
+  // Whether this client is also the billing client (default yes). When on, a
+  // default billing account is created for them, inheriting their address/contact.
+  const [isBillingClient, setIsBillingClient] = useState(true)
   // Optional "create a site for this client at the same time" flow.
   const [createSite, setCreateSite] = useState(false)
   const [sameAddress, setSameAddress] = useState(true)
@@ -93,6 +97,7 @@ export function AddClientDialog({ open, onOpenChange }: AddClientDialogProps) {
   const resetAll = () => {
     setFormData({ ...EMPTY_FORM })
     setSiteData({ ...EMPTY_SITE })
+    setIsBillingClient(true)
     setCreateSite(false)
     setSameAddress(true)
   }
@@ -120,6 +125,22 @@ export function AddClientDialog({ open, onOpenChange }: AddClientDialogProps) {
       console.error('[v0] Error creating client:', error)
       alert(`Error creating client: ${error?.message ?? 'unknown error'}`)
       return
+    }
+
+    // When the client is also the billing client, create a default billing
+    // account for them inheriting their address/contact details.
+    if (isBillingClient) {
+      const { error: baError } = await createBillingAccount(insertedClient.id, {
+        name: formData.name,
+        invoice_address: formData.address || null,
+        invoice_contact_name: formData.contact_name || null,
+        invoice_email: formData.contact_email || null,
+        invoice_phone: formData.contact_phone || null,
+      })
+      if (baError) {
+        // Client exists; surface the billing issue without losing the client.
+        console.log('[v0] Error creating default billing account:', baError)
+      }
     }
 
     // Optionally create the client's first site in the same step.
@@ -238,6 +259,22 @@ export function AddClientDialog({ open, onOpenChange }: AddClientDialogProps) {
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                 placeholder="Any additional notes about this client"
+              />
+            </div>
+            <div className="flex items-start justify-between gap-3 rounded-md border p-3">
+              <div className="min-w-0">
+                <Label htmlFor="is_billing_client" className="text-sm font-medium">
+                  This client is also the billing client
+                </Label>
+                <p className="mt-0.5 text-xs text-muted-foreground text-pretty">
+                  Creates a default billing account for them so their work can be invoiced. Turn
+                  off if invoices are sent to a different company (a parent or managing agent).
+                </p>
+              </div>
+              <Switch
+                id="is_billing_client"
+                checked={isBillingClient}
+                onCheckedChange={setIsBillingClient}
               />
             </div>
             <div className="flex items-start justify-between gap-3 rounded-md border p-3">

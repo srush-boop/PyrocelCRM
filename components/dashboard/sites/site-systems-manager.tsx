@@ -540,6 +540,9 @@ export function SiteSystemsManager({
               : null
             // Annualised recurring value across this system's services.
             const systemValue = sumServiceValue(services)
+            // Active services with no recurring charge set up, so we can warn the
+            // user (revenue would be missed when calls are completed/invoiced).
+            const chargelessServices = activeServices.filter((s) => serviceValue(s.id) <= 0)
 
             return (
               <Card
@@ -676,6 +679,17 @@ export function SiteSystemsManager({
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2 pb-2 pt-0">
+                  {chargelessServices.length > 0 && (
+                    <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        {chargelessServices.length === 1
+                          ? `${chargelessServices[0].service_type?.name ?? 'A service'} has no charge set up.`
+                          : `${chargelessServices.length} services have no charge set up.`}{' '}
+                        Add a charge so this work is invoiced.
+                      </span>
+                    </div>
+                  )}
                   {services.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No services attached.</p>
                   ) : (
@@ -709,12 +723,25 @@ export function SiteSystemsManager({
                               <Settings2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                             </button>
                             <div className="flex shrink-0 items-center gap-2">
-                              <span
-                                className="text-xs tabular-nums text-muted-foreground"
-                                title="Annualised recurring value"
-                              >
-                                {value > 0 ? `${formatPence(value)}/yr` : '—'}
-                              </span>
+                              {value > 0 ? (
+                                <span
+                                  className="text-xs tabular-nums text-muted-foreground"
+                                  title="Annualised recurring value"
+                                >
+                                  {formatPence(value)}/yr
+                                </span>
+                              ) : (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 gap-1 border-amber-300 px-2 text-xs text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+                                  onClick={() => openServiceCharge(svc.id)}
+                                  title="No charge set up for this service"
+                                >
+                                  <Coins className="h-3.5 w-3.5" />
+                                  Add charge
+                                </Button>
+                              )}
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button

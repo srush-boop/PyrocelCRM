@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2, Plus, Check } from 'lucide-react'
+import { Loader2, Plus, AlertTriangle } from 'lucide-react'
 import {
   getServiceChargeContext,
   createRecurringCharge,
@@ -32,6 +32,7 @@ import {
   RECURRING_TIMING_LABELS,
   MONTH_LABELS,
 } from '@/lib/billing/recurring'
+import { ANNUAL_OCCURRENCES } from '@/lib/billing/projected-revenue'
 import { resolveNominalCode, nominalSourceLabel } from '@/lib/billing/nominal-codes'
 import { NominalCodeSelect } from '@/components/dashboard/billing/nominal-code-select'
 import type { RecurringFrequency, RecurringTiming } from '@/lib/types/database'
@@ -70,6 +71,11 @@ export function ServiceChargeDialog({
   const [description, setDescription] = useState('')
   const [pricePounds, setPricePounds] = useState('')
   const [quantity, setQuantity] = useState('1')
+  // Recurring is the only creatable type for now; the toggle is informational.
+  const [chargeType, setChargeType] = useState<'recurring' | 'one_off'>('recurring')
+  // Whether the entered value is a per-invoice amount or the annual total. We
+  // always store the per-invoice unit price; the other figure is derived.
+  const [valueBasis, setValueBasis] = useState<'per_period' | 'annual'>('per_period')
   const [frequency, setFrequency] = useState<RecurringFrequency>('annual')
   const [timing, setTiming] = useState<RecurringTiming>('advance')
   const [renewalMonth, setRenewalMonth] = useState<string>(NO_RENEWAL)
@@ -85,6 +91,8 @@ export function ServiceChargeDialog({
     setDescription('')
     setPricePounds('')
     setQuantity('1')
+    setChargeType('recurring')
+    setValueBasis('per_period')
     setFrequency('annual')
     setTiming('advance')
     setRenewalMonth(NO_RENEWAL)
@@ -131,6 +139,18 @@ export function ServiceChargeDialog({
     serviceTypeId: ctx?.serviceTypeNominalCodeId ?? null,
   }).source
 
+  // Value maths. We store a per-invoice unit price; the annual figure is just
+  // (unit × qty × occurrences). When the user enters an annual total instead, we
+  // back it out to the per-invoice unit price for storage.
+  const qty = Number.parseInt(quantity, 10) || 1
+  const occurrences = ANNUAL_OCCURRENCES[frequency]
+  const enteredPence = penceFromPounds(pricePounds)
+  const unitPricePence =
+    valueBasis === 'annual' ? Math.round(enteredPence / occurrences / qty) : enteredPence
+  const perInvoiceTotalPence = unitPricePence * qty
+  const annualTotalPence = perInvoiceTotalPence * occurrences
+  const perLabel = RECURRING_FREQUENCY_LABELS[frequency].toLowerCase()
+
   function handleSave() {
     if (!ctx) return
     if (!description.trim()) {
@@ -150,8 +170,10 @@ export function ServiceChargeDialog({
         site_id: ctx.siteId,
         client_id: ctx.clientId,
         description: description.trim(),
-        unit_price_pence: penceFromPounds(pricePounds),
-        quantity: Number.parseInt(quantity, 10) || 1,
+        // Always store the per-invoice unit price, derived from the annual total
+        // when the user entered value on an annual basis.
+        unit_price_pence: unitPricePence,
+        quantity: qty,
         tax_code: taxCode || null,
         nominal_code_id: nominalCodeId,
         timing,
@@ -172,6 +194,8 @@ export function ServiceChargeDialog({
 
   const hasClient = !!ctx?.clientId
   const noAccounts = (ctx?.billingAccounts.length ?? 0) === 0
+  // Recurring charges can only attach to recurring services.
+  const notRecurring = !!ctx && !ctx.isRecurringService
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -200,8 +224,50 @@ export function ServiceChargeDialog({
           <p className="rounded-md border bg-muted/40 py-6 text-center text-sm text-muted-foreground">
             This client has no billing accounts. Add one from the client record first.
           </p>
+        ) : notRecurring ? (
+          <div className="flex items-start gap-3 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <p className="font-medium">This isn&apos;t a recurring service</p>
+              <p className="mt-1 text-amber-800">
+                Recurring charges can only be added to recurring (PPM) services. For ad-hoc work on{' '}
+                {ctx.serviceLabel}, raise the charge on an invoice directly instead.
+              </p>
+            </div>
+          </div>
         ) : (
           <div className="space-y-4">
+            <div className="grid gap-1.5">
+              <Label>Charge type</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setChargeType('recurring')}
+                  className={`rounded-md border p-3 text-left text-sm transition-colors ${
+                    chargeType === 'recurring'
+                      ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                      : 'hover:bg-muted/50'
+                  }`}
+                >
+                  <span className="font-medium">Recurring</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    Billed on a repeating cadence
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  disabled
+                  className="cursor-not-allowed rounded-md border border-dashed p-3 text-left text-sm opacity-60"
+                  title="Add one-off charges on an invoice directly"
+                >
+                  <span className="font-medium">One-off</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    Add on an invoice directly
+                  </span>
+                </button>
+              </div>
+            </div>
+
             {ctx.existingCharges.length > 0 && (
               <div className="rounded-md border bg-muted/30 p-3">
                 <p className="mb-1 text-xs font-medium text-muted-foreground">
@@ -257,38 +323,6 @@ export function ServiceChargeDialog({
               />
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="grid gap-1.5">
-                <Label htmlFor="sc-price">Value (£)</Label>
-                <Input
-                  id="sc-price"
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  inputMode="decimal"
-                  value={pricePounds}
-                  onChange={(e) => setPricePounds(e.target.value)}
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="sc-qty">Quantity</Label>
-                <Input
-                  id="sc-qty"
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label>Total</Label>
-                <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm">
-                  {formatPence(penceFromPounds(pricePounds) * (Number.parseInt(quantity, 10) || 1))}
-                </div>
-              </div>
-            </div>
-
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="sc-freq">Invoice frequency</Label>
@@ -322,6 +356,77 @@ export function ServiceChargeDialog({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            {/* Value entry: type either the per-invoice amount OR the annual
+                total, and the other is derived so the cadence is unambiguous. */}
+            <div className="rounded-md border p-3">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <Label className="text-sm">Value</Label>
+                <div className="inline-flex rounded-md border p-0.5 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setValueBasis('per_period')}
+                    className={`rounded px-2 py-1 transition-colors ${
+                      valueBasis === 'per_period'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Per invoice
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setValueBasis('annual')}
+                    className={`rounded px-2 py-1 transition-colors ${
+                      valueBasis === 'annual'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Annual
+                  </button>
+                </div>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="sc-price" className="text-xs text-muted-foreground">
+                    {valueBasis === 'annual' ? 'Annual value (£)' : 'Amount per invoice (£)'}
+                  </Label>
+                  <Input
+                    id="sc-price"
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    inputMode="decimal"
+                    value={pricePounds}
+                    onChange={(e) => setPricePounds(e.target.value)}
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="sc-qty" className="text-xs text-muted-foreground">
+                    Quantity
+                  </Label>
+                  <Input
+                    id="sc-qty"
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-md bg-muted/40 px-3 py-2 text-sm">
+                <span>
+                  <span className="font-semibold">{formatPence(perInvoiceTotalPence)}</span>{' '}
+                  <span className="text-muted-foreground">per {perLabel} invoice</span>
+                </span>
+                <span className="text-muted-foreground">
+                  {formatPence(annualTotalPence)} / year
+                  {occurrences > 1 ? ` · ${occurrences} invoices` : ''}
+                </span>
               </div>
             </div>
 
@@ -403,7 +508,7 @@ export function ServiceChargeDialog({
           </Button>
           <Button
             onClick={handleSave}
-            disabled={saving || loading || !ctx || !hasClient || noAccounts}
+            disabled={saving || loading || !ctx || !hasClient || noAccounts || notRecurring}
             className="gap-2"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}

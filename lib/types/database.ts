@@ -241,6 +241,8 @@ export interface InvoiceLineItem {
   job_id: string | null
   /** Source quote line for equipment / job_line kinds (drives dedup). */
   quote_line_item_id: string | null
+  /** Source site service for recurring lines; lets the invoice detail the service. */
+  site_service_id: string | null
   kind: InvoiceLineKind
   description: string
   quantity: number
@@ -281,6 +283,9 @@ export interface RecurringCharge {
   /** Buy price when subcontracted, in pence. */
   subcontract_price_pence: number | null
   active: boolean
+  /** True when auto-paused because the linked site service was deactivated;
+   * such charges auto-resume when the service is reactivated. */
+  paused_by_service: boolean
   start_date: string | null
   end_date: string | null
   last_invoiced_date: string | null

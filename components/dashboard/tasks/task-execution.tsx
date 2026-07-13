@@ -38,6 +38,10 @@ import {
   type NearbyOverdueCall,
 } from '@/app/(dashboard)/dashboard/nearby/actions'
 import { useShiftGate } from '@/components/dashboard/tasks/use-shift-gate'
+import { OfflineStatusBadge } from '@/components/dashboard/tasks/offline-status-badge'
+import { useOfflineSync } from '@/lib/offline/use-offline-sync'
+import { persistTaskResult, isOnline } from '@/lib/offline/sync'
+import { cacheCallSnapshot } from '@/lib/offline/snapshots'
 import { isNonRecurringCall } from '@/lib/follow-up'
 import { formatDateUK, cn } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
@@ -238,6 +242,8 @@ export function TaskExecution({
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [showSubmitDialog, setShowSubmitDialog] = useState(false)
+  // Offline spike: set when an engineer tries to submit with no connection.
+  const [offlineSubmitBlocked, setOfflineSubmitBlocked] = useState(false)
   // After completion, nearby overdue/due-soon calls the engineer can take on.
   const [nearbyCalls, setNearbyCalls] = useState<NearbyOverdueCall[]>([])
   const [showNearbyPrompt, setShowNearbyPrompt] = useState(false)
@@ -267,6 +273,25 @@ export function TaskExecution({
   const { ensureOnShift, checking: checkingShift, shiftGateDialog } = useShiftGate()
   const router = useRouter()
   const supabase = createClient()
+
+  // Offline spike: connectivity + queue state, and the server `updated_at` we
+  // last saw for the backing row (the conflict base for queued writes).
+  const offline = useOfflineSync()
+  const baseUpdatedAtRef = useRef<string | null>(existingResult?.updated_at ?? null)
+
+  // Cache the checklist-relevant props so the engineer surface can repopulate
+  // this call offline. Full offline rendering of the route needs the Phase 1
+  // shell; this stores the data that layer will read from.
+  useEffect(() => {
+    void cacheCallSnapshot(task.id, {
+      task,
+      checklistTemplate,
+      existingResult,
+      panels,
+      panelChecklists,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task.id])
 
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
@@ -404,26 +429,19 @@ export function TaskExecution({
       updated_at: new Date().toISOString(),
     }
 
-    if (resultIdRef.current) {
-      await supabase
-        .from('task_results')
-        .update(resultData)
-        .eq('id', resultIdRef.current)
-    } else {
-      const { data } = await supabase
-        .from('task_results')
-        .insert(resultData)
-        .select('id')
-        .single()
-      const newId = (data as { id: string } | null)?.id ?? null
-      if (newId) {
-        resultIdRef.current = newId
-        setResultId(newId)
-      }
-    }
+    const { id, queued } = await persistTaskResult(supabase, {
+      rowId: resultIdRef.current,
+      data: resultData,
+      baseUpdatedAt: baseUpdatedAtRef.current,
+    })
+    resultIdRef.current = id
+    setResultId(id)
+    if (!queued) baseUpdatedAtRef.current = resultData.updated_at
+    await offline.refresh()
 
     setSaving(false)
-    router.refresh()
+    // Offline: the draft is safe on-device; skip the RSC refresh (it would fail).
+    if (!queued) router.refresh()
   }
 
   const handleSubmit = async () => {
@@ -441,24 +459,35 @@ export function TaskExecution({
       updated_at: new Date().toISOString(),
     }
 
-    // Save/update task result
-    if (resultIdRef.current) {
-      await supabase
-        .from('task_results')
-        .update(resultData)
-        .eq('id', resultIdRef.current)
-    } else {
-      const { data } = await supabase
-        .from('task_results')
-        .insert(resultData)
-        .select('id')
-        .single()
-      const newId = (data as { id: string } | null)?.id ?? null
-      if (newId) {
-        resultIdRef.current = newId
-        setResultId(newId)
-      }
+    // Offline spike boundary: final submission runs a multi-step completion
+    // cascade (mark task complete, roll the recurring visit, email the report).
+    // We deliberately do NOT run that offline. Instead we queue the checklist so
+    // no work is lost, then ask the engineer to submit once back online. (Making
+    // the full cascade offline-safe is Phase 2/3 work.)
+    if (!isOnline()) {
+      const { id } = await persistTaskResult(supabase, {
+        rowId: resultIdRef.current,
+        data: resultData,
+        baseUpdatedAt: baseUpdatedAtRef.current,
+      })
+      resultIdRef.current = id
+      setResultId(id)
+      await offline.refresh()
+      setSubmitting(false)
+      setShowSubmitDialog(false)
+      setOfflineSubmitBlocked(true)
+      return
     }
+
+    // Save/update task result
+    const persisted = await persistTaskResult(supabase, {
+      rowId: resultIdRef.current,
+      data: resultData,
+      baseUpdatedAt: baseUpdatedAtRef.current,
+    })
+    resultIdRef.current = persisted.id
+    setResultId(persisted.id)
+    baseUpdatedAtRef.current = resultData.updated_at
 
     // Mark task as completed
     const completedAt = new Date()
@@ -596,20 +625,15 @@ export function TaskExecution({
       photos: existingResult?.photos || [],
       updated_at: new Date().toISOString(),
     }
-    if (resultIdRef.current) {
-      await supabase.from('task_results').update(resultData).eq('id', resultIdRef.current)
-    } else {
-      const { data } = await supabase
-        .from('task_results')
-        .insert(resultData)
-        .select('id')
-        .single()
-      const newId = (data as { id: string } | null)?.id ?? null
-      if (newId) {
-        resultIdRef.current = newId
-        setResultId(newId)
-      }
-    }
+    const { id, queued } = await persistTaskResult(supabase, {
+      rowId: resultIdRef.current,
+      data: resultData,
+      baseUpdatedAt: baseUpdatedAtRef.current,
+    })
+    resultIdRef.current = id
+    setResultId(id)
+    if (!queued) baseUpdatedAtRef.current = resultData.updated_at
+    void offline.refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checklistResults, engineerNotes, testingStartTime, testingEndTime, existingResult, task.id, supabase])
 
@@ -1203,6 +1227,11 @@ export function TaskExecution({
                     )}
                   </p>
                 )}
+                {canEdit && (
+                  <div className="mt-1.5">
+                    <OfflineStatusBadge state={offline} />
+                  </div>
+                )}
               </div>
               {canEdit && (
                 <ReportNotesAssist
@@ -1247,6 +1276,14 @@ export function TaskExecution({
       {/* Action Buttons */}
       {status === 'in_progress' && canEdit && (
         <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-50 flex flex-col gap-2 border-t bg-background px-4 py-3 lg:relative lg:inset-x-auto lg:bottom-auto lg:z-auto lg:border-0 lg:p-0">
+          {(offlineSubmitBlocked || !offline.online) && (
+            <p className="flex items-center gap-1.5 rounded-md bg-amber-100 px-3 py-2 text-xs font-medium text-amber-900">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              {offlineSubmitBlocked
+                ? "You're offline — your checklist is saved on this device and will submit once you're back online."
+                : "You're offline — you can keep working; submitting needs a connection."}
+            </p>
+          )}
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleSave} disabled={saving} className="h-12 flex-1">
               {saving ? (

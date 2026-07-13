@@ -743,9 +743,12 @@ export async function issueInvoice(invoiceId: string): Promise<{ error: string |
 
   const { data: inv } = await supabase
     .from('invoices')
-    .select('payment_terms_days, total_pence')
+    .select('payment_terms_days, total_pence, on_hold')
     .eq('id', invoiceId)
     .single()
+  if ((inv as { on_hold: boolean } | null)?.on_hold) {
+    return { error: 'This invoice is on hold. Release it before issuing.' }
+  }
   const terms = (inv as { payment_terms_days: number } | null)?.payment_terms_days ?? 30
 
   const issue = new Date()
@@ -776,9 +779,12 @@ export async function markInvoicePaid(invoiceId: string): Promise<{ error: strin
 
   const { data } = await supabase
     .from('invoices')
-    .select('status')
+    .select('status, document_type')
     .eq('id', invoiceId)
     .single()
+  if ((data as { document_type: string } | null)?.document_type === 'credit_note') {
+    return { error: 'Credit notes cannot be marked paid' }
+  }
   if ((data as { status: string } | null)?.status !== 'issued') {
     return { error: 'Only issued invoices can be marked paid' }
   }

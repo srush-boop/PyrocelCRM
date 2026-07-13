@@ -1,4 +1,13 @@
-import type { InvoiceStatus } from '@/lib/types/database'
+import type { BillingFrequency, InvoiceStatus } from '@/lib/types/database'
+
+export const BILLING_FREQUENCY_LABELS: Record<BillingFrequency, string> = {
+  weekly: 'Weekly',
+  monthly: 'Monthly',
+  bi_monthly: 'Every 2 months',
+  four_monthly: 'Every 4 months',
+  annual: 'Annual',
+  on_demand: 'On demand',
+}
 
 // UK financial year starts 1 April. Change here if the business FY differs.
 export const FINANCIAL_YEAR_START_MONTH = 4 // April (1-indexed)
@@ -23,6 +32,13 @@ export function financialYearLabel(fy: number): string {
 /** Format a reserved sequence into a full invoice number, e.g. INV-2026-0001. */
 export function formatInvoiceNumber(fy: number, seq: number): string {
   return `${INVOICE_NUMBER_PREFIX}-${fy}-${String(seq).padStart(4, '0')}`
+}
+
+export const CREDIT_NOTE_NUMBER_PREFIX = 'CRN'
+
+/** Format a reserved sequence into a full credit-note number, e.g. CRN-2026-0001. */
+export function formatCreditNoteNumber(fy: number, seq: number): string {
+  return `${CREDIT_NOTE_NUMBER_PREFIX}-${fy}-${String(seq).padStart(4, '0')}`
 }
 
 /** Format integer pence as GBP, e.g. 123456 -> "£1,234.56". */

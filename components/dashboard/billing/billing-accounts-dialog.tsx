@@ -52,6 +52,7 @@ const EMPTY_FORM: BillingAccountInput = {
   payment_terms_days: 30,
   default_tax_code: 'T1',
   default_nominal_code: '4000',
+  billing_frequency: 'on_demand',
   rate_card_id: null,
   notes: '',
 }
@@ -129,6 +130,7 @@ export function BillingAccountsDialog({ client, open, onOpenChange }: BillingAcc
       payment_terms_days: account.payment_terms_days,
       default_tax_code: account.default_tax_code,
       default_nominal_code: account.default_nominal_code,
+      billing_frequency: account.billing_frequency ?? 'on_demand',
       rate_card_id: account.rate_card_id ?? null,
       notes: account.notes ?? '',
     })
@@ -465,6 +467,28 @@ export function BillingAccountsDialog({ client, open, onOpenChange }: BillingAcc
               </Select>
               <p className="text-xs text-muted-foreground">
                 Used to auto-price call-out and labour lines on invoices for this account.
+              </p>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="ba-frequency">Billing frequency</Label>
+              <Select
+                value={form.billing_frequency ?? 'on_demand'}
+                onValueChange={(v) => set('billing_frequency', v as BillingFrequency)}
+              >
+                <SelectTrigger id="ba-frequency">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(BILLING_FREQUENCY_LABELS) as BillingFrequency[]).map((f) => (
+                    <SelectItem key={f} value={f}>
+                      {BILLING_FREQUENCY_LABELS[f]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                A cadence hint shown in the ready-to-invoice queue. It never blocks invoicing.
               </p>
             </div>
 

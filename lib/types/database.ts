@@ -133,6 +133,8 @@ export interface BillingAccount {
   payment_terms_days: number
   default_tax_code: string
   default_nominal_code: string
+  /** Inform-only cadence hint shown in the ready-to-invoice queue. */
+  billing_frequency: BillingFrequency
   /** The client's primary account; at most one per client. */
   is_default: boolean
   /** Optional rate-card override; null inherits the company default card. */
@@ -147,6 +149,16 @@ export interface BillingAccount {
 export type InvoiceStatus = 'draft' | 'issued' | 'paid' | 'void'
 /** Segregates ad-hoc/call invoices from recurring-charge invoices. */
 export type InvoiceOrigin = 'adhoc' | 'recurring'
+/** An invoice document or a credit note (own CRN number series). */
+export type InvoiceDocumentType = 'invoice' | 'credit_note'
+/** Inform-only billing cadence hint on a billing account. */
+export type BillingFrequency =
+  | 'weekly'
+  | 'monthly'
+  | 'bi_monthly'
+  | 'four_monthly'
+  | 'annual'
+  | 'on_demand'
 export type RecurringFrequency =
   | 'weekly'
   | 'monthly'
@@ -178,6 +190,15 @@ export interface Invoice {
   status: InvoiceStatus
   /** Ad-hoc/call invoice vs recurring-charge invoice (hard-segregated). */
   origin: InvoiceOrigin
+  /** Invoice vs credit note. Credit notes use their own CRN number series. */
+  document_type: InvoiceDocumentType
+  /** For credit notes: the invoice this credits. */
+  credited_invoice_id: string | null
+  /** Hold parks a draft before issuing; issuing is blocked while held. */
+  on_hold: boolean
+  hold_reason: string | null
+  held_at: string | null
+  held_by: string | null
   /** Customer PO number. Set only when common across all covered calls / from the job. */
   po_number: string | null
   /** Optional site the work relates to, plus a text snapshot of its address. */

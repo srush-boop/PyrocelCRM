@@ -35,7 +35,18 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { toast } from 'sonner'
-import { Loader2, Plus, Trash2, Send, CheckCircle2, Ban } from 'lucide-react'
+import {
+  Loader2,
+  Plus,
+  Trash2,
+  Send,
+  CheckCircle2,
+  Ban,
+  PauseCircle,
+  PlayCircle,
+  ReceiptText,
+} from 'lucide-react'
+import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import type { Invoice, InvoiceLineItem, InvoiceLineKind, InvoiceStatus } from '@/lib/types/database'
 import { formatPence, financialYearLabel, INVOICE_STATUS_LABELS } from '@/lib/billing/invoices'
@@ -48,6 +59,7 @@ import {
   updateInvoiceMeta,
   voidInvoice,
 } from '@/lib/actions/invoices'
+import { raiseCreditNote, holdInvoice, releaseInvoice } from '@/lib/actions/invoice-extras'
 
 type InvoiceWithNames = Invoice & {
   billing_account: { name: string } | null
@@ -94,9 +106,13 @@ export function InvoiceDetail({
 }) {
   const router = useRouter()
   const isDraft = invoice.status === 'draft'
+  const isCreditNote = invoice.document_type === 'credit_note'
   const [busy, setBusy] = useState(false)
 
-  const run = async (fn: () => Promise<{ error: string | null }>, success: string) => {
+  const run = async (
+    fn: () => Promise<{ error?: string | null }>,
+    success: string,
+  ) => {
     setBusy(true)
     const res = await fn()
     setBusy(false)
@@ -116,17 +132,42 @@ export function InvoiceDetail({
           <CardHeader className="pb-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
+                {isCreditNote && (
+                  <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                    Credit note
+                  </p>
+                )}
                 <CardTitle className="text-2xl">{invoice.invoice_number}</CardTitle>
                 <p className="mt-1 text-sm text-muted-foreground">
                   FY {financialYearLabel(invoice.financial_year)}
                 </p>
+                {isCreditNote && invoice.credited_invoice_id && (
+                  <p className="mt-1 text-sm">
+                    <Link
+                      href={`/dashboard/invoices/${invoice.credited_invoice_id}`}
+                      className="text-primary underline-offset-2 hover:underline"
+                    >
+                      View original invoice
+                    </Link>
+                  </p>
+                )}
               </div>
-              <Badge
-                variant="outline"
-                className={cn('text-sm font-medium', statusClasses(invoice.status))}
-              >
-                {INVOICE_STATUS_LABELS[invoice.status]}
-              </Badge>
+              <div className="flex flex-col items-end gap-2">
+                <Badge
+                  variant="outline"
+                  className={cn('text-sm font-medium', statusClasses(invoice.status))}
+                >
+                  {INVOICE_STATUS_LABELS[invoice.status]}
+                </Badge>
+                {invoice.on_hold && (
+                  <Badge
+                    variant="outline"
+                    className="border-amber-200 bg-amber-100 text-amber-800"
+                  >
+                    On hold
+                  </Badge>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -304,18 +345,41 @@ export function InvoiceDetail({
             {isDraft && (
               <ConfirmButton
                 trigger={
-                  <Button className="w-full" disabled={busy || lines.length === 0}>
+                  <Button className="w-full" disabled={busy || lines.length === 0 || invoice.on_hold}>
                     <Send className="mr-2 h-4 w-4" />
-                    Issue invoice
+                    {isCreditNote ? 'Issue credit note' : 'Issue invoice'}
                   </Button>
                 }
-                title="Issue this invoice?"
-                description="Issuing sets the invoice and due dates and locks the line items. This cannot be undone (you can void it instead)."
+                title={isCreditNote ? 'Issue this credit note?' : 'Issue this invoice?'}
+                description="Issuing sets the dates and locks the line items. This cannot be undone (you can void it instead)."
                 actionLabel="Issue"
-                onConfirm={() => run(() => issueInvoice(invoice.id), 'Invoice issued')}
+                onConfirm={() => run(() => issueInvoice(invoice.id), 'Issued')}
               />
             )}
-            {invoice.status === 'issued' && (
+            {isDraft && invoice.on_hold && (
+              <p className="text-xs text-amber-700">
+                On hold{invoice.hold_reason ? `: ${invoice.hold_reason}` : ''} — release to issue.
+              </p>
+            )}
+            {/* Hold / release (draft only) */}
+            {isDraft && !invoice.on_hold && (
+              <HoldButton
+                disabled={busy}
+                onConfirm={(reason) => run(() => holdInvoice(invoice.id, reason), 'Invoice held')}
+              />
+            )}
+            {isDraft && invoice.on_hold && (
+              <Button
+                variant="outline"
+                className="w-full"
+                disabled={busy}
+                onClick={() => run(() => releaseInvoice(invoice.id), 'Invoice released')}
+              >
+                <PlayCircle className="mr-2 h-4 w-4" />
+                Release hold
+              </Button>
+            )}
+            {invoice.status === 'issued' && !isCreditNote && (
               <ConfirmButton
                 trigger={
                   <Button className="w-full" disabled={busy}>
@@ -327,6 +391,31 @@ export function InvoiceDetail({
                 description="Record that this invoice has been paid in full."
                 actionLabel="Mark paid"
                 onConfirm={() => run(() => markInvoicePaid(invoice.id), 'Invoice marked paid')}
+              />
+            )}
+            {/* Raise a credit note against an issued/paid invoice. */}
+            {!isCreditNote && (invoice.status === 'issued' || invoice.status === 'paid') && (
+              <ConfirmButton
+                trigger={
+                  <Button variant="outline" className="w-full" disabled={busy}>
+                    <ReceiptText className="mr-2 h-4 w-4" />
+                    Raise credit note
+                  </Button>
+                }
+                title="Raise a credit note?"
+                description="Creates a draft credit note copying this invoice's lines. You can trim it to a partial credit before issuing."
+                actionLabel="Create"
+                onConfirm={async () => {
+                  setBusy(true)
+                  const res = await raiseCreditNote(invoice.id)
+                  setBusy(false)
+                  if (res.error) {
+                    toast.error(res.error)
+                    return
+                  }
+                  toast.success('Credit note created')
+                  if (res.id) router.push(`/dashboard/invoices/${res.id}`)
+                }}
               />
             )}
             {(invoice.status === 'draft' || invoice.status === 'issued') && (
@@ -661,13 +750,51 @@ function ConfirmButton({
   )
 }
 
-function VoidButton({
+function HoldButton({
   disabled,
   onConfirm,
 }: {
   disabled: boolean
   onConfirm: (reason: string | null) => void
 }) {
+  const [reason, setReason] = useState('')
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button variant="outline" className="w-full" disabled={disabled}>
+          <PauseCircle className="mr-2 h-4 w-4" />
+          Put on hold
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Put this draft on hold?</AlertDialogTitle>
+          <AlertDialogDescription>
+            The draft stays editable but cannot be issued until it is released.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="space-y-1">
+          <Label className="text-xs">Reason (optional)</Label>
+          <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} />
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={() => onConfirm(reason.trim() || null)}>
+            Put on hold
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
+function VoidButton({
+  disabled,
+  onConfirm,
+  }: {
+  disabled: boolean
+  onConfirm: (reason: string | null) => void
+  }) {
   const [reason, setReason] = useState('')
   return (
     <AlertDialog>

@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ReceiptText, Plus, ArrowRight } from 'lucide-react'
+import { ReceiptText, Plus, ArrowRight, RefreshCw } from 'lucide-react'
 import type { Invoice, Profile } from '@/lib/types/database'
 import { getReadyToInvoiceGroups } from '@/lib/actions/invoices'
 import { InvoicesTable } from '@/components/dashboard/invoices/invoices-table'
@@ -49,12 +49,20 @@ export default async function InvoicesPage() {
             Raise invoices from reviewed chargeable calls, then track them to paid.
           </p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/invoices/new">
-            <Plus className="mr-2 h-4 w-4" />
-            New invoice
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline">
+            <Link href="/dashboard/invoices/renewals">
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Renewals
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link href="/dashboard/invoices/new">
+              <Plus className="mr-2 h-4 w-4" />
+              New invoice
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {readyCount > 0 && (

@@ -2,7 +2,16 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import type { BillingAccountStatus, Profile } from '@/lib/types/database'
+import type { BillingAccountStatus, BillingFrequency, Profile } from '@/lib/types/database'
+
+const BILLING_FREQUENCIES: BillingFrequency[] = [
+  'weekly',
+  'monthly',
+  'bi_monthly',
+  'four_monthly',
+  'annual',
+  'on_demand',
+]
 
 // Server actions backing Phase 1 of billing: Client Billing Accounts
 // (sub-clients & statuses). Only office/admin may mutate billing data;
@@ -45,6 +54,7 @@ export interface BillingAccountInput {
   payment_terms_days?: number
   default_tax_code?: string
   default_nominal_code?: string
+  billing_frequency?: BillingFrequency
   /** Optional rate-card override; null inherits the company default card. */
   rate_card_id?: string | null
   notes?: string | null
@@ -65,6 +75,10 @@ function sanitiseInput(input: BillingAccountInput) {
         : 30,
     default_tax_code: input.default_tax_code?.trim() || 'T1',
     default_nominal_code: input.default_nominal_code?.trim() || '4000',
+    billing_frequency:
+      input.billing_frequency && BILLING_FREQUENCIES.includes(input.billing_frequency)
+        ? input.billing_frequency
+        : 'on_demand',
     rate_card_id: input.rate_card_id || null,
     notes: input.notes?.trim() || null,
   }

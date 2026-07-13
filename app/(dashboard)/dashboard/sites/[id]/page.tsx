@@ -21,7 +21,7 @@ import {
 import { SiteLogbook } from '@/components/dashboard/sites/site-logbook'
 import { SiteDocuments } from '@/components/dashboard/sites/site-documents'
 import { SiteEngineerInfoTab } from '@/components/dashboard/sites/site-engineer-info-tab'
-import { getOwnerDocuments } from '@/lib/documents/data'
+import { getAllDocumentTags, getOwnerDocuments } from '@/lib/documents/data'
 import { forecastCalls } from '@/lib/forecast'
 import { toDateString } from '@/lib/scheduling'
 import { CreateDocumentButton } from '@/components/documents/create-document-dialog'
@@ -510,6 +510,9 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
   const siteDocuments = await getOwnerDocuments('site', id)
   const canManageDocuments = ['admin', 'office'].includes((profile as Profile).role)
 
+  // Shared document tag vocabulary (for the tag picker + Type filter).
+  const allDocumentTags = await getAllDocumentTags()
+
   // Engineer Info tab: shared engineer file store + communal internal notes.
   const engineerDocuments = await getOwnerDocuments('site_engineer', id)
   const { data: internalNotesData } = await supabase
@@ -887,6 +890,8 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             folders={siteDocuments.folders}
             files={siteDocuments.files}
             canManage={canManageDocuments}
+            allTags={allDocumentTags}
+            usedTags={siteDocuments.usedTags}
           />
         </TabsContent>
 
@@ -898,6 +903,8 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             engineerFiles={engineerDocuments.files}
             currentUserId={user.id}
             canModerateNotes={canModerateNotes}
+            allTags={allDocumentTags}
+            usedTags={engineerDocuments.usedTags}
           />
         </TabsContent>
 

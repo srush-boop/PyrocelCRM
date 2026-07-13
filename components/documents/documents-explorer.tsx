@@ -17,6 +17,7 @@ import type {
   DocumentFile,
   DocumentFolder,
   DocumentOwnerType,
+  DocumentTag,
   Site,
 } from '@/lib/types/database'
 
@@ -36,9 +37,11 @@ interface DocumentsExplorerProps {
         ownerId: string
         folders: DocumentFolder[]
         files: DocumentFile[]
+        usedTags: DocumentTag[]
       }
     | null
   canManage: boolean
+  allTags: DocumentTag[]
   systemTypes: SystemTypeLite[]
   systemReferences: DocumentFile[]
   canManageReferences: boolean
@@ -66,6 +69,7 @@ export function DocumentsExplorer({
   siteServices,
   selected,
   canManage,
+  allTags,
   systemTypes,
   systemReferences,
   canManageReferences,
@@ -145,6 +149,9 @@ export function DocumentsExplorer({
           folders={selected.folders}
           files={selected.files}
           canManage={canManage}
+          allTags={allTags}
+          usedTags={selected.usedTags}
+          revalidatePath="/dashboard/documents"
         />
       </div>
     )

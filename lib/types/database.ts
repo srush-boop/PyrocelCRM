@@ -904,6 +904,15 @@ export interface DocumentFolder {
   created_at: string
 }
 
+// A shared, company-wide tag used to categorise uploaded documents and drive
+// the folder "Type" filter. Vocabulary is managed by office/admin under Settings.
+export interface DocumentTag {
+  id: string
+  name: string
+  created_by: string | null
+  created_at: string
+}
+
 export interface DocumentFile {
   id: string
   owner_type: DocumentOwnerType
@@ -922,6 +931,8 @@ export interface DocumentFile {
   extracted_text?: string | null
   // Set when this document was generated from a mail-merge template (null for uploads).
   template_id?: string | null
+  // Tags applied to this file (uploaded documents require at least one).
+  tags?: DocumentTag[]
 }
 
 export interface TaskAttachment {

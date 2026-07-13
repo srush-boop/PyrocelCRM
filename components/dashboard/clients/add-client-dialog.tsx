@@ -18,23 +18,40 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Loader2 } from 'lucide-react'
 import { PostcodeLookup } from '@/components/dashboard/shared/postcode-lookup'
+import { AddressFinder } from '@/components/dashboard/shared/address-finder'
+import type { PlaceResult } from '@/app/api/places-search/route'
 
 interface AddClientDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
+const EMPTY_FORM = {
+  name: '',
+  contact_name: '',
+  contact_email: '',
+  contact_phone: '',
+  address: '',
+  notes: '',
+  requires_po: false,
+}
+
+const EMPTY_SITE = {
+  name: '',
+  address: '',
+  postcode: '',
+  contact_name: '',
+  contact_phone: '',
+  contact_email: '',
+}
+
 export function AddClientDialog({ open, onOpenChange }: AddClientDialogProps) {
   const [loading, setLoading] = useState(false)
-  const [formData, setFormData] = useState({
-    name: '',
-    contact_name: '',
-    contact_email: '',
-    contact_phone: '',
-    address: '',
-    notes: '',
-    requires_po: false,
-  })
+  const [formData, setFormData] = useState({ ...EMPTY_FORM })
+  // Optional "create a site for this client at the same time" flow.
+  const [createSite, setCreateSite] = useState(false)
+  const [sameAddress, setSameAddress] = useState(true)
+  const [siteData, setSiteData] = useState({ ...EMPTY_SITE })
   const router = useRouter()
   const supabase = createClient()
 
@@ -52,43 +69,105 @@ export function AddClientDialog({ open, onOpenChange }: AddClientDialogProps) {
     })
   }
 
+  // Fill company name, address and contact details from a Google Places result.
+  const applyPlace = (p: PlaceResult) => {
+    setFormData((prev) => ({
+      ...prev,
+      name: prev.name || p.name,
+      address: p.address || prev.address,
+      contact_phone: p.phone || prev.contact_phone,
+    }))
+  }
+
+  // A separate finder for the site (used when it differs from the client).
+  const applySitePlace = (p: PlaceResult) => {
+    setSiteData((prev) => ({
+      ...prev,
+      name: prev.name || p.name,
+      address: p.address || prev.address,
+      postcode: p.postcode || prev.postcode,
+      contact_phone: p.phone || prev.contact_phone,
+    }))
+  }
+
+  const resetAll = () => {
+    setFormData({ ...EMPTY_FORM })
+    setSiteData({ ...EMPTY_SITE })
+    setCreateSite(false)
+    setSameAddress(true)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
-    const { error } = await supabase.from('clients').insert({
-      name: formData.name,
-      contact_name: formData.contact_name || null,
-      contact_email: formData.contact_email || null,
-      contact_phone: formData.contact_phone || null,
-      address: formData.address || null,
-      notes: formData.notes || null,
-      requires_po: formData.requires_po,
-    })
+    const { data: insertedClient, error } = await supabase
+      .from('clients')
+      .insert({
+        name: formData.name,
+        contact_name: formData.contact_name || null,
+        contact_email: formData.contact_email || null,
+        contact_phone: formData.contact_phone || null,
+        address: formData.address || null,
+        notes: formData.notes || null,
+        requires_po: formData.requires_po,
+      })
+      .select('id')
+      .single()
+
+    if (error || !insertedClient) {
+      setLoading(false)
+      console.error('[v0] Error creating client:', error)
+      alert(`Error creating client: ${error?.message ?? 'unknown error'}`)
+      return
+    }
+
+    // Optionally create the client's first site in the same step.
+    let newSiteId: string | null = null
+    if (createSite) {
+      const siteName = (sameAddress ? formData.name : siteData.name).trim()
+      const siteAddress = (sameAddress ? formData.address : siteData.address).trim()
+      const { data: insertedSite, error: siteError } = await supabase
+        .from('sites')
+        .insert({
+          client_id: insertedClient.id,
+          name: siteName || formData.name,
+          address: siteAddress || formData.address,
+          postcode: sameAddress ? '' : siteData.postcode || '',
+          contact_name: sameAddress ? formData.contact_name || null : siteData.contact_name || null,
+          contact_phone: sameAddress
+            ? formData.contact_phone || null
+            : siteData.contact_phone || null,
+          contact_email: sameAddress
+            ? formData.contact_email || null
+            : siteData.contact_email || null,
+          status: 'live',
+        })
+        .select('id')
+        .single()
+      if (siteError) {
+        // Client was created; surface the site issue but don't lose the client.
+        console.log('[v0] Error creating site for new client:', siteError)
+        alert(`Client created, but the site could not be added: ${siteError.message}`)
+      } else {
+        newSiteId = insertedSite?.id ?? null
+      }
+    }
 
     setLoading(false)
-
-    if (error) {
-      console.error('[v0] Error creating client:', error)
-      alert(`Error creating client: ${error.message}`)
+    onOpenChange(false)
+    resetAll()
+    // If a site was created, jump to its Systems tab; otherwise just refresh.
+    if (newSiteId) {
+      router.push(`/dashboard/sites/${newSiteId}?tab=systems`)
     } else {
-      onOpenChange(false)
-      setFormData({
-        name: '',
-        contact_name: '',
-        contact_email: '',
-        contact_phone: '',
-        address: '',
-        notes: '',
-        requires_po: false,
-      })
       router.refresh()
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add Client</DialogTitle>
           <DialogDescription>
@@ -97,6 +176,11 @@ export function AddClientDialog({ open, onOpenChange }: AddClientDialogProps) {
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
+            <AddressFinder
+              label="Find business or address"
+              hint="Search by company name or address to auto-fill the details below."
+              onSelect={applyPlace}
+            />
             <div className="grid gap-2">
               <Label htmlFor="name">Company Name *</Label>
               <Input
@@ -123,7 +207,7 @@ export function AddClientDialog({ open, onOpenChange }: AddClientDialogProps) {
                   id="contact_phone"
                   value={formData.contact_phone}
                   onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
-                  placeholder="01onal 123456"
+                  placeholder="0191 123456"
                 />
               </div>
             </div>
@@ -171,6 +255,81 @@ export function AddClientDialog({ open, onOpenChange }: AddClientDialogProps) {
                 checked={formData.requires_po}
                 onCheckedChange={(v) => setFormData({ ...formData, requires_po: v })}
               />
+            </div>
+
+            {/* Optionally create the client's first site in the same step. */}
+            <div className="rounded-md border p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <Label htmlFor="create_site" className="text-sm font-medium">
+                    Also create a site for this client
+                  </Label>
+                  <p className="mt-0.5 text-xs text-muted-foreground text-pretty">
+                    Sets up the client&apos;s first site now. You&apos;ll be taken to it afterwards
+                    to add systems and services.
+                  </p>
+                </div>
+                <Switch id="create_site" checked={createSite} onCheckedChange={setCreateSite} />
+              </div>
+
+              {createSite && (
+                <div className="mt-3 grid gap-3 border-t pt-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <Label htmlFor="same_address" className="text-sm">
+                      Site address is the same as the client address
+                    </Label>
+                    <Switch
+                      id="same_address"
+                      checked={sameAddress}
+                      onCheckedChange={setSameAddress}
+                    />
+                  </div>
+
+                  {sameAddress ? (
+                    <p className="text-xs text-muted-foreground">
+                      The site will be named after the client and use the client address and
+                      contact details above.
+                    </p>
+                  ) : (
+                    <div className="grid gap-3">
+                      <AddressFinder
+                        label="Find site business or address"
+                        hint="Search for the site if it differs from the client."
+                        onSelect={applySitePlace}
+                      />
+                      <div className="grid gap-2">
+                        <Label htmlFor="site_name">Site Name *</Label>
+                        <Input
+                          id="site_name"
+                          value={siteData.name}
+                          onChange={(e) => setSiteData({ ...siteData, name: e.target.value })}
+                          placeholder="e.g., Head Office"
+                          required={createSite && !sameAddress}
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="site_address">Site Address *</Label>
+                        <Textarea
+                          id="site_address"
+                          value={siteData.address}
+                          onChange={(e) => setSiteData({ ...siteData, address: e.target.value })}
+                          placeholder="Full site address"
+                          required={createSite && !sameAddress}
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="site_postcode">Site Postcode</Label>
+                        <Input
+                          id="site_postcode"
+                          value={siteData.postcode}
+                          onChange={(e) => setSiteData({ ...siteData, postcode: e.target.value })}
+                          placeholder="e.g., AB12 3CD"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>

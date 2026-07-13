@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
@@ -36,58 +35,33 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Loader2, Plus, Pencil, Trash2 } from 'lucide-react'
 import {
-  createChargeTemplate,
-  updateChargeTemplate,
-  deleteChargeTemplate,
-} from '@/lib/actions/charge-templates'
-import type { ChargeTemplate, NominalCode } from '@/lib/types/database'
-import { NominalCodeSelect } from '@/components/dashboard/billing/nominal-code-select'
+  createNominalCode,
+  updateNominalCode,
+  deleteNominalCode,
+} from '@/lib/actions/nominal-codes'
+import type { NominalCode } from '@/lib/types/database'
 
-interface ChargeTemplatesSettingsProps {
-  chargeTemplates: ChargeTemplate[]
+interface NominalCodesSettingsProps {
   nominalCodes: NominalCode[]
 }
 
 interface FormState {
   id?: string
+  code: string
   name: string
-  description: string
-  pricePounds: string
-  taxCode: string
-  nominalCodeId: string | null
   active: boolean
 }
 
 function emptyForm(): FormState {
-  return {
-    name: '',
-    description: '',
-    pricePounds: '',
-    taxCode: '',
-    nominalCodeId: null,
-    active: true,
-  }
+  return { code: '', name: '', active: true }
 }
 
-const poundsFromPence = (pence: number) => (pence / 100).toFixed(2)
-const penceFromPounds = (pounds: string) =>
-  Math.max(0, Math.round((Number.parseFloat(pounds) || 0) * 100))
-const formatPence = (pence: number) =>
-  new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(pence / 100)
-
-export function ChargeTemplatesSettings({
-  chargeTemplates,
-  nominalCodes,
-}: ChargeTemplatesSettingsProps) {
+export function NominalCodesSettings({ nominalCodes }: NominalCodesSettingsProps) {
   const router = useRouter()
-  const codeLabel = (id: string | null) => {
-    const c = id ? nominalCodes.find((n) => n.id === id) : null
-    return c ? `${c.code} — ${c.name}` : null
-  }
   const [isPending, startTransition] = useTransition()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [form, setForm] = useState<FormState>(emptyForm())
-  const [deleteTarget, setDeleteTarget] = useState<ChargeTemplate | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<NominalCode | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   function openCreate() {
@@ -96,37 +70,26 @@ export function ChargeTemplatesSettings({
     setDialogOpen(true)
   }
 
-  function openEdit(t: ChargeTemplate) {
-    setForm({
-      id: t.id,
-      name: t.name,
-      description: t.description ?? '',
-      pricePounds: poundsFromPence(t.default_unit_price_pence),
-      taxCode: t.default_tax_code ?? '',
-      nominalCodeId: t.nominal_code_id ?? null,
-      active: t.active,
-    })
+  function openEdit(c: NominalCode) {
+    setForm({ id: c.id, code: c.code, name: c.name, active: c.active })
     setMessage(null)
     setDialogOpen(true)
   }
 
   function handleSave() {
+    if (!form.code.trim()) {
+      setMessage({ type: 'error', text: 'A code is required.' })
+      return
+    }
     if (!form.name.trim()) {
       setMessage({ type: 'error', text: 'A name is required.' })
       return
     }
-    const payload = {
-      name: form.name,
-      description: form.description,
-      defaultUnitPricePence: penceFromPounds(form.pricePounds),
-      defaultTaxCode: form.taxCode,
-      nominalCodeId: form.nominalCodeId,
-      active: form.active,
-    }
+    const payload = { code: form.code, name: form.name, active: form.active }
     startTransition(async () => {
       const res = form.id
-        ? await updateChargeTemplate(form.id, payload)
-        : await createChargeTemplate(payload)
+        ? await updateNominalCode(form.id, payload)
+        : await createNominalCode(payload)
       if (res.error) {
         setMessage({ type: 'error', text: res.error })
         return
@@ -140,7 +103,7 @@ export function ChargeTemplatesSettings({
     if (!deleteTarget) return
     const target = deleteTarget
     startTransition(async () => {
-      const res = await deleteChargeTemplate(target.id)
+      const res = await deleteNominalCode(target.id)
       setDeleteTarget(null)
       if (res.error) {
         setMessage({ type: 'error', text: res.error })
@@ -154,15 +117,16 @@ export function ChargeTemplatesSettings({
     <Card>
       <CardHeader className="flex flex-row items-start justify-between gap-4">
         <div>
-          <CardTitle>Charges</CardTitle>
+          <CardTitle>Nominal codes</CardTitle>
           <CardDescription>
-            A catalog of preconfigured charges. Pick one when adding a recurring charge to a site
-            service to prefill its description, price and codes — all still editable per site.
+            Your accounting (Sage) nominal codes. Map them to departments, service types, charges
+            and products so invoice lines get the right code automatically. These are internal only
+            and never shown on client invoices.
           </CardDescription>
         </div>
         <Button onClick={openCreate} className="gap-2">
           <Plus className="h-4 w-4" />
-          Add charge
+          Add code
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -176,56 +140,45 @@ export function ChargeTemplatesSettings({
           </div>
         )}
 
-        {chargeTemplates.length === 0 ? (
+        {nominalCodes.length === 0 ? (
           <p className="rounded-md border py-8 text-center text-sm text-muted-foreground">
-            No charges yet. Add one to build your reusable catalog.
+            No nominal codes yet. Add the codes from your accounts package to get started.
           </p>
         ) : (
           <div className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-32">Code</TableHead>
                   <TableHead>Name</TableHead>
-                  <TableHead>Default price</TableHead>
-                  <TableHead>Tax</TableHead>
-                  <TableHead>Nominal</TableHead>
                   <TableHead className="w-24" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {chargeTemplates.map((t) => (
-                  <TableRow key={t.id}>
+                {nominalCodes.map((c) => (
+                  <TableRow key={c.id}>
+                    <TableCell className="font-mono font-medium">{c.code}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <span className="font-medium">{t.name}</span>
-                        {!t.active && <Badge variant="secondary">Inactive</Badge>}
+                        <span>{c.name}</span>
+                        {!c.active && <Badge variant="secondary">Inactive</Badge>}
                       </div>
-                      {t.description && (
-                        <p className="text-xs text-muted-foreground">{t.description}</p>
-                      )}
-                    </TableCell>
-                    <TableCell>{formatPence(t.default_unit_price_pence)}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {t.default_tax_code || '—'}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {codeLabel(t.nominal_code_id) || t.default_nominal_code || '—'}
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1">
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => openEdit(t)}
-                          aria-label={`Edit ${t.name}`}
+                          onClick={() => openEdit(c)}
+                          aria-label={`Edit ${c.code}`}
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => setDeleteTarget(t)}
-                          aria-label={`Delete ${t.name}`}
+                          onClick={() => setDeleteTarget(c)}
+                          aria-label={`Delete ${c.code}`}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
@@ -242,61 +195,30 @@ export function ChargeTemplatesSettings({
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{form.id ? 'Edit charge' : 'Add charge'}</DialogTitle>
+            <DialogTitle>{form.id ? 'Edit nominal code' : 'Add nominal code'}</DialogTitle>
             <DialogDescription>
-              These defaults prefill a recurring charge when this catalog item is picked. They can
-              be overridden per site service.
+              Enter the code exactly as it appears in your accounts package (e.g. Sage 50).
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid gap-1.5">
-              <Label htmlFor="ct-name">Name</Label>
-              <Input
-                id="ct-name"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="e.g. Fire alarm maintenance contract"
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="ct-desc">Description</Label>
-              <Textarea
-                id="ct-desc"
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-                rows={2}
-                placeholder="Optional line description used on the invoice."
-              />
-            </div>
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="grid gap-1.5">
-                <Label htmlFor="ct-price">Default price (£)</Label>
+                <Label htmlFor="nc-code">Code</Label>
                 <Input
-                  id="ct-price"
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  inputMode="decimal"
-                  value={form.pricePounds}
-                  onChange={(e) => setForm({ ...form, pricePounds: e.target.value })}
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="ct-tax">Tax code</Label>
-                <Input
-                  id="ct-tax"
-                  value={form.taxCode}
-                  onChange={(e) => setForm({ ...form, taxCode: e.target.value })}
-                  placeholder="e.g. T1"
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="ct-nominal">Nominal code</Label>
-                <Input
-                  id="ct-nominal"
-                  value={form.nominalCode}
-                  onChange={(e) => setForm({ ...form, nominalCode: e.target.value })}
+                  id="nc-code"
+                  value={form.code}
+                  onChange={(e) => setForm({ ...form, code: e.target.value })}
                   placeholder="e.g. 4000"
+                  className="font-mono"
+                />
+              </div>
+              <div className="grid gap-1.5 sm:col-span-2">
+                <Label htmlFor="nc-name">Name</Label>
+                <Input
+                  id="nc-name"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="e.g. Fire alarm maintenance income"
                 />
               </div>
             </div>
@@ -307,7 +229,7 @@ export function ChargeTemplatesSettings({
                 onChange={(e) => setForm({ ...form, active: e.target.checked })}
                 className="h-4 w-4 rounded border-input"
               />
-              Active (available to pick)
+              Active (available to map and pick)
             </label>
           </div>
           <DialogFooter>
@@ -316,7 +238,7 @@ export function ChargeTemplatesSettings({
             </Button>
             <Button onClick={handleSave} disabled={isPending}>
               {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {form.id ? 'Save changes' : 'Create charge'}
+              {form.id ? 'Save changes' : 'Create code'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -325,10 +247,11 @@ export function ChargeTemplatesSettings({
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete {deleteTarget?.name}?</AlertDialogTitle>
+            <AlertDialogTitle>Delete {deleteTarget?.code}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes the catalog item. Recurring charges already created from it are not
-              affected. This cannot be undone.
+              Any departments, service types, charges or products mapped to this code will have
+              their mapping cleared. Invoices already issued keep their recorded code. This cannot
+              be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -44,6 +44,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { describeTolerance } from '@/lib/kpi'
+import { formatPence } from '@/lib/billing/invoices'
 import { buildSeedTaskRows, fetchVisitsByServiceType } from '@/lib/scheduling'
 import type { ServiceType, SiteService, Profile, Task, Route, Area, Subcontractor, WorkerType, ToleranceUnit } from '@/lib/types/database'
 import {
@@ -76,6 +77,9 @@ interface SiteServicesManagerProps {
   // Cascade default: a service with no explicit sub-contractor inherits its
   // system's default.
   systemDefaultsById?: Record<string, string | null>
+  // Annualised recurring revenue (pence) per site_service id. Used to show the
+  // true margin against the sub-contractor annual cost in the edit dialog.
+  annualValueByServiceId?: Record<string, number>
 }
 
 export function SiteServicesManager({
@@ -91,6 +95,7 @@ export function SiteServicesManager({
   tasks = [],
   siteStatus = 'live',
   systemDefaultsById = {},
+  annualValueByServiceId = {},
 }: SiteServicesManagerProps) {
   const [selectedServiceTypes, setSelectedServiceTypes] = useState<string[]>([])
   const [addServicesOpen, setAddServicesOpen] = useState(false)
@@ -114,6 +119,8 @@ export function SiteServicesManager({
   const [editAreaId, setEditAreaId] = useState<string>(NONE_VALUE)
   const [editEngineerId, setEditEngineerId] = useState<string>(NONE_VALUE)
   const [editSubcontractorId, setEditSubcontractorId] = useState<string>(NONE_VALUE)
+  // Fixed annual sub-contractor cost, entered in pounds (empty = not set).
+  const [editSubcontractorCost, setEditSubcontractorCost] = useState<string>('')
   const [editNextServiceDate, setEditNextServiceDate] = useState<Date | undefined>(undefined)
   const [editReportingEmails, setEditReportingEmails] = useState<string[]>([])
   const [editDefectsToEmail, setEditDefectsToEmail] = useState('')
@@ -252,6 +259,11 @@ export function SiteServicesManager({
     setEditAreaId(ss.area_id || NONE_VALUE)
     setEditEngineerId(ss.assigned_engineer_id || NONE_VALUE)
     setEditSubcontractorId(ss.subcontractor_id || NONE_VALUE)
+    setEditSubcontractorCost(
+      ss.subcontractor_annual_cost_pence != null
+        ? (ss.subcontractor_annual_cost_pence / 100).toFixed(2)
+        : '',
+    )
     // Derive the current assignment method from whichever vector is set.
     let method: AssignmentMethod
     if (workerType === 'subcontractor') method = 'subcontractor'
@@ -347,6 +359,12 @@ export function SiteServicesManager({
     const engineerId = editMethod === 'direct' && editEngineerId !== NONE_VALUE ? editEngineerId : null
     const subcontractorId =
       editMethod === 'subcontractor' && editSubcontractorId !== NONE_VALUE ? editSubcontractorId : null
+    // Only persist a sub-contractor annual cost for sub-contracted services; a
+    // blank/invalid value clears it. Stored in pence.
+    const subcontractorAnnualCostPence =
+      editWorkerType === 'subcontractor' && editSubcontractorCost.trim() !== ''
+        ? Math.max(0, Math.round(parseFloat(editSubcontractorCost) * 100))
+        : null
 
     await supabase
       .from('site_services')
@@ -365,6 +383,7 @@ export function SiteServicesManager({
         area_id: areaId,
         assigned_engineer_id: engineerId,
         subcontractor_id: subcontractorId,
+        subcontractor_annual_cost_pence: subcontractorAnnualCostPence,
         next_service_date: editNextServiceDate
           ? format(editNextServiceDate, 'yyyy-MM-dd')
           : null,
@@ -1283,6 +1302,64 @@ export function SiteServicesManager({
                     Sub-contracted work is tracked for completion but is not assigned to an
                     internal engineer.
                   </p>
+
+                  <div className="grid gap-2 pt-1">
+                    <Label htmlFor="sub-annual-cost">Sub-contractor price (£/year)</Label>
+                    <Input
+                      id="sub-annual-cost"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      placeholder="e.g. 480.00"
+                      value={editSubcontractorCost}
+                      onChange={(e) => setEditSubcontractorCost(e.target.value)}
+                    />
+                    {(() => {
+                      // True margin = annualised recurring revenue for this
+                      // service minus the fixed annual sub-contractor cost.
+                      const revenuePence = editingId ? annualValueByServiceId[editingId] ?? 0 : 0
+                      const costPence =
+                        editSubcontractorCost.trim() !== ''
+                          ? Math.max(0, Math.round(parseFloat(editSubcontractorCost) * 100))
+                          : 0
+                      if (revenuePence <= 0 && costPence <= 0) {
+                        return (
+                          <p className="text-xs text-muted-foreground">
+                            Enter the annual sub-contractor cost to see the true margin. Revenue is
+                            taken from this service&apos;s recurring charge.
+                          </p>
+                        )
+                      }
+                      const marginPence = revenuePence - costPence
+                      const marginPct =
+                        revenuePence > 0 ? (marginPence / revenuePence) * 100 : null
+                      return (
+                        <div className="rounded-md border bg-muted/40 p-2 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Revenue</span>
+                            <span className="tabular-nums">{formatPence(revenuePence)}/yr</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Sub cost</span>
+                            <span className="tabular-nums">{formatPence(costPence)}/yr</span>
+                          </div>
+                          <div className="mt-1 flex items-center justify-between border-t pt-1 font-medium">
+                            <span>True margin</span>
+                            <span
+                              className={cn(
+                                'tabular-nums',
+                                marginPence >= 0 ? 'text-emerald-600' : 'text-red-600',
+                              )}
+                            >
+                              {formatPence(marginPence)}/yr
+                              {marginPct != null && ` (${marginPct.toFixed(1)}%)`}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })()}
+                  </div>
                 </div>
               )}
             </div>

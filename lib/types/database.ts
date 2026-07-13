@@ -989,6 +989,10 @@ export interface Site {
   route_id: string | null
   area_id: string | null
   subcontractor_id: string | null
+  // Fixed annual cost (pence) paid to the sub-contractor for this service. Used
+  // to show the true margin vs the annualised recurring revenue. Only meaningful
+  // when worker_type = 'subcontractor'.
+  subcontractor_annual_cost_pence: number | null
   assigned_engineer_id: string | null
   reporting_emails: string[]
   defects_to_email: string | null

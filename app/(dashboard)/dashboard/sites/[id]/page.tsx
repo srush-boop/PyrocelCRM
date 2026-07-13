@@ -962,9 +962,10 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             areas={areas}
             subcontractors={subcontractors}
             tasks={tasks}
-            siteStatus={(site as Site).status}
-            systemDefaultsById={systemDefaultsById}
-          />
+                  siteStatus={(site as Site).status}
+                  systemDefaultsById={systemDefaultsById}
+                  annualValueByServiceId={annualValueByServiceId}
+                />
         </TabsContent>
 
         <TabsContent value="quotes" className="mt-0">

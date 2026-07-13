@@ -793,11 +793,26 @@ export function SiteSystemsManager({
                       {services.map((svc) => {
                         const inactive = svc.active === false
                         const value = serviceValue(svc.id)
+                        // Sub-contracted services: resolve the sub name (explicit
+                        // → joined relation → lookup) and the true margin vs the
+                        // annualised revenue.
+                        const isSub = svc.worker_type === 'subcontractor'
+                        const subName = isSub
+                          ? svc.subcontractor?.name ??
+                            subcontractors.find((s) => s.id === svc.subcontractor_id)?.name ??
+                            null
+                          : null
+                        const subCostPence = svc.subcontractor_annual_cost_pence ?? null
+                        const marginPence =
+                          isSub && subCostPence != null ? value - subCostPence : null
+                        const marginPct =
+                          marginPence != null && value > 0 ? (marginPence / value) * 100 : null
                         return (
                           <li
                             key={svc.id}
-                            className="flex items-center justify-between gap-3 px-3 py-1"
+                            className="flex flex-col gap-1 px-3 py-1.5"
                           >
+                            <div className="flex items-center justify-between gap-3">
                             <button
                               type="button"
                               onClick={() => openServiceSetup(svc.id)}
@@ -901,6 +916,39 @@ export function SiteSystemsManager({
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </div>
+                            </div>
+                            {isSub && (
+                              <div className="flex flex-wrap items-center gap-2 pl-6">
+                                <Badge
+                                  variant="secondary"
+                                  className="gap-1 text-[10px] font-medium"
+                                >
+                                  <HardHat className="h-3 w-3" />
+                                  Sub-contracted{subName ? ` · ${subName}` : ''}
+                                </Badge>
+                                {marginPence != null ? (
+                                  <span
+                                    className={cn(
+                                      'text-[11px] tabular-nums',
+                                      marginPence >= 0 ? 'text-emerald-600' : 'text-red-600',
+                                    )}
+                                    title="True margin: annual revenue minus sub-contractor cost"
+                                  >
+                                    Margin {formatPence(marginPence)}/yr
+                                    {marginPct != null && ` (${marginPct.toFixed(0)}%)`}
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => openServiceSetup(svc.id)}
+                                    className="text-[11px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+                                    title="Set the sub-contractor price to see true margin"
+                                  >
+                                    Set sub price
+                                  </button>
+                                )}
+                              </div>
+                            )}
                           </li>
                         )
                       })}

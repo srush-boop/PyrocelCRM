@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ReceiptText, Plus, ArrowRight, RefreshCw } from 'lucide-react'
+import { ReceiptText, Plus, ArrowRight, RefreshCw, TrendingUp } from 'lucide-react'
 import type { Invoice, Profile } from '@/lib/types/database'
 import { getReadyToInvoiceGroups } from '@/lib/actions/invoices'
 import { InvoicesTable } from '@/components/dashboard/invoices/invoices-table'
@@ -50,6 +50,12 @@ export default async function InvoicesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button asChild variant="outline">
+            <Link href="/dashboard/invoices/projected-revenue">
+              <TrendingUp className="mr-2 h-4 w-4" />
+              Projected revenue
+            </Link>
+          </Button>
           <Button asChild variant="outline">
             <Link href="/dashboard/invoices/renewals">
               <RefreshCw className="mr-2 h-4 w-4" />

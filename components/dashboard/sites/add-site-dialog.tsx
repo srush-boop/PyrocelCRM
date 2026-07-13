@@ -27,6 +27,8 @@ import { Switch } from '@/components/ui/switch'
 import { Plus, Loader2, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { PostcodeLookup } from '@/components/dashboard/shared/postcode-lookup'
+import { AddressFinder } from '@/components/dashboard/shared/address-finder'
+import type { PlaceResult } from '@/app/api/places-search/route'
 import { SiteClassificationFields } from '@/components/dashboard/sites/site-classification-fields'
 import {
   SystemServicePicker,
@@ -144,6 +146,20 @@ export function AddSiteDialog({
   // Fill the postcode and, when the address doesn't already mention the locality,
   // append it so the engineer/typist only needs to add the street line.
   // Stable identity so the memoized PostcodeLookup doesn't re-render each keystroke.
+  // Fill the site name, address, postcode and contact phone from a Google
+  // Places result. Existing values are only overwritten when the result has a
+  // value, so a half-filled form isn't wiped by a lookup.
+  const applyPlace = useCallback((p: PlaceResult) => {
+    setFormData((prev) => ({
+      ...prev,
+      name: prev.name || p.name,
+      address: p.address || prev.address,
+      postcode: p.postcode || prev.postcode,
+      contact_phone: p.phone || prev.contact_phone,
+    }))
+    setError(null)
+  }, [])
+
   const applyPostcode = useCallback((r: { postcode: string; locality: string }) => {
     setFormData((prev) => {
       const hasLocality =
@@ -340,6 +356,11 @@ export function AddSiteDialog({
                 required
               />
             </div>
+            <AddressFinder
+              label="Find business or address"
+              hint="Search by business name or address to auto-fill the details below."
+              onSelect={applyPlace}
+            />
             <PostcodeLookup id="site-postcode-lookup" onResolved={applyPostcode} />
             <div className="grid gap-2">
               <Label htmlFor="address">Address *</Label>

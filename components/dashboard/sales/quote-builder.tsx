@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { AddressFinder } from '@/components/dashboard/shared/address-finder'
+import type { PlaceResult } from '@/app/api/places-search/route'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
@@ -1529,6 +1531,19 @@ export function QuoteBuilder({
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
+              {!disabled && (
+                <div className="sm:col-span-2">
+                  <AddressFinder
+                    label="Find prospect business or address"
+                    hint="Search by business name or address to auto-fill the prospect details."
+                    onSelect={(p: PlaceResult) => {
+                      if (p.name && !prospectName) setProspectName(p.name)
+                      if (p.address) setProspectAddress(p.address)
+                      if (p.phone && !prospectPhone) setProspectPhone(p.phone)
+                    }}
+                  />
+                </div>
+              )}
               <div className="grid gap-1.5">
                 <Label htmlFor="p-name">Prospect name *</Label>
                 <Input id="p-name" value={prospectName} onChange={(e) => setProspectName(e.target.value)} disabled={disabled} />

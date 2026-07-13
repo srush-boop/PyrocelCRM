@@ -277,6 +277,14 @@ export function ServiceChargeDialog({
       ? perPeriodFromAnnual(penceFromPounds(pricePounds), frequency)
       : penceFromPounds(pricePounds)
 
+  // The true annual total (× quantity): the entered value itself when in annual
+  // mode, otherwise the per-period value multiplied up across the year.
+  const annualTotalPence =
+    (priceBasis === 'annual'
+      ? penceFromPounds(pricePounds)
+      : annualFromPerPeriod(penceFromPounds(pricePounds), frequency)) *
+    (Number.parseInt(quantity, 10) || 1)
+
   const hasClient = !!ctx?.clientId
   const noAccounts = (ctx?.billingAccounts.length ?? 0) === 0
 
@@ -515,19 +523,11 @@ export function ServiceChargeDialog({
                 <p className="text-xs text-muted-foreground">
                   {pricePounds.trim() === ''
                     ? 'Enter a value to see the per-invoice amount.'
-                    : priceBasis === 'annual'
-                      ? `${formatPence(
-                          annualFromPerPeriod(penceFromPounds(pricePounds), frequency) *
-                            (Number.parseInt(quantity, 10) || 1),
-                        )}/yr split across ${annualOccurrences(frequency)} ${RECURRING_FREQUENCY_LABELS[
-                          frequency
-                        ].toLowerCase()} invoice${annualOccurrences(frequency) === 1 ? '' : 's'}.`
-                      : `${formatPence(
-                          annualFromPerPeriod(penceFromPounds(pricePounds), frequency) *
-                            (Number.parseInt(quantity, 10) || 1),
-                        )}/yr across ${annualOccurrences(frequency)} invoice${
-                          annualOccurrences(frequency) === 1 ? '' : 's'
-                        }.`}
+                    : `${formatPence(annualTotalPence)}/yr ${
+                        priceBasis === 'annual' ? 'split across' : 'across'
+                      } ${annualOccurrences(frequency)} ${RECURRING_FREQUENCY_LABELS[
+                        frequency
+                      ].toLowerCase()} invoice${annualOccurrences(frequency) === 1 ? '' : 's'}.`}
                 </p>
               </div>
               <span className="whitespace-nowrap text-lg font-semibold tabular-nums">

@@ -166,11 +166,21 @@ export async function sendRenewalNotice(billingAccountId: string, chargeIds: str
 
   const { data: charges } = await supabase
     .from('recurring_charges')
-    .select('*')
+    .select(
+      '*, site_service:site_services(site_system:site_systems(name, system_type:system_types(name)))',
+    )
     .in('id', chargeIds)
     .eq('billing_account_id', billingAccountId)
 
-  const rows = (charges ?? []) as RecurringCharge[]
+  type ChargeWithSystem = RecurringCharge & {
+    site_service?: {
+      site_system?: {
+        name: string | null
+        system_type?: { name: string | null } | null
+      } | null
+    } | null
+  }
+  const rows = (charges ?? []) as ChargeWithSystem[]
   if (!rows.length) return { error: 'Charges not found for this account' }
 
   const contactName = acc?.invoice_contact_name || acc?.client?.contact_name || null
@@ -181,6 +191,12 @@ export async function sendRenewalNotice(billingAccountId: string, chargeIds: str
     : `${new Date().getFullYear()}`
   const lines = rows.map((c) => ({
     description: c.description,
+    // The system this charge relates to (via its site service), so the client
+    // can see e.g. "Fire Alarm" alongside the service description.
+    systemType:
+      c.site_service?.site_system?.system_type?.name ||
+      c.site_service?.site_system?.name ||
+      null,
     frequency: c.frequency,
     newPricePence: c.unit_price_pence * c.quantity,
   }))

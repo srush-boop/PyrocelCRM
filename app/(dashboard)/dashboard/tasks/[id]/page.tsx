@@ -410,7 +410,25 @@ export default async function TaskPage({ params }: PageProps) {
     )
   }
 
-  // Fetch the checklist template for this service type. Resolution order:
+  const serviceTypeIdForChecklist = task.site_service.service_type_id
+
+  // The system type this task is on, resolved from the site system the service
+  // is attached to. Used both for choosing system-scoped templates and for
+  // filtering shared/general checklists.
+  let linkedSystemTypeId: string | null = null
+  if (task.site_service?.site_system_id) {
+    const { data: linkedSystem } = await supabase
+      .from('site_systems')
+      .select('system_type_id')
+      .eq('id', task.site_service.site_system_id)
+      .maybeSingle()
+    linkedSystemTypeId = linkedSystem?.system_type_id ?? null
+  }
+
+  // Fetch checklist templates that apply to this service type. A template
+  // qualifies via its legacy single column OR its multi-service array (a shared
+  // checklist assigned to several service types). Resolution order for the
+  // PRIMARY template:
   //  1. Multi-visit services: the template matching this task's visit type.
   //  2. Multi-system call types (reactive/planned): the template matching the
   //     booked system, then the general (no-system) fallback.
@@ -418,10 +436,26 @@ export default async function TaskPage({ params }: PageProps) {
   const { data: checklistTemplates } = await supabase
     .from('checklist_templates')
     .select('*')
-    .eq('service_type_id', task.site_service.service_type_id)
+    .or(
+      `service_type_id.eq.${serviceTypeIdForChecklist},service_type_ids.cs.{${serviceTypeIdForChecklist}}`,
+    )
 
   const taskSystemTypeId = (task as { system_type_id?: string | null }).system_type_id ?? null
-  const templates = (checklistTemplates || []) as ChecklistTemplate[]
+  const allTemplates = (checklistTemplates || []) as ChecklistTemplate[]
+
+  // Does a template's optional system-type scope cover this task? Empty array
+  // (or unset) means it applies to every system.
+  const systemScopeOk = (t: ChecklistTemplate) => {
+    const ids = t.system_type_ids ?? []
+    if (ids.length === 0) return true
+    return linkedSystemTypeId !== null && ids.includes(linkedSystemTypeId)
+  }
+
+  // Templates whose direct (legacy) service is this one drive primary selection;
+  // shared templates (matched only via the array) are combined in afterwards.
+  const templates = allTemplates.filter(
+    (t) => t.service_type_id === serviceTypeIdForChecklist && systemScopeOk(t),
+  )
   let checklistTemplate =
     (task.visit_type_id
       ? templates.find((t) => t.visit_type_id === task.visit_type_id)
@@ -434,21 +468,41 @@ export default async function TaskPage({ params }: PageProps) {
     templates[0] ??
     null
 
+  // Combine any OTHER matching checklists (e.g. a shared "general remedial work"
+  // list assigned to multiple service types) by appending their items. Scope is
+  // checked against the task's system type; items are de-duped by id.
+  const combinedTemplates = allTemplates.filter(
+    (t) => t.id !== checklistTemplate?.id && systemScopeOk(t),
+  )
+  if (combinedTemplates.length > 0) {
+    const seen = new Set((checklistTemplate?.items ?? []).map((it) => it.id))
+    const sharedItems = combinedTemplates
+      .flatMap((t) => t.items ?? [])
+      .filter((it) => (seen.has(it.id) ? false : (seen.add(it.id), true)))
+    if (sharedItems.length > 0) {
+      checklistTemplate = {
+        id: checklistTemplate?.id ?? `synthetic-${serviceTypeIdForChecklist}`,
+        service_type_id: serviceTypeIdForChecklist,
+        service_type_ids: checklistTemplate?.service_type_ids ?? [serviceTypeIdForChecklist],
+        system_type_ids: checklistTemplate?.system_type_ids ?? [],
+        visit_type_id: checklistTemplate?.visit_type_id ?? task.visit_type_id ?? null,
+        system_type_id: checklistTemplate?.system_type_id ?? null,
+        name: checklistTemplate?.name ?? 'Checklist',
+        items: [...(checklistTemplate?.items ?? []), ...sharedItems],
+        created_at: checklistTemplate?.created_at ?? new Date().toISOString(),
+        updated_at: checklistTemplate?.updated_at ?? new Date().toISOString(),
+      } as ChecklistTemplate
+    }
+  }
+
   // Append any client-specific checklist items that match this task's system
   // type and service type. Items with an empty scope array apply to all.
   const clientId = task.site_service?.site?.client_id
   let clientLinks: ClientLink[] = []
   if (clientId) {
-    // The system type comes from the system this service is attached to.
-    let systemTypeId: string | null = null
-    if (task.site_service?.site_system_id) {
-      const { data: linkedSystem } = await supabase
-        .from('site_systems')
-        .select('system_type_id')
-        .eq('id', task.site_service.site_system_id)
-        .maybeSingle()
-      systemTypeId = linkedSystem?.system_type_id ?? null
-    }
+    // The system type comes from the system this service is attached to
+    // (already resolved above for checklist scoping).
+    const systemTypeId: string | null = linkedSystemTypeId
 
     const { data: clientItems } = await supabase
       .from('client_checklist_items')
@@ -479,7 +533,10 @@ export default async function TaskPage({ params }: PageProps) {
       checklistTemplate = {
         id: checklistTemplate?.id ?? `synthetic-${task.site_service.service_type_id}`,
         service_type_id: task.site_service.service_type_id,
+        service_type_ids: checklistTemplate?.service_type_ids ?? [task.site_service.service_type_id],
+        system_type_ids: checklistTemplate?.system_type_ids ?? [],
         visit_type_id: checklistTemplate?.visit_type_id ?? task.visit_type_id ?? null,
+        system_type_id: checklistTemplate?.system_type_id ?? null,
         name: checklistTemplate?.name ?? 'Checklist',
         items: [...(checklistTemplate?.items ?? []), ...extraItems],
         created_at: checklistTemplate?.created_at ?? new Date().toISOString(),

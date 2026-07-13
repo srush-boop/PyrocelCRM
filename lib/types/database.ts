@@ -618,6 +618,13 @@ export interface ChecklistItem {
 export interface ChecklistTemplate {
   id: string
   service_type_id: string
+  // A checklist may apply to multiple service types (e.g. a shared "general
+  // remedial work" list). This array is the source of truth; service_type_id is
+  // kept as the legacy primary/first entry for backward compatibility.
+  service_type_ids: string[]
+  // Optional system-type scope. Empty array = applies to all systems. When
+  // populated, the template only applies to tasks on those system types.
+  system_type_ids: string[]
   // When set, this template applies only to the matching visit type. When null,
   // it is the service-wide fallback used by visits with no specific template.
   visit_type_id?: string | null

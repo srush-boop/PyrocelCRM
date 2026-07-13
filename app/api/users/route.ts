@@ -39,13 +39,16 @@ export async function POST(req: NextRequest) {
     if (guard.error) return guard.error
 
     const body = await req.json()
-    const { email, password, fullName, role, departmentId, branchId } = body as {
+    const { email, password, fullName, role, departmentId, branchId, copyFromUserId } = body as {
       email?: string
       password?: string
       fullName?: string
       role?: string
       departmentId?: string | null
       branchId?: string | null
+      // When set, clone all settings (except identity/personal/live state) from
+      // this existing user onto the new account.
+      copyFromUserId?: string | null
     }
 
     const trimmedEmail = typeof email === 'string' ? email.trim().toLowerCase() : ''
@@ -111,6 +114,59 @@ export async function POST(req: NextRequest) {
         { error: `Failed to create profile: ${profileError.message}` },
         { status: 500 },
       )
+    }
+
+    // Optionally inherit all settings from an existing user. We copy an explicit
+    // whitelist of configuration columns and deliberately EXCLUDE identity
+    // (email, name, employee_number), personal media (signature, avatar), home /
+    // live-location, and lone-worker temporary state — those must be unique or
+    // start clean on the new account. Role/department/branch already came from
+    // the form (which the dialog pre-fills from the source user).
+    if (copyFromUserId) {
+      const { data: source } = await adminClient
+        .from('profiles')
+        .select('*')
+        .eq('id', copyFromUserId)
+        .single()
+
+      if (source) {
+        const inherited = {
+          department_id: source.department_id ?? null,
+          branch_id: source.branch_id ?? null,
+          manager_id: source.manager_id ?? null,
+          role_id: source.role_id ?? null,
+          job_title: source.job_title ?? null,
+          discipline: source.discipline ?? null,
+          work_start_time: source.work_start_time ?? null,
+          work_end_time: source.work_end_time ?? null,
+          lunch_minutes: source.lunch_minutes ?? null,
+          work_days: source.work_days ?? null,
+          work_day_hours: source.work_day_hours ?? null,
+          holiday_entitlement_days: source.holiday_entitlement_days ?? null,
+          holiday_entitlement_hours: source.holiday_entitlement_hours ?? null,
+          menu_permissions: source.menu_permissions ?? null,
+          dashboard_tile_colors: source.dashboard_tile_colors ?? null,
+          timesheet_required: source.timesheet_required ?? null,
+          can_manage_lone_worker: source.can_manage_lone_worker ?? false,
+          updated_at: now,
+        }
+        const { error: copyError } = await adminClient
+          .from('profiles')
+          .update(inherited)
+          .eq('id', userId)
+        if (copyError) {
+          console.error('[v0] copy-user settings error:', copyError.message)
+          // Non-fatal: the account exists with form values; report partial success.
+          return NextResponse.json(
+            {
+              message: 'User created, but some settings could not be copied.',
+              userId,
+              warning: copyError.message,
+            },
+            { status: 201 },
+          )
+        }
+      }
     }
 
     return NextResponse.json(

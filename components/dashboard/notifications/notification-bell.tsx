@@ -126,8 +126,12 @@ export function NotificationBell() {
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-0 sm:w-96">
-        <div className="flex items-center justify-between border-b px-4 py-3">
+      <PopoverContent
+        align="end"
+        collisionPadding={8}
+        className="flex max-h-[var(--radix-popover-content-available-height)] w-80 flex-col p-0 sm:w-96"
+      >
+        <div className="flex shrink-0 items-center justify-between border-b px-4 py-3">
           <h3 className="text-sm font-semibold">Notifications</h3>
           {unread > 0 && (
             <Button variant="ghost" size="sm" className="h-auto gap-1.5 px-2 py-1 text-xs" onClick={handleMarkAll}>
@@ -137,11 +141,11 @@ export function NotificationBell() {
           )}
         </div>
 
-        <div className="border-b px-4 py-3">
+        <div className="shrink-0 border-b px-4 py-3">
           <PushToggle />
         </div>
 
-        <ScrollArea className="max-h-96">
+        <ScrollArea className="min-h-0 flex-1">
           {notifications.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-muted-foreground">
               No notifications yet.
@@ -192,7 +196,7 @@ export function NotificationBell() {
           )}
         </ScrollArea>
 
-        <div className="border-t px-4 py-2">
+        <div className="shrink-0 border-t px-4 py-2">
           <Button asChild variant="ghost" size="sm" className="w-full justify-center text-xs">
             <Link href="/dashboard/notifications" onClick={() => setOpen(false)}>
               View all notifications

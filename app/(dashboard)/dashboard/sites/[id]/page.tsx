@@ -37,6 +37,7 @@ import { isFireAlarmService } from '@/lib/mcps'
 import { isEmergencyLightService } from '@/lib/emergency-lights'
 import { isExtinguisherService } from '@/lib/extinguishers'
 import { REMOTE_MONITORING_LABELS } from '@/lib/sites'
+import { annualRevenuePence } from '@/lib/billing/projected-revenue'
 import type {
   Profile,
   Site,
@@ -65,16 +66,33 @@ import type {
   Quote,
   SiteInternalNote,
   BillingAccount,
+  RecurringCharge,
 } from '@/lib/types/database'
 
 interface PageProps {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ tab?: string; editService?: string }>
+  searchParams: Promise<{
+    tab?: string
+    editService?: string
+    chargeService?: string
+    bookService?: string
+    deleteService?: string
+  }>
 }
 
 export default async function SiteDetailPage({ params, searchParams }: PageProps) {
   const { id } = await params
-  const { tab: tabParam, editService: editServiceParam } = await searchParams
+  const {
+    tab: tabParam,
+    editService: editServiceParam,
+    chargeService: chargeServiceParam,
+    bookService: bookServiceParam,
+    deleteService: deleteServiceParam,
+  } = await searchParams
+  // Any service dialog param means the (dialogsOnly) services manager on the
+  // Systems tab should be visible, so force that tab open.
+  const serviceDialogParam =
+    editServiceParam || chargeServiceParam || bookServiceParam || deleteServiceParam
   const supabase = await createClient()
   
   const { data: { user } } = await supabase.auth.getUser()
@@ -183,6 +201,40 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
   const systemTypes = (systemTypesResult.data || []) as SystemType[]
   const quotes = (quotesResult.data || []) as Quote[]
   const panelFieldDefs = (panelFieldDefsResult.data || []) as PanelFieldDef[]
+
+  // Annualised recurring value (run-rate £/yr, in pence) per site_service, from
+  // this site's active recurring charges. Shown on the Systems tab at service,
+  // system and site level. Only charges tied to a specific service count.
+  const serviceIds = siteServices.map((s) => s.id)
+  const { data: recurringChargesData } = serviceIds.length > 0
+    ? await supabase
+        .from('recurring_charges')
+        .select('site_service_id, unit_price_pence, quantity, frequency, active')
+        .eq('active', true)
+        .in('site_service_id', serviceIds)
+    : { data: [] }
+  const annualValueByServiceId: Record<string, number> = {}
+  for (const charge of (recurringChargesData ?? []) as Pick<
+    RecurringCharge,
+    'site_service_id' | 'unit_price_pence' | 'quantity' | 'frequency'
+  >[]) {
+    if (!charge.site_service_id) continue
+    const value = annualRevenuePence({
+      frequency: charge.frequency,
+      unitPricePence: charge.unit_price_pence,
+      quantity: charge.quantity,
+      isSubcontracted: false,
+      subcontractPricePence: null,
+      branchId: null,
+      branchName: null,
+      serviceTypeId: null,
+      serviceTypeName: null,
+      systemTypeId: null,
+      systemTypeName: null,
+    })
+    annualValueByServiceId[charge.site_service_id] =
+      (annualValueByServiceId[charge.site_service_id] ?? 0) + value
+  }
 
   // Panels captured against this site's systems (Fire Alarm etc.). Loaded here
   // so the systems tab can list and edit them per system.
@@ -810,20 +862,6 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             )}
           </CardContent>
         </Card>
-
-                <SiteServicesManager
-                  siteId={id}
-                  initialEditServiceId={editServiceParam}
-          siteServices={siteServices}
-          availableServiceTypes={availableServiceTypes}
-          engineers={engineers}
-          routes={routes}
-          areas={areas}
-                  subcontractors={subcontractors}
-                  tasks={tasks}
-                  siteStatus={(site as Site).status}
-                  systemDefaultsById={systemDefaultsById}
-                />
           </div>
         </TabsContent>
 
@@ -836,7 +874,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
           />
         </TabsContent>
 
-        <TabsContent value="systems" className="mt-0">
+        <TabsContent value="systems" className="mt-0 space-y-4">
               <SiteSystemsManager
                 siteId={id}
                 siteSystems={siteSystems}
@@ -853,12 +891,30 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
                   engineers={engineers}
           clients={clients}
           reactiveServiceTypes={reactiveServiceTypes}
+          annualValueByServiceId={annualValueByServiceId}
           siteFlagDefaults={{
             booking_required: Boolean((site as Site).booking_required),
             access_required: Boolean((site as Site).access_required),
             keys_required: Boolean((site as Site).keys_required),
             two_engineers_required: Boolean((site as Site).two_engineers_required),
           }}
+          />
+          {/* Dialogs-only mount: the Systems service rows drive setup / charge /
+              book / delete dialogs via URL params (editService, chargeService,
+              bookService, deleteService). No visible list is rendered here. */}
+          <SiteServicesManager
+            dialogsOnly
+            siteId={id}
+            initialEditServiceId={editServiceParam}
+            siteServices={siteServices}
+            availableServiceTypes={availableServiceTypes}
+            engineers={engineers}
+            routes={routes}
+            areas={areas}
+            subcontractors={subcontractors}
+            tasks={tasks}
+            siteStatus={(site as Site).status}
+            systemDefaultsById={systemDefaultsById}
           />
         </TabsContent>
 

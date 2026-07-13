@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -60,6 +60,11 @@ interface SiteServicesManagerProps {
   // When set (via the ?editService= URL param, e.g. after adding a service
   // from a system), the edit dialog for this service opens automatically.
   initialEditServiceId?: string
+  // When true, render ONLY the dialogs (setup / add-charge / book / delete) and
+  // no visible services list. Used on the Systems tab, where each service is
+  // shown grouped under its system and the row's actions drive these dialogs via
+  // URL params (editService / chargeService / bookService / deleteService).
+  dialogsOnly?: boolean
   siteServices: (SiteService & { service_type: ServiceType })[]
   availableServiceTypes: ServiceType[]
   engineers?: Profile[]
@@ -76,6 +81,7 @@ interface SiteServicesManagerProps {
 export function SiteServicesManager({
   siteId,
   initialEditServiceId,
+  dialogsOnly = false,
   siteServices,
   availableServiceTypes,
   engineers = [],
@@ -129,7 +135,18 @@ export function SiteServicesManager({
 
   const router = useRouter()
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const supabase = createClient()
+
+  // In dialogsOnly mode, dialogs are opened by URL params set from the Systems
+  // tab's service rows. Strip the given param(s) (preserving the rest, e.g.
+  // tab=systems) so a dialog doesn't spring back open after close/save/refresh.
+  const stripDialogParams = (...names: string[]) => {
+    const next = new URLSearchParams(Array.from(searchParams.entries()))
+    for (const n of names) next.delete(n)
+    const qs = next.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname)
+  }
 
   // Off-contract sites (Dead, or New/auto-created from a won prospect quote) do
   // not auto-generate scheduled tasks until formally set Live.
@@ -252,10 +269,10 @@ export function SiteServicesManager({
     setNewEmail('')
   }
 
-  // Auto-open the edit dialog when arrived at via ?editService= (e.g. straight
-  // after adding a service from a system). Runs once on mount.
+  // Legacy (non-dialogsOnly): auto-open the edit dialog once from ?editService=.
   const autoOpenedRef = useRef(false)
   useEffect(() => {
+    if (dialogsOnly) return
     if (autoOpenedRef.current || !initialEditServiceId) return
     const match = siteServices.find((s) => s.id === initialEditServiceId)
     if (match) {
@@ -264,6 +281,52 @@ export function SiteServicesManager({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // dialogsOnly: drive each dialog reactively from its URL param so the Systems
+  // tab's service rows can open them, and reopening a different service works.
+  const paramEdit = dialogsOnly ? searchParams.get('editService') : null
+  const paramCharge = dialogsOnly ? searchParams.get('chargeService') : null
+  const paramBook = dialogsOnly ? searchParams.get('bookService') : null
+  const paramDelete = dialogsOnly ? searchParams.get('deleteService') : null
+
+  const lastEditParamRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!dialogsOnly) return
+    if (paramEdit && paramEdit !== lastEditParamRef.current) {
+      const match = siteServices.find((s) => s.id === paramEdit)
+      if (match) {
+        lastEditParamRef.current = paramEdit
+        openEditDialog(match)
+      }
+    } else if (!paramEdit) {
+      lastEditParamRef.current = null
+      setEditingId((cur) => (cur ? null : cur))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paramEdit, dialogsOnly])
+
+  useEffect(() => {
+    if (!dialogsOnly) return
+    setChargeServiceId(paramCharge || null)
+  }, [paramCharge, dialogsOnly])
+
+  useEffect(() => {
+    if (!dialogsOnly) return
+    if (paramBook) {
+      const match = siteServices.find((s) => s.id === paramBook)
+      setScheduleServiceId(paramBook)
+      setScheduleDate(new Date())
+      setScheduleEngineerId(match?.assigned_engineer_id || '')
+    } else {
+      setScheduleServiceId(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paramBook, dialogsOnly])
+
+  useEffect(() => {
+    if (!dialogsOnly) return
+    setDeleteId(paramDelete || null)
+  }, [paramDelete, dialogsOnly])
 
   const handleAddEmail = () => {
     const email = newEmail.trim()
@@ -337,9 +400,10 @@ export function SiteServicesManager({
 
     setSavingEdit(false)
     setEditingId(null)
-    // Drop the ?editService= param (mirrors the dialog's onOpenChange) so the
-    // auto-open effect doesn't reopen the dialog when the refresh re-renders.
-    if (initialEditServiceId) router.replace(pathname)
+    // Drop the driving param (mirrors the dialog's onOpenChange) so the dialog
+    // doesn't reopen when the refresh re-renders.
+    if (dialogsOnly) stripDialogParams('editService')
+    else if (initialEditServiceId) router.replace(pathname)
     router.refresh()
   }
 
@@ -347,6 +411,7 @@ export function SiteServicesManager({
     if (!deleteId) return
     await supabase.from('site_services').delete().eq('id', deleteId)
     setDeleteId(null)
+    if (dialogsOnly) stripDialogParams('deleteService')
     router.refresh()
   }
 
@@ -365,6 +430,7 @@ export function SiteServicesManager({
     setScheduleServiceId(null)
     setScheduleDate(new Date())
     setScheduleEngineerId('')
+    if (dialogsOnly) stripDialogParams('bookService')
     router.refresh()
   }
 
@@ -387,6 +453,7 @@ export function SiteServicesManager({
 
   return (
     <>
+      {!dialogsOnly && (
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -613,6 +680,7 @@ export function SiteServicesManager({
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* Add Multiple Services Dialog */}
       <Dialog open={addServicesOpen} onOpenChange={setAddServicesOpen}>
@@ -723,7 +791,15 @@ export function SiteServicesManager({
       </Dialog>
 
       {/* Schedule One-off Task Dialog */}
-      <Dialog open={!!scheduleServiceId} onOpenChange={() => setScheduleServiceId(null)}>
+      <Dialog
+        open={!!scheduleServiceId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setScheduleServiceId(null)
+            if (dialogsOnly) stripDialogParams('bookService')
+          }
+        }}
+      >
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Book Service Call</DialogTitle>
@@ -777,7 +853,13 @@ export function SiteServicesManager({
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setScheduleServiceId(null)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setScheduleServiceId(null)
+                if (dialogsOnly) stripDialogParams('bookService')
+              }}
+            >
               Cancel
             </Button>
             <Button onClick={handleScheduleTask} disabled={scheduling}>
@@ -798,7 +880,15 @@ export function SiteServicesManager({
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+      <AlertDialog
+        open={!!deleteId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteId(null)
+            if (dialogsOnly) stripDialogParams('deleteService')
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Remove Service</AlertDialogTitle>
@@ -822,7 +912,12 @@ export function SiteServicesManager({
       {chargeServiceId && (
         <ServiceChargeDialog
           open={!!chargeServiceId}
-          onOpenChange={(open) => !open && setChargeServiceId(null)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setChargeServiceId(null)
+              if (dialogsOnly) stripDialogParams('chargeService')
+            }
+          }}
           siteServiceId={chargeServiceId}
         />
       )}
@@ -833,19 +928,20 @@ export function SiteServicesManager({
         onOpenChange={(open) => {
           if (!open) {
             setEditingId(null)
-            // Drop the ?editService= param so it doesn't reopen on refresh.
-            if (initialEditServiceId) router.replace(pathname)
+            // Drop the driving param so it doesn't reopen on refresh.
+            if (dialogsOnly) stripDialogParams('editService')
+            else if (initialEditServiceId) router.replace(pathname)
           }
         }}
       >
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[90dvh] max-w-md flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b p-6">
             <DialogTitle>Edit Service</DialogTitle>
             <DialogDescription>
               Configure the recurring schedule, assignment and client report emails for this service.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
+          <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto p-6">
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="freq-value">Frequency Value</Label>
@@ -1249,7 +1345,7 @@ export function SiteServicesManager({
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="shrink-0 border-t p-6">
             <Button variant="outline" onClick={() => setEditingId(null)}>
               Cancel
             </Button>

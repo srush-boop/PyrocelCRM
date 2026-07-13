@@ -217,7 +217,7 @@ export async function createInvoiceFromRecurringCharges(
   // Re-fetch charges server-side (trusted amounts) and confirm ownership + active.
   const { data: charges } = await supabase
     .from('recurring_charges')
-    .select('id, description, unit_price_pence, quantity, tax_code, nominal_code')
+    .select('id, description, unit_price_pence, quantity, tax_code, nominal_code, nominal_code_id')
     .in('id', chargeIds)
     .eq('billing_account_id', billingAccountId)
     .eq('active', true)
@@ -227,8 +227,13 @@ export async function createInvoiceFromRecurringCharges(
     description: string
     unit_price_pence: number
     quantity: number | string
+    nominal_code_id: string | null
   }[]
   if (rows.length === 0) return { error: 'These charges are no longer available to invoice' }
+
+  // Map nominal-code id → code text for a stable per-line snapshot.
+  const { data: ncRows } = await supabase.from('nominal_codes').select('id, code')
+  const nominalText = new Map<string, string>((ncRows ?? []).map((n: any) => [n.id, n.code]))
 
   const now = new Date()
   const fy = financialYearOf(now)
@@ -279,6 +284,8 @@ export async function createInvoiceFromRecurringCharges(
       unit_price_pence: r.unit_price_pence,
       amount_pence: lineAmountPence(q, r.unit_price_pence),
       sort_order: i,
+      nominal_code_id: r.nominal_code_id ?? null,
+      nominal_code: r.nominal_code_id ? nominalText.get(r.nominal_code_id) ?? null : null,
     }
   })
 

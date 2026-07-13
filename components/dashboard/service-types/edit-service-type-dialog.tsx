@@ -18,7 +18,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Loader2, Siren, Coins } from 'lucide-react'
-import type { ServiceType, WorkerType, ToleranceUnit, SystemType, ChecklistTemplate } from '@/lib/types/database'
+import type { ServiceType, WorkerType, ToleranceUnit, SystemType, ChecklistTemplate, NominalCode } from '@/lib/types/database'
+import { NominalCodeSelect } from '@/components/dashboard/billing/nominal-code-select'
 import { WORKER_TYPE_LABELS } from '@/lib/assignment'
 import { ServiceColorPicker } from './service-color-picker'
 import { ToleranceFields } from './tolerance-fields'
@@ -41,11 +42,12 @@ import {
 interface EditServiceTypeDialogProps {
   serviceType: ServiceType
   systemTypes: SystemType[]
+  nominalCodes: NominalCode[]
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-export function EditServiceTypeDialog({ serviceType, systemTypes, open, onOpenChange }: EditServiceTypeDialogProps) {
+export function EditServiceTypeDialog({ serviceType, systemTypes, nominalCodes, open, onOpenChange }: EditServiceTypeDialogProps) {
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: serviceType.name,
@@ -66,6 +68,7 @@ export function EditServiceTypeDialog({ serviceType, systemTypes, open, onOpenCh
     is_emergency: serviceType.is_emergency ?? false,
     default_kpi_hours: serviceType.default_kpi_hours ?? 24,
     default_chargeable: serviceType.default_chargeable ?? false,
+    nominal_code_id: serviceType.nominal_code_id ?? null,
   })
   const router = useRouter()
   const supabase = createClient()
@@ -136,6 +139,7 @@ export function EditServiceTypeDialog({ serviceType, systemTypes, open, onOpenCh
         ...callKindFlags(formData.call_kind, formData.is_emergency),
         default_kpi_hours: isReactive ? formData.default_kpi_hours : null,
         default_chargeable: formData.default_chargeable,
+        nominal_code_id: formData.nominal_code_id,
       })
       .eq('id', serviceType.id)
 
@@ -357,6 +361,20 @@ export function EditServiceTypeDialog({ serviceType, systemTypes, open, onOpenCh
                 checked={formData.default_chargeable}
                 onCheckedChange={(v) => setFormData({ ...formData, default_chargeable: v })}
               />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="nominal-code">Nominal code</Label>
+              <NominalCodeSelect
+                id="nominal-code"
+                value={formData.nominal_code_id}
+                onChange={(id) => setFormData({ ...formData, nominal_code_id: id })}
+                codes={nominalCodes}
+                noneLabel="None"
+              />
+              <p className="text-xs text-muted-foreground">
+                Accounting code for work of this type. Used to auto-fill invoice lines when the
+                department has no code set.
+              </p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="default-worker-type">Default delivered by</Label>

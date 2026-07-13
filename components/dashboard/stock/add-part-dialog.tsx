@@ -24,6 +24,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Plus, Loader2 } from 'lucide-react'
+import type { NominalCode } from '@/lib/types/database'
+import { NominalCodeSelect } from '@/components/dashboard/billing/nominal-code-select'
 
 const NONE_VALUE = '__none__'
 
@@ -35,13 +37,15 @@ const emptyForm = {
   default_min_level: '',
   description: '',
   supplier_id: '',
+  nominal_code_id: null as string | null,
 }
 
 interface AddPartDialogProps {
   suppliers?: { id: string; name: string }[]
+  nominalCodes?: NominalCode[]
 }
 
-export function AddPartDialog({ suppliers = [] }: AddPartDialogProps) {
+export function AddPartDialog({ suppliers = [], nominalCodes = [] }: AddPartDialogProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState(emptyForm)
@@ -62,6 +66,7 @@ export function AddPartDialog({ suppliers = [] }: AddPartDialogProps) {
         : 0,
       description: formData.description || null,
       supplier_id: formData.supplier_id || null,
+      nominal_code_id: formData.nominal_code_id,
     })
 
     setLoading(false)
@@ -171,6 +176,19 @@ export function AddPartDialog({ suppliers = [] }: AddPartDialogProps) {
               </Select>
               <p className="text-xs text-muted-foreground">
                 The supplier this part is ordered from. Used for future equipment ordering.
+              </p>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="nominal">Nominal code</Label>
+              <NominalCodeSelect
+                id="nominal"
+                value={formData.nominal_code_id}
+                onChange={(id) => setFormData({ ...formData, nominal_code_id: id })}
+                codes={nominalCodes}
+                noneLabel="None"
+              />
+              <p className="text-xs text-muted-foreground">
+                Optional. Overrides the department/service nominal when this part is invoiced.
               </p>
             </div>
             <div className="grid gap-2">

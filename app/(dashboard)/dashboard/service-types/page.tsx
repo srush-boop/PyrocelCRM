@@ -2,7 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { ServiceTypesTable } from '@/components/dashboard/service-types/service-types-table'
 import { AddServiceTypeDialog } from '@/components/dashboard/service-types/add-service-type-dialog'
-import type { Profile, ServiceType, SystemType } from '@/lib/types/database'
+import type { Profile, ServiceType, SystemType, NominalCode } from '@/lib/types/database'
+import { getNominalCodes } from '@/lib/actions/nominal-codes'
 
 export default async function ServiceTypesPage() {
   const supabase = await createClient()
@@ -28,6 +29,8 @@ export default async function ServiceTypesPage() {
     supabase.from('system_types').select('*').eq('active', true).order('name'),
   ])
 
+  const nominalCodes = await getNominalCodes()
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -37,12 +40,16 @@ export default async function ServiceTypesPage() {
             Manage the types of services your company offers
           </p>
         </div>
-        <AddServiceTypeDialog systemTypes={(systemTypes || []) as SystemType[]} />
+        <AddServiceTypeDialog
+          systemTypes={(systemTypes || []) as SystemType[]}
+          nominalCodes={nominalCodes}
+        />
       </div>
 
       <ServiceTypesTable
         serviceTypes={(serviceTypes || []) as ServiceType[]}
         systemTypes={(systemTypes || []) as SystemType[]}
+        nominalCodes={nominalCodes}
       />
     </div>
   )

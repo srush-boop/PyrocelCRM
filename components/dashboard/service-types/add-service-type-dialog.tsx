@@ -25,7 +25,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { WorkerType, ToleranceUnit, SystemType, ServiceType } from '@/lib/types/database'
+import type { WorkerType, ToleranceUnit, SystemType, ServiceType, NominalCode } from '@/lib/types/database'
+import { NominalCodeSelect } from '@/components/dashboard/billing/nominal-code-select'
 import { WORKER_TYPE_LABELS } from '@/lib/assignment'
 import { ServiceColorPicker } from './service-color-picker'
 import { ToleranceFields } from './tolerance-fields'
@@ -37,7 +38,13 @@ import {
 import { syncServiceTypeChecklists } from '@/lib/service-type-checklists'
 import { CALL_KIND_OPTIONS, callKindFlags } from '@/lib/call-kinds'
 
-export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[] }) {
+export function AddServiceTypeDialog({
+  systemTypes,
+  nominalCodes,
+}: {
+  systemTypes: SystemType[]
+  nominalCodes: NominalCode[]
+}) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
@@ -57,6 +64,7 @@ export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[
     is_emergency: false,
     default_kpi_hours: 24,
     default_chargeable: false,
+    nominal_code_id: null as string | null,
   })
   // Per-system checklists for non-recurring call types (reactive/planned).
   const [checklists, setChecklists] = useState<ServiceTypeChecklistEntry[]>([])
@@ -102,6 +110,7 @@ export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[
         // KPI only applies to reactive call types (planned has no deadline/KPI).
         default_kpi_hours: isReactive ? formData.default_kpi_hours : null,
         default_chargeable: formData.default_chargeable,
+        nominal_code_id: formData.nominal_code_id,
       })
       .select('id')
       .single()
@@ -141,6 +150,7 @@ export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[
         is_emergency: false,
         default_kpi_hours: 24,
         default_chargeable: false,
+        nominal_code_id: null,
       })
       setChecklists([])
       router.refresh()
@@ -344,6 +354,20 @@ export function AddServiceTypeDialog({ systemTypes }: { systemTypes: SystemType[
                 checked={formData.default_chargeable}
                 onCheckedChange={(v) => setFormData({ ...formData, default_chargeable: v })}
               />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="nominal-code">Nominal code</Label>
+              <NominalCodeSelect
+                id="nominal-code"
+                value={formData.nominal_code_id}
+                onChange={(id) => setFormData({ ...formData, nominal_code_id: id })}
+                codes={nominalCodes}
+                noneLabel="None"
+              />
+              <p className="text-xs text-muted-foreground">
+                Accounting code for work of this type. Used to auto-fill invoice lines when the
+                department has no code set.
+              </p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="default-worker-type">Default delivered by</Label>

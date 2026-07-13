@@ -33,15 +33,16 @@ import {
 import { MoreHorizontal, Pencil, Trash2, Search, Package } from 'lucide-react'
 import { PrintButton } from '@/components/ui/print-button'
 import { EditPartDialog } from './edit-part-dialog'
-import type { Part } from '@/lib/types/database'
+import type { Part, NominalCode } from '@/lib/types/database'
 import { formatGBP } from '@/lib/utils'
 
 interface PartsTableProps {
   parts: Part[]
   suppliers?: { id: string; name: string }[]
+  nominalCodes?: NominalCode[]
 }
 
-export function PartsTable({ parts, suppliers = [] }: PartsTableProps) {
+export function PartsTable({ parts, suppliers = [], nominalCodes = [] }: PartsTableProps) {
   const [search, setSearch] = useState('')
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -209,6 +210,7 @@ export function PartsTable({ parts, suppliers = [] }: PartsTableProps) {
           open={!!editPart}
           onOpenChange={() => setEditPart(null)}
           suppliers={suppliers}
+          nominalCodes={nominalCodes}
         />
       )}
     </div>

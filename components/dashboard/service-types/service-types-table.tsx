@@ -34,14 +34,15 @@ import { PrintButton } from '@/components/ui/print-button'
 import { EditServiceTypeDialog } from './edit-service-type-dialog'
 import { SystemBadge } from '@/lib/system-types'
 import { resolveCallKind as callKind } from '@/lib/call-kinds'
-import type { ServiceType, SystemType } from '@/lib/types/database'
+import type { ServiceType, SystemType, NominalCode } from '@/lib/types/database'
 
 interface ServiceTypesTableProps {
   serviceTypes: ServiceType[]
   systemTypes: SystemType[]
+  nominalCodes: NominalCode[]
 }
 
-export function ServiceTypesTable({ serviceTypes, systemTypes }: ServiceTypesTableProps) {
+export function ServiceTypesTable({ serviceTypes, systemTypes, nominalCodes }: ServiceTypesTableProps) {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [editServiceType, setEditServiceType] = useState<ServiceType | null>(null)
   const router = useRouter()
@@ -180,6 +181,7 @@ export function ServiceTypesTable({ serviceTypes, systemTypes }: ServiceTypesTab
         <EditServiceTypeDialog
           serviceType={editServiceType}
           systemTypes={systemTypes}
+          nominalCodes={nominalCodes}
           open={!!editServiceType}
           onOpenChange={() => setEditServiceType(null)}
         />

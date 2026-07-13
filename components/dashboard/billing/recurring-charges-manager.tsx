@@ -54,6 +54,9 @@ import {
   type RecurringChargeInput,
   type LinkableService,
 } from '@/lib/actions/recurring-charges'
+import { getNominalCodes } from '@/lib/actions/nominal-codes'
+import { NominalCodeSelect } from '@/components/dashboard/billing/nominal-code-select'
+import type { NominalCode } from '@/lib/types/database'
 import { Link2 } from 'lucide-react'
 
 interface RecurringChargesManagerProps {
@@ -71,7 +74,7 @@ interface FormState {
   isSubcontracted: boolean
   poundsSubcontract: string
   taxCode: string
-  nominalCode: string
+  nominalCodeId: string | null
   siteServiceId: string // '' = standalone (no service link)
   siteId: string
 }
@@ -87,7 +90,7 @@ const EMPTY_FORM: FormState = {
   isSubcontracted: false,
   poundsSubcontract: '',
   taxCode: '',
-  nominalCode: '',
+  nominalCodeId: null,
   siteServiceId: '',
   siteId: '',
 }
@@ -110,6 +113,7 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
   const [open, setOpen] = useState(false)
   const [charges, setCharges] = useState<RecurringCharge[]>([])
   const [services, setServices] = useState<LinkableService[]>([])
+  const [nominalCodes, setNominalCodes] = useState<NominalCode[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [editing, setEditing] = useState<string | null>(null) // null hidden | 'new' | id
@@ -117,12 +121,14 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [rows, svc] = await Promise.all([
+    const [rows, svc, codes] = await Promise.all([
       getRecurringChargesForAccount(account.id),
       getLinkableServices(account.client_id),
+      getNominalCodes(),
     ])
     setCharges(rows)
     setServices(svc)
+    setNominalCodes(codes)
     setLoading(false)
   }, [account.id, account.client_id])
 
@@ -139,7 +145,7 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
   }
 
   function startAdd() {
-    setForm({ ...EMPTY_FORM, taxCode: account.default_tax_code, nominalCode: account.default_nominal_code })
+    setForm({ ...EMPTY_FORM, taxCode: account.default_tax_code, nominalCodeId: null })
     setEditing('new')
   }
 
@@ -155,7 +161,7 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
       isSubcontracted: charge.is_subcontracted,
       poundsSubcontract: penceToPounds(charge.subcontract_price_pence),
       taxCode: charge.tax_code ?? '',
-      nominalCode: charge.nominal_code ?? '',
+      nominalCodeId: charge.nominal_code_id ?? null,
       siteServiceId: charge.site_service_id ?? '',
       siteId: charge.site_id ?? '',
     })
@@ -191,7 +197,7 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
       unit_price_pence: poundsToPence(form.poundsPrice),
       quantity: Number.parseFloat(form.quantity) || 1,
       tax_code: form.taxCode || null,
-      nominal_code: form.nominalCode || null,
+      nominal_code_id: form.nominalCodeId,
       timing: form.timing,
       frequency: form.frequency,
       renewal_month: form.renewalMonth ? Number(form.renewalMonth) : null,
@@ -608,11 +614,12 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
                   <Label htmlFor="rc-nominal">
                     Nominal code <span className="text-muted-foreground">(optional)</span>
                   </Label>
-                  <Input
+                  <NominalCodeSelect
                     id="rc-nominal"
-                    value={form.nominalCode}
-                    onChange={(e) => set('nominalCode', e.target.value)}
-                    placeholder={account.default_nominal_code}
+                    value={form.nominalCodeId}
+                    onChange={(id) => set('nominalCodeId', id)}
+                    codes={nominalCodes}
+                    noneLabel="None"
                   />
                 </div>
               </div>

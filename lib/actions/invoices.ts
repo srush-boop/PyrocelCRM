@@ -322,8 +322,8 @@ export async function createInvoiceFromTasks(
       id, started_at, completed_at, scheduled_date, is_emergency, client_ref,
       task_result:task_results(reference_number),
       direct_site:sites!tasks_site_id_fkey(id, name, address, postcode),
-      site_service:site_services(service_type:service_types(name), sites(id, name, address, postcode)),
-      call_parts(id, part_id, quantity, unit_cost_pence, sale_unit_price_pence, chargeable, part:parts(name, sku))
+      site_service:site_services(service_type:service_types(name, nominal_code_id), sites(id, name, address, postcode)),
+      call_parts(id, part_id, quantity, unit_cost_pence, sale_unit_price_pence, chargeable, part:parts(name, sku, nominal_code_id))
     `,
     )
     .in('id', taskIds)
@@ -345,6 +345,15 @@ export async function createInvoiceFromTasks(
     loadBankHolidays(supabase),
   ])
   const rateCard = resolveRateCard(account.rate_card_id, cardsById, defaultCard)
+
+  // Map nominal-code id → code text so each line can carry a stable snapshot.
+  // Resolution for task lines: part's own code → its service type's code.
+  const { data: ncRows } = await supabase.from('nominal_codes').select('id, code')
+  const nominalText = new Map<string, string>((ncRows ?? []).map((n: any) => [n.id, n.code]))
+  const nominalFor = (id: string | null) => ({
+    nominal_code_id: id,
+    nominal_code: id ? nominalText.get(id) ?? null : null,
+  })
 
   // Derive each call's PO number + site so we can (a) set invoice-level values
   // when they're common across all calls, and (b) prefix line descriptions when
@@ -432,13 +441,19 @@ export async function createInvoiceFromTasks(
     unit_price_pence: number
     amount_pence: number
     sort_order: number
+    nominal_code_id: string | null
+    nominal_code: string | null
   }[] = []
   let order = 0
 
   for (const t of rows) {
     const siteService = Array.isArray(t.site_service) ? t.site_service[0] : t.site_service
     const siteName = siteService?.sites?.name || t.direct_site?.name || 'site'
-    const serviceName = siteService?.service_type?.name || 'attendance'
+    const svcType = Array.isArray(siteService?.service_type)
+      ? siteService.service_type[0]
+      : siteService?.service_type
+    const serviceName = svcType?.name || 'attendance'
+    const svcNominalId: string | null = svcType?.nominal_code_id ?? null
     const reference =
       (Array.isArray(t.task_result)
         ? t.task_result[0]?.reference_number
@@ -490,6 +505,7 @@ export async function createInvoiceFromTasks(
         unit_price_pence: priced.attendancePence,
         amount_pence: priced.attendancePence,
         sort_order: order++,
+        ...nominalFor(svcNominalId),
       })
 
       // Labour line only when there are chargeable hours beyond the fee.
@@ -504,6 +520,7 @@ export async function createInvoiceFromTasks(
           unit_price_pence: priced.hourlyRatePence,
           amount_pence: lineAmountPence(priced.chargeHours, priced.hourlyRatePence),
           sort_order: order++,
+          ...nominalFor(svcNominalId),
         })
       }
     } else {
@@ -519,6 +536,7 @@ export async function createInvoiceFromTasks(
         unit_price_pence: 0,
         amount_pence: 0,
         sort_order: order++,
+        ...nominalFor(svcNominalId),
       })
     }
 
@@ -527,6 +545,8 @@ export async function createInvoiceFromTasks(
       const part = Array.isArray(p.part) ? p.part[0] : p.part
       const unit = p.sale_unit_price_pence ?? p.unit_cost_pence ?? 0
       const qty = p.quantity ?? 0
+      // Part's own nominal wins; else fall back to the call's service type.
+      const partNominalId: string | null = part?.nominal_code_id ?? svcNominalId
       lines.push({
         invoice_id: invoiceId,
         task_id: t.id,
@@ -537,6 +557,7 @@ export async function createInvoiceFromTasks(
         unit_price_pence: unit,
         amount_pence: lineAmountPence(qty, unit),
         sort_order: order++,
+        ...nominalFor(partNominalId),
       })
     }
   }
@@ -705,6 +726,44 @@ export async function updateInvoiceLine(
   return { error: null }
 }
 
+/**
+ * Set (or clear) the internal nominal code on a single draft line. Also writes
+ * the text snapshot so it survives future master-list edits. INTERNAL only —
+ * the code never renders on the client-facing invoice.
+ */
+export async function setInvoiceLineNominal(
+  lineId: string,
+  invoiceId: string,
+  nominalCodeId: string | null,
+): Promise<{ error: string | null }> {
+  const ctx = await requireManager()
+  if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
+  const { supabase } = ctx
+
+  const guard = await assertDraft(supabase, invoiceId)
+  if (guard) return { error: guard }
+
+  let codeText: string | null = null
+  if (nominalCodeId) {
+    const { data: nc } = await supabase
+      .from('nominal_codes')
+      .select('code')
+      .eq('id', nominalCodeId)
+      .single()
+    codeText = (nc as { code: string } | null)?.code ?? null
+  }
+
+  const { error } = await supabase
+    .from('invoice_line_items')
+    .update({ nominal_code_id: nominalCodeId, nominal_code: codeText })
+    .eq('id', lineId)
+    .eq('invoice_id', invoiceId)
+  if (error) return { error: error.message }
+
+  revalidatePath(`/dashboard/invoices/${invoiceId}`)
+  return { error: null }
+}
+
 export async function deleteInvoiceLine(
   lineId: string,
   invoiceId: string,
@@ -771,6 +830,22 @@ export async function issueInvoice(invoiceId: string): Promise<{ error: string |
 
   const guard = await assertDraft(supabase, invoiceId)
   if (guard) return { error: guard }
+
+  // Every line must carry a nominal (accounting) code before the invoice can be
+  // issued — this is what a future Sage 50 export keys off. Drafts may be
+  // incomplete; the office fixes flagged lines inline in the detail view.
+  const { data: unresolved } = await supabase
+    .from('invoice_line_items')
+    .select('id')
+    .eq('invoice_id', invoiceId)
+    .is('nominal_code_id', null)
+    .limit(1)
+  if (unresolved && unresolved.length > 0) {
+    return {
+      error:
+        'Every line needs a nominal code before this invoice can be issued. Set the missing codes and try again.',
+    }
+  }
 
   const { data: inv } = await supabase
     .from('invoices')

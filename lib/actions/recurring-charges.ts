@@ -3,11 +3,15 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import type {
+  BillingAccount,
+  ChargeTemplate,
+  NominalCode,
   Profile,
   RecurringCharge,
   RecurringFrequency,
   RecurringTiming,
 } from '@/lib/types/database'
+import { resolveBillingAccount } from '@/lib/billing/resolve-billing-account'
 
 // Server actions for recurring charges (Phase A). Office/admin only; RLS
 // (is_billing_manager) also enforces this at the database level. Every price
@@ -43,6 +47,7 @@ export interface RecurringChargeInput {
   quantity: number
   tax_code?: string | null
   nominal_code?: string | null
+  nominal_code_id?: string | null
   timing: RecurringTiming
   frequency: RecurringFrequency
   renewal_month?: number | null
@@ -65,6 +70,7 @@ function sanitize(input: RecurringChargeInput) {
     quantity: input.quantity > 0 ? input.quantity : 1,
     tax_code: input.tax_code?.trim() || null,
     nominal_code: input.nominal_code?.trim() || null,
+    nominal_code_id: input.nominal_code_id ?? null,
     timing: input.timing,
     frequency: input.frequency,
     renewal_month: input.renewal_month ?? null,
@@ -148,6 +154,100 @@ export async function getRecurringChargesForAccount(
     .order('active', { ascending: false })
     .order('description', { ascending: true })
   return (data ?? []) as RecurringCharge[]
+}
+
+export interface ServiceChargeContext {
+  siteServiceId: string
+  siteId: string
+  clientId: string | null
+  serviceLabel: string
+  /** Billing accounts on the service's client, selectable in the dialog. */
+  billingAccounts: BillingAccount[]
+  /** The resolved default account id (service → site → client default). */
+  defaultBillingAccountId: string | null
+  /** Active catalog charges to pick from. */
+  chargeTemplates: ChargeTemplate[]
+  /** Existing recurring charges already linked to this service. */
+  existingCharges: RecurringCharge[]
+  /** Active nominal codes for the managed picker. */
+  nominalCodes: NominalCode[]
+  /** This service type's nominal code — the auto-select fallback for charges. */
+  serviceTypeNominalCodeId: string | null
+}
+
+/**
+ * Everything the "Add charge" dialog on a site service needs: the client's
+ * billing accounts, the resolved default account, the active charge catalog and
+ * any charges already linked to this service. Read-only; office/admin gate via
+ * RLS but any signed-in manager viewing the site can load this.
+ */
+export async function getServiceChargeContext(
+  siteServiceId: string,
+): Promise<ServiceChargeContext | null> {
+  const supabase = await createClient()
+
+  // The service carries its own billing override + its site; the site carries a
+  // billing override + the client. One query resolves the whole chain.
+  const { data: svc } = await supabase
+    .from('site_services')
+    .select(
+      'id, site_id, billing_account_id, service_type:service_types(name, nominal_code_id), site:sites(id, client_id, billing_account_id)',
+    )
+    .eq('id', siteServiceId)
+    .single()
+
+  if (!svc) return null
+
+  const site = Array.isArray((svc as any).site) ? (svc as any).site[0] : (svc as any).site
+  const serviceType = Array.isArray((svc as any).service_type)
+    ? (svc as any).service_type[0]
+    : (svc as any).service_type
+  const clientId: string | null = site?.client_id ?? null
+
+  // Candidate accounts = every billing account on the client.
+  const { data: accountRows } = clientId
+    ? await supabase
+        .from('billing_accounts')
+        .select('*')
+        .eq('client_id', clientId)
+        .order('is_default', { ascending: false })
+        .order('name')
+    : { data: [] as BillingAccount[] }
+  const billingAccounts = (accountRows ?? []) as BillingAccount[]
+
+  const clientDefault = billingAccounts.find((a) => a.is_default) ?? null
+  const resolved = resolveBillingAccount(
+    { billing_account_id: (svc as any).billing_account_id },
+    { billing_account_id: site?.billing_account_id },
+    clientDefault,
+    billingAccounts,
+  )
+
+  const [{ data: templateRows }, { data: existingRows }, { data: nominalRows }] = await Promise.all(
+    [
+      supabase.from('charge_templates').select('*').eq('active', true).order('name'),
+      supabase
+        .from('recurring_charges')
+        .select('*')
+        .eq('site_service_id', siteServiceId)
+        .order('active', { ascending: false })
+        .order('description'),
+      supabase.from('nominal_codes').select('*').eq('active', true).order('code'),
+    ],
+  )
+
+  return {
+    siteServiceId,
+    siteId: (svc as any).site_id,
+    clientId,
+    serviceLabel: serviceType?.name ?? 'Service',
+    billingAccounts,
+    defaultBillingAccountId: resolved.account?.id ?? null,
+    chargeTemplates: (templateRows ?? []) as ChargeTemplate[],
+    existingCharges: (existingRows ?? []) as RecurringCharge[],
+    nominalCodes: (nominalRows ?? []) as NominalCode[],
+    serviceTypeNominalCodeId: serviceType?.nominal_code_id ?? null,
+  }
 }
 
 export async function createRecurringCharge(input: RecurringChargeInput) {

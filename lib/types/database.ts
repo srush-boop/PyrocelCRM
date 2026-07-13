@@ -247,6 +247,10 @@ export interface InvoiceLineItem {
   unit_price_pence: number
   amount_pence: number
   sort_order: number
+  /** Managed nominal-code mapping (internal accounting only). */
+  nominal_code_id: string | null
+  /** Text snapshot of the code at issue time; survives master-list changes. */
+  nominal_code: string | null
   created_at: string
 }
 
@@ -265,6 +269,8 @@ export interface RecurringCharge {
   quantity: number
   tax_code: string | null
   nominal_code: string | null
+  /** Managed nominal-code mapping (preferred over the legacy text field). */
+  nominal_code_id: string | null
   timing: RecurringTiming
   frequency: RecurringFrequency
   /** 1-12: the month the annual price is reviewed for renewal. */
@@ -284,6 +290,36 @@ export interface RecurringCharge {
   updated_at: string
   billing_account?: BillingAccount | null
   site_service?: SiteService | null
+}
+
+// Managed master list of Sage-style nominal (accounting) codes. INTERNAL only —
+// codes never appear on client-facing invoices.
+export interface NominalCode {
+  id: string
+  code: string
+  name: string
+  active: boolean
+  created_at: string
+  created_by: string | null
+  updated_at: string
+}
+
+// A reusable, preconfigured charge in the catalog (Settings → Charges).
+// Picking one prefills a recurring charge's description, price and codes; the
+// values can then be overridden per site service. Amounts in integer pence.
+export interface ChargeTemplate {
+  id: string
+  name: string
+  description: string | null
+  default_unit_price_pence: number
+  default_tax_code: string | null
+  default_nominal_code: string | null
+  /** Managed nominal-code mapping (preferred over the legacy text field). */
+  nominal_code_id: string | null
+  active: boolean
+  created_at: string
+  created_by: string | null
+  updated_at: string
 }
 
 export interface RecurringChargePriceHistory {
@@ -443,6 +479,8 @@ export interface Department {
   id: string
   name: string
   default_margin_percent: number
+  /** Default nominal code for anything under this department (first fallback). */
+  nominal_code_id: string | null
   active: boolean
   created_at: string
   updated_at: string
@@ -494,6 +532,8 @@ export interface ServiceType {
   // Parent system type (e.g. Fire Alarm). The queryable code lives on the
   // system type now, not here.
   system_type_id: string | null
+  /** Nominal code for work of this service type (second fallback). */
+  nominal_code_id: string | null
   description: string | null
   default_frequency_months?: number // Legacy field
   default_frequency_value: number
@@ -2176,6 +2216,8 @@ export interface Part {
   is_active: boolean
   // Product supplier this part is ordered from (see Supplier of type 'product').
   supplier_id: string | null
+  /** Nominal code override for this product/part (wins over dept/service). */
+  nominal_code_id: string | null
   created_at: string
   supplier?: Supplier | null
 }

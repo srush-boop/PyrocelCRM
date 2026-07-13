@@ -113,7 +113,9 @@ export async function raiseCreditNote(invoiceId: string) {
   // Copy the source lines across.
   const { data: srcLines } = await supabase
     .from('invoice_line_items')
-    .select('task_id, part_id, kind, description, quantity, unit_price_pence, amount_pence, sort_order')
+    .select(
+      'task_id, part_id, kind, description, quantity, unit_price_pence, amount_pence, sort_order, nominal_code_id, nominal_code',
+    )
     .eq('invoice_id', invoiceId)
     .order('sort_order', { ascending: true })
 
@@ -126,6 +128,8 @@ export async function raiseCreditNote(invoiceId: string) {
     unit_price_pence: number
     amount_pence: number
     sort_order: number
+    nominal_code_id: string | null
+    nominal_code: string | null
   }[]
 
   if (lines.length) {
@@ -142,6 +146,9 @@ export async function raiseCreditNote(invoiceId: string) {
         unit_price_pence: l.unit_price_pence,
         amount_pence: l.amount_pence,
         sort_order: l.sort_order,
+        // Carry the accounting code snapshot onto the credit note.
+        nominal_code_id: l.nominal_code_id,
+        nominal_code: l.nominal_code,
       })),
     )
   }

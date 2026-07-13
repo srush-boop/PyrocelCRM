@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home, Wrench, HardHat, FileText, Database, PhoneCall, ShieldCheck, Receipt, Tags } from 'lucide-react'
+import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home, Wrench, HardHat, FileText, Database, PhoneCall, ShieldCheck, Receipt, Tags, Coins, Hash } from 'lucide-react'
 import type { User as AuthUser } from '@supabase/supabase-js'
 import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType, DocumentTemplate } from '@/lib/types/database'
 import type { LoneWorkerManagedUser } from '@/app/(dashboard)/dashboard/lone-worker/actions'
@@ -26,8 +26,11 @@ import { BulkDataSettings } from './bulk-data-settings'
 import { GlobalConfigSettings } from './global-config-settings'
 import { LoneWorkerSettings } from './lone-worker-settings'
 import { RateCardsSettings } from './rate-cards-settings'
+import { ChargeTemplatesSettings } from './charge-templates-settings'
+import { NominalCodesSettings } from './nominal-codes-settings'
 import { DocumentTagsSettings } from './document-tags-settings'
 import type { RateCard } from '@/lib/billing/rate-cards'
+import type { ChargeTemplate, NominalCode } from '@/lib/types/database'
 import type { TagWithUsage } from '@/lib/actions/document-tags'
 import type { OpeningHours } from '@/lib/oncall/opening-hours'
 import { signatureSrc } from '@/lib/blob'
@@ -49,12 +52,14 @@ interface SettingsContentProps {
   loneWorkerTimings: LoneWorkerTimings
   canManageRates: boolean
   rateCards: RateCard[]
+  chargeTemplates: ChargeTemplate[]
+  nominalCodes: NominalCode[]
   canManageTags: boolean
   documentTags: TagWithUsage[]
   openingHours: OpeningHours
 }
 
-export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards, canManageTags, documentTags, openingHours }: SettingsContentProps) {
+export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards, chargeTemplates, nominalCodes, canManageTags, documentTags, openingHours }: SettingsContentProps) {
   const isAdmin = profile.role === 'admin'
   // Templates are managed by office/admin (mail-merge letters for client correspondence).
   const canManageTemplates = profile.role === 'admin' || profile.role === 'office'
@@ -202,6 +207,18 @@ export function SettingsContent({ user, profile, company, branches, departments,
           <TabsTrigger value="rates" className="gap-2">
             <Receipt className="h-4 w-4" />
             Rates
+          </TabsTrigger>
+        )}
+        {canManageRates && (
+          <TabsTrigger value="charges" className="gap-2">
+            <Coins className="h-4 w-4" />
+            Charges
+          </TabsTrigger>
+        )}
+        {canManageRates && (
+          <TabsTrigger value="nominal" className="gap-2">
+            <Hash className="h-4 w-4" />
+            Nominal Codes
           </TabsTrigger>
         )}
         {canManageTags && (
@@ -377,7 +394,7 @@ export function SettingsContent({ user, profile, company, branches, departments,
 
       {isAdmin && (
         <TabsContent value="departments" className="space-y-4">
-          <DepartmentsSettings departments={departments} />
+          <DepartmentsSettings departments={departments} nominalCodes={nominalCodes} />
         </TabsContent>
       )}
 
@@ -438,11 +455,21 @@ export function SettingsContent({ user, profile, company, branches, departments,
         </TabsContent>
       )}
 
-      {canManageRates && (
-        <TabsContent value="rates" className="space-y-4">
-          <RateCardsSettings rateCards={rateCards} />
-        </TabsContent>
-      )}
+        {canManageRates && (
+          <TabsContent value="rates" className="space-y-4">
+            <RateCardsSettings rateCards={rateCards} />
+          </TabsContent>
+        )}
+        {canManageRates && (
+          <TabsContent value="charges" className="space-y-4">
+            <ChargeTemplatesSettings chargeTemplates={chargeTemplates} nominalCodes={nominalCodes} />
+          </TabsContent>
+        )}
+        {canManageRates && (
+          <TabsContent value="nominal" className="space-y-4">
+            <NominalCodesSettings nominalCodes={nominalCodes} />
+          </TabsContent>
+        )}
 
       {canManageTags && (
         <TabsContent value="tags" className="space-y-4">

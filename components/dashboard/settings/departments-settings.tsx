@@ -35,26 +35,33 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Loader2, Plus, Pencil, Trash2 } from 'lucide-react'
-import type { Department } from '@/lib/types/database'
+import type { Department, NominalCode } from '@/lib/types/database'
+import { NominalCodeSelect } from '@/components/dashboard/billing/nominal-code-select'
 
 interface DepartmentsSettingsProps {
   departments: Department[]
+  nominalCodes: NominalCode[]
 }
 
 interface FormState {
   id?: string
   name: string
   margin: string
+  nominalCodeId: string | null
   active: boolean
 }
 
 function emptyForm(): FormState {
-  return { name: '', margin: '0', active: true }
+  return { name: '', margin: '0', nominalCodeId: null, active: true }
 }
 
-export function DepartmentsSettings({ departments }: DepartmentsSettingsProps) {
+export function DepartmentsSettings({ departments, nominalCodes }: DepartmentsSettingsProps) {
   const router = useRouter()
   const supabase = createClient()
+  const codeLabel = (id: string | null) => {
+    const c = id ? nominalCodes.find((n) => n.id === id) : null
+    return c ? `${c.code} — ${c.name}` : '—'
+  }
   const [isPending, startTransition] = useTransition()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [form, setForm] = useState<FormState>(emptyForm())
@@ -72,6 +79,7 @@ export function DepartmentsSettings({ departments }: DepartmentsSettingsProps) {
       id: dept.id,
       name: dept.name,
       margin: String(dept.default_margin_percent ?? 0),
+      nominalCodeId: dept.nominal_code_id ?? null,
       active: dept.active,
     })
     setMessage(null)
@@ -87,6 +95,7 @@ export function DepartmentsSettings({ departments }: DepartmentsSettingsProps) {
       const payload = {
         name: form.name.trim(),
         default_margin_percent: Number.parseFloat(form.margin) || 0,
+        nominal_code_id: form.nominalCodeId,
         active: form.active,
         updated_at: new Date().toISOString(),
       }
@@ -148,6 +157,7 @@ export function DepartmentsSettings({ departments }: DepartmentsSettingsProps) {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead className="text-right">Default margin</TableHead>
+                <TableHead>Nominal code</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-24" />
               </TableRow>
@@ -155,7 +165,7 @@ export function DepartmentsSettings({ departments }: DepartmentsSettingsProps) {
             <TableBody>
               {departments.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
                     No departments yet. Add one to set a default sales margin.
                   </TableCell>
                 </TableRow>
@@ -165,6 +175,9 @@ export function DepartmentsSettings({ departments }: DepartmentsSettingsProps) {
                     <TableCell className="font-medium">{dept.name}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {dept.default_margin_percent ?? 0}%
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {codeLabel(dept.nominal_code_id)}
                     </TableCell>
                     <TableCell>
                       <Badge variant={dept.active ? 'default' : 'secondary'}>
@@ -227,6 +240,20 @@ export function DepartmentsSettings({ departments }: DepartmentsSettingsProps) {
                 placeholder="0"
               />
               <p className="text-xs text-muted-foreground">Sell price = cost / (1 − margin%).</p>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="d-nominal">Default nominal code</Label>
+              <NominalCodeSelect
+                id="d-nominal"
+                value={form.nominalCodeId}
+                onChange={(id) => setForm({ ...form, nominalCodeId: id })}
+                codes={nominalCodes}
+                noneLabel="None"
+              />
+              <p className="text-xs text-muted-foreground">
+                Used as the first fallback when a charge or part on this department has no code of
+                its own.
+              </p>
             </div>
             <label className="flex items-center gap-2 text-sm">
               <input

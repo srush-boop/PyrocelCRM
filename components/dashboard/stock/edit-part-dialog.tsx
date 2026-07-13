@@ -24,7 +24,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Loader2 } from 'lucide-react'
-import type { Part } from '@/lib/types/database'
+import type { Part, NominalCode } from '@/lib/types/database'
+import { NominalCodeSelect } from '@/components/dashboard/billing/nominal-code-select'
 
 const NONE_VALUE = '__none__'
 
@@ -33,9 +34,10 @@ interface EditPartDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   suppliers?: { id: string; name: string }[]
+  nominalCodes?: NominalCode[]
 }
 
-export function EditPartDialog({ part, open, onOpenChange, suppliers = [] }: EditPartDialogProps) {
+export function EditPartDialog({ part, open, onOpenChange, suppliers = [], nominalCodes = [] }: EditPartDialogProps) {
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: part.name,
@@ -46,6 +48,7 @@ export function EditPartDialog({ part, open, onOpenChange, suppliers = [] }: Edi
     description: part.description ?? '',
     is_active: part.is_active,
     supplier_id: part.supplier_id ?? '',
+    nominal_code_id: part.nominal_code_id ?? null,
   })
   const router = useRouter()
   const supabase = createClient()
@@ -65,6 +68,7 @@ export function EditPartDialog({ part, open, onOpenChange, suppliers = [] }: Edi
         description: formData.description || null,
         is_active: formData.is_active,
         supplier_id: formData.supplier_id || null,
+        nominal_code_id: formData.nominal_code_id,
       })
       .eq('id', part.id)
 
@@ -163,6 +167,19 @@ export function EditPartDialog({ part, open, onOpenChange, suppliers = [] }: Edi
               </Select>
               <p className="text-xs text-muted-foreground">
                 The supplier this part is ordered from. Used for future equipment ordering.
+              </p>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit_nominal">Nominal code</Label>
+              <NominalCodeSelect
+                id="edit_nominal"
+                value={formData.nominal_code_id}
+                onChange={(id) => setFormData({ ...formData, nominal_code_id: id })}
+                codes={nominalCodes}
+                noneLabel="None"
+              />
+              <p className="text-xs text-muted-foreground">
+                Optional. Overrides the department/service nominal when this part is invoiced.
               </p>
             </div>
             <div className="grid gap-2">

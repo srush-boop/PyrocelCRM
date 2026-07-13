@@ -5,6 +5,8 @@ import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType, Docu
 import { getGlobalConfigs } from '@/lib/actions/global-config'
 import { getLoneWorkerAdminData } from '@/app/(dashboard)/dashboard/lone-worker/actions'
 import { getRateCards } from '@/lib/actions/rate-cards'
+import { getChargeTemplates } from '@/lib/actions/charge-templates'
+import { getNominalCodes } from '@/lib/actions/nominal-codes'
 import { listTagsWithUsage } from '@/lib/actions/document-tags'
 import { OPENING_HOURS_KEY, parseOpeningHours } from '@/lib/oncall/opening-hours'
 
@@ -45,6 +47,9 @@ export default async function SettingsPage() {
   // Rate cards (call-out + labour pricing) are managed by office/admin.
   const canManageRates = role === 'admin' || role === 'office'
   const rateCards = canManageRates ? await getRateCards() : []
+  const chargeTemplates = canManageRates ? await getChargeTemplates() : []
+  // Nominal codes power the Settings tab AND the department/service-type mappings.
+  const nominalCodes = canManageRates ? await getNominalCodes() : []
 
   // Document tags (shared vocabulary) are managed by office/admin.
   const documentTags = canManageTemplates ? await listTagsWithUsage() : []
@@ -98,6 +103,8 @@ export default async function SettingsPage() {
         loneWorkerTimings={loneWorkerData.timings}
         canManageRates={canManageRates}
         rateCards={rateCards}
+        chargeTemplates={chargeTemplates}
+        nominalCodes={nominalCodes}
         canManageTags={canManageTemplates}
         documentTags={documentTags}
         openingHours={openingHours}

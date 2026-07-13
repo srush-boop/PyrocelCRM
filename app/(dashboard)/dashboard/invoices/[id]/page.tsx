@@ -3,7 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
-import type { Invoice, InvoiceLineItem, Profile } from '@/lib/types/database'
+import type { Invoice, InvoiceLineItem, NominalCode, Profile } from '@/lib/types/database'
 import { InvoiceDetail } from '@/components/dashboard/invoices/invoice-detail'
 
 export const dynamic = 'force-dynamic'
@@ -41,6 +41,13 @@ export default async function InvoiceDetailPage({
     .select('*')
     .eq('invoice_id', id)
     .order('sort_order', { ascending: true })
+
+  // Managed nominal codes for the internal per-line accounting picker.
+  const { data: nominalCodeRows } = await supabase
+    .from('nominal_codes')
+    .select('*')
+    .order('code', { ascending: true })
+  const nominalCodes = (nominalCodeRows ?? []) as NominalCode[]
 
   // Resolve each task-sourced line's service type so the detail can group
   // multi-service invoices under service-type subheadings (presentation only).
@@ -83,6 +90,7 @@ export default async function InvoiceDetailPage({
         }}
         lines={lineList}
         serviceTypeByLineId={serviceTypeByLineId}
+        nominalCodes={nominalCodes}
       />
     </div>
   )

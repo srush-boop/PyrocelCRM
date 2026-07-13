@@ -49,6 +49,39 @@ function frequencyMonths(frequency: RecurringFrequency): number {
   }
 }
 
+/**
+ * How many times a charge of the given frequency is billed in a year. Weekly is
+ * treated as 52. Used to convert between an annual total and a per-period price.
+ */
+export function annualOccurrences(frequency: RecurringFrequency): number {
+  switch (frequency) {
+    case 'weekly':
+      return 52
+    case 'monthly':
+      return 12
+    case 'quarterly':
+      return 4
+    case 'biannual':
+      return 2
+    case 'annual':
+      return 1
+  }
+}
+
+/**
+ * Given an annual total (pence), the whole-pence amount to bill each period.
+ * Rounded to the nearest penny; over a year the small rounding drift is at most
+ * a few pence, which is acceptable for recurring billing.
+ */
+export function perPeriodFromAnnual(annualPence: number, frequency: RecurringFrequency): number {
+  return Math.round(annualPence / annualOccurrences(frequency))
+}
+
+/** Given a per-period price (pence), the implied annual total. */
+export function annualFromPerPeriod(perPeriodPence: number, frequency: RecurringFrequency): number {
+  return Math.round(perPeriodPence * annualOccurrences(frequency))
+}
+
 /** Advance a date by one period of the given frequency (UTC-safe date math). */
 export function addPeriod(from: Date, frequency: RecurringFrequency): Date {
   const d = new Date(from)

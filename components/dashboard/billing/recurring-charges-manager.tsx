@@ -46,12 +46,15 @@ import {
 import { formatPence } from '@/lib/billing/invoices'
 import {
   getRecurringChargesForAccount,
+  getLinkableServices,
   createRecurringCharge,
   updateRecurringCharge,
   setRecurringChargeActive,
   deleteRecurringCharge,
   type RecurringChargeInput,
+  type LinkableService,
 } from '@/lib/actions/recurring-charges'
+import { Link2 } from 'lucide-react'
 
 interface RecurringChargesManagerProps {
   account: BillingAccount
@@ -69,6 +72,8 @@ interface FormState {
   poundsSubcontract: string
   taxCode: string
   nominalCode: string
+  siteServiceId: string // '' = standalone (no service link)
+  siteId: string
 }
 
 const EMPTY_FORM: FormState = {
@@ -83,9 +88,12 @@ const EMPTY_FORM: FormState = {
   poundsSubcontract: '',
   taxCode: '',
   nominalCode: '',
+  siteServiceId: '',
+  siteId: '',
 }
 
 const NO_RENEWAL = '__none__'
+const NO_SERVICE = '__standalone__'
 
 function poundsToPence(pounds: string): number {
   const n = Number.parseFloat(pounds)
@@ -101,6 +109,7 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [charges, setCharges] = useState<RecurringCharge[]>([])
+  const [services, setServices] = useState<LinkableService[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [editing, setEditing] = useState<string | null>(null) // null hidden | 'new' | id
@@ -108,10 +117,14 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
 
   const load = useCallback(async () => {
     setLoading(true)
-    const rows = await getRecurringChargesForAccount(account.id)
+    const [rows, svc] = await Promise.all([
+      getRecurringChargesForAccount(account.id),
+      getLinkableServices(account.client_id),
+    ])
     setCharges(rows)
+    setServices(svc)
     setLoading(false)
-  }, [account.id])
+  }, [account.id, account.client_id])
 
   useEffect(() => {
     if (open) {
@@ -143,14 +156,37 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
       poundsSubcontract: penceToPounds(charge.subcontract_price_pence),
       taxCode: charge.tax_code ?? '',
       nominalCode: charge.nominal_code ?? '',
+      siteServiceId: charge.site_service_id ?? '',
+      siteId: charge.site_id ?? '',
     })
     setEditing(charge.id)
+  }
+
+  // Linking to a service also captures its site and, when the description is
+  // still blank, prefills a sensible "{Site} — {Service type}" label.
+  function handlePickService(value: string) {
+    if (value === NO_SERVICE) {
+      setForm((prev) => ({ ...prev, siteServiceId: '', siteId: '' }))
+      return
+    }
+    const svc = services.find((s) => s.site_service_id === value)
+    if (!svc) return
+    setForm((prev) => ({
+      ...prev,
+      siteServiceId: svc.site_service_id,
+      siteId: svc.site_id,
+      description: prev.description.trim()
+        ? prev.description
+        : `${svc.site_name} — ${svc.service_type_name}`,
+    }))
   }
 
   function buildInput(): RecurringChargeInput {
     return {
       billing_account_id: account.id,
       client_id: account.client_id,
+      site_service_id: form.siteServiceId || null,
+      site_id: form.siteId || null,
       description: form.description,
       unit_price_pence: poundsToPence(form.poundsPrice),
       quantity: Number.parseFloat(form.quantity) || 1,
@@ -274,6 +310,12 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
                                 Subcontracted
                               </Badge>
                             )}
+                            {charge.site_service_id && (
+                              <Badge variant="outline" className="gap-1 text-xs">
+                                <Link2 className="h-3 w-3" />
+                                Linked to service
+                              </Badge>
+                            )}
                           </div>
                           <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
                             <span className="font-medium text-foreground">
@@ -373,6 +415,32 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
                 >
                   <X className="h-4 w-4" />
                 </Button>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="rc-service">
+                  Linked service <span className="text-muted-foreground">(optional)</span>
+                </Label>
+                <Select
+                  value={form.siteServiceId || NO_SERVICE}
+                  onValueChange={handlePickService}
+                >
+                  <SelectTrigger id="rc-service">
+                    <SelectValue placeholder="Standalone charge (no service)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_SERVICE}>Standalone charge (no service)</SelectItem>
+                    {services.map((s) => (
+                      <SelectItem key={s.site_service_id} value={s.site_service_id}>
+                        {s.site_name} — {s.service_type_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Link this charge to a scheduled service, or leave standalone for fees with no
+                  visit (monitoring, rentals).
+                </p>
               </div>
 
               <div className="grid gap-2">

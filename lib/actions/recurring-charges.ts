@@ -161,9 +161,6 @@ export interface ServiceChargeContext {
   siteId: string
   clientId: string | null
   serviceLabel: string
-  /** Whether the linked service type schedules recurring visits. Recurring
-   * charges can only attach to recurring services. */
-  isRecurringService: boolean
   /** Billing accounts on the service's client, selectable in the dialog. */
   billingAccounts: BillingAccount[]
   /** The resolved default account id (service → site → client default). */
@@ -194,7 +191,7 @@ export async function getServiceChargeContext(
   const { data: svc } = await supabase
     .from('site_services')
     .select(
-      'id, site_id, billing_account_id, service_type:service_types(name, nominal_code_id, is_recurring), site:sites(id, client_id, billing_account_id)',
+      'id, site_id, billing_account_id, service_type:service_types(name, nominal_code_id), site:sites(id, client_id, billing_account_id)',
     )
     .eq('id', siteServiceId)
     .single()
@@ -244,7 +241,6 @@ export async function getServiceChargeContext(
     siteId: (svc as any).site_id,
     clientId,
     serviceLabel: serviceType?.name ?? 'Service',
-    isRecurringService: !!serviceType?.is_recurring,
     billingAccounts,
     defaultBillingAccountId: resolved.account?.id ?? null,
     chargeTemplates: (templateRows ?? []) as ChargeTemplate[],
@@ -260,23 +256,6 @@ export async function createRecurringCharge(input: RecurringChargeInput) {
   const { supabase, userId } = auth
 
   if (!input.description?.trim()) return { error: 'Description is required' }
-
-  // Recurring charges may only be attached to recurring services. Verify the
-  // linked service type schedules recurring visits before inserting.
-  if (input.site_service_id) {
-    const { data: svc } = await supabase
-      .from('site_services')
-      .select('service_type:service_types(is_recurring)')
-      .eq('id', input.site_service_id)
-      .single()
-    const st = (svc as any)?.service_type
-    const isRecurring = Array.isArray(st) ? st[0]?.is_recurring : st?.is_recurring
-    if (!isRecurring) {
-      return {
-        error: 'Recurring charges can only be added to recurring services.',
-      }
-    }
-  }
 
   const values = sanitize(input)
   const { data, error } = await supabase

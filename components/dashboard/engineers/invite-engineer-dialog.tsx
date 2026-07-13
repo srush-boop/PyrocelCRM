@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import {
@@ -20,29 +20,17 @@ import {
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Loader2, RefreshCw, Copy, Check, UserPlus, Users } from 'lucide-react'
+import { Loader2, RefreshCw, Copy, Check, UserPlus } from 'lucide-react'
 import type { UserRole, Department, Branch } from '@/lib/types/database'
 
 const NO_DEPARTMENT = '__none__'
 const NO_BRANCH = '__none__'
-
-// Details of the user being copied. When provided, the dialog pre-fills the
-// org placement, blanks the identity fields, and tells the API to clone the
-// source user's settings onto the new account.
-export interface CopyUserSource {
-  id: string
-  full_name: string | null
-  role: UserRole
-  department_id: string | null
-  branch_id: string | null
-}
 
 interface InviteEngineerDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   departments: Department[]
   branches?: Branch[]
-  copyFrom?: CopyUserSource | null
 }
 
 /** Generates a readable but strong temporary password. */
@@ -59,9 +47,7 @@ export function InviteEngineerDialog({
   onOpenChange,
   departments,
   branches = [],
-  copyFrom = null,
 }: InviteEngineerDialogProps) {
-  const isCopy = !!copyFrom
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -77,37 +63,19 @@ export function InviteEngineerDialog({
   })
   const router = useRouter()
 
-  // Build the initial form values, pre-filling org placement (but never
-  // identity) from the source user when copying.
-  const initialForm = useCallback(
-    () => ({
+  const resetForm = () => {
+    setFormData({
       email: '',
       full_name: '',
-      role: (copyFrom?.role ?? 'engineer') as UserRole,
-      department_id: copyFrom?.department_id ?? NO_DEPARTMENT,
-      branch_id: copyFrom?.branch_id ?? NO_BRANCH,
+      role: 'engineer',
+      department_id: NO_DEPARTMENT,
+      branch_id: NO_BRANCH,
       password: generatePassword(),
-    }),
-    [copyFrom],
-  )
-
-  const resetForm = useCallback(() => {
-    setFormData(initialForm())
+    })
     setError(null)
     setCreated(null)
     setCopied(false)
-  }, [initialForm])
-
-  // When the dialog opens (or the copy source changes), refresh the form so the
-  // copied placement is reflected.
-  useEffect(() => {
-    if (open) {
-      setFormData(initialForm())
-      setError(null)
-      setCreated(null)
-      setCopied(false)
-    }
-  }, [open, initialForm])
+  }
 
   const handleClose = (next: boolean) => {
     if (loading) return
@@ -144,7 +112,6 @@ export function InviteEngineerDialog({
           role: formData.role,
           departmentId: formData.department_id === NO_DEPARTMENT ? null : formData.department_id,
           branchId: formData.branch_id === NO_BRANCH ? null : formData.branch_id,
-          copyFromUserId: copyFrom?.id ?? null,
         }),
       })
       const data = await res.json()
@@ -214,13 +181,10 @@ export function InviteEngineerDialog({
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle>
-                {isCopy ? `Copy user${copyFrom?.full_name ? ` — ${copyFrom.full_name}` : ''}` : 'Add Team Member'}
-              </DialogTitle>
+              <DialogTitle>Add Team Member</DialogTitle>
               <DialogDescription>
-                {isCopy
-                  ? 'Creates a new account that inherits all of this user\u2019s settings (role, department, working hours, holiday entitlement, menu access and more). Enter the new person\u2019s email, name and password below.'
-                  : 'Create a staff account and set their password. You\u2019ll then share the sign-in details with them directly — no email invitation is sent.'}
+                Create a staff account and set their password. You&apos;ll then share the sign-in
+                details with them directly — no email invitation is sent.
               </DialogDescription>
             </DialogHeader>
 
@@ -356,12 +320,10 @@ export function InviteEngineerDialog({
                 <Button type="submit" disabled={loading} className="gap-2">
                   {loading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : isCopy ? (
-                    <Users className="h-4 w-4" />
                   ) : (
                     <UserPlus className="h-4 w-4" />
                   )}
-                  {loading ? 'Creating...' : isCopy ? 'Create Copy' : 'Create User'}
+                  {loading ? 'Creating...' : 'Create User'}
                 </Button>
               </DialogFooter>
             </form>

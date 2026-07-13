@@ -42,12 +42,10 @@ interface ChecklistsTableProps {
   serviceTypes: ServiceType[]
 }
 
-export function ChecklistsTable({ checklists, serviceTypes }: ChecklistsTableProps) {
+export function ChecklistsTable({ checklists }: ChecklistsTableProps) {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
-
-  const serviceName = (id: string) => serviceTypes.find((s) => s.id === id)?.name
 
   const handleDelete = async () => {
     if (!deleteId) return
@@ -93,20 +91,9 @@ export function ChecklistsTable({ checklists, serviceTypes }: ChecklistsTablePro
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap items-center gap-1.5">
-                      {(checklist.service_type_ids?.length
-                        ? checklist.service_type_ids
-                        : checklist.service_type_id
-                          ? [checklist.service_type_id]
-                          : []
-                      ).map((id) => (
-                        <Badge key={id} variant="secondary">
-                          {serviceName(id) ??
-                            (id === checklist.service_type_id
-                              ? checklist.service_type?.name
-                              : null) ??
-                            'Unknown'}
-                        </Badge>
-                      ))}
+                      <Badge variant="secondary">
+                        {checklist.service_type?.name || 'Unknown'}
+                      </Badge>
                       {checklist.visit_type && (
                         <Badge variant="outline">{checklist.visit_type.name}</Badge>
                       )}

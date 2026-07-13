@@ -17,7 +17,6 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import { markNotificationsRead } from '@/app/(dashboard)/dashboard/notifications/actions'
 import { PushToggle } from './push-toggle'
-import { InstallAppButton } from './install-app-button'
 
 interface NotificationRow {
   id: string
@@ -142,9 +141,8 @@ export function NotificationBell() {
           )}
         </div>
 
-        <div className="flex shrink-0 flex-col gap-3 border-b px-4 py-3">
+        <div className="shrink-0 border-b px-4 py-3">
           <PushToggle />
-          <InstallAppButton />
         </div>
 
         <ScrollArea className="min-h-0 flex-1">

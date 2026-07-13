@@ -128,6 +128,7 @@ const adminCallsNavItem: NavItem = {
     { title: 'Lone Worker', href: '/dashboard/lone-worker', icon: ShieldCheck },
     { title: 'Reports', href: '/dashboard/reports', icon: FileText },
     { title: 'Chargeable Calls', href: '/dashboard/chargeable', icon: Coins },
+    { title: 'Invoices', href: '/dashboard/invoices', icon: ReceiptText },
     { title: 'Follow-ups', href: '/dashboard/follow-ups', icon: Wrench },
     { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
     { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
@@ -149,6 +150,7 @@ const officeCallsNavItem: NavItem = {
     { title: 'Lone Worker', href: '/dashboard/lone-worker', icon: ShieldCheck },
     { title: 'Reports', href: '/dashboard/reports', icon: FileText },
     { title: 'Chargeable Calls', href: '/dashboard/chargeable', icon: Coins },
+    { title: 'Invoices', href: '/dashboard/invoices', icon: ReceiptText },
     { title: 'Follow-ups', href: '/dashboard/follow-ups', icon: Wrench },
     { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
     { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
@@ -181,22 +183,6 @@ const salesNavItem: NavItem = {
     { title: 'Quotes', href: '/dashboard/sales/quotes', icon: ReceiptText },
     { title: 'Quote Bank', href: '/dashboard/sales/quote-bank', icon: Landmark },
     {
-      title: 'Tender AI',
-      icon: Sparkles,
-      children: [
-        { title: 'Dashboard', href: '/dashboard/tender-ai', icon: LayoutDashboard },
-        { title: 'Active Tenders', href: '/dashboard/tender-ai/tenders', icon: FileSignature },
-        { title: 'Knowledge Centre', href: '/dashboard/tender-ai/knowledge', icon: BookOpen },
-        { title: 'Evidence Library', href: '/dashboard/tender-ai/evidence', icon: Paperclip },
-        { title: 'AI Prompt Library', href: '/dashboard/tender-ai/prompts', icon: MessageSquareText },
-        { title: 'Templates', href: '/dashboard/tender-ai/templates', icon: LayoutList },
-        { title: 'Previous Responses', href: '/dashboard/tender-ai/previous-responses', icon: History },
-        { title: 'Tender Vault', href: '/dashboard/tender-ai/vault', icon: Archive },
-        { title: 'Requested Documents', href: '/dashboard/tender-ai/requested-documents', icon: FileText },
-        { title: 'AI Settings', href: '/dashboard/tender-ai/settings', icon: SlidersHorizontal },
-      ],
-    },
-    {
       title: 'Configure',
       icon: Settings,
       children: [
@@ -211,15 +197,6 @@ const salesNavItem: NavItem = {
       ],
     },
   ],
-}
-
-// Invoicing: promoted out of the Service group to a top-level item. Keeps the
-// `invoices` key so per-user permissions and deep links continue to resolve.
-const invoicingNavItem: NavItem = {
-  key: 'invoices',
-  title: 'Invoicing',
-  href: '/dashboard/invoices',
-  icon: ReceiptText,
 }
 
 // Jobs: the operational delivery of won quotes. A clickable group opening the
@@ -269,6 +246,27 @@ const engineerStockNavItem: NavItem = {
   children: [
     { title: 'Overview', href: '/dashboard/stock', icon: Boxes },
     { title: 'Transfer Stock', href: '/dashboard/stock/transfer', icon: Route },
+  ],
+}
+
+// Tender AI: an expandable group. The trigger opens the module dashboard and
+// reveals the nine sub-sections. Shared by admin and office.
+const tenderAiNavItem: NavItem = {
+  key: 'tender-ai',
+  title: 'Tender AI',
+  href: '/dashboard/tender-ai',
+  icon: Sparkles,
+  children: [
+    { title: 'Dashboard', href: '/dashboard/tender-ai', icon: LayoutDashboard },
+    { title: 'Active Tenders', href: '/dashboard/tender-ai/tenders', icon: FileSignature },
+    { title: 'Knowledge Centre', href: '/dashboard/tender-ai/knowledge', icon: BookOpen },
+    { title: 'Evidence Library', href: '/dashboard/tender-ai/evidence', icon: Paperclip },
+    { title: 'AI Prompt Library', href: '/dashboard/tender-ai/prompts', icon: MessageSquareText },
+    { title: 'Templates', href: '/dashboard/tender-ai/templates', icon: LayoutList },
+    { title: 'Previous Responses', href: '/dashboard/tender-ai/previous-responses', icon: History },
+    { title: 'Tender Vault', href: '/dashboard/tender-ai/vault', icon: Archive },
+    { title: 'Requested Documents', href: '/dashboard/tender-ai/requested-documents', icon: FileText },
+    { title: 'AI Settings', href: '/dashboard/tender-ai/settings', icon: SlidersHorizontal },
   ],
 }
 
@@ -391,12 +389,12 @@ const adminNavItems: NavItem[] = [
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   chatNavItem,
   salesNavItem,
-  invoicingNavItem,
   jobsNavItem,
   purchasingNavItem,
   managerStockNavItem,
   adminPeopleNavItem,
   documentsNavItem,
+  tenderAiNavItem,
   adminCompanyNavItem,
 ]
 
@@ -410,12 +408,12 @@ const officeNavItems: NavItem[] = [
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   chatNavItem,
   salesNavItem,
-  invoicingNavItem,
   jobsNavItem,
   purchasingNavItem,
   managerStockNavItem,
   officePeopleNavItem,
   documentsNavItem,
+  tenderAiNavItem,
   officeCompanyNavItem,
 ]
 
@@ -471,9 +469,6 @@ const PERMISSION_KEY_MIGRATION: Record<string, string> = {
   users: 'company',
   assets: 'company',
   notifications: 'company',
-  // Tender AI is now a sub-menu inside the Sales group, so it follows the
-  // `sales` permission rather than being individually toggleable.
-  'tender-ai': 'sales',
 }
 
 export function migratePermissionKeys(keys: string[]): string[] {
@@ -495,9 +490,5 @@ export function getVisibleMenu(
   // from it — anyone who could see the Service group keeps access to Requests
   // without a data migration.
   if (enabled.has('calls')) enabled.add('requests')
-  // Invoicing was promoted out of the Service (`calls`) group into a top-level
-  // item. Existing per-user overrides only stored `calls`, so inherit its
-  // visibility from the Service group — no data migration required.
-  if (enabled.has('calls')) enabled.add('invoices')
   return menu.filter((item) => item.locked || enabled.has(item.key))
 }

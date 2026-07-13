@@ -31,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Plus, Pencil, Trash2, Cpu, CalendarRange, Wand2, ChevronRight } from 'lucide-react'
+import { Plus, Pencil, Trash2, Cpu, CalendarRange, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { savePanel, deletePanel } from '@/lib/actions/panels'
 import { setPanelRotationEnabled, savePanelRotation } from '@/lib/actions/panel-rotation'
@@ -77,10 +77,6 @@ export function SystemPanelsManager({
 
   const defs = orderedActiveDefs(fieldDefs)
   const systemPanels = [...panels].sort((a, b) => a.position - b.position)
-
-  // Panels are nested under each system, so collapse the list by default once
-  // there are panels to keep the systems view compact; expand on click.
-  const [panelsOpen, setPanelsOpen] = useState(false)
 
   // ── Panel-level visit rotation ───────────────────────────────────────────────
   // Rotation only makes sense with ≥2 panels and ≥2 visit occurrences (e.g. a
@@ -277,31 +273,18 @@ export function SystemPanelsManager({
   return (
     <div className="space-y-2 rounded-md border p-3">
       <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={() => setPanelsOpen((o) => !o)}
-          disabled={systemPanels.length === 0}
-          className="flex items-center gap-2 rounded text-sm font-medium disabled:cursor-default"
-          aria-expanded={panelsOpen}
-        >
-          {systemPanels.length > 0 && (
-            <ChevronRight
-              className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${
-                panelsOpen ? 'rotate-90' : ''
-              }`}
-            />
-          )}
+        <span className="flex items-center gap-2 text-sm font-medium">
           <Cpu className="h-3.5 w-3.5 text-muted-foreground" />
           Panels
           <span className="text-muted-foreground">({systemPanels.length})</span>
-        </button>
+        </span>
         <Button variant="outline" size="sm" onClick={openNew} disabled={disabled}>
           <Plus className="h-4 w-4" />
           Add panel
         </Button>
       </div>
 
-      {systemPanels.length > 0 && panelsOpen && (
+      {systemPanels.length > 0 && (
         <ul className="divide-y rounded-md border">
           {systemPanels.map((panel) => {
             const summary = panelSummaryLine(panel, defs)
@@ -381,6 +364,9 @@ export function SystemPanelsManager({
                       {orderedVisitTypes.map((vt, i) => (
                         <th key={vt.id} className="p-2 text-center font-medium">
                           Visit {i + 1}
+                          <span className="block text-xs font-normal text-muted-foreground">
+                            {vt.name}
+                          </span>
                         </th>
                       ))}
                     </tr>
@@ -402,8 +388,8 @@ export function SystemPanelsManager({
                                 <SelectTrigger
                                   className={
                                     isHeavy
-                                      ? 'mx-auto h-8 w-28 justify-center border-primary/40 bg-primary/5 text-xs font-medium'
-                                      : 'mx-auto h-8 w-28 justify-center text-xs'
+                                      ? 'h-8 justify-center border-primary/40 bg-primary/5 text-xs font-medium'
+                                      : 'h-8 justify-center text-xs'
                                   }
                                 >
                                   <SelectValue />

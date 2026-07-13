@@ -10,7 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Wallet, AlertTriangle } from 'lucide-react'
+import { Wallet, AlertTriangle, ChevronDown } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import type { BillingAccount } from '@/lib/types/database'
 import { BillingStatusBadge } from './billing-status-badge'
@@ -42,6 +43,8 @@ export function SiteBillingCard({
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [busyKey, setBusyKey] = useState<string | null>(null)
+  // Billing detail is collapsed by default to keep the overview compact.
+  const [expanded, setExpanded] = useState(false)
 
   const clientDefault = accounts.find((a) => a.is_default) ?? null
 
@@ -86,15 +89,45 @@ export function SiteBillingCard({
   return (
     <Card className="md:col-span-2">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Wallet className="h-5 w-5" />
-          Billing
-        </CardTitle>
-        <CardDescription>
-          Which account each service is invoiced under. Services inherit the site, and the
-          site inherits the client&apos;s default account unless overridden.
-        </CardDescription>
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          className="flex w-full items-start justify-between gap-3 text-left"
+        >
+          <div className="space-y-1.5">
+            <CardTitle className="flex items-center gap-2">
+              <Wallet className="h-5 w-5" />
+              Billing
+            </CardTitle>
+            <CardDescription>
+              {expanded ? (
+                <>
+                  Which account each service is invoiced under. Services inherit the site, and the
+                  site inherits the client&apos;s default account unless overridden.
+                </>
+              ) : (
+                <span className="flex flex-wrap items-center gap-2">
+                  {siteResolved.account ? (
+                    <>
+                      <span className="text-foreground">{siteResolved.account.name}</span>
+                      <BillingStatusBadge status={siteResolved.account.status} />
+                    </>
+                  ) : (
+                    <span>No billing account resolved</span>
+                  )}
+                </span>
+              )}
+            </CardDescription>
+          </div>
+          <ChevronDown
+            className={`mt-1 h-5 w-5 shrink-0 text-muted-foreground transition-transform ${
+              expanded ? 'rotate-180' : ''
+            }`}
+          />
+        </button>
       </CardHeader>
+      {expanded && (
       <CardContent className="space-y-4">
         {accounts.length === 0 ? (
           <p className="text-sm text-muted-foreground">
@@ -214,6 +247,7 @@ export function SiteBillingCard({
           </>
         )}
       </CardContent>
+      )}
     </Card>
   )
 }

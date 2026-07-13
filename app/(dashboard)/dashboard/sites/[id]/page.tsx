@@ -703,75 +703,6 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
 
         <TabsContent value="overview" className="mt-0">
           <div className="grid gap-6 md:grid-cols-2">
-        <SiteCallsOverviewCard
-          siteId={id}
-          openCallsCount={openCallsCount}
-          awaitingPoCount={awaitingPoCount}
-          upcomingVisits={upcomingVisits}
-        />
-        {siteClient && (
-          <Card className="md:col-span-2">
-            <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
-              <CardTitle className="flex items-center gap-2">
-                <Building className="h-5 w-5" />
-                Client
-              </CardTitle>
-              <Button asChild variant="outline" size="sm">
-                <Link href={`/dashboard/clients?client=${siteClient.id}`}>
-                  View client
-                  <ExternalLink className="h-4 w-4" />
-                </Link>
-              </Button>
-            </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2">
-              <div className="text-sm font-medium">{siteClient.name}</div>
-              <div className="grid gap-2 sm:col-start-1">
-                {siteClient.contact_name && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <User className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <span>{siteClient.contact_name}</span>
-                  </div>
-                )}
-                {siteClient.contact_phone && (
-                  <a
-                    href={`tel:${siteClient.contact_phone}`}
-                    className="flex items-center gap-2 text-sm text-primary hover:underline"
-                  >
-                    <Phone className="h-4 w-4" />
-                    {siteClient.contact_phone}
-                  </a>
-                )}
-                {siteClient.contact_email && (
-                  <a
-                    href={`mailto:${siteClient.contact_email}`}
-                    className="flex items-center gap-2 text-sm text-primary hover:underline"
-                  >
-                    <Mail className="h-4 w-4" />
-                    {siteClient.contact_email}
-                  </a>
-                )}
-              </div>
-              {siteClient.address && (
-                <div className="flex items-start gap-2 text-sm text-muted-foreground sm:row-start-2">
-                  <MapPin className="h-4 w-4 mt-0.5 shrink-0" />
-                  <span>{siteClient.address}</span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-        {siteClientId && (
-          <SiteBillingCard
-            siteId={id}
-            siteBillingAccountId={(site as Site).billing_account_id ?? null}
-            services={siteServices.map((ss) => ({
-              id: ss.id,
-              name: ss.service_type?.name ?? 'Service',
-              billing_account_id: ss.billing_account_id ?? null,
-            }))}
-            accounts={billingAccounts}
-          />
-        )}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -878,6 +809,77 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             )}
           </CardContent>
         </Card>
+        {siteClient && (
+          <Card>
+            <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+              <CardTitle className="flex items-center gap-2">
+                <Building className="h-5 w-5" />
+                Client
+              </CardTitle>
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/dashboard/clients?client=${siteClient.id}`}>
+                  View client
+                  <ExternalLink className="h-4 w-4" />
+                </Link>
+              </Button>
+            </CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-2">
+              <div className="text-sm font-medium">{siteClient.name}</div>
+              <div className="grid gap-2 sm:col-start-1">
+                {siteClient.contact_name && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span>{siteClient.contact_name}</span>
+                  </div>
+                )}
+                {siteClient.contact_phone && (
+                  <a
+                    href={`tel:${siteClient.contact_phone}`}
+                    className="flex items-center gap-2 text-sm text-primary hover:underline"
+                  >
+                    <Phone className="h-4 w-4" />
+                    {siteClient.contact_phone}
+                  </a>
+                )}
+                {siteClient.contact_email && (
+                  <a
+                    href={`mailto:${siteClient.contact_email}`}
+                    className="flex items-center gap-2 text-sm text-primary hover:underline"
+                  >
+                    <Mail className="h-4 w-4" />
+                    {siteClient.contact_email}
+                  </a>
+                )}
+              </div>
+              {siteClient.address && (
+                <div className="flex items-start gap-2 text-sm text-muted-foreground sm:row-start-2">
+                  <MapPin className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>{siteClient.address}</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+        <div className="md:col-span-2">
+          <SiteCallsOverviewCard
+            siteId={id}
+            openCallsCount={openCallsCount}
+            awaitingPoCount={awaitingPoCount}
+            upcomingVisits={upcomingVisits}
+          />
+        </div>
+        {siteClientId && (
+          <SiteBillingCard
+            siteId={id}
+            siteBillingAccountId={(site as Site).billing_account_id ?? null}
+            services={siteServices.map((ss) => ({
+              id: ss.id,
+              name: ss.service_type?.name ?? 'Service',
+              billing_account_id: ss.billing_account_id ?? null,
+            }))}
+            accounts={billingAccounts}
+          />
+        )}
           </div>
           <p className="mt-4 text-center text-xs text-muted-foreground">
             Site set up

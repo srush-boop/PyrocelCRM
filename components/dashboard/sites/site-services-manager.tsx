@@ -934,14 +934,14 @@ export function SiteServicesManager({
           }
         }}
       >
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[90dvh] max-w-md flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b p-6">
             <DialogTitle>Edit Service</DialogTitle>
             <DialogDescription>
               Configure the recurring schedule, assignment and client report emails for this service.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
+          <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto p-6">
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="freq-value">Frequency Value</Label>
@@ -1345,7 +1345,7 @@ export function SiteServicesManager({
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="shrink-0 border-t p-6">
             <Button variant="outline" onClick={() => setEditingId(null)}>
               Cancel
             </Button>

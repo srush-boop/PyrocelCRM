@@ -827,103 +827,33 @@ export function SiteSystemsManager({
           </CardHeader>
           <CardContent>
             <ul className="divide-y rounded-md border">
-              {unassigned.map((svc) => {
-                const inactive = svc.active === false
-                const value = serviceValue(svc.id)
-                return (
+              {unassigned.map((svc) => (
                 <li key={svc.id} className="flex items-center justify-between gap-3 px-3 py-2">
-                  <button
-                    type="button"
-                    onClick={() => openServiceSetup(svc.id)}
-                    className="group flex min-w-0 flex-1 items-center gap-2 text-left text-sm hover:text-primary"
-                    title="Open service set up"
+                  <span className="flex items-center gap-2 text-sm">
+                    <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
+                    {svc.service_type?.name ?? 'Service'}
+                  </span>
+                  <Select
+                    value={UNASSIGNED}
+                    onValueChange={(value) =>
+                      assignService(svc.id, value === UNASSIGNED ? null : value)
+                    }
+                    disabled={siteSystems.length === 0}
                   >
-                    <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover:text-primary" />
-                    <span className="truncate group-hover:underline">
-                      {svc.service_type?.name ?? 'Service'}
-                    </span>
-                    {inactive && (
-                      <Badge
-                        variant="outline"
-                        className="shrink-0 text-[10px] font-normal text-muted-foreground"
-                      >
-                        Inactive
-                      </Badge>
-                    )}
-                  </button>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {value > 0 && (
-                      <span
-                        className="text-xs tabular-nums text-muted-foreground"
-                        title="Annualised recurring value"
-                      >
-                        {formatPence(value)}/yr
-                      </span>
-                    )}
-                    <Select
-                      value={UNASSIGNED}
-                      onValueChange={(value) =>
-                        assignService(svc.id, value === UNASSIGNED ? null : value)
-                      }
-                      disabled={siteSystems.length === 0}
-                    >
-                      <SelectTrigger className="w-44">
-                        <SelectValue placeholder="Assign to system" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={UNASSIGNED}>Unassigned</SelectItem>
-                        {siteSystems.map((system) => (
-                          <SelectItem key={system.id} value={system.id}>
-                            {systemTitle(system)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Service actions">
-                          <MoreHorizontal className="h-4 w-4" />
-                          <span className="sr-only">Service actions</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem onSelect={() => openServiceSetup(svc.id)}>
-                          <Settings2 className="mr-2 h-4 w-4" />
-                          Set up
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => openServiceCharge(svc.id)}>
-                          <Receipt className="mr-2 h-4 w-4" />
-                          Add charge
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          disabled={isDead || inactive}
-                          onSelect={() => openServiceBook(svc.id)}
-                        >
-                          <Clock className="mr-2 h-4 w-4" />
-                          Book call
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => toggleServiceActive(svc.id, inactive)}>
-                          <Power className="mr-2 h-4 w-4" />
-                          {inactive ? 'Activate' : 'Deactivate'}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => setDocServiceId(svc.id)}>
-                          <FolderOpen className="mr-2 h-4 w-4" />
-                          Documents
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          onSelect={() => openServiceDelete(svc.id)}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Remove service
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="Assign to system" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={UNASSIGNED}>Unassigned</SelectItem>
+                      {siteSystems.map((system) => (
+                        <SelectItem key={system.id} value={system.id}>
+                          {systemTitle(system)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </li>
-                )
-              })}
+              ))}
             </ul>
           </CardContent>
         </Card>

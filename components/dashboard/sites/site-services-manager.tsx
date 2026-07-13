@@ -680,6 +680,7 @@ export function SiteServicesManager({
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* Add Multiple Services Dialog */}
       <Dialog open={addServicesOpen} onOpenChange={setAddServicesOpen}>
@@ -790,7 +791,15 @@ export function SiteServicesManager({
       </Dialog>
 
       {/* Schedule One-off Task Dialog */}
-      <Dialog open={!!scheduleServiceId} onOpenChange={() => setScheduleServiceId(null)}>
+      <Dialog
+        open={!!scheduleServiceId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setScheduleServiceId(null)
+            if (dialogsOnly) stripDialogParams('bookService')
+          }
+        }}
+      >
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Book Service Call</DialogTitle>
@@ -844,7 +853,13 @@ export function SiteServicesManager({
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setScheduleServiceId(null)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setScheduleServiceId(null)
+                if (dialogsOnly) stripDialogParams('bookService')
+              }}
+            >
               Cancel
             </Button>
             <Button onClick={handleScheduleTask} disabled={scheduling}>
@@ -865,7 +880,15 @@ export function SiteServicesManager({
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+      <AlertDialog
+        open={!!deleteId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteId(null)
+            if (dialogsOnly) stripDialogParams('deleteService')
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Remove Service</AlertDialogTitle>
@@ -889,7 +912,12 @@ export function SiteServicesManager({
       {chargeServiceId && (
         <ServiceChargeDialog
           open={!!chargeServiceId}
-          onOpenChange={(open) => !open && setChargeServiceId(null)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setChargeServiceId(null)
+              if (dialogsOnly) stripDialogParams('chargeService')
+            }
+          }}
           siteServiceId={chargeServiceId}
         />
       )}
@@ -900,8 +928,9 @@ export function SiteServicesManager({
         onOpenChange={(open) => {
           if (!open) {
             setEditingId(null)
-            // Drop the ?editService= param so it doesn't reopen on refresh.
-            if (initialEditServiceId) router.replace(pathname)
+            // Drop the driving param so it doesn't reopen on refresh.
+            if (dialogsOnly) stripDialogParams('editService')
+            else if (initialEditServiceId) router.replace(pathname)
           }
         }}
       >

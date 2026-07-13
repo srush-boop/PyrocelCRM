@@ -47,7 +47,25 @@ import {
   CalendarDays,
   AlertTriangle,
   HardHat,
+  Receipt,
+  Clock,
+  FolderOpen,
+  Power,
+  PowerOff,
+  Coins,
+  Loader2,
+  MoreHorizontal,
 } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { formatPence } from '@/lib/billing/invoices'
+import { CreateDocumentDialog } from '@/components/documents/create-document-dialog'
+import { Badge } from '@/components/ui/badge'
 import {
   EDITABLE_SITE_FLAG_KEYS,
   SITE_FLAG_META,
@@ -103,6 +121,9 @@ interface SiteSystemsManagerProps {
   // Site-level attendance defaults, shown as the "Inherit" value for each
   // system's per-system override.
   siteFlagDefaults?: Record<EditableSiteFlagKey, boolean>
+  // Annualised recurring value (pence) per site_service id, used to show the
+  // £ value on each service row, per-system subtotals and the site total.
+  annualValueByServiceId?: Record<string, number>
 }
 
 export function SiteSystemsManager({
@@ -127,10 +148,18 @@ export function SiteSystemsManager({
     keys_required: false,
     two_engineers_required: false,
   },
+  annualValueByServiceId = {},
 }: SiteSystemsManagerProps) {
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
+  const [togglingServiceId, setTogglingServiceId] = useState<string | null>(null)
+
+  // Annualised recurring value (pence) for one service, and for a list of them.
+  const serviceValue = (serviceId: string) => annualValueByServiceId[serviceId] ?? 0
+  const sumServiceValue = (svcs: ServiceWithType[]) =>
+    svcs.reduce((acc, s) => acc + serviceValue(s.id), 0)
+  const siteTotalValue = sumServiceValue(siteServices)
 
   // Off-contract sites (Dead, or New/auto-created from a won prospect quote) do
   // not auto-schedule visits when services are added.
@@ -153,6 +182,9 @@ export function SiteSystemsManager({
     two_engineers_required: null as boolean | null,
     remedial_notes: '',
   })
+
+  // Create-document flow for a service (opened from its actions menu).
+  const [docServiceId, setDocServiceId] = useState<string | null>(null)
 
   // Add-services-to-a-system flow
   const [serviceSystemId, setServiceSystemId] = useState<string | null>(null)
@@ -271,11 +303,32 @@ export function SiteSystemsManager({
     router.refresh()
   }
 
-  // Open the full service setup (frequency, assignment, KPIs) for a service by
-  // routing to the overview tab with ?editService=, which auto-opens its edit
-  // dialog in SiteServicesManager.
-  function openServiceSetup(serviceId: string) {
-    router.push(`${pathname}?tab=overview&editService=${serviceId}`)
+  // Each per-service action sets a URL param that the dialogsOnly
+  // SiteServicesManager (mounted on this Systems tab) reacts to and opens the
+  // matching dialog. Staying on tab=systems keeps the user in context.
+  function openServiceParam(param: string, serviceId: string) {
+    router.push(`${pathname}?tab=systems&${param}=${serviceId}`)
+  }
+  const openServiceSetup = (serviceId: string) => openServiceParam('editService', serviceId)
+  const openServiceCharge = (serviceId: string) => openServiceParam('chargeService', serviceId)
+  const openServiceBook = (serviceId: string) => openServiceParam('bookService', serviceId)
+  const openServiceDelete = (serviceId: string) => openServiceParam('deleteService', serviceId)
+
+  // Activate/deactivate a service in place. Deactivating stops all future call
+  // generation; existing pending calls are left untouched.
+  async function toggleServiceActive(serviceId: string, nextActive: boolean) {
+    setTogglingServiceId(serviceId)
+    const { error } = await supabase
+      .from('site_services')
+      .update({ active: nextActive })
+      .eq('id', serviceId)
+    setTogglingServiceId(null)
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+    toast.success(nextActive ? 'Service activated' : 'Service deactivated')
+    router.refresh()
   }
 
   async function assignService(serviceId: string, systemId: string | null) {
@@ -411,10 +464,21 @@ export function SiteSystemsManager({
             The systems installed at this site. Attach services to each system.
           </p>
         </div>
-        <Button onClick={openAdd} size="sm">
-          <Plus className="h-4 w-4" />
-          Add system
-        </Button>
+        <div className="flex items-center gap-3">
+          {siteTotalValue > 0 && (
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Projected annual value</p>
+              <p className="text-lg font-semibold tabular-nums">
+                {formatPence(siteTotalValue)}
+                <span className="ml-1 text-xs font-normal text-muted-foreground">/yr</span>
+              </p>
+            </div>
+          )}
+          <Button onClick={openAdd} size="sm">
+            <Plus className="h-4 w-4" />
+            Add system
+          </Button>
+        </div>
       </div>
 
       {siteSystems.length === 0 ? (
@@ -474,6 +538,8 @@ export function SiteSystemsManager({
             const subName = system.default_subcontractor_id
               ? subcontractors.find((s) => s.id === system.default_subcontractor_id)?.name ?? null
               : null
+            // Annualised recurring value across this system's services.
+            const systemValue = sumServiceValue(services)
 
             return (
               <Card
@@ -515,6 +581,15 @@ export function SiteSystemsManager({
                         <Wrench className="h-3.5 w-3.5" />
                         {activeServices.length} service{activeServices.length !== 1 ? 's' : ''}
                       </span>
+                      {systemValue > 0 && (
+                        <span
+                          className="inline-flex items-center gap-1 font-medium text-foreground"
+                          title="Annualised recurring value for this system"
+                        >
+                          <Receipt className="h-3.5 w-3.5" />
+                          {formatPence(systemValue)}/yr
+                        </span>
+                      )}
                       {nextDueDate && (
                         <span
                           className={cn(
@@ -605,33 +680,107 @@ export function SiteSystemsManager({
                     <p className="text-sm text-muted-foreground">No services attached.</p>
                   ) : (
                     <ul className="divide-y rounded-md border">
-                      {services.map((svc) => (
-                        <li
-                          key={svc.id}
-                          className="flex items-center justify-between gap-3 px-3 py-1"
-                        >
-                          <button
-                            type="button"
-                            onClick={() => openServiceSetup(svc.id)}
-                            className="group flex flex-1 items-center gap-2 text-left text-sm hover:text-primary"
-                            title="Open service set up"
+                      {services.map((svc) => {
+                        const inactive = svc.active === false
+                        const value = serviceValue(svc.id)
+                        return (
+                          <li
+                            key={svc.id}
+                            className="flex items-center justify-between gap-3 px-3 py-1"
                           >
-                            <Wrench className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary" />
-                            <span className="group-hover:underline">
-                              {svc.service_type?.name ?? 'Service'}
-                            </span>
-                            <Settings2 className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                          </button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            onClick={() => assignService(svc.id, null)}
-                          >
-                            Detach
-                          </Button>
-                        </li>
-                      ))}
+                            <button
+                              type="button"
+                              onClick={() => openServiceSetup(svc.id)}
+                              className="group flex min-w-0 flex-1 items-center gap-2 text-left text-sm hover:text-primary"
+                              title="Open service set up"
+                            >
+                              <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover:text-primary" />
+                              <span className="truncate group-hover:underline">
+                                {svc.service_type?.name ?? 'Service'}
+                              </span>
+                              {inactive && (
+                                <Badge
+                                  variant="outline"
+                                  className="shrink-0 text-[10px] font-normal text-muted-foreground"
+                                >
+                                  Inactive
+                                </Badge>
+                              )}
+                              <Settings2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                            </button>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <span
+                                className="text-xs tabular-nums text-muted-foreground"
+                                title="Annualised recurring value"
+                              >
+                                {value > 0 ? `${formatPence(value)}/yr` : '—'}
+                              </span>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    title="Service actions"
+                                  >
+                                    <MoreHorizontal className="h-4 w-4" />
+                                    <span className="sr-only">Service actions</span>
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-48">
+                                  <DropdownMenuItem onSelect={() => openServiceSetup(svc.id)}>
+                                    <Settings2 className="mr-2 h-4 w-4" />
+                                    Set up
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onSelect={() => openServiceCharge(svc.id)}>
+                                    <Receipt className="mr-2 h-4 w-4" />
+                                    Add charge
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    disabled={isDead || inactive}
+                                    onSelect={() => openServiceBook(svc.id)}
+                                  >
+                                    <Clock className="mr-2 h-4 w-4" />
+                                    Book call
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    disabled={togglingServiceId === svc.id}
+                                    onSelect={(e) => {
+                                      e.preventDefault()
+                                      toggleServiceActive(svc.id, inactive)
+                                    }}
+                                  >
+                                    {togglingServiceId === svc.id ? (
+                                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : inactive ? (
+                                      <Power className="mr-2 h-4 w-4" />
+                                    ) : (
+                                      <PowerOff className="mr-2 h-4 w-4" />
+                                    )}
+                                    {inactive ? 'Activate' : 'Deactivate'}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onSelect={() => setDocServiceId(svc.id)}>
+                                    <FolderOpen className="mr-2 h-4 w-4" />
+                                    Documents
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem onSelect={() => assignService(svc.id, null)}>
+                                    <ExternalLink className="mr-2 h-4 w-4" />
+                                    Detach from system
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onSelect={() => openServiceDelete(svc.id)}
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Remove service
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </li>
+                        )
+                      })}
                     </ul>
                   )}
                   <Button
@@ -973,6 +1122,19 @@ export function SiteSystemsManager({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {docServiceId && (
+        <CreateDocumentDialog
+          open={!!docServiceId}
+          onOpenChange={(open) => !open && setDocServiceId(null)}
+          ownerType="site_service"
+          ownerId={docServiceId}
+          entityLabel={
+            siteServices.find((s) => s.id === docServiceId)?.service_type?.name
+          }
+          revalidatePath={pathname}
+        />
+      )}
     </div>
   )
 }

@@ -217,18 +217,34 @@ export async function createInvoiceFromRecurringCharges(
   // Re-fetch charges server-side (trusted amounts) and confirm ownership + active.
   const { data: charges } = await supabase
     .from('recurring_charges')
-    .select('id, description, unit_price_pence, quantity, tax_code, nominal_code, nominal_code_id')
+    .select(
+      `id, description, unit_price_pence, quantity, tax_code, nominal_code, nominal_code_id,
+       site_service_id,
+       site_service:site_services(site:sites(name), service_type:service_types(name))`,
+    )
     .in('id', chargeIds)
     .eq('billing_account_id', billingAccountId)
     .eq('active', true)
 
-  const rows = (charges ?? []) as {
+  type ChargeInvoiceRow = {
     id: string
     description: string
     unit_price_pence: number
     quantity: number | string
     nominal_code_id: string | null
-  }[]
+    site_service_id: string | null
+    site_service:
+      | {
+          site: { name: string } | { name: string }[] | null
+          service_type: { name: string } | { name: string }[] | null
+        }
+      | {
+          site: { name: string } | { name: string }[] | null
+          service_type: { name: string } | { name: string }[] | null
+        }[]
+      | null
+  }
+  const rows = (charges ?? []) as unknown as ChargeInvoiceRow[]
   if (rows.length === 0) return { error: 'These charges are no longer available to invoice' }
 
   // Map nominal-code id → code text for a stable per-line snapshot.
@@ -276,14 +292,21 @@ export async function createInvoiceFromRecurringCharges(
   const lines = rows.map((r, i) => {
     const qty = typeof r.quantity === 'string' ? Number.parseFloat(r.quantity) : r.quantity
     const q = qty || 1
+    // Detail the source service on the line: "Site — Service type: description".
+    const ss = Array.isArray(r.site_service) ? r.site_service[0] : r.site_service
+    const siteRel = ss ? (Array.isArray(ss.site) ? ss.site[0] : ss.site) : null
+    const stRel = ss ? (Array.isArray(ss.service_type) ? ss.service_type[0] : ss.service_type) : null
+    const prefix = [siteRel?.name, stRel?.name].filter(Boolean).join(' — ')
+    const description = prefix ? `${prefix}: ${r.description}` : r.description
     return {
       invoice_id: invoiceId,
       kind: 'other' as const,
-      description: r.description,
+      description,
       quantity: q,
       unit_price_pence: r.unit_price_pence,
       amount_pence: lineAmountPence(q, r.unit_price_pence),
       sort_order: i,
+      site_service_id: r.site_service_id ?? null,
       nominal_code_id: r.nominal_code_id ?? null,
       nominal_code: r.nominal_code_id ? nominalText.get(r.nominal_code_id) ?? null : null,
     }

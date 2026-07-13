@@ -52,6 +52,7 @@ import {
   Pencil,
   PanelLeft,
   Truck,
+  CopyPlus,
 } from 'lucide-react'
 import {
   Dialog,
@@ -65,7 +66,7 @@ import { Label } from '@/components/ui/label'
 import type { Profile, UserRole, Department, Branch, WorkDayHours, Role } from '@/lib/types/database'
 import type { LeaveBalance } from '@/lib/leave-utils'
 import { formatDateUK } from '@/lib/utils'
-import { InviteEngineerDialog } from './invite-engineer-dialog'
+import { InviteEngineerDialog, type CopyUserSource } from './invite-engineer-dialog'
 import { MenuAccessDialog } from './menu-access-dialog'
 import { VehicleDialog } from './vehicle-dialog'
 import { PrintButton } from '@/components/ui/print-button'
@@ -180,6 +181,8 @@ export function EngineersTable({
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
   const [inviteOpen, setInviteOpen] = useState(false)
+  // Source user for the "Copy user" flow (opens the invite dialog in copy mode).
+  const [copyUser, setCopyUser] = useState<CopyUserSource | null>(null)
   const [deleteUser, setDeleteUser] = useState<Profile | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [passwordUser, setPasswordUser] = useState<Profile | null>(null)
@@ -633,6 +636,22 @@ export function EngineersTable({
                           <Pencil className="mr-2 h-4 w-4" />
                           Edit Profile
                         </DropdownMenuItem>
+                        {user.role !== 'client' && (
+                          <DropdownMenuItem
+                            onClick={() =>
+                              setCopyUser({
+                                id: user.id,
+                                full_name: user.full_name,
+                                role: user.role,
+                                department_id: user.department_id,
+                                branch_id: user.branch_id,
+                              })
+                            }
+                          >
+                            <CopyPlus className="mr-2 h-4 w-4" />
+                            Copy User
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => handleRoleChange(user.id, 'admin')}>
                           Set as Admin
@@ -687,6 +706,14 @@ export function EngineersTable({
         onOpenChange={setInviteOpen}
         departments={departments}
         branches={branches}
+      />
+
+      <InviteEngineerDialog
+        open={!!copyUser}
+        onOpenChange={(open) => !open && setCopyUser(null)}
+        departments={departments}
+        branches={branches}
+        copyFrom={copyUser}
       />
 
       <Dialog

@@ -284,6 +284,19 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
     : { data: [] }
   const billingAccounts = (billingAccountsData || []) as BillingAccount[]
 
+  // Recurring charges attached to this site's services, so the Billing card can
+  // show each service's value, last-billed date and status.
+  const billingServiceIds = siteServices.map((ss) => ss.id)
+  const { data: siteChargesData } = billingServiceIds.length > 0
+    ? await supabase
+        .from('recurring_charges')
+        .select(
+          'id, site_service_id, description, unit_price_pence, quantity, frequency, timing, active, paused_by_service, last_invoiced_date, start_date',
+        )
+        .in('site_service_id', billingServiceIds)
+    : { data: [] }
+  const siteCharges = (siteChargesData || []) as RecurringCharge[]
+
   // Get tasks for this site's services
   const siteServiceIds = siteServices.map(ss => ss.id)
   const { data: tasksData } = siteServiceIds.length > 0 
@@ -751,7 +764,23 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             services={siteServices.map((ss) => ({
               id: ss.id,
               name: ss.service_type?.name ?? 'Service',
+              active: ss.active,
+              isRecurring: !!ss.service_type?.is_recurring,
               billing_account_id: ss.billing_account_id ?? null,
+              charges: siteCharges
+                .filter((c) => c.site_service_id === ss.id)
+                .map((c) => ({
+                  id: c.id,
+                  description: c.description,
+                  unit_price_pence: c.unit_price_pence,
+                  quantity: c.quantity,
+                  frequency: c.frequency,
+                  active: c.active,
+                  paused_by_service: c.paused_by_service,
+                  last_invoiced_date: c.last_invoiced_date,
+                  start_date: c.start_date,
+                  timing: c.timing,
+                })),
             }))}
             accounts={billingAccounts}
           />

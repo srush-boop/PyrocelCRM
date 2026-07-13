@@ -241,6 +241,8 @@ export interface InvoiceLineItem {
   job_id: string | null
   /** Source quote line for equipment / job_line kinds (drives dedup). */
   quote_line_item_id: string | null
+  /** Source site service for recurring lines; lets the invoice detail the service. */
+  site_service_id: string | null
   kind: InvoiceLineKind
   description: string
   quantity: number
@@ -281,6 +283,9 @@ export interface RecurringCharge {
   /** Buy price when subcontracted, in pence. */
   subcontract_price_pence: number | null
   active: boolean
+  /** True when auto-paused because the linked site service was deactivated;
+   * such charges auto-resume when the service is reactivated. */
+  paused_by_service: boolean
   start_date: string | null
   end_date: string | null
   last_invoiced_date: string | null
@@ -613,6 +618,13 @@ export interface ChecklistItem {
 export interface ChecklistTemplate {
   id: string
   service_type_id: string
+  // A checklist may apply to multiple service types (e.g. a shared "general
+  // remedial work" list). This array is the source of truth; service_type_id is
+  // kept as the legacy primary/first entry for backward compatibility.
+  service_type_ids: string[]
+  // Optional system-type scope. Empty array = applies to all systems. When
+  // populated, the template only applies to tasks on those system types.
+  system_type_ids: string[]
   // When set, this template applies only to the matching visit type. When null,
   // it is the service-wide fallback used by visits with no specific template.
   visit_type_id?: string | null

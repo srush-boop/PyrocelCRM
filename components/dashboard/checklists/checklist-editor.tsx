@@ -29,11 +29,19 @@ import {
   Hash,
   ToggleLeft
 } from 'lucide-react'
-import type { ChecklistTemplate, ServiceType, ChecklistItem, ServiceVisitType } from '@/lib/types/database'
+import type {
+  ChecklistTemplate,
+  ServiceType,
+  ChecklistItem,
+  ServiceVisitType,
+  SystemType,
+} from '@/lib/types/database'
 
 interface ChecklistEditorProps {
   checklist: ChecklistTemplate & { service_type: ServiceType }
   visitTypes?: ServiceVisitType[]
+  serviceTypes?: ServiceType[]
+  systemTypes?: SystemType[]
 }
 
 // Sentinel used by the visit-type Select to represent "applies to all visits"
@@ -54,14 +62,33 @@ const itemTypeLabels = {
   checkbox: 'Checkbox',
 }
 
-export function ChecklistEditor({ checklist, visitTypes = [] }: ChecklistEditorProps) {
+export function ChecklistEditor({
+  checklist,
+  visitTypes = [],
+  serviceTypes = [],
+  systemTypes = [],
+}: ChecklistEditorProps) {
   const [items, setItems] = useState<ChecklistItem[]>(checklist.items || [])
   const [name, setName] = useState(checklist.name)
   const [visitTypeId, setVisitTypeId] = useState<string>(checklist.visit_type_id || ALL_VISITS)
+  // Multi-service scope. Fall back to the legacy single column so pre-existing
+  // checklists show their assignment correctly.
+  const [serviceTypeIds, setServiceTypeIds] = useState<string[]>(
+    checklist.service_type_ids?.length
+      ? checklist.service_type_ids
+      : checklist.service_type_id
+        ? [checklist.service_type_id]
+        : [],
+  )
+  // Optional system scope. Empty = applies to all systems.
+  const [systemTypeIds, setSystemTypeIds] = useState<string[]>(checklist.system_type_ids ?? [])
   const [saving, setSaving] = useState(false)
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
   const router = useRouter()
   const supabase = createClient()
+
+  const toggle = (list: string[], id: string) =>
+    list.includes(id) ? list.filter((x) => x !== id) : [...list, id]
 
   const addItem = () => {
     const newItem: ChecklistItem = {
@@ -110,6 +137,10 @@ export function ChecklistEditor({ checklist, visitTypes = [] }: ChecklistEditorP
         name,
         items,
         visit_type_id: visitTypeId === ALL_VISITS ? null : visitTypeId,
+        service_type_ids: serviceTypeIds,
+        // Keep the legacy single column in sync (first selected service).
+        service_type_id: serviceTypeIds[0] ?? checklist.service_type_id,
+        system_type_ids: systemTypeIds,
         updated_at: new Date().toISOString(),
       })
       .eq('id', checklist.id)
@@ -129,12 +160,21 @@ export function ChecklistEditor({ checklist, visitTypes = [] }: ChecklistEditorP
           </Button>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Edit Checklist</h1>
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Badge variant="secondary">{checklist.service_type?.name}</Badge>
+            <div className="flex flex-wrap items-center gap-1.5 text-muted-foreground">
+              {serviceTypeIds.length > 0 ? (
+                serviceTypeIds.map((id) => (
+                  <Badge key={id} variant="secondary">
+                    {serviceTypes.find((s) => s.id === id)?.name ??
+                      (id === checklist.service_type_id ? checklist.service_type?.name : id)}
+                  </Badge>
+                ))
+              ) : (
+                <Badge variant="secondary">{checklist.service_type?.name}</Badge>
+              )}
             </div>
           </div>
         </div>
-        <Button onClick={handleSave} disabled={saving}>
+        <Button onClick={handleSave} disabled={saving || serviceTypeIds.length === 0}>
           {saving ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -189,6 +229,68 @@ export function ChecklistEditor({ checklist, visitTypes = [] }: ChecklistEditorP
           </div>
         </CardContent>
       </Card>
+
+      {(serviceTypes.length > 0 || systemTypes.length > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Applies to</CardTitle>
+            <CardDescription>
+              Choose which service type(s) this checklist is offered on. Optionally restrict it to
+              specific system types.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-6 md:grid-cols-2">
+              {serviceTypes.length > 0 && (
+                <div className="grid gap-2">
+                  <Label>Service types</Label>
+                  <div className="max-h-60 space-y-1.5 overflow-y-auto rounded-md border bg-background p-3">
+                    {serviceTypes.map((svc) => (
+                      <label
+                        key={svc.id}
+                        className="flex cursor-pointer items-center gap-2 text-sm"
+                      >
+                        <Checkbox
+                          checked={serviceTypeIds.includes(svc.id)}
+                          onCheckedChange={() =>
+                            setServiceTypeIds((prev) => toggle(prev, svc.id))
+                          }
+                        />
+                        {svc.name}
+                      </label>
+                    ))}
+                  </div>
+                  {serviceTypeIds.length === 0 && (
+                    <p className="text-xs text-destructive">Select at least one service type.</p>
+                  )}
+                </div>
+              )}
+              {systemTypes.length > 0 && (
+                <div className="grid gap-2">
+                  <Label>System types</Label>
+                  <div className="max-h-60 space-y-1.5 overflow-y-auto rounded-md border bg-background p-3">
+                    {systemTypes.map((st) => (
+                      <label
+                        key={st.id}
+                        className="flex cursor-pointer items-center gap-2 text-sm"
+                      >
+                        <Checkbox
+                          checked={systemTypeIds.includes(st.id)}
+                          onCheckedChange={() => setSystemTypeIds((prev) => toggle(prev, st.id))}
+                        />
+                        {st.code ? `${st.code} — ${st.name}` : st.name}
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Leave all unticked to apply to every system.
+                  </p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

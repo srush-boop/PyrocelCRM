@@ -19,7 +19,8 @@ import { getOpenRemedialForSite } from '@/lib/remedial'
 import { DeadlineFailedPanel } from '@/components/dashboard/tasks/deadline-failed-panel'
 import { CallNotesCard } from '@/components/dashboard/tasks/call-notes-card'
 import { getGlobalConfig } from '@/lib/actions/global-config'
-import type { DocumentFile, DocumentFolder, SiteInternalNote } from '@/lib/types/database'
+import { getAllDocumentTags, getOwnerDocuments } from '@/lib/documents/data'
+import type { SiteInternalNote } from '@/lib/types/database'
 import type {
   Profile,
   TaskWithDetails,
@@ -119,24 +120,17 @@ export default async function TaskPage({ params }: PageProps) {
 
   let preAttendancePanel: ReactNode = null
   if (preAttendanceSiteId) {
-    const [{ data: notesData }, { data: engFolders }, { data: engFiles }] = await Promise.all([
+    const [{ data: notesData }, engDocs, allDocumentTags] = await Promise.all([
       supabase
         .from('site_internal_notes')
         .select('*, author:profiles!site_internal_notes_author_id_fkey(id, full_name, role)')
         .eq('site_id', preAttendanceSiteId)
         .order('created_at', { ascending: false }),
-      supabase
-        .from('document_folders')
-        .select('*')
-        .eq('owner_type', 'site_engineer')
-        .eq('owner_id', preAttendanceSiteId),
-      supabase
-        .from('documents')
-        .select('*')
-        .eq('owner_type', 'site_engineer')
-        .eq('owner_id', preAttendanceSiteId)
-        .order('created_at', { ascending: false }),
+      getOwnerDocuments('site_engineer', preAttendanceSiteId),
+      getAllDocumentTags(),
     ])
+    const engFolders = engDocs.folders
+    const engFiles = engDocs.files
 
     // Derive the "remedial works required" alert automatically from any
     // outstanding remedial call on this site (site + service scope) rather than
@@ -155,11 +149,13 @@ export default async function TaskPage({ params }: PageProps) {
         siteId={preAttendanceSiteId}
         flags={flags}
         notes={(notesData || []) as SiteInternalNote[]}
-        engineerFolders={(engFolders || []) as DocumentFolder[]}
-        engineerFiles={(engFiles || []) as DocumentFile[]}
+        engineerFolders={engFolders}
+        engineerFiles={engFiles}
         currentUserId={user.id}
         canModerateNotes={canModerateNotes}
         isFireAlarm={isFireAlarmService(task.site_service?.service_type?.name)}
+        allTags={allDocumentTags}
+        usedTags={engDocs.usedTags}
       />
     )
   }
@@ -170,20 +166,16 @@ export default async function TaskPage({ params }: PageProps) {
   // slot so every execution variant renders them without extra props.
   if (task.is_commissioning && task.source_job_id) {
     const jobId = task.source_job_id as string
-    const [{ data: jobRow }, { data: jobFolders }, { data: jobFiles }] = await Promise.all([
+    const [{ data: jobRow }, jobDocs] = await Promise.all([
       supabase
         .from('jobs')
         .select('id, job_number, title, po_number, notes')
         .eq('id', jobId)
         .maybeSingle(),
-      supabase.from('document_folders').select('*').eq('owner_type', 'job').eq('owner_id', jobId),
-      supabase
-        .from('documents')
-        .select('*')
-        .eq('owner_type', 'job')
-        .eq('owner_id', jobId)
-        .order('created_at', { ascending: false }),
+      getOwnerDocuments('job', jobId),
     ])
+    const jobFolders = jobDocs.folders
+    const jobFiles = jobDocs.files
 
     if (jobRow) {
       const j = jobRow as {
@@ -200,8 +192,8 @@ export default async function TaskPage({ params }: PageProps) {
           jobTitle={j.title}
           poNumber={j.po_number}
           jobNotes={j.notes}
-          folders={(jobFolders || []) as DocumentFolder[]}
-          files={(jobFiles || []) as DocumentFile[]}
+          folders={jobFolders}
+          files={jobFiles}
           canOpenJob={role === 'admin' || role === 'office'}
         />
       )

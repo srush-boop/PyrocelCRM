@@ -16,6 +16,7 @@ import { activeFlagKeys } from '@/lib/site-flags'
 import type {
   DocumentFile,
   DocumentFolder,
+  DocumentTag,
   ResolvedSiteFlags,
   SiteInternalNote,
 } from '@/lib/types/database'
@@ -30,6 +31,8 @@ interface PreAttendancePanelProps {
   canModerateNotes: boolean
   /** When true (fire alarm calls), shows the "Upload Download" action. */
   isFireAlarm?: boolean
+  allTags?: DocumentTag[]
+  usedTags?: DocumentTag[]
 }
 
 /**
@@ -47,6 +50,8 @@ export function PreAttendancePanel({
   currentUserId,
   canModerateNotes,
   isFireAlarm = false,
+  allTags = [],
+  usedTags = [],
 }: PreAttendancePanelProps) {
   const hasFlags = activeFlagKeys(flags).length > 0
   const fileCount = engineerFiles.length
@@ -146,6 +151,10 @@ export function PreAttendancePanel({
                 folders={engineerFolders}
                 files={engineerFiles}
                 canManage
+                allowCreateTags={false}
+                allTags={allTags}
+                usedTags={usedTags}
+                revalidatePath={`/dashboard/tasks`}
               />
             </AccordionContent>
           </AccordionItem>

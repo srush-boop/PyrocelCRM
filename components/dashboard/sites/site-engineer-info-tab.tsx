@@ -12,6 +12,7 @@ import { SiteInternalNotes } from '@/components/dashboard/site-info/site-interna
 import type {
   DocumentFile,
   DocumentFolder,
+  DocumentTag,
   Site,
   SiteInternalNote,
 } from '@/lib/types/database'
@@ -23,6 +24,8 @@ interface SiteEngineerInfoTabProps {
   engineerFiles: DocumentFile[]
   currentUserId: string
   canModerateNotes: boolean
+  allTags?: DocumentTag[]
+  usedTags?: DocumentTag[]
 }
 
 /**
@@ -38,6 +41,8 @@ export function SiteEngineerInfoTab({
   engineerFiles,
   currentUserId,
   canModerateNotes,
+  allTags = [],
+  usedTags = [],
 }: SiteEngineerInfoTabProps) {
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -105,6 +110,10 @@ export function SiteEngineerInfoTab({
             folders={engineerFolders}
             files={engineerFiles}
             canManage
+            allowCreateTags={false}
+            allTags={allTags}
+            usedTags={usedTags}
+            revalidatePath={`/dashboard/sites/${site.id}`}
           />
         </CardContent>
       </Card>

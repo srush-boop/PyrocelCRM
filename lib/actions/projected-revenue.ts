@@ -69,7 +69,9 @@ export async function getProjectedRevenue(
     )
     .eq('active', true)
 
-  const rows = (data ?? []) as ChargeRow[]
+  // Supabase types embedded relations as arrays; we normalise each with first()
+  // below, so cast through unknown to our tolerant ChargeRow shape.
+  const rows = (data ?? []) as unknown as ChargeRow[]
 
   const flattened: ProjectionInput[] = rows.map((r) => {
     const svc = first(r.site_service)

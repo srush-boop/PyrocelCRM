@@ -887,6 +887,71 @@ export interface Site {
     updated_at: string
   }
 
+  // ---------- Remote Monitoring (REM-MON) configurable section ----------
+
+  export type RemMonFieldType = 'text' | 'textarea' | 'number' | 'date' | 'select'
+
+  // Where a REM-MON link points. 'online' opens an external URL entered per site;
+  // 'in_app' deep-links to one of this site's own pages (target resolved from the
+  // site id at render time).
+  export type RemMonLinkTargetKind = 'online' | 'in_app'
+  export type RemMonInAppTarget =
+    | 'overview'
+    | 'systems'
+    | 'documents'
+    | 'assets'
+    | 'calls'
+    | 'logbook'
+    | 'quotes'
+    | 'custom'
+
+  // Admin-configurable custom field for the REM-MON section master template,
+  // scoped to a system type (the Remote Monitoring system). Mirrors PanelFieldDef.
+  export interface RemMonFieldDef {
+    id: string
+    system_type_id: string
+    label: string
+    field_key: string
+    field_type: RemMonFieldType
+    options: string[]
+    required: boolean
+    position: number
+    active: boolean
+    created_at: string
+    updated_at: string
+    system_type?: SystemType | null
+  }
+
+  // Admin-configurable link slot for the REM-MON section master template. Each
+  // site fills the actual URL/override in RemMonEntry.link_values keyed by link_key.
+  export interface RemMonLinkDef {
+    id: string
+    system_type_id: string
+    label: string
+    link_key: string
+    target_kind: RemMonLinkTargetKind
+    in_app_target: RemMonInAppTarget | null
+    position: number
+    active: boolean
+    created_at: string
+    updated_at: string
+    system_type?: SystemType | null
+  }
+
+  // A per-site REM-MON entry belonging to a site system (multiple allowed, like
+  // panels). field_values is keyed by rem_mon_field_defs.field_key; link_values is
+  // keyed by rem_mon_link_defs.link_key (URL for 'online', optional path for 'custom').
+  export interface RemMonEntry {
+    id: string
+    site_system_id: string
+    name: string
+    position: number
+    field_values: Record<string, string | number | boolean | null>
+    link_values: Record<string, string | null>
+    created_at: string
+    updated_at: string
+  }
+
   // Panel-level visit rotation. For a multi-panel system with rotation enabled,
   // each panel is assigned, per scheduled visit occurrence (`visit_type_id`), the
   // checklist level actually applied to it (`applied_visit_type_id`). This spreads
@@ -924,6 +989,10 @@ export interface Site {
   route_id: string | null
   area_id: string | null
   subcontractor_id: string | null
+  // Fixed annual cost (pence) paid to the sub-contractor for this service. Used
+  // to show the true margin vs the annualised recurring revenue. Only meaningful
+  // when worker_type = 'subcontractor'.
+  subcontractor_annual_cost_pence: number | null
   assigned_engineer_id: string | null
   reporting_emails: string[]
   defects_to_email: string | null

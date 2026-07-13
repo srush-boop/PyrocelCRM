@@ -51,6 +51,9 @@ import type {
   SystemType,
   PanelFieldDef,
   SystemPanel,
+  RemMonFieldDef,
+  RemMonLinkDef,
+  RemMonEntry,
   ServiceVisitType,
   PanelVisitAssignment,
   Task,
@@ -134,7 +137,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
     createdByName = creator?.full_name || creator?.email || null
   }
 
-  const [siteServicesResult, serviceTypesResult, engineersResult, routesResult, areasResult, subcontractorsResult, clientsResult, siteSystemsResult, systemTypesResult, quotesResult, panelFieldDefsResult] = await Promise.all([
+  const [siteServicesResult, serviceTypesResult, engineersResult, routesResult, areasResult, subcontractorsResult, clientsResult, siteSystemsResult, systemTypesResult, quotesResult, panelFieldDefsResult, remMonFieldDefsResult, remMonLinkDefsResult] = await Promise.all([
     supabase
       .from('site_services')
       .select(`
@@ -169,6 +172,8 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
       .eq('site_id', id)
       .order('created_at', { ascending: false }),
     supabase.from('panel_field_defs').select('*').eq('active', true).order('position'),
+    supabase.from('rem_mon_field_defs').select('*').eq('active', true).order('position'),
+    supabase.from('rem_mon_link_defs').select('*').eq('active', true).order('position'),
   ])
 
   const siteServices = (siteServicesResult.data || []) as (SiteService & { service_type: ServiceType })[]
@@ -259,6 +264,18 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
         .order('position')
     : { data: [] }
   const panels = (panelsData || []) as SystemPanel[]
+
+  // Remote Monitoring entries captured against this site's REM-MON system(s).
+  const { data: remMonEntriesData } = siteSystemIds.length > 0
+    ? await supabase
+        .from('rem_mon_entries')
+        .select('*')
+        .in('site_system_id', siteSystemIds)
+        .order('position')
+    : { data: [] }
+  const remMonEntries = (remMonEntriesData || []) as RemMonEntry[]
+  const remMonFieldDefs = (remMonFieldDefsResult.data || []) as RemMonFieldDef[]
+  const remMonLinkDefs = (remMonLinkDefsResult.data || []) as RemMonLinkDef[]
 
   // Panel-level visit rotation data: the visit types (Annual/Periodic/…) for the
   // service types used on this site, plus any saved panel→visit assignments. Both
@@ -913,6 +930,9 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
                   siteStatus={(site as Site).status}
                   panelFieldDefs={panelFieldDefs}
                   panels={panels}
+                  remMonFieldDefs={remMonFieldDefs}
+                  remMonLinkDefs={remMonLinkDefs}
+                  remMonEntries={remMonEntries}
                   serviceVisitTypes={serviceVisitTypes}
                   panelAssignments={panelAssignments}
                   subcontractors={subcontractors}
@@ -942,9 +962,10 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             areas={areas}
             subcontractors={subcontractors}
             tasks={tasks}
-            siteStatus={(site as Site).status}
-            systemDefaultsById={systemDefaultsById}
-          />
+                  siteStatus={(site as Site).status}
+                  systemDefaultsById={systemDefaultsById}
+                  annualValueByServiceId={annualValueByServiceId}
+                />
         </TabsContent>
 
         <TabsContent value="quotes" className="mt-0">

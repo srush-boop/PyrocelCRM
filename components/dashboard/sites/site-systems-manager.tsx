@@ -78,6 +78,7 @@ import { format, parseISO } from 'date-fns'
 import { toast } from 'sonner'
 import { buildSeedTaskRows, fetchVisitsByServiceType } from '@/lib/scheduling'
 import { SystemPanelsManager } from '@/components/dashboard/sites/system-panels-manager'
+import { RemMonSection } from '@/components/dashboard/sites/rem-mon-section'
 import { CreateTaskDialog } from '@/components/dashboard/schedule/create-task-dialog'
 import type {
   SiteSystem,
@@ -86,6 +87,9 @@ import type {
   SystemType,
   PanelFieldDef,
   SystemPanel,
+  RemMonFieldDef,
+  RemMonLinkDef,
+  RemMonEntry,
   ServiceVisitType,
   PanelVisitAssignment,
   Supplier,
@@ -106,6 +110,11 @@ interface SiteSystemsManagerProps {
   siteStatus?: 'live' | 'dead' | 'new'
   panelFieldDefs?: PanelFieldDef[]
   panels?: SystemPanel[]
+  // Remote Monitoring master template (fields + link slots) and this site's saved
+  // REM-MON entries, used to render the collapsible section under the REM-MON system.
+  remMonFieldDefs?: RemMonFieldDef[]
+  remMonLinkDefs?: RemMonLinkDef[]
+  remMonEntries?: RemMonEntry[]
   // Visit types (Annual/Periodic/…) for the service types used on this site, and
   // any saved panel→visit rotation assignments. Feed the rotation grid.
   serviceVisitTypes?: ServiceVisitType[]
@@ -135,6 +144,9 @@ export function SiteSystemsManager({
   siteStatus = 'live',
   panelFieldDefs = [],
   panels = [],
+  remMonFieldDefs = [],
+  remMonLinkDefs = [],
+  remMonEntries = [],
   serviceVisitTypes = [],
   panelAssignments = [],
   subcontractors = [],
@@ -463,6 +475,30 @@ export function SiteSystemsManager({
     panelsBySystem.set(panel.site_system_id, list)
   }
 
+  // Remote Monitoring master template grouped by system type, plus this site's
+  // saved entries grouped by site system. The section only shows for a system
+  // whose type is REM-MON (matched by code, below).
+  const remMonFieldDefsBySystemType = new Map<string, RemMonFieldDef[]>()
+  for (const def of remMonFieldDefs) {
+    if (!def.active) continue
+    const list = remMonFieldDefsBySystemType.get(def.system_type_id) ?? []
+    list.push(def)
+    remMonFieldDefsBySystemType.set(def.system_type_id, list)
+  }
+  const remMonLinkDefsBySystemType = new Map<string, RemMonLinkDef[]>()
+  for (const def of remMonLinkDefs) {
+    if (!def.active) continue
+    const list = remMonLinkDefsBySystemType.get(def.system_type_id) ?? []
+    list.push(def)
+    remMonLinkDefsBySystemType.set(def.system_type_id, list)
+  }
+  const remMonEntriesBySystem = new Map<string, RemMonEntry[]>()
+  for (const entry of remMonEntries) {
+    const list = remMonEntriesBySystem.get(entry.site_system_id) ?? []
+    list.push(entry)
+    remMonEntriesBySystem.set(entry.site_system_id, list)
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -559,6 +595,15 @@ export function SiteSystemsManager({
               ? panelDefsBySystemType.get(system.system_type_id) ?? []
               : []
             const systemPanels = panelsBySystem.get(system.id) ?? []
+            // Remote Monitoring section applies only to a REM-MON system type.
+            const isRemMon = st?.code === 'REM-MON'
+            const systemRemMonFieldDefs = isRemMon && system.system_type_id
+              ? remMonFieldDefsBySystemType.get(system.system_type_id) ?? []
+              : []
+            const systemRemMonLinkDefs = isRemMon && system.system_type_id
+              ? remMonLinkDefsBySystemType.get(system.system_type_id) ?? []
+              : []
+            const systemRemMonEntries = remMonEntriesBySystem.get(system.id) ?? []
             // Rotation grid inputs for this system: the distinct visit types of
             // its active services (ordered), and the saved assignments. Rotation
             // only makes sense when a service actually has ≥2 visit occurrences.
@@ -748,11 +793,26 @@ export function SiteSystemsManager({
                       {services.map((svc) => {
                         const inactive = svc.active === false
                         const value = serviceValue(svc.id)
+                        // Sub-contracted services: resolve the sub name (explicit
+                        // → joined relation → lookup) and the true margin vs the
+                        // annualised revenue.
+                        const isSub = svc.worker_type === 'subcontractor'
+                        const subName = isSub
+                          ? svc.subcontractor?.name ??
+                            subcontractors.find((s) => s.id === svc.subcontractor_id)?.name ??
+                            null
+                          : null
+                        const subCostPence = svc.subcontractor_annual_cost_pence ?? null
+                        const marginPence =
+                          isSub && subCostPence != null ? value - subCostPence : null
+                        const marginPct =
+                          marginPence != null && value > 0 ? (marginPence / value) * 100 : null
                         return (
                           <li
                             key={svc.id}
-                            className="flex items-center justify-between gap-3 px-3 py-1"
+                            className="flex flex-col gap-1 px-3 py-1.5"
                           >
+                            <div className="flex items-center justify-between gap-3">
                             <button
                               type="button"
                               onClick={() => openServiceSetup(svc.id)}
@@ -856,6 +916,39 @@ export function SiteSystemsManager({
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </div>
+                            </div>
+                            {isSub && (
+                              <div className="flex flex-wrap items-center gap-2 pl-6">
+                                <Badge
+                                  variant="secondary"
+                                  className="gap-1 text-[10px] font-medium"
+                                >
+                                  <HardHat className="h-3 w-3" />
+                                  Sub-contracted{subName ? ` · ${subName}` : ''}
+                                </Badge>
+                                {marginPence != null ? (
+                                  <span
+                                    className={cn(
+                                      'text-[11px] tabular-nums',
+                                      marginPence >= 0 ? 'text-emerald-600' : 'text-red-600',
+                                    )}
+                                    title="True margin: annual revenue minus sub-contractor cost"
+                                  >
+                                    Margin {formatPence(marginPence)}/yr
+                                    {marginPct != null && ` (${marginPct.toFixed(0)}%)`}
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => openServiceSetup(svc.id)}
+                                    className="text-[11px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+                                    title="Set the sub-contractor price to see true margin"
+                                  >
+                                    Set sub price
+                                  </button>
+                                )}
+                              </div>
+                            )}
                           </li>
                         )
                       })}
@@ -886,6 +979,17 @@ export function SiteSystemsManager({
                       rotationEnabled={system.panel_rotation_enabled}
                       visitTypes={systemVisitTypes}
                       assignments={systemPanelAssignments}
+                    />
+                  )}
+                  {isRemMon && (
+                    <RemMonSection
+                      siteSystemId={system.id}
+                      sitePath={pathname}
+                      disabled={isDead}
+                      fieldDefs={systemRemMonFieldDefs}
+                      linkDefs={systemRemMonLinkDefs}
+                      entries={systemRemMonEntries}
+                      siteId={siteId}
                     />
                   )}
                 </CardContent>

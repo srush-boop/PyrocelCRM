@@ -14,6 +14,7 @@ import {
   PencilRuler,
   LayoutList,
   PanelsTopLeft,
+  Radio,
   Settings,
   ChevronDown,
 } from 'lucide-react'
@@ -47,6 +48,7 @@ const configLinks: SalesNavLink[] = [
   { title: 'Spec Templates', href: '/dashboard/sales/spec-templates', icon: FileText },
   { title: 'Work-type Fields', href: '/dashboard/sales/work-type-fields', icon: SlidersHorizontal },
   { title: 'Panel Fields', href: '/dashboard/sales/panel-fields', icon: PanelsTopLeft },
+  { title: 'Remote Monitoring', href: '/dashboard/sales/rem-mon', icon: Radio },
   { title: 'Quote Sections', href: '/dashboard/sales/quote-sections', icon: LayoutList },
   { title: 'Design Categories', href: '/dashboard/sales/design-categories', icon: PencilRuler },
 ]

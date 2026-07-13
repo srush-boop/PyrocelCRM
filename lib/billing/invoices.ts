@@ -1,4 +1,13 @@
-import type { InvoiceStatus } from '@/lib/types/database'
+import type { BillingFrequency, InvoiceStatus } from '@/lib/types/database'
+
+export const BILLING_FREQUENCY_LABELS: Record<BillingFrequency, string> = {
+  weekly: 'Weekly',
+  monthly: 'Monthly',
+  bi_monthly: 'Every 2 months',
+  four_monthly: 'Every 4 months',
+  annual: 'Annual',
+  on_demand: 'On demand',
+}
 
 // UK financial year starts 1 April. Change here if the business FY differs.
 export const FINANCIAL_YEAR_START_MONTH = 4 // April (1-indexed)
@@ -23,6 +32,13 @@ export function financialYearLabel(fy: number): string {
 /** Format a reserved sequence into a full invoice number, e.g. INV-2026-0001. */
 export function formatInvoiceNumber(fy: number, seq: number): string {
   return `${INVOICE_NUMBER_PREFIX}-${fy}-${String(seq).padStart(4, '0')}`
+}
+
+export const CREDIT_NOTE_NUMBER_PREFIX = 'CRN'
+
+/** Format a reserved sequence into a full credit-note number, e.g. CRN-2026-0001. */
+export function formatCreditNoteNumber(fy: number, seq: number): string {
+  return `${CREDIT_NOTE_NUMBER_PREFIX}-${fy}-${String(seq).padStart(4, '0')}`
 }
 
 /** Format integer pence as GBP, e.g. 123456 -> "£1,234.56". */
@@ -53,4 +69,33 @@ export const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = {
   issued: 'Issued',
   paid: 'Paid',
   void: 'Void',
+}
+
+const FREQUENCY_DAYS: Record<BillingFrequency, number | null> = {
+  weekly: 7,
+  monthly: 30,
+  bi_monthly: 61,
+  four_monthly: 122,
+  annual: 365,
+  on_demand: null,
+}
+
+/**
+ * Inform-only billing due hint. Given an account's cadence and the date its
+ * last invoice was issued, returns whether a new invoice is "due" and a short
+ * label. Never used to block invoicing — purely advisory in the queue.
+ */
+export function billingDueHint(
+  frequency: BillingFrequency,
+  lastIssuedISO: string | null,
+  now: Date = new Date(),
+): { due: boolean; label: string } | null {
+  const period = FREQUENCY_DAYS[frequency]
+  if (period == null) return null // on_demand → no cadence to judge against
+  if (!lastIssuedISO) return { due: true, label: 'Due now (never invoiced)' }
+  const last = new Date(lastIssuedISO)
+  const dueDate = new Date(last.getTime() + period * 24 * 60 * 60 * 1000)
+  const days = Math.ceil((dueDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
+  if (days <= 0) return { due: true, label: 'Due now' }
+  return { due: false, label: `Not due for ${days} day${days === 1 ? '' : 's'}` }
 }

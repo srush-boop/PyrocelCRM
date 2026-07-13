@@ -6,6 +6,7 @@ import { getGlobalConfigs } from '@/lib/actions/global-config'
 import { getLoneWorkerAdminData } from '@/app/(dashboard)/dashboard/lone-worker/actions'
 import { getRateCards } from '@/lib/actions/rate-cards'
 import { listTagsWithUsage } from '@/lib/actions/document-tags'
+import { OPENING_HOURS_KEY, parseOpeningHours } from '@/lib/oncall/opening-hours'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -53,6 +54,7 @@ export default async function SettingsPage() {
         'po_request_overdue_days',
         'deadline_failed_reasons',
         'engagement_stats_enabled',
+        OPENING_HOURS_KEY,
       ])
     : {}
 
@@ -61,6 +63,8 @@ export default async function SettingsPage() {
   // Encouragement stats default to ON when the key has never been set.
   const engagementStatsEnabled =
     (globalConfig['engagement_stats_enabled'] as boolean | null) ?? true
+  // Company opening hours (defaults preserve the historical 08:30-17:00 window).
+  const openingHours = parseOpeningHours(globalConfig[OPENING_HOURS_KEY])
 
   // Lone worker admin tab: available to admins and nominated managers.
   const canManageLoneWorker = isAdmin || (profile as Profile).can_manage_lone_worker === true
@@ -96,6 +100,7 @@ export default async function SettingsPage() {
         rateCards={rateCards}
         canManageTags={canManageTemplates}
         documentTags={documentTags}
+        openingHours={openingHours}
       />
     </div>
   )

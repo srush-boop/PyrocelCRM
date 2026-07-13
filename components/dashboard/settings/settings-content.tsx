@@ -29,6 +29,7 @@ import { RateCardsSettings } from './rate-cards-settings'
 import { DocumentTagsSettings } from './document-tags-settings'
 import type { RateCard } from '@/lib/billing/rate-cards'
 import type { TagWithUsage } from '@/lib/actions/document-tags'
+import type { OpeningHours } from '@/lib/oncall/opening-hours'
 import { signatureSrc } from '@/lib/blob'
 
 interface SettingsContentProps {
@@ -50,9 +51,10 @@ interface SettingsContentProps {
   rateCards: RateCard[]
   canManageTags: boolean
   documentTags: TagWithUsage[]
+  openingHours: OpeningHours
 }
 
-export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards, canManageTags, documentTags }: SettingsContentProps) {
+export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards, canManageTags, documentTags, openingHours }: SettingsContentProps) {
   const isAdmin = profile.role === 'admin'
   // Templates are managed by office/admin (mail-merge letters for client correspondence).
   const canManageTemplates = profile.role === 'admin' || profile.role === 'office'
@@ -176,12 +178,6 @@ export function SettingsContent({ user, profile, company, branches, departments,
           <TabsTrigger value="templates" className="gap-2">
             <FileText className="h-4 w-4" />
             Documents
-          </TabsTrigger>
-        )}
-        {canManageTags && (
-          <TabsTrigger value="tags" className="gap-2">
-            <Tags className="h-4 w-4" />
-            Tags
           </TabsTrigger>
         )}
         {isAdmin && (
@@ -415,12 +411,6 @@ export function SettingsContent({ user, profile, company, branches, departments,
         </TabsContent>
       )}
 
-      {canManageTags && (
-        <TabsContent value="tags" className="space-y-4">
-          <DocumentTagsSettings tags={documentTags} />
-        </TabsContent>
-      )}
-
       {isAdmin && (
         <TabsContent value="data" className="space-y-4">
           <BulkDataSettings />
@@ -433,6 +423,7 @@ export function SettingsContent({ user, profile, company, branches, departments,
             poOverdueDays={poOverdueDays}
             deadlineReasons={deadlineReasons}
             engagementStatsEnabled={engagementStatsEnabled}
+            openingHours={openingHours}
           />
         </TabsContent>
       )}

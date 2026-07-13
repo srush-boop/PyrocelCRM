@@ -24,8 +24,15 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, Plus, Pencil, Star, Building2, X } from 'lucide-react'
 import { toast } from 'sonner'
-import type { Client, BillingAccount, BillingAccountStatus } from '@/lib/types/database'
+import type {
+  Client,
+  BillingAccount,
+  BillingAccountStatus,
+  BillingFrequency,
+} from '@/lib/types/database'
+import { BILLING_FREQUENCY_LABELS } from '@/lib/billing/invoices'
 import { BillingStatusBadge } from './billing-status-badge'
+import { RecurringChargesManager } from './recurring-charges-manager'
 import {
   createBillingAccount,
   updateBillingAccount,
@@ -51,6 +58,7 @@ const EMPTY_FORM: BillingAccountInput = {
   payment_terms_days: 30,
   default_tax_code: 'T1',
   default_nominal_code: '4000',
+  billing_frequency: 'on_demand',
   rate_card_id: null,
   notes: '',
 }
@@ -128,6 +136,7 @@ export function BillingAccountsDialog({ client, open, onOpenChange }: BillingAcc
       payment_terms_days: account.payment_terms_days,
       default_tax_code: account.default_tax_code,
       default_nominal_code: account.default_nominal_code,
+      billing_frequency: account.billing_frequency ?? 'on_demand',
       rate_card_id: account.rate_card_id ?? null,
       notes: account.notes ?? '',
     })
@@ -285,6 +294,7 @@ export function BillingAccountsDialog({ client, open, onOpenChange }: BillingAcc
                         <SelectItem value="dead">Closed</SelectItem>
                       </SelectContent>
                     </Select>
+                    <RecurringChargesManager account={account} />
                     {!account.is_default && (
                       <Button
                         variant="outline"
@@ -463,6 +473,28 @@ export function BillingAccountsDialog({ client, open, onOpenChange }: BillingAcc
               </Select>
               <p className="text-xs text-muted-foreground">
                 Used to auto-price call-out and labour lines on invoices for this account.
+              </p>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="ba-frequency">Billing frequency</Label>
+              <Select
+                value={form.billing_frequency ?? 'on_demand'}
+                onValueChange={(v) => set('billing_frequency', v as BillingFrequency)}
+              >
+                <SelectTrigger id="ba-frequency">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(BILLING_FREQUENCY_LABELS) as BillingFrequency[]).map((f) => (
+                    <SelectItem key={f} value={f}>
+                      {BILLING_FREQUENCY_LABELS[f]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                A cadence hint shown in the ready-to-invoice queue. It never blocks invoicing.
               </p>
             </div>
 

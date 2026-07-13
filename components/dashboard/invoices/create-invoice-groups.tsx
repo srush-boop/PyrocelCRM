@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/table'
 import { toast } from 'sonner'
 import { Loader2, ReceiptText, AlertTriangle, CheckCircle2 } from 'lucide-react'
-import { formatPence } from '@/lib/billing/invoices'
+import { formatPence, BILLING_FREQUENCY_LABELS } from '@/lib/billing/invoices'
 import { createInvoiceFromTasks, type ReadyGroup } from '@/lib/actions/invoices'
 
 export function CreateInvoiceGroups({ groups }: { groups: ReadyGroup[] }) {
@@ -115,6 +115,18 @@ function GroupCard({ group }: { group: ReadyGroup }) {
             </CardTitle>
             {group.clientName && (
               <p className="mt-0.5 text-sm text-muted-foreground">{group.clientName}</p>
+            )}
+            {group.dueHint && (
+              <Badge
+                variant="outline"
+                className={
+                  group.dueHint.due
+                    ? 'mt-1.5 border-emerald-200 bg-emerald-50 text-emerald-700'
+                    : 'mt-1.5 text-muted-foreground'
+                }
+              >
+                {BILLING_FREQUENCY_LABELS[group.billingFrequency]} · {group.dueHint.label}
+              </Badge>
             )}
           </div>
           <div className="text-right">

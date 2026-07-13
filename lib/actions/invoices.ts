@@ -2,9 +2,15 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import type { BillingAccount, InvoiceLineKind, Profile } from '@/lib/types/database'
+import type {
+  BillingAccount,
+  BillingFrequency,
+  InvoiceLineKind,
+  Profile,
+} from '@/lib/types/database'
 import { resolveBillingAccount } from '@/lib/billing/resolve-billing-account'
 import {
+  billingDueHint,
   computeInvoiceTotals,
   DEFAULT_TAX_RATE,
   financialYearOf,
@@ -140,6 +146,10 @@ export interface ReadyGroup {
   onHold: boolean
   /** Client prefers one invoice per call; UI leads with per-call raising. */
   invoiceCallsIndividually: boolean
+  /** Inform-only cadence hint (never blocks raising). */
+  billingFrequency: BillingFrequency
+  /** Human due hint derived from cadence + last issued invoice, or null. */
+  dueHint: { due: boolean; label: string } | null
   tasks: ReadyTask[]
   partsTotalPence: number
 }
@@ -179,6 +189,20 @@ export async function getReadyToInvoiceGroups(): Promise<ReadyGroup[]> {
   ])
 
   const pool = (accounts ?? []) as BillingAccount[]
+
+  // Last issued invoice date per billing account, for the cadence due-hint.
+  const { data: issuedRows } = await supabase
+    .from('invoices')
+    .select('billing_account_id, invoice_date')
+    .not('invoice_date', 'is', null)
+    .order('invoice_date', { ascending: false })
+  const lastIssuedByAccount = new Map<string, string>()
+  for (const row of (issuedRows ?? []) as { billing_account_id: string | null; invoice_date: string | null }[]) {
+    if (row.billing_account_id && row.invoice_date && !lastIssuedByAccount.has(row.billing_account_id)) {
+      lastIssuedByAccount.set(row.billing_account_id, row.invoice_date)
+    }
+  }
+
   const groups = new Map<string, ReadyGroup>()
 
   for (const t of (tasks ?? []) as any[]) {
@@ -239,6 +263,13 @@ export async function getReadyToInvoiceGroups(): Promise<ReadyGroup[]> {
         clientName: client?.name || '',
         onHold: !!account && account.status !== 'live',
         invoiceCallsIndividually: !!client?.invoice_calls_individually,
+        billingFrequency: account?.billing_frequency ?? 'on_demand',
+        dueHint: account
+          ? billingDueHint(
+              account.billing_frequency ?? 'on_demand',
+              lastIssuedByAccount.get(account.id) ?? null,
+            )
+          : null,
         tasks: [],
         partsTotalPence: 0,
       }
@@ -369,6 +400,7 @@ export async function createInvoiceFromTasks(
       billing_account_id: account.id,
       client_id: account.client_id,
       status: 'draft',
+      origin: 'adhoc',
       po_number: commonPo,
       site_id: commonSiteId,
       site_address: commonSiteAddress,
@@ -599,6 +631,21 @@ export async function addInvoiceLine(
   if (guard) return { error: guard }
   if (!input.description?.trim()) return { error: 'Description is required' }
 
+  // Segregation: a recurring-origin invoice may only take manual "other"
+  // adjustment lines — never call/part/job lines (those belong on ad-hoc
+  // invoices). Recurring-charge lines are added at creation time.
+  const { data: originRow } = await supabase
+    .from('invoices')
+    .select('origin')
+    .eq('id', invoiceId)
+    .single()
+  const origin = (originRow as { origin: string } | null)?.origin
+  if (origin === 'recurring' && input.kind !== 'other') {
+    return {
+      error: 'Recurring invoices can only take manual adjustment lines, not call or job lines.',
+    }
+  }
+
   const { data: last } = await supabase
     .from('invoice_line_items')
     .select('sort_order')
@@ -727,9 +774,12 @@ export async function issueInvoice(invoiceId: string): Promise<{ error: string |
 
   const { data: inv } = await supabase
     .from('invoices')
-    .select('payment_terms_days, total_pence')
+    .select('payment_terms_days, total_pence, on_hold')
     .eq('id', invoiceId)
     .single()
+  if ((inv as { on_hold: boolean } | null)?.on_hold) {
+    return { error: 'This invoice is on hold. Release it before issuing.' }
+  }
   const terms = (inv as { payment_terms_days: number } | null)?.payment_terms_days ?? 30
 
   const issue = new Date()
@@ -760,9 +810,12 @@ export async function markInvoicePaid(invoiceId: string): Promise<{ error: strin
 
   const { data } = await supabase
     .from('invoices')
-    .select('status')
+    .select('status, document_type')
     .eq('id', invoiceId)
     .single()
+  if ((data as { document_type: string } | null)?.document_type === 'credit_note') {
+    return { error: 'Credit notes cannot be marked paid' }
+  }
   if ((data as { status: string } | null)?.status !== 'issued') {
     return { error: 'Only issued invoices can be marked paid' }
   }

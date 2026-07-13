@@ -133,6 +133,8 @@ export interface BillingAccount {
   payment_terms_days: number
   default_tax_code: string
   default_nominal_code: string
+  /** Inform-only cadence hint shown in the ready-to-invoice queue. */
+  billing_frequency: BillingFrequency
   /** The client's primary account; at most one per client. */
   is_default: boolean
   /** Optional rate-card override; null inherits the company default card. */
@@ -145,6 +147,26 @@ export interface BillingAccount {
 
 // ---- Invoicing (Phase 3) ------------------------------------------------
 export type InvoiceStatus = 'draft' | 'issued' | 'paid' | 'void'
+/** Segregates ad-hoc/call invoices from recurring-charge invoices. */
+export type InvoiceOrigin = 'adhoc' | 'recurring'
+/** An invoice document or a credit note (own CRN number series). */
+export type InvoiceDocumentType = 'invoice' | 'credit_note'
+/** Inform-only billing cadence hint on a billing account. */
+export type BillingFrequency =
+  | 'weekly'
+  | 'monthly'
+  | 'bi_monthly'
+  | 'four_monthly'
+  | 'annual'
+  | 'on_demand'
+export type RecurringFrequency =
+  | 'weekly'
+  | 'monthly'
+  | 'quarterly'
+  | 'biannual'
+  | 'annual'
+/** When a recurring charge becomes due for invoicing relative to its period. */
+export type RecurringTiming = 'advance' | 'arrears' | 'on_completion'
 export type InvoiceLineKind =
   | 'labour'
   | 'part'
@@ -166,6 +188,17 @@ export interface Invoice {
   /** Source job when this invoice was raised from a job (null for call invoices). */
   job_id: string | null
   status: InvoiceStatus
+  /** Ad-hoc/call invoice vs recurring-charge invoice (hard-segregated). */
+  origin: InvoiceOrigin
+  /** Invoice vs credit note. Credit notes use their own CRN number series. */
+  document_type: InvoiceDocumentType
+  /** For credit notes: the invoice this credits. */
+  credited_invoice_id: string | null
+  /** Hold parks a draft before issuing; issuing is blocked while held. */
+  on_hold: boolean
+  hold_reason: string | null
+  held_at: string | null
+  held_by: string | null
   /** Customer PO number. Set only when common across all covered calls / from the job. */
   po_number: string | null
   /** Optional site the work relates to, plus a text snapshot of its address. */
@@ -215,6 +248,52 @@ export interface InvoiceLineItem {
   amount_pence: number
   sort_order: number
   created_at: string
+}
+
+// A scheduled/standing charge billed on a cadence. The link to a site_service
+// is optional so service-less fees (monitoring, rental, standing charges) work.
+// Amounts are stored in integer pence.
+export interface RecurringCharge {
+  id: string
+  billing_account_id: string
+  site_service_id: string | null
+  client_id: string | null
+  site_id: string | null
+  description: string
+  /** The live sell price per unit, in pence. */
+  unit_price_pence: number
+  quantity: number
+  tax_code: string | null
+  nominal_code: string | null
+  timing: RecurringTiming
+  frequency: RecurringFrequency
+  /** 1-12: the month the annual price is reviewed for renewal. */
+  renewal_month: number | null
+  /** Optional label to force a separate invoice within an account. */
+  group_key: string | null
+  is_subcontracted: boolean
+  /** Buy price when subcontracted, in pence. */
+  subcontract_price_pence: number | null
+  active: boolean
+  start_date: string | null
+  end_date: string | null
+  last_invoiced_date: string | null
+  notice_sent_at: string | null
+  created_at: string
+  created_by: string | null
+  updated_at: string
+  billing_account?: BillingAccount | null
+  site_service?: SiteService | null
+}
+
+export interface RecurringChargePriceHistory {
+  id: string
+  recurring_charge_id: string
+  old_price_pence: number | null
+  new_price_pence: number
+  reason: string | null
+  changed_at: string
+  changed_by: string | null
 }
 
 // A quantity of a job's physical quote line issued/delivered to the client.

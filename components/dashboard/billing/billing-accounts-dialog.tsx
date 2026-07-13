@@ -24,7 +24,13 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, Plus, Pencil, Star, Building2, X } from 'lucide-react'
 import { toast } from 'sonner'
-import type { Client, BillingAccount, BillingAccountStatus } from '@/lib/types/database'
+import type {
+  Client,
+  BillingAccount,
+  BillingAccountStatus,
+  BillingFrequency,
+} from '@/lib/types/database'
+import { BILLING_FREQUENCY_LABELS } from '@/lib/billing/invoices'
 import { BillingStatusBadge } from './billing-status-badge'
 import { RecurringChargesManager } from './recurring-charges-manager'
 import {

@@ -42,6 +42,31 @@ export default async function InvoiceDetailPage({
     .eq('invoice_id', id)
     .order('sort_order', { ascending: true })
 
+  // Resolve each task-sourced line's service type so the detail can group
+  // multi-service invoices under service-type subheadings (presentation only).
+  const lineList = (lines ?? []) as InvoiceLineItem[]
+  const taskIds = Array.from(
+    new Set(lineList.map((l) => l.task_id).filter((t): t is string => !!t)),
+  )
+  const serviceTypeByLineId: Record<string, string> = {}
+  if (taskIds.length > 0) {
+    const { data: taskRows } = await supabase
+      .from('tasks')
+      .select('id, site_service:site_services(service_type:service_types(name))')
+      .in('id', taskIds)
+    const nameByTask = new Map<string, string>()
+    for (const t of (taskRows ?? []) as any[]) {
+      const ss = Array.isArray(t.site_service) ? t.site_service[0] : t.site_service
+      const name = ss?.service_type?.name
+      if (name) nameByTask.set(t.id, name)
+    }
+    for (const l of lineList) {
+      if (l.task_id && nameByTask.has(l.task_id)) {
+        serviceTypeByLineId[l.id] = nameByTask.get(l.task_id) as string
+      }
+    }
+  }
+
   return (
     <div className="space-y-6">
       <Button asChild variant="ghost" size="sm" className="-ml-2 h-8 text-muted-foreground">
@@ -56,7 +81,8 @@ export default async function InvoiceDetailPage({
           billing_account: { name: string } | null
           client: { name: string } | null
         }}
-        lines={(lines ?? []) as InvoiceLineItem[]}
+        lines={lineList}
+        serviceTypeByLineId={serviceTypeByLineId}
       />
     </div>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -100,14 +100,39 @@ function formatDate(value: string | null): string {
 export function InvoiceDetail({
   invoice,
   lines,
+  serviceTypeByLineId = {},
 }: {
   invoice: InvoiceWithNames
   lines: InvoiceLineItem[]
+  serviceTypeByLineId?: Record<string, string>
 }) {
   const router = useRouter()
   const isDraft = invoice.status === 'draft'
   const isCreditNote = invoice.document_type === 'credit_note'
   const [busy, setBusy] = useState(false)
+
+  // Group-by-service-type (presentation only): only when read-only (issued/
+  // paid/void) AND the invoice spans two or more service types. Lines with no
+  // resolved service type fall under "Other charges".
+  const OTHER = 'Other charges'
+  const groupedByService = (() => {
+    if (isDraft) return null
+    const groups = new Map<string, InvoiceLineItem[]>()
+    for (const line of lines) {
+      const key = serviceTypeByLineId[line.id] ?? OTHER
+      const arr = groups.get(key) ?? []
+      arr.push(line)
+      groups.set(key, arr)
+    }
+    const realServiceCount = Array.from(groups.keys()).filter((k) => k !== OTHER).length
+    if (realServiceCount < 2) return null
+    // Deterministic order: named service types alphabetically, "Other" last.
+    return Array.from(groups.entries()).sort(([a], [b]) => {
+      if (a === OTHER) return 1
+      if (b === OTHER) return -1
+      return a.localeCompare(b)
+    })
+  })()
 
   const run = async (
     fn: () => Promise<{ error?: string | null }>,
@@ -257,6 +282,25 @@ export function InvoiceDetail({
                         No line items yet.
                       </TableCell>
                     </TableRow>
+                  ) : groupedByService ? (
+                    groupedByService.map(([serviceName, groupLines]) => {
+                      const subtotal = groupLines.reduce((s, l) => s + l.amount_pence, 0)
+                      return (
+                        <Fragment key={serviceName}>
+                          <TableRow className="bg-muted/50 hover:bg-muted/50">
+                            <TableCell colSpan={4} className="py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              {serviceName}
+                            </TableCell>
+                            <TableCell className="py-2 text-right text-xs font-medium text-muted-foreground">
+                              {formatPence(subtotal)}
+                            </TableCell>
+                          </TableRow>
+                          {groupLines.map((line) => (
+                            <ReadOnlyLineRow key={line.id} line={line} />
+                          ))}
+                        </Fragment>
+                      )
+                    })
                   ) : (
                     lines.map((line) =>
                       isDraft ? (
@@ -266,19 +310,7 @@ export function InvoiceDetail({
                           onSaved={() => router.refresh()}
                         />
                       ) : (
-                        <TableRow key={line.id}>
-                          <TableCell>
-                            <Badge variant="secondary">{KIND_LABELS[line.kind]}</Badge>
-                          </TableCell>
-                          <TableCell>{line.description}</TableCell>
-                          <TableCell className="text-right">{line.quantity}</TableCell>
-                          <TableCell className="text-right">
-                            {(line.unit_price_pence / 100).toFixed(2)}
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {formatPence(line.amount_pence)}
-                          </TableCell>
-                        </TableRow>
+                        <ReadOnlyLineRow key={line.id} line={line} />
                       ),
                     )
                   )}
@@ -747,6 +779,20 @@ function ConfirmButton({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  )
+}
+
+function ReadOnlyLineRow({ line }: { line: InvoiceLineItem }) {
+  return (
+    <TableRow>
+      <TableCell>
+        <Badge variant="secondary">{KIND_LABELS[line.kind]}</Badge>
+      </TableCell>
+      <TableCell>{line.description}</TableCell>
+      <TableCell className="text-right">{line.quantity}</TableCell>
+      <TableCell className="text-right">{(line.unit_price_pence / 100).toFixed(2)}</TableCell>
+      <TableCell className="text-right font-medium">{formatPence(line.amount_pence)}</TableCell>
+    </TableRow>
   )
 }
 

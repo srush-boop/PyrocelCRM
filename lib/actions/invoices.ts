@@ -2,9 +2,15 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import type { BillingAccount, InvoiceLineKind, Profile } from '@/lib/types/database'
+import type {
+  BillingAccount,
+  BillingFrequency,
+  InvoiceLineKind,
+  Profile,
+} from '@/lib/types/database'
 import { resolveBillingAccount } from '@/lib/billing/resolve-billing-account'
 import {
+  billingDueHint,
   computeInvoiceTotals,
   DEFAULT_TAX_RATE,
   financialYearOf,
@@ -140,6 +146,10 @@ export interface ReadyGroup {
   onHold: boolean
   /** Client prefers one invoice per call; UI leads with per-call raising. */
   invoiceCallsIndividually: boolean
+  /** Inform-only cadence hint (never blocks raising). */
+  billingFrequency: BillingFrequency
+  /** Human due hint derived from cadence + last issued invoice, or null. */
+  dueHint: { due: boolean; label: string } | null
   tasks: ReadyTask[]
   partsTotalPence: number
 }
@@ -179,6 +189,20 @@ export async function getReadyToInvoiceGroups(): Promise<ReadyGroup[]> {
   ])
 
   const pool = (accounts ?? []) as BillingAccount[]
+
+  // Last issued invoice date per billing account, for the cadence due-hint.
+  const { data: issuedRows } = await supabase
+    .from('invoices')
+    .select('billing_account_id, invoice_date')
+    .not('invoice_date', 'is', null)
+    .order('invoice_date', { ascending: false })
+  const lastIssuedByAccount = new Map<string, string>()
+  for (const row of (issuedRows ?? []) as { billing_account_id: string | null; invoice_date: string | null }[]) {
+    if (row.billing_account_id && row.invoice_date && !lastIssuedByAccount.has(row.billing_account_id)) {
+      lastIssuedByAccount.set(row.billing_account_id, row.invoice_date)
+    }
+  }
+
   const groups = new Map<string, ReadyGroup>()
 
   for (const t of (tasks ?? []) as any[]) {
@@ -239,6 +263,13 @@ export async function getReadyToInvoiceGroups(): Promise<ReadyGroup[]> {
         clientName: client?.name || '',
         onHold: !!account && account.status !== 'live',
         invoiceCallsIndividually: !!client?.invoice_calls_individually,
+        billingFrequency: account?.billing_frequency ?? 'on_demand',
+        dueHint: account
+          ? billingDueHint(
+              account.billing_frequency ?? 'on_demand',
+              lastIssuedByAccount.get(account.id) ?? null,
+            )
+          : null,
         tasks: [],
         partsTotalPence: 0,
       }

@@ -34,10 +34,18 @@ import {
   RECURRING_FREQUENCY_LABELS,
   RECURRING_TIMING_LABELS,
   MONTH_LABELS,
+  annualOccurrences,
+  perPeriodFromAnnual,
+  annualFromPerPeriod,
 } from '@/lib/billing/recurring'
 import { resolveNominalCode, nominalSourceLabel } from '@/lib/billing/nominal-codes'
 import { NominalCodeSelect } from '@/components/dashboard/billing/nominal-code-select'
-import type { RecurringCharge, RecurringFrequency, RecurringTiming } from '@/lib/types/database'
+import type {
+  RecurringCharge,
+  RecurringFrequency,
+  RecurringPriceBasis,
+  RecurringTiming,
+} from '@/lib/types/database'
 
 interface ServiceChargeDialogProps {
   open: boolean
@@ -76,6 +84,8 @@ export function ServiceChargeDialog({
   const [templateId, setTemplateId] = useState<string>(NO_TEMPLATE)
   const [description, setDescription] = useState('')
   const [pricePounds, setPricePounds] = useState('')
+  // Whether pricePounds is a per-period price or an annual total.
+  const [priceBasis, setPriceBasis] = useState<RecurringPriceBasis>('per_period')
   const [quantity, setQuantity] = useState('1')
   const [frequency, setFrequency] = useState<RecurringFrequency>('annual')
   const [timing, setTiming] = useState<RecurringTiming>('advance')
@@ -92,6 +102,7 @@ export function ServiceChargeDialog({
     setTemplateId(NO_TEMPLATE)
     setDescription('')
     setPricePounds('')
+    setPriceBasis('per_period')
     setQuantity('1')
     setFrequency('annual')
     setTiming('advance')
@@ -110,7 +121,17 @@ export function ServiceChargeDialog({
     setError(null)
     setTemplateId(NO_TEMPLATE)
     setDescription(charge.description)
-    setPricePounds(poundsFromPence(charge.unit_price_pence))
+    const basis = charge.price_basis ?? 'per_period'
+    setPriceBasis(basis)
+    // unit_price_pence is always per-period; show the annual total when that's
+    // how the charge was entered.
+    setPricePounds(
+      poundsFromPence(
+        basis === 'annual'
+          ? annualFromPerPeriod(charge.unit_price_pence, charge.frequency)
+          : charge.unit_price_pence,
+      ),
+    )
     setQuantity(String(charge.quantity ?? 1))
     setFrequency(charge.frequency)
     setTiming(charge.timing)
@@ -143,6 +164,8 @@ export function ServiceChargeDialog({
     const t = ctx?.chargeTemplates.find((x) => x.id === value)
     if (!t) return
     setDescription(t.name)
+    // Catalog prices are per-period amounts.
+    setPriceBasis('per_period')
     setPricePounds(poundsFromPence(t.default_unit_price_pence))
     setTaxCode(t.default_tax_code ?? '')
     // Only auto-move the nominal if the user hasn't manually overridden it.
@@ -171,13 +194,17 @@ export function ServiceChargeDialog({
     setSaving(true)
     setError(null)
     void (async () => {
+      const enteredPence = penceFromPounds(pricePounds)
       const base = {
         billing_account_id: billingAccountId,
         site_service_id: ctx.siteServiceId,
         site_id: ctx.siteId,
         client_id: ctx.clientId,
         description: description.trim(),
-        unit_price_pence: penceFromPounds(pricePounds),
+        // Store the per-period amount; divide down when entered as an annual total.
+        unit_price_pence:
+          priceBasis === 'annual' ? perPeriodFromAnnual(enteredPence, frequency) : enteredPence,
+        price_basis: priceBasis,
         quantity: Number.parseInt(quantity, 10) || 1,
         tax_code: taxCode || null,
         nominal_code_id: nominalCodeId,
@@ -243,6 +270,13 @@ export function ServiceChargeDialog({
     })()
   }
 
+  // The amount billed on each invoice: the entered value, divided down when the
+  // user typed an annual total.
+  const perInvoicePence =
+    priceBasis === 'annual'
+      ? perPeriodFromAnnual(penceFromPounds(pricePounds), frequency)
+      : penceFromPounds(pricePounds)
+
   const hasClient = !!ctx?.clientId
   const noAccounts = (ctx?.billingAccounts.length ?? 0) === 0
 
@@ -296,6 +330,15 @@ export function ServiceChargeDialog({
                         <span className="min-w-0 flex-1 truncate">{c.description}</span>
                         <span className="flex items-center gap-2 whitespace-nowrap text-muted-foreground">
                           {formatPence(c.unit_price_pence * c.quantity)}
+                          {c.price_basis === 'annual' && c.frequency !== 'annual' && (
+                            <span className="text-xs">
+                              (
+                              {formatPence(
+                                annualFromPerPeriod(c.unit_price_pence, c.frequency) * c.quantity,
+                              )}
+                              /yr)
+                            </span>
+                          )}
                           <Badge variant="outline" className="text-xs">
                             {RECURRING_FREQUENCY_LABELS[c.frequency]}
                           </Badge>
@@ -383,9 +426,26 @@ export function ServiceChargeDialog({
               />
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
-                <Label htmlFor="sc-price">Value (£)</Label>
+                <Label htmlFor="sc-basis">Value entered as</Label>
+                <Select
+                  value={priceBasis}
+                  onValueChange={(v) => setPriceBasis(v as RecurringPriceBasis)}
+                >
+                  <SelectTrigger id="sc-basis">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="per_period">Value per period</SelectItem>
+                    <SelectItem value="annual">Annual total</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="sc-price">
+                  {priceBasis === 'annual' ? 'Annual value (£)' : 'Value (£)'}
+                </Label>
                 <Input
                   id="sc-price"
                   type="number"
@@ -396,6 +456,9 @@ export function ServiceChargeDialog({
                   onChange={(e) => setPricePounds(e.target.value)}
                 />
               </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="sc-qty">Quantity</Label>
                 <Input
@@ -408,12 +471,24 @@ export function ServiceChargeDialog({
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label>Total</Label>
+                <Label>Total per invoice</Label>
                 <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm">
-                  {formatPence(penceFromPounds(pricePounds) * (Number.parseInt(quantity, 10) || 1))}
+                  {formatPence(perInvoicePence * (Number.parseInt(quantity, 10) || 1))}
                 </div>
               </div>
             </div>
+
+            {pricePounds.trim() !== '' && (
+              <p className="text-xs text-muted-foreground">
+                {priceBasis === 'annual'
+                  ? `Bills ${formatPence(perInvoicePence)} each ${RECURRING_FREQUENCY_LABELS[
+                      frequency
+                    ].toLowerCase()} period (${annualOccurrences(frequency)}× per year).`
+                  : `Annual total ${formatPence(
+                      annualFromPerPeriod(penceFromPounds(pricePounds), frequency),
+                    )} (${annualOccurrences(frequency)}× per year).`}
+              </p>
+            )}
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">

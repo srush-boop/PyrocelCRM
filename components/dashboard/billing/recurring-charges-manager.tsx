@@ -35,6 +35,7 @@ import type {
   BillingAccount,
   RecurringCharge,
   RecurringFrequency,
+  RecurringPriceBasis,
   RecurringTiming,
 } from '@/lib/types/database'
 import {
@@ -42,6 +43,9 @@ import {
   RECURRING_TIMING_LABELS,
   MONTH_LABELS,
   marginPct,
+  annualOccurrences,
+  perPeriodFromAnnual,
+  annualFromPerPeriod,
 } from '@/lib/billing/recurring'
 import { formatPence } from '@/lib/billing/invoices'
 import {
@@ -66,6 +70,8 @@ interface RecurringChargesManagerProps {
 interface FormState {
   description: string
   poundsPrice: string
+  /** Whether poundsPrice is a per-period price or an annual total. */
+  priceBasis: RecurringPriceBasis
   quantity: string
   frequency: RecurringFrequency
   timing: RecurringTiming
@@ -82,6 +88,7 @@ interface FormState {
 const EMPTY_FORM: FormState = {
   description: '',
   poundsPrice: '',
+  priceBasis: 'per_period',
   quantity: '1',
   frequency: 'annual',
   timing: 'arrears',
@@ -150,9 +157,17 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
   }
 
   function startEdit(charge: RecurringCharge) {
+    const basis = charge.price_basis ?? 'per_period'
+    // When stored as an annual total, show the annual figure in the field
+    // (unit_price_pence is always the per-period amount).
+    const shownPence =
+      basis === 'annual'
+        ? annualFromPerPeriod(charge.unit_price_pence, charge.frequency)
+        : charge.unit_price_pence
     setForm({
       description: charge.description,
-      poundsPrice: penceToPounds(charge.unit_price_pence),
+      poundsPrice: penceToPounds(shownPence),
+      priceBasis: basis,
       quantity: String(charge.quantity ?? 1),
       frequency: charge.frequency,
       timing: charge.timing,
@@ -188,13 +203,20 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
   }
 
   function buildInput(): RecurringChargeInput {
+    const enteredPence = poundsToPence(form.poundsPrice)
+    // The DB always stores the per-period amount; divide down annual entries.
+    const perPeriodPence =
+      form.priceBasis === 'annual'
+        ? perPeriodFromAnnual(enteredPence, form.frequency)
+        : enteredPence
     return {
       billing_account_id: account.id,
       client_id: account.client_id,
       site_service_id: form.siteServiceId || null,
       site_id: form.siteId || null,
       description: form.description,
-      unit_price_pence: poundsToPence(form.poundsPrice),
+      unit_price_pence: perPeriodPence,
+      price_basis: form.priceBasis,
       quantity: Number.parseFloat(form.quantity) || 1,
       tax_code: form.taxCode || null,
       nominal_code_id: form.nominalCodeId,
@@ -328,6 +350,14 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
                               {formatPence(charge.unit_price_pence)}
                               {charge.quantity !== 1 ? ` × ${charge.quantity}` : ''}
                             </span>
+                            {charge.price_basis === 'annual' && charge.frequency !== 'annual' && (
+                              <span>
+                                {formatPence(
+                                  annualFromPerPeriod(charge.unit_price_pence, charge.frequency),
+                                )}
+                                /yr
+                              </span>
+                            )}
                             <span>{RECURRING_FREQUENCY_LABELS[charge.frequency]}</span>
                             <span>{RECURRING_TIMING_LABELS[charge.timing]}</span>
                             {charge.renewal_month && (
@@ -459,9 +489,26 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
                 />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
-                  <Label htmlFor="rc-price">Sell price (£)</Label>
+                  <Label htmlFor="rc-basis">Price entered as</Label>
+                  <Select
+                    value={form.priceBasis}
+                    onValueChange={(v) => set('priceBasis', v as RecurringPriceBasis)}
+                  >
+                    <SelectTrigger id="rc-basis">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="per_period">Price per period</SelectItem>
+                      <SelectItem value="annual">Annual total</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="rc-price">
+                    {form.priceBasis === 'annual' ? 'Annual sell price (£)' : 'Sell price (£)'}
+                  </Label>
                   <Input
                     id="rc-price"
                     inputMode="decimal"
@@ -470,6 +517,9 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
                     placeholder="0.00"
                   />
                 </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
                   <Label htmlFor="rc-qty">Quantity</Label>
                   <Input
@@ -498,6 +548,23 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
                   </Select>
                 </div>
               </div>
+
+              {/* Derived amount readout, so the user can sanity-check the split. */}
+              {form.poundsPrice.trim() !== '' && (
+                <p className="text-xs text-muted-foreground">
+                  {form.priceBasis === 'annual'
+                    ? `Bills ${formatPence(
+                        perPeriodFromAnnual(poundsToPence(form.poundsPrice), form.frequency),
+                      )} each ${RECURRING_FREQUENCY_LABELS[form.frequency].toLowerCase()} period (${annualOccurrences(
+                        form.frequency,
+                      )}× per year).`
+                    : `Annual total ${formatPence(
+                        annualFromPerPeriod(poundsToPence(form.poundsPrice), form.frequency),
+                      )} (${annualOccurrences(form.frequency)}× ${formatPence(
+                        poundsToPence(form.poundsPrice),
+                      )}).`}
+                </p>
+              )}
 
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="grid gap-2">

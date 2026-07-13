@@ -9,6 +9,7 @@ import type {
   Profile,
   RecurringCharge,
   RecurringFrequency,
+  RecurringPriceBasis,
   RecurringTiming,
 } from '@/lib/types/database'
 import { resolveBillingAccount } from '@/lib/billing/resolve-billing-account'
@@ -43,7 +44,11 @@ export interface RecurringChargeInput {
   client_id?: string | null
   site_id?: string | null
   description: string
+  /** Per-period price in pence — the canonical billed amount. Callers that let
+   *  the user enter an annual total must divide it down before calling. */
   unit_price_pence: number
+  /** How the value was entered (defaults to 'per_period' when omitted). */
+  price_basis?: RecurringPriceBasis
   quantity: number
   tax_code?: string | null
   nominal_code?: string | null
@@ -67,6 +72,7 @@ function sanitize(input: RecurringChargeInput) {
     site_id: input.site_id ?? null,
     description: input.description.trim(),
     unit_price_pence: Math.max(0, Math.round(input.unit_price_pence ?? 0)),
+    price_basis: input.price_basis === 'annual' ? 'annual' : 'per_period',
     quantity: input.quantity > 0 ? input.quantity : 1,
     tax_code: input.tax_code?.trim() || null,
     nominal_code: input.nominal_code?.trim() || null,

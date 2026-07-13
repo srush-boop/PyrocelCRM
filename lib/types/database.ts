@@ -167,6 +167,9 @@ export type RecurringFrequency =
   | 'annual'
 /** When a recurring charge becomes due for invoicing relative to its period. */
 export type RecurringTiming = 'advance' | 'arrears' | 'on_completion'
+/** How a recurring charge value was entered: a per-period price, or an annual
+ *  total that gets divided across the periods in a year. */
+export type RecurringPriceBasis = 'per_period' | 'annual'
 export type InvoiceLineKind =
   | 'labour'
   | 'part'
@@ -264,8 +267,12 @@ export interface RecurringCharge {
   client_id: string | null
   site_id: string | null
   description: string
-  /** The live sell price per unit, in pence. */
+  /** The live sell price per unit, in pence. Always the PER-PERIOD amount billed
+   *  each occurrence, even when the value was entered as an annual total. */
   unit_price_pence: number
+  /** How the value was entered: a per-period price, or an annual total divided
+   *  across the periods in a year to derive unit_price_pence. */
+  price_basis: RecurringPriceBasis
   quantity: number
   tax_code: string | null
   nominal_code: string | null

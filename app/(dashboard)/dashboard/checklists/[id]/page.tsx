@@ -1,13 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import { ChecklistEditor } from '@/components/dashboard/checklists/checklist-editor'
-import type {
-  Profile,
-  ChecklistTemplate,
-  ServiceType,
-  ServiceVisitType,
-  SystemType,
-} from '@/lib/types/database'
+import type { Profile, ChecklistTemplate, ServiceType, ServiceVisitType } from '@/lib/types/database'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -51,20 +45,11 @@ export default async function ChecklistEditorPage({ params }: PageProps) {
     .eq('service_type_id', checklist.service_type_id)
     .order('sort_order', { ascending: true })
 
-  // All service types and system types, so the checklist can be assigned to
-  // multiple service types and optionally scoped to specific systems.
-  const [{ data: serviceTypes }, { data: systemTypes }] = await Promise.all([
-    supabase.from('service_types').select('*').order('name', { ascending: true }),
-    supabase.from('system_types').select('*').order('name', { ascending: true }),
-  ])
-
   return (
     <div className="space-y-6">
       <ChecklistEditor 
         checklist={checklist as ChecklistTemplate & { service_type: ServiceType }} 
         visitTypes={(visitTypes || []) as ServiceVisitType[]}
-        serviceTypes={(serviceTypes || []) as ServiceType[]}
-        systemTypes={(systemTypes || []) as SystemType[]}
       />
     </div>
   )

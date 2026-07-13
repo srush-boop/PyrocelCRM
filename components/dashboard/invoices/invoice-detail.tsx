@@ -45,6 +45,7 @@ import {
   PauseCircle,
   PlayCircle,
   ReceiptText,
+  FileText,
 } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
@@ -398,6 +399,18 @@ export function InvoiceDetail({
             <CardTitle className="text-base">Actions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
+            {/* Customer-facing PDF (no internal nominal codes). Drafts open a
+                watermarked preview. */}
+            <Button asChild variant="outline" className="w-full">
+              <a
+                href={`/api/invoices/${invoice.id}/pdf`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                {isDraft ? 'Preview PDF' : `View ${isCreditNote ? 'credit note' : 'invoice'} PDF`}
+              </a>
+            </Button>
             {isDraft && (
               <ConfirmButton
                 trigger={

@@ -4,6 +4,8 @@ import type { RecurringFrequency } from '@/lib/types/database'
 
 export interface RenewalNoticeLine {
   description: string
+  /** The system this charge relates to, e.g. "Fire Alarm". Null if unknown. */
+  systemType?: string | null
   frequency: RecurringFrequency
   newPricePence: number
 }
@@ -27,6 +29,9 @@ export function buildRenewalNoticeHtml(content: RenewalNoticeContent): string {
       (l) => `
       <tr>
         <td style="padding:10px 12px;border-bottom:1px solid #eee;">${escapeHtml(l.description)}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #eee;color:#555;">${
+          l.systemType ? escapeHtml(l.systemType) : '&mdash;'
+        }</td>
         <td style="padding:10px 12px;border-bottom:1px solid #eee;color:#555;">${
           RECURRING_FREQUENCY_LABELS[l.frequency] ?? l.frequency
         }</td>
@@ -55,6 +60,7 @@ export function buildRenewalNoticeHtml(content: RenewalNoticeContent): string {
           <thead>
             <tr style="background:#fafafa;">
               <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #eee;">Service</th>
+              <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #eee;">System</th>
               <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #eee;">Frequency</th>
               <th style="padding:10px 12px;text-align:right;border-bottom:2px solid #eee;">Proposed price</th>
             </tr>

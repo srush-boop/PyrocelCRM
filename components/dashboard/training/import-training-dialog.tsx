@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import * as XLSX from 'xlsx'
+import { loadXlsx } from '@/lib/xlsx-client'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import {
@@ -60,6 +60,7 @@ export function ImportTrainingDialog() {
     setReport(null)
     setFileName(file.name)
     try {
+      const XLSX = await loadXlsx()
       const buffer = await file.arrayBuffer()
       const workbook = XLSX.read(buffer, { type: 'array' })
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
@@ -106,7 +107,8 @@ export function ImportTrainingDialog() {
     }
   }
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
+    const XLSX = await loadXlsx()
     const ws = XLSX.utils.aoa_to_sheet([
       ['Employee Number', 'Training Type', 'Course Name', 'Provider', 'Completed Date', 'Expiry Date'],
       ['EMP-0042', 'Fire Safety', 'Fire Marshal Training', 'BAFE', '2025-01-15', '2028-01-15'],

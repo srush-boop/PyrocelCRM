@@ -23,7 +23,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import { ChevronRight, Settings, BookOpen, HelpCircle, Wallet } from 'lucide-react'
+import { ChevronRight, Settings, BookOpen, HelpCircle, Wallet, Database } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 import { getVisibleMenu, type NavItem, type NavChild } from '@/lib/config/navigation'
 import { ChatNavBadge } from '@/components/dashboard/chat/chat-nav-badge'
@@ -152,20 +152,35 @@ export function DashboardSidebar({ profile }: DashboardSidebarProps) {
   // so we inject it here rather than in the shared role menus. Mirrors the pure
   // predicate in lib/auth/labour-costs.ts (which is server-only and can't be
   // imported into this client component).
-  const canViewLabourCosts =
-    profile.can_view_labour_costs === true ||
-    (profile.email ?? '').toLowerCase() === 'steve.rush@pyrocel.co.uk'
-  const menuItems: NavItem[] = canViewLabourCosts
-    ? [
-        ...navItems,
-        {
-          key: 'labour-costs',
-          title: 'Labour Costs',
-          href: '/dashboard/labour-costs',
-          icon: Wallet,
-        },
-      ]
-    : navItems
+  const isOwner = (profile.email ?? '').toLowerCase() === 'steve.rush@pyrocel.co.uk'
+  const canViewLabourCosts = profile.can_view_labour_costs === true || isOwner
+  // Query tools (Query Builder + User Cost Calculator) are owner-granted too.
+  // Mirrors the server-only predicate in lib/auth/query-tools.ts.
+  const canUseQueryTools = profile.can_use_query_tools === true || isOwner
+
+  const menuItems: NavItem[] = [
+    ...navItems,
+    ...(canViewLabourCosts
+      ? [
+          {
+            key: 'labour-costs',
+            title: 'Labour Costs',
+            href: '/dashboard/labour-costs',
+            icon: Wallet,
+          } as NavItem,
+        ]
+      : []),
+    ...(canUseQueryTools
+      ? [
+          {
+            key: 'query-builder',
+            title: 'Query Builder',
+            href: '/dashboard/query-builder',
+            icon: Database,
+          } as NavItem,
+        ]
+      : []),
+  ]
 
   return (
     <Sidebar>

@@ -15,15 +15,21 @@ let pool: Pool | null = null
 
 function getPool(): Pool {
   if (pool) return pool
-  const connectionString =
-    process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_URL
-  if (!connectionString) {
+  const raw = process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_URL
+  if (!raw) {
     throw new Error('No Postgres connection string configured.')
   }
+  // Newer `pg` aliases `sslmode=require` (which Supabase URLs include) to
+  // `verify-full`, which rejects Supabase's self-signed cert chain. Strip the
+  // sslmode param so our explicit `ssl` object below governs TLS instead.
+  const connectionString = raw
+    .replace(/([?&])sslmode=[^&]*/i, (_m, sep: string) => (sep === '?' ? '?' : ''))
+    .replace(/[?&]$/, '')
+
   pool = new Pool({
     connectionString,
-    // Supabase requires TLS; the managed cert chain isn't always present in the
-    // runtime, so we don't force full verification here.
+    // Supabase requires TLS but presents a self-signed chain in this runtime,
+    // so we encrypt without full chain verification.
     ssl: { rejectUnauthorized: false },
     max: 3,
     idleTimeoutMillis: 10_000,

@@ -1,7 +1,11 @@
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
+import { Calculator } from 'lucide-react'
 import { requireLabourCostViewer } from '@/lib/auth/labour-costs'
+import { requireQueryToolsUser } from '@/lib/auth/query-tools'
 import { getLabourDashboard } from '@/lib/billing/labour-dashboard-data'
 import { LabourCostsView } from '@/components/dashboard/labour-costs/labour-costs-view'
+import { Button } from '@/components/ui/button'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,6 +38,10 @@ export default async function LabourCostsPage({
   const access = await requireLabourCostViewer()
   if (!access) redirect('/dashboard')
 
+  // A labour-cost viewer may or may not also have query-tools access; only show
+  // the calculator link to those who do.
+  const canUseCalculator = await requireQueryToolsUser()
+
   const sp = await searchParams
 
   const today = new Date()
@@ -59,12 +67,23 @@ export default async function LabourCostsPage({
 
   return (
     <div className="space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-3xl font-bold tracking-tight">Labour costs</h1>
-        <p className="text-muted-foreground">
-          Profitability of completed calls — labour cost against resolved revenue — with breakdowns
-          by engineer, service, department, branch and role. Figures are ex-VAT and confidential.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight">Labour costs</h1>
+          <p className="text-muted-foreground">
+            Profitability of completed calls — labour cost against resolved revenue — with
+            breakdowns by engineer, service, department, branch and role. Figures are ex-VAT and
+            confidential.
+          </p>
+        </div>
+        {canUseCalculator && (
+          <Button asChild variant="outline" className="shrink-0">
+            <Link href="/dashboard/labour-costs/user-cost-calculator">
+              <Calculator className="mr-2 h-4 w-4" />
+              User cost calculator
+            </Link>
+          </Button>
+        )}
       </div>
 
       <LabourCostsView data={data} filters={filters} />

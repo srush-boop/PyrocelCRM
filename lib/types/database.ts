@@ -483,6 +483,9 @@ export interface Profile {
   // only grantable by the owner (steve.rush@pyrocel.co.uk).
   cost_per_hour_pence: number | null
   can_view_labour_costs: boolean
+  // Owner-granted access to the admin Query Builder + User Cost Calculator
+  // tools. Only grantable by the owner (steve.rush@pyrocel.co.uk).
+  can_use_query_tools: boolean
   created_at: string
   updated_at: string
   department?: Department | null

@@ -217,6 +217,8 @@ export function EngineersTable({
     cost_per_hour_pounds: '',
     // Labour-cost view permission (only editable by the owner).
     can_view_labour_costs: false,
+    // Query Builder + User Cost Calculator access (only editable by the owner).
+    can_use_query_tools: false,
   })
   const [editError, setEditError] = useState<string | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
@@ -363,6 +365,7 @@ export function EngineersTable({
       cost_per_hour_pounds:
         user.cost_per_hour_pence != null ? (user.cost_per_hour_pence / 100).toFixed(2) : '',
       can_view_labour_costs: user.can_view_labour_costs === true,
+      can_use_query_tools: user.can_use_query_tools === true,
     })
     setEditError(null)
   }
@@ -421,10 +424,13 @@ export function EngineersTable({
           secondary_phone: editForm.secondary_phone.trim() || null,
           cost_per_hour_pence: costPounds === '' ? null : Math.round(Number(costPounds) * 100),
           // Only the owner may change this; the API enforces it too.
-          ...(canGrantLabourCosts
-            ? { can_view_labour_costs: editForm.can_view_labour_costs }
-            : {}),
-        }),
+        ...(canGrantLabourCosts
+          ? {
+              can_view_labour_costs: editForm.can_view_labour_costs,
+              can_use_query_tools: editForm.can_use_query_tools,
+            }
+          : {}),
+      }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -998,6 +1004,23 @@ export function EngineersTable({
                       <span className="block text-xs text-muted-foreground">
                         Grants access to per-call cost/profit/margin figures and the labour-cost
                         dashboard.
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2 rounded-md border px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={editForm.can_use_query_tools}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, can_use_query_tools: e.target.checked })
+                      }
+                      className="mt-0.5 h-4 w-4 rounded border-input"
+                    />
+                    <span>
+                      Can use query tools
+                      <span className="block text-xs text-muted-foreground">
+                        Grants access to the SQL Query Builder and User Cost Calculator. These can
+                        modify data directly &mdash; grant with care.
                       </span>
                     </span>
                   </label>

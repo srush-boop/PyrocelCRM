@@ -436,6 +436,17 @@ export function ExtinguisherTaskExecution({
       console.log('[v0] Report email request error:', err)
     }
 
+    // Per-visit "invoice on completion" billing — best-effort, idempotent server-side.
+    try {
+      await fetch('/api/tasks/complete-billing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId: task.id }),
+      })
+    } catch (err) {
+      console.log('[v0] Visit billing request error:', err)
+    }
+
     setSubmitting(false)
     setShowSubmit(false)
     setStatus('completed')

@@ -67,7 +67,10 @@ function normalizeLabel(s: string): string {
   return s.trim().toLowerCase()
 }
 
-function computeStats(checklist: ChecklistResult[]): ChecklistStats {
+function computeStats(input: ChecklistResult[]): ChecklistStats {
+  // Conditional follow-up rows are supplementary detail shown under their parent;
+  // they must not skew the pass/fail tallies or count summaries.
+  const checklist = input.filter((item) => !item.parent_item_id)
   // Index numeric items by both item_id and normalised label so we can resolve
   // count summaries no matter how the executor keyed them.
   const numById: Record<string, number> = {}
@@ -165,6 +168,11 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
   const ServiceIcon = getServiceIcon(serviceType?.name)
 
   const checklist = result?.checklist_results || []
+  // Top-level rows only — conditional follow-ups are rendered beneath their parent.
+  const parentChecklist = useMemo(
+    () => checklist.filter((r) => !r.parent_item_id),
+    [checklist],
+  )
   const stats = useMemo(() => computeStats(checklist), [checklist])
 
   const pieData = useMemo(() => {
@@ -292,10 +300,16 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
                 </tr>
               </thead>
               <tbody>
-                {checklist.map((item, index) => {
-                  const prev = index > 0 ? checklist[index - 1] : null
+                {parentChecklist.map((item, index) => {
+                  const prev = index > 0 ? parentChecklist[index - 1] : null
                   const showPanelHeader =
                     !!item.panel_name && item.panel_id !== (prev?.panel_id ?? null)
+                  // Follow-up rows spawned by this item's active conditions, plus
+                  // any per-item photos, rendered as indented sub-rows.
+                  const followUps = checklist.filter(
+                    (r) => r.parent_item_id === item.item_id,
+                  )
+                  const photos = item.photos || []
                   return (
                     <Fragment key={item.item_id || index}>
                       {showPanelHeader && (
@@ -328,6 +342,55 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
                         </td>
                         <td className="px-3 py-2 text-muted-foreground">{item.notes || '—'}</td>
                       </tr>
+                      {followUps.map((child) => (
+                        <tr
+                          key={child.item_id}
+                          className="border-t border-dashed align-top bg-amber-50/50"
+                        >
+                          <td className="px-3 py-2 pl-6 text-muted-foreground">
+                            <span className="mr-1 text-amber-600">↳</span>
+                            {child.label}
+                          </td>
+                          <td className="px-3 py-2">
+                            {child.type === 'pass_fail' ? (
+                              <span
+                                className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase text-white"
+                                style={{
+                                  backgroundColor: child.passed
+                                    ? REPORT_COLORS.pass
+                                    : REPORT_COLORS.fail,
+                                }}
+                              >
+                                {child.passed ? 'Pass' : 'Fail'}
+                              </span>
+                            ) : child.type === 'checkbox' ? (
+                              <span className="font-semibold">{child.value ? 'Yes' : 'No'}</span>
+                            ) : (
+                              <span className="font-semibold tabular-nums">
+                                {String(child.value ?? '—')}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-muted-foreground">{child.notes || '—'}</td>
+                        </tr>
+                      ))}
+                      {photos.length > 0 && (
+                        <tr className="border-t border-dashed align-top">
+                          <td colSpan={3} className="px-3 py-2 pl-6">
+                            <div className="flex flex-wrap gap-2">
+                              {photos.map((p) => (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  key={p.id}
+                                  src={p.url || '/placeholder.svg'}
+                                  alt={p.name}
+                                  className="h-20 w-20 rounded border object-cover"
+                                />
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
                     </Fragment>
                   )
                 })}

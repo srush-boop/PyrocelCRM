@@ -16,6 +16,7 @@ export const RECURRING_TIMING_LABELS: Record<RecurringTiming, string> = {
   advance: 'In advance',
   arrears: 'In arrears',
   on_completion: 'On completion',
+  per_visit: 'Per completed visit',
 }
 
 export const MONTH_LABELS = [
@@ -82,6 +83,85 @@ export function annualFromPerPeriod(perPeriodPence: number, frequency: Recurring
   return Math.round(perPeriodPence * annualOccurrences(frequency))
 }
 
+// --- Per-visit (on-completion split) billing -------------------------------
+// A `per_visit` charge bills the FULL ANNUAL VALUE spread across the visits that
+// occur in one service cycle: 1 visit = 100%, 2 = 50% each, 3 = 33.3% with the
+// last visit absorbing the rounding remainder so the cycle sums exactly.
+
+/**
+ * The full annual value of a charge in pence. `unit_price_pence` is always the
+ * per-period amount, so the annual total is that times the periods in a year.
+ * For an annual-billed contract (the usual per_visit case) this is simply
+ * unit_price_pence × quantity.
+ */
+export function fullAnnualValuePence(
+  charge: Pick<RecurringCharge, 'unit_price_pence' | 'quantity' | 'frequency'>,
+): number {
+  const qty = charge.quantity ?? 1
+  return Math.round(charge.unit_price_pence * qty * annualOccurrences(charge.frequency))
+}
+
+/**
+ * Visits per year implied by a service's visit interval in months. Rounded and
+ * clamped to at least 1 (e.g. 6-monthly → 2, 3-monthly → 4, 12-monthly → 1,
+ * 24-monthly → 1 as it is billed once on the single visit that occurs).
+ */
+export function visitsPerYearFromMonths(frequencyMonthsValue: number | null | undefined): number {
+  if (!frequencyMonthsValue || frequencyMonthsValue <= 0) return 1
+  return Math.max(1, Math.round(12 / frequencyMonthsValue))
+}
+
+/**
+ * How many visits the full value is split across for this charge: the manual
+ * per-charge override when set, otherwise derived from the linked service's
+ * visit frequency (in months). Always ≥ 1.
+ */
+export function visitsPerCycle(
+  charge: Pick<RecurringCharge, 'visits_per_cycle'>,
+  serviceFrequencyMonths: number | null | undefined,
+): number {
+  if (charge.visits_per_cycle && charge.visits_per_cycle >= 1) return charge.visits_per_cycle
+  return visitsPerYearFromMonths(serviceFrequencyMonths)
+}
+
+/**
+ * Split a full value (pence) into `n` whole-pence shares. Every share is the
+ * floor of the even split except the LAST, which absorbs the remainder so the
+ * shares sum to exactly `fullPence`.
+ */
+export function splitFullValue(fullPence: number, n: number): number[] {
+  const count = Math.max(1, Math.floor(n))
+  const base = Math.floor(fullPence / count)
+  const shares = Array.from({ length: count }, () => base)
+  shares[count - 1] = fullPence - base * (count - 1)
+  return shares
+}
+
+/**
+ * The 0-based cycle position for the next visit to be billed, given how many
+ * visits have already been billed for this charge. Wraps every `n` visits so a
+ * new cycle starts cleanly (visit 3 of a 2-visit cycle is index 0 again).
+ */
+export function cycleIndexForVisit(priorBilledCount: number, n: number): number {
+  const count = Math.max(1, Math.floor(n))
+  return ((priorBilledCount % count) + count) % count
+}
+
+/**
+ * The pence amount to bill for the next visit of a `per_visit` charge: the share
+ * at the current cycle index of the full-value split.
+ */
+export function perVisitAmountPence(
+  charge: Pick<RecurringCharge, 'unit_price_pence' | 'quantity' | 'frequency' | 'visits_per_cycle'>,
+  serviceFrequencyMonths: number | null | undefined,
+  priorBilledCount: number,
+): { amountPence: number; cycleIndex: number; visitsInCycle: number } {
+  const n = visitsPerCycle(charge, serviceFrequencyMonths)
+  const shares = splitFullValue(fullAnnualValuePence(charge), n)
+  const cycleIndex = cycleIndexForVisit(priorBilledCount, n)
+  return { amountPence: shares[cycleIndex], cycleIndex, visitsInCycle: n }
+}
+
 /** Advance a date by one period of the given frequency (UTC-safe date math). */
 export function addPeriod(from: Date, frequency: RecurringFrequency): Date {
   const d = new Date(from)
@@ -117,7 +197,9 @@ export function isDueNow(
   asOf: Date = new Date(),
 ): boolean {
   if (!charge.active) return false
-  if (charge.timing === 'on_completion') return false
+  // Completion-driven timings are never due by date alone — they are gated on a
+  // linked call completing (handled in the assembly / visit-billing layers).
+  if (charge.timing === 'on_completion' || charge.timing === 'per_visit') return false
   const due = parseISODate(nextDueDate(charge))
   // Advance charges become due at the start of the period; arrears at the end.
   // nextDueDate already reflects the period boundary, so a simple compare works.

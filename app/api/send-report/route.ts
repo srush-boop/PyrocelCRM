@@ -188,9 +188,12 @@ export async function POST(request: NextRequest) {
           passed: boolean | null
           advisory?: boolean
           notes?: string
+          parent_item_id?: string
         }) => ({
           id: r.label,
-          label: r.label,
+          // Conditional follow-up rows are indented under their parent so the
+          // extra question + answer reads as a sub-item in the emailed report.
+          label: r.parent_item_id ? `↳ ${r.label}` : r.label,
           type: r.type,
           value: r.value,
           // Preserve null for summary/informational items so they are not

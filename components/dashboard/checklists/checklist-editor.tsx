@@ -27,9 +27,19 @@ import {
   CheckCircle,
   TextCursorInput,
   Hash,
-  ToggleLeft
+  ToggleLeft,
+  GitBranch,
+  Camera,
+  StickyNote,
+  CornerDownRight,
 } from 'lucide-react'
-import type { ChecklistTemplate, ServiceType, ChecklistItem, ServiceVisitType } from '@/lib/types/database'
+import type {
+  ChecklistTemplate,
+  ServiceType,
+  ChecklistItem,
+  ChecklistCondition,
+  ServiceVisitType,
+} from '@/lib/types/database'
 
 interface ChecklistEditorProps {
   checklist: ChecklistTemplate & { service_type: ServiceType }
@@ -54,6 +64,39 @@ const itemTypeLabels = {
   checkbox: 'Checkbox',
 }
 
+// Text items have no discrete answer to trigger on, so they can't carry rules.
+function supportsConditions(type: ChecklistItem['type']) {
+  return type !== 'text'
+}
+
+// The sensible default trigger for a freshly-added rule on a given item type.
+function defaultTriggerForType(
+  type: ChecklistItem['type'],
+): Pick<ChecklistCondition, 'when' | 'comparator' | 'threshold'> {
+  if (type === 'checkbox') return { when: 'checked' }
+  if (type === 'number') return { when: 'number', comparator: 'lt', threshold: 0 }
+  // pass_fail (default)
+  return { when: 'fail' }
+}
+
+// Trigger options offered in the "When answer is…" select, per parent type.
+const passFailTriggers = [
+  { value: 'fail', label: 'marked Fail' },
+  { value: 'advisory', label: 'marked Advisory' },
+  { value: 'pass', label: 'marked Pass' },
+] as const
+const checkboxTriggers = [
+  { value: 'checked', label: 'ticked' },
+  { value: 'unchecked', label: 'left unticked' },
+] as const
+const numberComparators = [
+  { value: 'gt', label: 'greater than' },
+  { value: 'lt', label: 'less than' },
+  { value: 'gte', label: 'at least' },
+  { value: 'lte', label: 'at most' },
+  { value: 'eq', label: 'equal to' },
+] as const
+
 export function ChecklistEditor({ checklist, visitTypes = [] }: ChecklistEditorProps) {
   const [items, setItems] = useState<ChecklistItem[]>(checklist.items || [])
   const [name, setName] = useState(checklist.name)
@@ -74,11 +117,116 @@ export function ChecklistEditor({ checklist, visitTypes = [] }: ChecklistEditorP
   }
 
   const updateItem = (id: string, updates: Partial<ChecklistItem>) => {
-    setItems(items.map((item) => (item.id === id ? { ...item, ...updates } : item)))
+    setItems(
+      items.map((item) => {
+        if (item.id !== id) return item
+        const next = { ...item, ...updates }
+        // When the item type changes, any existing conditional rules may no longer
+        // make sense (e.g. a "Fail" trigger on what is now a checkbox). Re-home each
+        // rule's trigger to the default for the new type, or drop rules entirely for
+        // text items (which cannot be triggered on). Photo/note/follow-up config is
+        // preserved.
+        if (updates.type && updates.type !== item.type && next.conditions?.length) {
+          if (!supportsConditions(updates.type)) {
+            next.conditions = []
+          } else {
+            next.conditions = next.conditions.map((c) => ({
+              ...c,
+              ...defaultTriggerForType(updates.type as ChecklistItem['type']),
+            }))
+          }
+        }
+        return next
+      }),
+    )
   }
 
   const removeItem = (id: string) => {
     setItems(items.filter((item) => item.id !== id))
+  }
+
+  // --- Conditional rule helpers ---------------------------------------------
+  const addCondition = (itemId: string, itemType: ChecklistItem['type']) => {
+    const cond: ChecklistCondition = {
+      id: crypto.randomUUID(),
+      ...defaultTriggerForType(itemType),
+    }
+    setItems(
+      items.map((it) =>
+        it.id === itemId ? { ...it, conditions: [...(it.conditions || []), cond] } : it,
+      ),
+    )
+  }
+
+  const updateCondition = (
+    itemId: string,
+    condId: string,
+    updates: Partial<ChecklistCondition>,
+  ) => {
+    setItems(
+      items.map((it) =>
+        it.id === itemId
+          ? {
+              ...it,
+              conditions: (it.conditions || []).map((c) =>
+                c.id === condId ? { ...c, ...updates } : c,
+              ),
+            }
+          : it,
+      ),
+    )
+  }
+
+  const removeCondition = (itemId: string, condId: string) => {
+    setItems(
+      items.map((it) =>
+        it.id === itemId
+          ? { ...it, conditions: (it.conditions || []).filter((c) => c.id !== condId) }
+          : it,
+      ),
+    )
+  }
+
+  // Mutate the follow-up question list of a single condition.
+  const mutateConditionItems = (
+    itemId: string,
+    condId: string,
+    fn: (children: ChecklistItem[]) => ChecklistItem[],
+  ) => {
+    setItems(
+      items.map((it) =>
+        it.id === itemId
+          ? {
+              ...it,
+              conditions: (it.conditions || []).map((c) =>
+                c.id === condId ? { ...c, items: fn(c.items || []) } : c,
+              ),
+            }
+          : it,
+      ),
+    )
+  }
+
+  const addConditionItem = (itemId: string, condId: string) => {
+    mutateConditionItems(itemId, condId, (children) => [
+      ...children,
+      { id: crypto.randomUUID(), label: '', type: 'text', required: true },
+    ])
+  }
+
+  const updateConditionItem = (
+    itemId: string,
+    condId: string,
+    childId: string,
+    updates: Partial<ChecklistItem>,
+  ) => {
+    mutateConditionItems(itemId, condId, (children) =>
+      children.map((ch) => (ch.id === childId ? { ...ch, ...updates } : ch)),
+    )
+  }
+
+  const removeConditionItem = (itemId: string, condId: string, childId: string) => {
+    mutateConditionItems(itemId, condId, (children) => children.filter((ch) => ch.id !== childId))
   }
 
   const handleDragStart = (index: number) => {
@@ -221,72 +369,92 @@ export function ChecklistEditor({ checklist, visitTypes = [] }: ChecklistEditorP
                     onDragStart={() => handleDragStart(index)}
                     onDragOver={(e) => handleDragOver(e, index)}
                     onDragEnd={handleDragEnd}
-                    className={`flex items-center gap-3 p-4 border rounded-lg bg-card transition-opacity ${
+                    className={`border rounded-lg bg-card transition-opacity ${
                       draggedIndex === index ? 'opacity-50' : ''
                     }`}
                   >
-                    <div className="cursor-grab text-muted-foreground hover:text-foreground">
-                      <GripVertical className="h-5 w-5" />
-                    </div>
-                    
-                    <div className="flex-1 grid gap-3 md:grid-cols-[1fr_150px_auto]">
-                      <Input
-                        value={item.label}
-                        onChange={(e) => updateItem(item.id, { label: e.target.value })}
-                        placeholder="Item label (e.g., 'Check smoke detectors')"
-                      />
-                      
-                      <Select
-                        value={item.type}
-                        onValueChange={(value: ChecklistItem['type']) =>
-                          updateItem(item.id, { type: value })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(itemTypeLabels).map(([value, label]) => {
-                            const TypeIcon = itemTypeIcons[value as ChecklistItem['type']]
-                            return (
-                              <SelectItem key={value} value={value}>
-                                <div className="flex items-center gap-2">
-                                  <TypeIcon className="h-4 w-4" />
-                                  {label}
-                                </div>
-                              </SelectItem>
-                            )
-                          })}
-                        </SelectContent>
-                      </Select>
+                    <div className="flex items-center gap-3 p-4">
+                      <div className="cursor-grab text-muted-foreground hover:text-foreground">
+                        <GripVertical className="h-5 w-5" />
+                      </div>
+
+                      <div className="flex-1 grid gap-3 md:grid-cols-[1fr_150px_auto]">
+                        <Input
+                          value={item.label}
+                          onChange={(e) => updateItem(item.id, { label: e.target.value })}
+                          placeholder="Item label (e.g., 'Check smoke detectors')"
+                        />
+
+                        <Select
+                          value={item.type}
+                          onValueChange={(value: ChecklistItem['type']) =>
+                            updateItem(item.id, { type: value })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(itemTypeLabels).map(([value, label]) => {
+                              const TypeIcon = itemTypeIcons[value as ChecklistItem['type']]
+                              return (
+                                <SelectItem key={value} value={value}>
+                                  <div className="flex items-center gap-2">
+                                    <TypeIcon className="h-4 w-4" />
+                                    {label}
+                                  </div>
+                                </SelectItem>
+                              )
+                            })}
+                          </SelectContent>
+                        </Select>
+
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            id={`required-${item.id}`}
+                            checked={item.required}
+                            onCheckedChange={(checked) =>
+                              updateItem(item.id, { required: checked as boolean })
+                            }
+                          />
+                          <Label htmlFor={`required-${item.id}`} className="text-sm">
+                            Required
+                          </Label>
+                        </div>
+                      </div>
 
                       <div className="flex items-center gap-2">
-                        <Checkbox
-                          id={`required-${item.id}`}
-                          checked={item.required}
-                          onCheckedChange={(checked) =>
-                            updateItem(item.id, { required: checked as boolean })
-                          }
-                        />
-                        <Label htmlFor={`required-${item.id}`} className="text-sm">
-                          Required
-                        </Label>
+                        <div className="text-muted-foreground">
+                          <Icon className="h-4 w-4" />
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeItem(item.id)}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <div className="text-muted-foreground">
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeItem(item.id)}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    {supportsConditions(item.type) && (
+                      <ConditionsPanel
+                        item={item}
+                        onAddCondition={() => addCondition(item.id, item.type)}
+                        onUpdateCondition={(condId, updates) =>
+                          updateCondition(item.id, condId, updates)
+                        }
+                        onRemoveCondition={(condId) => removeCondition(item.id, condId)}
+                        onAddConditionItem={(condId) => addConditionItem(item.id, condId)}
+                        onUpdateConditionItem={(condId, childId, updates) =>
+                          updateConditionItem(item.id, condId, childId, updates)
+                        }
+                        onRemoveConditionItem={(condId, childId) =>
+                          removeConditionItem(item.id, condId, childId)
+                        }
+                      />
+                    )}
                   </div>
                 )
               })}
@@ -294,6 +462,217 @@ export function ChecklistEditor({ checklist, visitTypes = [] }: ChecklistEditorP
           )}
         </CardContent>
       </Card>
+    </div>
+  )
+}
+
+// Per-item panel that manages the conditional rules for a single checklist item.
+// Kept as a focused sub-component so the main editor stays readable.
+function ConditionsPanel({
+  item,
+  onAddCondition,
+  onUpdateCondition,
+  onRemoveCondition,
+  onAddConditionItem,
+  onUpdateConditionItem,
+  onRemoveConditionItem,
+}: {
+  item: ChecklistItem
+  onAddCondition: () => void
+  onUpdateCondition: (condId: string, updates: Partial<ChecklistCondition>) => void
+  onRemoveCondition: (condId: string) => void
+  onAddConditionItem: (condId: string) => void
+  onUpdateConditionItem: (
+    condId: string,
+    childId: string,
+    updates: Partial<ChecklistItem>,
+  ) => void
+  onRemoveConditionItem: (condId: string, childId: string) => void
+}) {
+  const conditions = item.conditions || []
+
+  return (
+    <div className="border-t bg-muted/30 px-4 py-3 space-y-3 rounded-b-lg">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <GitBranch className="h-4 w-4" />
+          <span>
+            Conditional rules
+            {conditions.length > 0 ? ` (${conditions.length})` : ''}
+          </span>
+        </div>
+        <Button variant="outline" size="sm" onClick={onAddCondition}>
+          <Plus className="mr-2 h-3.5 w-3.5" />
+          Add rule
+        </Button>
+      </div>
+
+      {conditions.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Optionally require a photo, a note, or extra questions when this item is answered a
+          certain way.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {conditions.map((cond) => (
+            <div key={cond.id} className="rounded-md border bg-card p-3 space-y-3">
+              {/* Trigger row */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-muted-foreground">When answer is</span>
+                {item.type === 'number' ? (
+                  <>
+                    <Select
+                      value={cond.comparator || 'lt'}
+                      onValueChange={(v) =>
+                        onUpdateCondition(cond.id, {
+                          when: 'number',
+                          comparator: v as ChecklistCondition['comparator'],
+                        })
+                      }
+                    >
+                      <SelectTrigger className="w-[150px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {numberComparators.map((c) => (
+                          <SelectItem key={c.value} value={c.value}>
+                            {c.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="number"
+                      className="w-28"
+                      value={cond.threshold ?? ''}
+                      onChange={(e) =>
+                        onUpdateCondition(cond.id, {
+                          threshold: e.target.value === '' ? undefined : Number(e.target.value),
+                        })
+                      }
+                      placeholder="value"
+                    />
+                  </>
+                ) : (
+                  <Select
+                    value={cond.when}
+                    onValueChange={(v) =>
+                      onUpdateCondition(cond.id, { when: v as ChecklistCondition['when'] })
+                    }
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(item.type === 'checkbox' ? checkboxTriggers : passFailTriggers).map((t) => (
+                        <SelectItem key={t.value} value={t.value}>
+                          {t.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onRemoveCondition(cond.id)}
+                  className="ml-auto text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* Requirement toggles */}
+              <div className="flex flex-wrap items-center gap-4">
+                <span className="text-sm text-muted-foreground">Then require:</span>
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox
+                    checked={!!cond.requirePhoto}
+                    onCheckedChange={(c) => onUpdateCondition(cond.id, { requirePhoto: !!c })}
+                  />
+                  <Camera className="h-4 w-4 text-muted-foreground" />
+                  Photo
+                </label>
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox
+                    checked={!!cond.requireNote}
+                    onCheckedChange={(c) => onUpdateCondition(cond.id, { requireNote: !!c })}
+                  />
+                  <StickyNote className="h-4 w-4 text-muted-foreground" />
+                  Note
+                </label>
+              </div>
+
+              {/* Follow-up questions */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <CornerDownRight className="h-3.5 w-3.5" />
+                    Follow-up questions
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onAddConditionItem(cond.id)}
+                    className="h-7"
+                  >
+                    <Plus className="mr-1 h-3.5 w-3.5" />
+                    Add question
+                  </Button>
+                </div>
+                {(cond.items || []).map((child) => (
+                  <div
+                    key={child.id}
+                    className="grid gap-2 md:grid-cols-[1fr_140px_auto_auto] items-center pl-5"
+                  >
+                    <Input
+                      value={child.label}
+                      onChange={(e) =>
+                        onUpdateConditionItem(cond.id, child.id, { label: e.target.value })
+                      }
+                      placeholder="Follow-up question"
+                    />
+                    <Select
+                      value={child.type}
+                      onValueChange={(v: ChecklistItem['type']) =>
+                        onUpdateConditionItem(cond.id, child.id, { type: v })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(itemTypeLabels).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <Checkbox
+                        checked={child.required}
+                        onCheckedChange={(c) =>
+                          onUpdateConditionItem(cond.id, child.id, { required: !!c })
+                        }
+                      />
+                      Required
+                    </label>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => onRemoveConditionItem(cond.id, child.id)}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

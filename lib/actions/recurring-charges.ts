@@ -56,6 +56,8 @@ export interface RecurringChargeInput {
   nominal_code_id?: string | null
   timing: RecurringTiming
   frequency: RecurringFrequency
+  /** per_visit only: override for visits-per-cycle (null = derive from service). */
+  visits_per_cycle?: number | null
   renewal_month?: number | null
   group_key?: string | null
   is_subcontracted: boolean
@@ -86,6 +88,13 @@ function sanitize(input: RecurringChargeInput) {
     nominal_code_id: input.nominal_code_id ?? null,
     timing: input.timing,
     frequency: input.frequency,
+    // Only a per_visit charge carries a split override; clear it otherwise.
+    visits_per_cycle:
+      input.timing === 'per_visit' &&
+      typeof input.visits_per_cycle === 'number' &&
+      input.visits_per_cycle >= 1
+        ? Math.round(input.visits_per_cycle)
+        : null,
     renewal_month: input.renewal_month ?? null,
     group_key: input.group_key?.trim() || null,
     is_subcontracted: subcontracted,

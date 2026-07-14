@@ -165,8 +165,10 @@ export type RecurringFrequency =
   | 'quarterly'
   | 'biannual'
   | 'annual'
-/** When a recurring charge becomes due for invoicing relative to its period. */
-export type RecurringTiming = 'advance' | 'arrears' | 'on_completion'
+/** When a recurring charge becomes due for invoicing relative to its period.
+ *  `per_visit` splits the full annual value across the service's visits and bills
+ *  a share as each visit completes (see lib/billing/recurring.ts). */
+export type RecurringTiming = 'advance' | 'arrears' | 'on_completion' | 'per_visit'
 /** How a recurring charge value was entered: a per-period price, or an annual
  *  total that gets divided across the periods in a year. */
 export type RecurringPriceBasis = 'per_period' | 'annual'
@@ -280,6 +282,9 @@ export interface RecurringCharge {
   nominal_code_id: string | null
   timing: RecurringTiming
   frequency: RecurringFrequency
+  /** For `per_visit` timing: how many visits the full annual value is split across
+   *  in one cycle. When null, derived from the linked service's visit frequency. */
+  visits_per_cycle: number | null
   /** 1-12: the month the annual price is reviewed for renewal. */
   renewal_month: number | null
   /** Optional label to force a separate invoice within an account. */
@@ -297,6 +302,25 @@ export interface RecurringCharge {
   updated_at: string
   billing_account?: BillingAccount | null
   site_service?: SiteService | null
+}
+
+// One row per (recurring charge × completed visit) billed under `per_visit`
+// timing. Acts as both an audit trail and the idempotency guard: the UNIQUE
+// (recurring_charge_id, task_id) constraint means a given visit can only ever be
+// billed once for a given charge, whether raised automatically on completion or
+// manually from the due queue.
+export interface RecurringVisitBilling {
+  id: string
+  recurring_charge_id: string
+  task_id: string
+  invoice_id: string | null
+  invoice_line_item_id: string | null
+  /** 0-based position of this visit within its cycle (drives the split share). */
+  cycle_index: number
+  /** How many visits the cycle's full value was split across. */
+  visits_in_cycle: number
+  amount_pence: number
+  created_at: string
 }
 
 // Managed master list of Sage-style nominal (accounting) codes. INTERNAL only —
@@ -610,11 +634,35 @@ export interface QuoteService {
   updated_at: string
 }
 
+// A conditional rule attached to a checklist item. When the engineer's answer to
+// the parent item meets the `when` trigger, the rule becomes "active" and the
+// engineer must satisfy its requirements (a photo, a note and/or the follow-up
+// questions) before the task can be submitted.
+export interface ChecklistCondition {
+  id: string
+  // What answer on the parent item activates this rule.
+  // - fail/advisory/pass  → pass_fail items
+  // - checked/unchecked   → checkbox items
+  // - number              → number items (uses comparator + threshold)
+  when: 'fail' | 'advisory' | 'pass' | 'checked' | 'unchecked' | 'number'
+  // Number triggers only: how to compare the entered value against `threshold`.
+  comparator?: 'gt' | 'lt' | 'gte' | 'lte' | 'eq'
+  threshold?: number
+  // Requirements the engineer must satisfy while the rule is active.
+  requirePhoto?: boolean
+  requireNote?: boolean
+  // Extra follow-up questions revealed while active. One level deep — a follow-up
+  // item cannot itself carry conditions.
+  items?: ChecklistItem[]
+}
+
 export interface ChecklistItem {
   id: string
   label: string
   type: 'pass_fail' | 'text' | 'number' | 'checkbox'
   required: boolean
+  // Conditional rules that reveal extra requirements based on this item's answer.
+  conditions?: ChecklistCondition[]
 }
 
 export interface ChecklistTemplate {
@@ -1324,6 +1372,23 @@ export interface Task {
   // When panel rotation is active, the visit-type/level label actually applied to
   // this panel on this visit (e.g. "Annual" / "Periodic"). Absent otherwise.
   panel_level?: string | null
+  // Conditional rules copied from the template item onto its (parent) result row
+  // at build time, so execution and reports can evaluate triggers without the
+  // template. Present only on top-level rows that have rules. Panel repetition
+  // copies these onto each panel's row.
+  conditions?: ChecklistCondition[]
+  // Conditional follow-up rows: when this result was produced by a triggered
+  // condition on another item, these tag the parent item and the condition that
+  // spawned it. Absent on normal (top-level) rows. Reports hide these rows unless
+  // the owning condition was actually active and the row was answered.
+  parent_item_id?: string
+  condition_id?: string
+  // Whether this (follow-up) row must be answered before submit. Mirrors the
+  // template item's `required` flag; only meaningful on conditional child rows.
+  required?: boolean
+  // Per-item photos captured during execution. Metadata comes from the
+  // task_attachments upload; the file is served via the attachments file route.
+  photos?: { id: string; name: string; url: string }[]
   }
 
 // PO request log: one row per request sent to the client for a PO number.

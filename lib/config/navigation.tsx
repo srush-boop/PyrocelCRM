@@ -36,6 +36,7 @@ import {
   ClipboardCheck,
   CalendarCheck,
   CalendarClock,
+  TrendingUp,
   Sparkles,
   FileSignature,
   Paperclip,
@@ -128,7 +129,6 @@ const adminCallsNavItem: NavItem = {
     { title: 'Lone Worker', href: '/dashboard/lone-worker', icon: ShieldCheck },
     { title: 'Reports', href: '/dashboard/reports', icon: FileText },
     { title: 'Chargeable Calls', href: '/dashboard/chargeable', icon: Coins },
-    { title: 'Invoices', href: '/dashboard/invoices', icon: ReceiptText },
     { title: 'Follow-ups', href: '/dashboard/follow-ups', icon: Wrench },
     { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
     { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
@@ -150,7 +150,6 @@ const officeCallsNavItem: NavItem = {
     { title: 'Lone Worker', href: '/dashboard/lone-worker', icon: ShieldCheck },
     { title: 'Reports', href: '/dashboard/reports', icon: FileText },
     { title: 'Chargeable Calls', href: '/dashboard/chargeable', icon: Coins },
-    { title: 'Invoices', href: '/dashboard/invoices', icon: ReceiptText },
     { title: 'Follow-ups', href: '/dashboard/follow-ups', icon: Wrench },
     { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
     { title: 'KPIs', href: '/dashboard/kpis', icon: Gauge },
@@ -196,6 +195,21 @@ const salesNavItem: NavItem = {
         { title: 'Design Categories', href: '/dashboard/sales/design-categories', icon: PencilRuler },
       ],
     },
+  ],
+}
+
+// Invoicing: promoted out of the Service group into its own top-level clickable
+// group. The trigger opens the invoices list and reveals Renewals and Projected
+// Revenue. Shared by admin and office.
+const invoicingNavItem: NavItem = {
+  key: 'invoices',
+  title: 'Invoicing',
+  href: '/dashboard/invoices',
+  icon: ReceiptText,
+  children: [
+    { title: 'Invoices', href: '/dashboard/invoices', icon: ReceiptText },
+    { title: 'Renewals', href: '/dashboard/invoices/renewals', icon: CalendarClock },
+    { title: 'Projected Revenue', href: '/dashboard/invoices/projected-revenue', icon: TrendingUp },
   ],
 }
 
@@ -390,6 +404,7 @@ const adminNavItems: NavItem[] = [
   chatNavItem,
   salesNavItem,
   jobsNavItem,
+  invoicingNavItem,
   purchasingNavItem,
   managerStockNavItem,
   adminPeopleNavItem,
@@ -409,6 +424,7 @@ const officeNavItems: NavItem[] = [
   chatNavItem,
   salesNavItem,
   jobsNavItem,
+  invoicingNavItem,
   purchasingNavItem,
   managerStockNavItem,
   officePeopleNavItem,
@@ -490,5 +506,9 @@ export function getVisibleMenu(
   // from it — anyone who could see the Service group keeps access to Requests
   // without a data migration.
   if (enabled.has('calls')) enabled.add('requests')
+  // Invoicing was likewise promoted out of the Service (`calls`) group into a
+  // top-level item, so anyone who could see Service keeps access to Invoicing
+  // without a data migration.
+  if (enabled.has('calls')) enabled.add('invoices')
   return menu.filter((item) => item.locked || enabled.has(item.key))
 }

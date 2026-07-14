@@ -286,6 +286,13 @@ export function CreateTaskDialog({
     }
     setTimeError(null)
 
+    // A reactive / emergency call must carry a description so the engineer knows
+    // what they are attending.
+    if (mode === 'reactive' && !description.trim()) {
+      setError('Add a call description so the engineer knows what to attend.')
+      return
+    }
+
     // When a call type is scoped to specific systems and has no general
     // fallback checklist, a system must be chosen so the right checklist loads.
     if (
@@ -342,7 +349,9 @@ export function CreateTaskDialog({
   }
 
   const canSubmit =
-    mode === 'recurring' ? Boolean(formData.site_service_id) : Boolean(siteId && reactiveTypeId)
+    mode === 'recurring'
+      ? Boolean(formData.site_service_id)
+      : Boolean(siteId && reactiveTypeId && description.trim())
 
   return (
     <Dialog
@@ -574,16 +583,18 @@ export function CreateTaskDialog({
 
 
                 <div className="grid gap-2">
-                  <Label htmlFor="call-description">Call description</Label>
+                  <Label htmlFor="call-description">Call description *</Label>
                   <Textarea
                     id="call-description"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Describe the fault, symptoms, access details or anything the engineer should know…"
                     rows={3}
+                    required
+                    aria-required="true"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Optional. Shown to the engineer as the call notes.
+                    Required. Shown to the engineer as the call notes.
                   </p>
                 </div>
               </>

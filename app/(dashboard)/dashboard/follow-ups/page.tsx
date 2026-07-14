@@ -35,7 +35,7 @@ export default async function FollowUpsPage() {
     .from('follow_up_requests')
     .select(
       `
-      id, original_task_id, fix_attempt, issue_summary, status, proposed_date,
+      id, original_task_id, fix_attempt, issue_summary, ai_summary, status, proposed_date,
       assigned_engineer_id, escalated, escalated_at, resolved_at, created_at, created_task_id,
       site:sites(id, name),
       requested_by_profile:profiles!follow_up_requests_requested_by_fkey(id, full_name, email),
@@ -170,6 +170,7 @@ export default async function FollowUpsPage() {
       id: r.id,
       fixAttempt: r.fix_attempt,
       issueSummary: r.issue_summary,
+      aiSummary: r.ai_summary ?? null,
       status: r.status,
       escalated: r.escalated,
       resolvedAt: r.resolved_at,

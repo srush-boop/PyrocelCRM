@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { notifyUsers } from '@/lib/notifications'
+import { summariseFollowUp } from '@/lib/ai/summarise-follow-up'
 import {
   PLANNED_CALL_SERVICE_TYPE_ID,
   SERVICE_MANAGER_ROLE_ID,
@@ -86,14 +87,19 @@ export async function raiseFollowUp(input: {
   const summary = input.issueSummary?.trim()
   if (!summary) return { ok: false, error: 'Describe the outstanding issue.' }
 
-  // Load the original call.
+  // Load the original call (with context names for the AI brief).
   const { data: taskRow, error: taskErr } = await ctx.supabase
     .from('tasks')
-    .select('id, site_id, is_emergency, fix_attempt, site_service_id, assigned_engineer_id, status')
+    .select(
+      `id, site_id, is_emergency, fix_attempt, site_service_id, assigned_engineer_id, status,
+       site:sites(name),
+       service_type:service_types(name),
+       system_type:system_types(name)`,
+    )
     .eq('id', input.originalTaskId)
     .maybeSingle()
   if (taskErr || !taskRow) return { ok: false, error: 'Call not found.' }
-  const task = taskRow as {
+  const rawTask = taskRow as {
     id: string
     site_id: string | null
     is_emergency: boolean
@@ -101,6 +107,18 @@ export async function raiseFollowUp(input: {
     site_service_id: string | null
     assigned_engineer_id: string | null
     status: string
+    // Supabase embeds come back as an object or a single-element array.
+    site: { name: string | null } | { name: string | null }[] | null
+    service_type: { name: string | null } | { name: string | null }[] | null
+    system_type: { name: string | null } | { name: string | null }[] | null
+  }
+  const embedOne = <T,>(x: T | T[] | null): T | null =>
+    Array.isArray(x) ? x[0] ?? null : x
+  const task = {
+    ...rawTask,
+    siteName: embedOne(rawTask.site)?.name ?? null,
+    serviceTypeName: embedOne(rawTask.service_type)?.name ?? null,
+    systemTypeName: embedOne(rawTask.system_type)?.name ?? null,
   }
 
   // Guard: one open follow-up per call.
@@ -117,6 +135,49 @@ export async function raiseFollowUp(input: {
   const failedAttempt = task.fix_attempt ?? 1
   const escalated = shouldEscalate(failedAttempt)
   const nowIso = new Date().toISOString()
+
+  // Build a human-readable list of the suggested parts for the AI brief:
+  // resolve names for catalogue parts, use the free-text description otherwise.
+  const partInputs = input.parts ?? []
+  const partIds = partInputs
+    .map((p) => p.partId)
+    .filter((id): id is string => !!id && id.length > 0)
+  let partNameById = new Map<string, string>()
+  if (partIds.length > 0) {
+    const { data: partRows } = await ctx.supabase
+      .from('parts')
+      .select('id, name')
+      .in('id', partIds)
+    partNameById = new Map(
+      (partRows ?? []).map((r) => [(r as { id: string }).id, (r as { name: string }).name]),
+    )
+  }
+  const partLines = partInputs
+    .map((p) => {
+      const name = p.partId
+        ? partNameById.get(p.partId) ?? 'Part'
+        : (p.description?.trim() ?? '')
+      return name ? { name, quantity: Math.max(1, Math.floor(p.quantity) || 1) } : null
+    })
+    .filter((p): p is { name: string; quantity: number } => p !== null)
+
+  // AI-summarise WHAT IS REQUIRED for the return visit. Best-effort: on failure
+  // we store null and fall back to the raw issue text when the call is created.
+  let aiSummary: string | null = null
+  try {
+    const res = await summariseFollowUp({
+      issueSummary: summary,
+      parts: partLines,
+      siteName: task.siteName,
+      serviceType: task.serviceTypeName,
+      systemType: task.systemTypeName,
+      isEmergency: task.is_emergency,
+      fixAttempt: failedAttempt + 1,
+    })
+    if (res.ok && res.text) aiSummary = res.text
+  } catch (err) {
+    console.log('[v0] raiseFollowUp summary failed:', (err as Error).message)
+  }
 
   // Complete the original call + first-time-fix + chargeable review routing.
   const taskUpdate: Record<string, unknown> = {
@@ -141,6 +202,7 @@ export async function raiseFollowUp(input: {
       requested_by: ctx.userId,
       fix_attempt: failedAttempt + 1,
       issue_summary: summary,
+      ai_summary: aiSummary,
       status: 'pending',
       escalated,
       escalated_at: escalated ? nowIso : null,
@@ -384,7 +446,7 @@ export async function approveFollowUp(
 
   const { data: reqRow } = await ctx.supabase
     .from('follow_up_requests')
-    .select('id, original_task_id, site_id, fix_attempt, issue_summary, status')
+    .select('id, original_task_id, site_id, fix_attempt, issue_summary, ai_summary, status')
     .eq('id', requestId)
     .maybeSingle()
   if (!reqRow) return { ok: false, error: 'Follow-up not found.' }
@@ -393,6 +455,7 @@ export async function approveFollowUp(
     site_id: string | null
     fix_attempt: number
     issue_summary: string
+    ai_summary: string | null
     status: string
   }
   if (req.status !== 'pending') return { ok: false, error: 'This follow-up has already been reviewed.' }
@@ -427,7 +490,11 @@ export async function approveFollowUp(
       is_emergency: false,
       follow_up_to_id: req.original_task_id,
       fix_attempt: req.fix_attempt,
-      notes: `Follow-up works.\n\nOutstanding issue:\n${req.issue_summary}`,
+      // Prefer the AI brief of the works required; fall back to the raw issue
+      // text if generation was unavailable when the follow-up was raised.
+      notes: req.ai_summary?.trim()
+        ? `Follow-up works required:\n\n${req.ai_summary.trim()}\n\nEngineer's original account:\n${req.issue_summary}`
+        : `Follow-up works.\n\nOutstanding issue:\n${req.issue_summary}`,
     })
     .select('id')
     .single()

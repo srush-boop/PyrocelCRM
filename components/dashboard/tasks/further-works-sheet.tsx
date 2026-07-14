@@ -166,6 +166,10 @@ export function FurtherWorksSheet({ taskId, isEmergency, onBeforeRaise }: Furthe
                 placeholder="Describe what's wrong, what was tried, and what's needed to resolve it..."
                 rows={5}
               />
+              <p className="text-xs text-muted-foreground">
+                This is automatically summarised into a clear brief of the works required, which is
+                carried onto the follow-up call for the next engineer.
+              </p>
             </div>
 
             <div className="space-y-3">

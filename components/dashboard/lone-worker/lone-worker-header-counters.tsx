@@ -25,25 +25,30 @@ export function LoneWorkerHeaderCounters() {
   const emergencies = data?.emergencyCount ?? 0
 
   return (
-    <Link
-      href="/dashboard/lone-worker"
-      aria-label={`Lone worker: ${warnings} warning${warnings === 1 ? '' : 's'}, ${emergencies} emergenc${emergencies === 1 ? 'y' : 'ies'}. Open monitoring.`}
-      className="inline-flex items-center gap-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <Counter
-        icon={ShieldAlert}
-        label="Warnings"
-        value={warnings}
-        tone={warnings > 0 ? 'amber' : 'neutral'}
-      />
-      <Counter
-        icon={Siren}
-        label="Emergencies"
-        value={emergencies}
-        tone={emergencies > 0 ? 'red' : 'neutral'}
-        pulse={emergencies > 0}
-      />
-    </Link>
+    <div className="flex flex-col gap-1">
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Lone working
+      </span>
+      <Link
+        href="/dashboard/lone-worker"
+        aria-label={`Lone working safety: ${warnings} warning${warnings === 1 ? '' : 's'}, ${emergencies} emergenc${emergencies === 1 ? 'y' : 'ies'}. Open monitoring.`}
+        className="inline-flex items-center gap-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <Counter
+          icon={ShieldAlert}
+          label="Warnings"
+          value={warnings}
+          tone={warnings > 0 ? 'amber' : 'neutral'}
+        />
+        <Counter
+          icon={Siren}
+          label="Emergencies"
+          value={emergencies}
+          tone={emergencies > 0 ? 'red' : 'neutral'}
+          pulse={emergencies > 0}
+        />
+      </Link>
+    </div>
   )
 }
 

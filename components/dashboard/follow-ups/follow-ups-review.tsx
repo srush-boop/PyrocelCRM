@@ -14,6 +14,7 @@ import {
   MapPin,
   Package,
   ShoppingCart,
+  Sparkles,
   User,
   Wrench,
   XCircle,
@@ -88,6 +89,8 @@ export interface FollowUpReviewRow {
   id: string
   fixAttempt: number
   issueSummary: string
+  /** AI brief of the works required, carried onto the created call's notes. */
+  aiSummary: string | null
   status: 'pending' | 'approved' | 'rejected' | 'cancelled'
   escalated: boolean
   resolvedAt: string | null
@@ -308,6 +311,14 @@ function FollowUpDetail({
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Outstanding issue</p>
             <p className="mt-1 whitespace-pre-wrap text-sm">{row.issueSummary}</p>
           </div>
+          {row.aiSummary?.trim() && (
+            <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
+              <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-primary">
+                <Sparkles className="h-3.5 w-3.5" /> AI brief &mdash; passed to the call
+              </p>
+              <p className="mt-1 whitespace-pre-wrap text-sm">{row.aiSummary}</p>
+            </div>
+          )}
           {readOnly && row.createdTaskId && (
             <Link
               href={`/dashboard/tasks/${row.createdTaskId}`}

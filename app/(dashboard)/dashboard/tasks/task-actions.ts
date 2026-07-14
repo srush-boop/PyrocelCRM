@@ -9,6 +9,17 @@ export interface TaskActionResult {
 }
 
 /**
+ * Whole seconds elapsed since a `paused_at` timestamp (clamped ≥ 0). Used to
+ * fold an open pause into a task's accumulated `total_paused_seconds` on resume
+ * or completion.
+ */
+function pausedSecondsSince(pausedAt: string | null | undefined): number {
+  if (!pausedAt) return 0
+  const ms = Date.now() - new Date(pausedAt).getTime()
+  return Math.max(0, Math.floor(ms / 1000))
+}
+
+/**
  * Pause an in-progress inspection. Used when an engineer leaves site before
  * completing the work and needs to return another day. The task keeps its
  * progress/checklist intact (nothing is cleared) and `started_at` is preserved,
@@ -91,7 +102,7 @@ export async function resumeTask(taskId: string): Promise<TaskActionResult> {
 
   const { data: task } = await supabase
     .from('tasks')
-    .select('id, status, assigned_engineer_id')
+    .select('id, status, assigned_engineer_id, paused_at, total_paused_seconds')
     .eq('id', taskId)
     .single()
   if (!task) return { ok: false, error: 'Call not found.' }
@@ -106,6 +117,11 @@ export async function resumeTask(taskId: string): Promise<TaskActionResult> {
     return { ok: false, error: 'Only a paused inspection can be resumed.' }
   }
 
+  // Accumulate the just-ended pause so on-site time (and its labour cost)
+  // excludes paused periods.
+  const accumulatedPaused =
+    (task.total_paused_seconds ?? 0) + pausedSecondsSince(task.paused_at)
+
   const { error } = await supabase
     .from('tasks')
     .update({
@@ -113,6 +129,7 @@ export async function resumeTask(taskId: string): Promise<TaskActionResult> {
       paused_at: null,
       pause_note: null,
       paused_by: null,
+      total_paused_seconds: accumulatedPaused,
       updated_at: new Date().toISOString(),
     })
     .eq('id', taskId)

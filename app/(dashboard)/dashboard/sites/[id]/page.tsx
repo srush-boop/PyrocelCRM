@@ -693,8 +693,8 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
       <EntityRequestsCard entityType="site" entityId={id} />
 
       <Tabs
-        key={editServiceParam ? `edit-${editServiceParam}` : tabParam ?? 'overview'}
-        defaultValue={editServiceParam ? 'overview' : tabParam ?? 'overview'}
+        key={serviceDialogParam ? `svc-${serviceDialogParam}` : tabParam ?? 'overview'}
+        defaultValue={serviceDialogParam ? 'systems' : tabParam ?? 'overview'}
         className="gap-6"
       >
         <TabsList className="h-auto flex-wrap justify-start">

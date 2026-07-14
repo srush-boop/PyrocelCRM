@@ -461,6 +461,12 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
       const serviceName = r.visitName
         ? `${r.serviceTypeName} · ${r.visitName}`
         : r.serviceTypeName
+      // High-frequency cadences (weekly / monthly) produce many occurrences in the
+      // 6-month window, so summarise as "N visits · <frequency>" instead of listing
+      // every date. Lower frequencies keep the individual-date `otherDates` note.
+      const isWeekly = r.frequencyUnit === 'weeks' && r.frequencyValue === 1
+      const isMonthly = r.frequencyUnit === 'months' && r.frequencyValue === 1
+      const frequencyLabel = isWeekly ? 'Weekly' : isMonthly ? 'Monthly' : null
       return {
         key: r.taskId ?? `${r.siteServiceId}|${r.visitTypeId ?? 'none'}|${r.date}`,
         taskId: r.taskId,
@@ -473,7 +479,9 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
         bookedStartTime: r.bookedStartTime,
         bookedEndTime: r.bookedEndTime,
         isWeeklyRecurring,
-        otherDates: group.slice(1).map((o) => o.date),
+        otherDates: frequencyLabel ? [] : group.slice(1).map((o) => o.date),
+        frequencyLabel,
+        visitCount: group.length,
       }
     })
 

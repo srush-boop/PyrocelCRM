@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Printer, Send, Check, X, RotateCcw, Clock, FileText } from 'lucide-react'
+import { Printer, Send, X, RotateCcw, Clock, FileText } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn, formatDateUK } from '@/lib/utils'
 import { QUOTE_STATUS_META } from '@/lib/sales'
@@ -87,7 +87,12 @@ export function QuoteStatusPanel({ quote }: { quote: Quote }) {
           </Link>
         </Button>
 
-        {quote.status === 'draft' && <SendQuoteDialog quote={quote} />}
+        {quote.status === 'draft' && (
+          <>
+            <SendQuoteDialog quote={quote} />
+            <MarkAcceptedDialog quote={quote} />
+          </>
+        )}
 
         {quote.status === 'sent' && (
           <>
@@ -101,16 +106,7 @@ export function QuoteStatusPanel({ quote }: { quote: Quote }) {
                 </Button>
               }
             />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => update('accepted')}
-              disabled={isPending}
-              className="border-green-600 text-green-700 hover:bg-green-50 hover:text-green-800"
-            >
-              <Check className="mr-2 h-4 w-4" />
-              Mark accepted
-            </Button>
+            <MarkAcceptedDialog quote={quote} />
             <Button size="sm" variant="outline" onClick={() => update('rejected')} disabled={isPending}>
               <X className="mr-2 h-4 w-4" />
               Mark declined

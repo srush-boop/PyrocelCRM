@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { computeQuoteTotals, QUOTE_TYPES, WORK_TYPES, sellFromCost, resolveLineMargin } from '@/lib/sales'
 import { sendEmail } from '@/lib/email/send-email'
@@ -127,6 +128,7 @@ export interface QuoteInput {
   discount_pence: number
   show_line_items?: boolean
   show_equipment_spec?: boolean
+  show_optional_extras?: boolean
   show_design_overview?: boolean
   // Append the modernised maintenance service agreement to the quote document.
   show_maintenance_agreement?: boolean
@@ -390,6 +392,7 @@ export async function saveQuote(
     total_pence: totals.totalPence,
     show_line_items: input.show_line_items ?? true,
     show_equipment_spec: input.show_equipment_spec ?? false,
+    show_optional_extras: input.show_optional_extras ?? false,
     show_design_overview: input.show_design_overview ?? true,
     show_maintenance_agreement: input.show_maintenance_agreement ?? false,
     valid_until: input.valid_until || null,
@@ -880,29 +883,94 @@ export async function setQuoteStatus(
   // Non-remedial quotes instead spawn a delivery Job (idempotent; skips remedial
   // internally). Neither path is allowed to block the status change.
   if (status === 'accepted') {
-    await createRemedialCallsForQuote(supabase, id)
-    // Routine Maintenance quotes go through Contract Review (draft client/site/
-    // system/service/charge records awaiting approval) instead of a delivery Job.
-    const { data: acceptedQuote } = await supabase
-      .from('quotes')
-      .select('quote_type')
-      .eq('id', id)
-      .single()
-    if (acceptedQuote?.quote_type === 'service_contract') {
-      await buildContractReviewDraft(supabase, id)
-      revalidatePath('/dashboard/sales/contract-reviews')
-      revalidatePath('/dashboard/service')
-    } else {
-      await createJobForAcceptedQuote(supabase, id)
-      revalidatePath('/dashboard/jobs')
-    }
-    revalidatePath('/dashboard/schedule')
-    revalidatePath('/dashboard/defects')
+    await applyQuoteAcceptedEffects(supabase, id)
   }
 
   revalidatePath('/dashboard/sales')
   revalidatePath('/dashboard/sales/quotes')
   revalidatePath(`/dashboard/sales/${id}`)
+  return { ok: true }
+}
+
+/**
+ * Side-effects to run once a quote becomes accepted, regardless of whether it
+ * was accepted via the dashboard, a manual/printed mark, or the public link.
+ * Raises remedial calls, then routes Routine Maintenance (service_contract)
+ * quotes through Contract Review (draft records awaiting approval) and all other
+ * quotes to a delivery Job. Idempotent and never throws so acceptance is never
+ * blocked.
+ */
+async function applyQuoteAcceptedEffects(supabase: SupabaseClient, id: string) {
+  await createRemedialCallsForQuote(supabase, id)
+  const { data: acceptedQuote } = await supabase
+    .from('quotes')
+    .select('quote_type')
+    .eq('id', id)
+    .single()
+  if (acceptedQuote?.quote_type === 'service_contract') {
+    await buildContractReviewDraft(supabase, id)
+    revalidatePath('/dashboard/sales/contract-reviews')
+    revalidatePath('/dashboard/service')
+  } else {
+    await createJobForAcceptedQuote(supabase, id)
+    revalidatePath('/dashboard/jobs')
+  }
+  revalidatePath('/dashboard/schedule')
+  revalidatePath('/dashboard/defects')
+}
+
+/**
+ * Mark a quote accepted without emailing it — for quotes that were printed and
+ * signed on paper (or agreed verbally). Optionally imports the signer's name and
+ * a drawn/scanned signature image so the document reads as an executed contract.
+ * Runs the same accepted-side effects as any other acceptance path.
+ */
+export async function markQuoteAcceptedManually(args: {
+  id: string
+  signatureName?: string
+  // Data-URL (image/png) of the signature, drawn or captured from the paper copy.
+  signatureDataUrl?: string
+  poNumber?: string
+  note?: string
+}): Promise<{ ok: boolean; error?: string }> {
+  const { supabase, user, error } = await requireStaff()
+  if (error || !user) return { ok: false, error: error ?? 'Not authorised.' }
+
+  const now = new Date().toISOString()
+  const patch: Record<string, unknown> = {
+    status: 'accepted',
+    decided_at: now,
+    decision_note: args.note?.trim() || null,
+    po_number: args.poNumber?.trim() || null,
+  }
+  if (args.signatureName?.trim()) {
+    patch.signature_name = args.signatureName.trim()
+    patch.signed_at = now
+  }
+  // Store the signature inline as a data URL (a few KB) so it renders everywhere
+  // without Blob/signed-URL handling, mirroring the public acceptance flow.
+  if (args.signatureDataUrl?.startsWith('data:image/')) {
+    patch.signature_image_url = args.signatureDataUrl
+  }
+
+  const { data: updated, error: upErr } = await supabase
+    .from('quotes')
+    .update(patch)
+    .eq('id', args.id)
+    .select('id')
+  if (upErr) {
+    console.log('[v0] markQuoteAcceptedManually update error:', upErr.message)
+    return { ok: false, error: 'Could not accept the quote.' }
+  }
+  if (!updated || updated.length === 0) {
+    return { ok: false, error: 'Quote not found or you do not have permission to update it.' }
+  }
+
+  await applyQuoteAcceptedEffects(supabase, args.id)
+
+  revalidatePath('/dashboard/sales')
+  revalidatePath('/dashboard/sales/quotes')
+  revalidatePath(`/dashboard/sales/${args.id}`)
   return { ok: true }
 }
 

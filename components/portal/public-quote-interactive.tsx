@@ -46,7 +46,8 @@ export function PublicQuoteInteractive({
   const router = useRouter()
 
   const locked = quote.status === 'accepted' || quote.status === 'rejected'
-  const hasOptions = optionalLines.length > 0
+  // Extras are only interactive when the quote opts in to showing them.
+  const hasOptions = quote.show_optional_extras && optionalLines.length > 0
 
   // Toggle an option. Selecting a grouped option (same option_group within the
   // same system) clears any sibling so groups stay mutually exclusive.
@@ -71,6 +72,18 @@ export function PublicQuoteInteractive({
         }
       }
       next.add(line.id)
+      return next
+    })
+  }
+
+  // "No optional extras" for a system: clear every optional line in it.
+  const declineSystemOptions = (systemId: string) => {
+    if (locked) return
+    setSelection((prev) => {
+      const next = new Set(prev)
+      for (const l of optionalLines) {
+        if (l.system_id === systemId) next.delete(l.id)
+      }
       return next
     })
   }
@@ -111,6 +124,7 @@ export function PublicQuoteInteractive({
         catalogue={catalogue}
         optionSelection={selection}
         onToggleOption={locked ? undefined : toggle}
+        onDeclineSystemOptions={locked ? undefined : declineSystemOptions}
       />
 
       {/* Sticky save bar — only when there are options to choose and the quote

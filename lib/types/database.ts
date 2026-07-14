@@ -1836,6 +1836,9 @@ export interface Quote {
   // When true (default), the quote document/PDF shows each system's design
   // overview + design/survey details. Hidden when false.
   show_design_overview: boolean
+  // When true, optional extra line items are shown to the client on the public
+  // quote/PDF. Defaults off so extras are hidden unless staff opt in.
+  show_optional_extras: boolean
   valid_until: string | null
   sent_at: string | null
   decided_at: string | null
@@ -2232,6 +2235,8 @@ export interface ContractReview {
   created_by: string | null
   committed_by: string | null
   committed_at: string | null
+  // Set when the approved (committed) contract copy has been emailed to the client.
+  contract_sent_at: string | null
   created_at: string
   updated_at: string
   // Optional joins

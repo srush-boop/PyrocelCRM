@@ -532,6 +532,11 @@ export function QuoteBuilder({
   const [validUntil, setValidUntil] = useState(quote?.valid_until ?? '')
   const [showLineItems, setShowLineItems] = useState(quote?.show_line_items ?? true)
   const [showEquipmentSpec, setShowEquipmentSpec] = useState(quote?.show_equipment_spec ?? false)
+  // Optional extras are hidden from the client quote by default; staff opt in
+  // per-quote. When off, optional lines never render on the public quote/PDF.
+  const [showOptionalExtras, setShowOptionalExtras] = useState(
+    quote?.show_optional_extras ?? false,
+  )
 
   // Append the modernised maintenance service agreement to the quote document.
   // Defaults on so it's auto-included on maintenance quotes (payload gates it on
@@ -1090,6 +1095,7 @@ export function QuoteBuilder({
       discount_pence: poundsToPence(discount),
       show_line_items: showLineItems,
       show_equipment_spec: showEquipmentSpec,
+      show_optional_extras: showOptionalExtras,
       // Design overview / survey section has been removed from the quote
       // document, so it is never included.
       show_design_overview: false,
@@ -1169,6 +1175,7 @@ export function QuoteBuilder({
     validUntil,
     showLineItems,
     showEquipmentSpec,
+    showOptionalExtras,
     systems,
   ])
 
@@ -1266,6 +1273,7 @@ export function QuoteBuilder({
       if (typeof d.validUntil === 'string') setValidUntil(d.validUntil)
       if (typeof d.showLineItems === 'boolean') setShowLineItems(d.showLineItems)
       if (typeof d.showEquipmentSpec === 'boolean') setShowEquipmentSpec(d.showEquipmentSpec)
+    if (typeof d.showOptionalExtras === 'boolean') setShowOptionalExtras(d.showOptionalExtras)
       if (typeof d.showMaintenanceAgreement === 'boolean')
         setShowMaintenanceAgreement(d.showMaintenanceAgreement)
       if (typeof d.showRequirementsMatrix === 'boolean')
@@ -1309,6 +1317,7 @@ export function QuoteBuilder({
       validUntil,
       showLineItems,
       showEquipmentSpec,
+      showOptionalExtras,
       showMaintenanceAgreement,
       showRequirementsMatrix,
       requirements,
@@ -1344,6 +1353,7 @@ export function QuoteBuilder({
     validUntil,
     showLineItems,
     showEquipmentSpec,
+    showOptionalExtras,
     showMaintenanceAgreement,
     showRequirementsMatrix,
     requirements,
@@ -1953,6 +1963,24 @@ export function QuoteBuilder({
                 id="q-show-spec"
                 checked={showEquipmentSpec}
                 onCheckedChange={setShowEquipmentSpec}
+                disabled={disabled}
+              />
+            </div>
+            <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+              <div className="grid gap-0.5">
+                <Label htmlFor="q-show-optional" className="cursor-pointer">
+                  Show optional extras to client
+                </Label>
+                <span className="text-xs text-muted-foreground">
+                  {showOptionalExtras
+                    ? 'Optional extra lines are offered to the client, who can choose them or select "No optional extras".'
+                    : 'Optional extras are hidden from the client quote and PDF (default). Turn on to offer them.'}
+                </span>
+              </div>
+              <Switch
+                id="q-show-optional"
+                checked={showOptionalExtras}
+                onCheckedChange={setShowOptionalExtras}
                 disabled={disabled}
               />
             </div>

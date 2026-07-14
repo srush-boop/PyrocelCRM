@@ -487,6 +487,7 @@ export function ServiceChargeDialog({
                 <Select
                   value={frequency}
                   onValueChange={(v) => setFrequency(v as RecurringFrequency)}
+                  disabled={timing === 'per_visit'}
                 >
                   <SelectTrigger id="sc-freq">
                     <SelectValue />
@@ -499,6 +500,12 @@ export function ServiceChargeDialog({
                     ))}
                   </SelectContent>
                 </Select>
+                {timing === 'per_visit' && (
+                  <p className="text-xs text-muted-foreground">
+                    Not used — invoicing is triggered by each completed visit, not a
+                    calendar schedule.
+                  </p>
+                )}
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="sc-timing">Billed</Label>
@@ -539,18 +546,71 @@ export function ServiceChargeDialog({
                 </div>
                 {(() => {
                   const n = Number.parseInt(visitsPerCycle, 10)
-                  if (!(n >= 1) || annualTotalPence <= 0) return null
+                  if (!(n >= 1)) {
+                    return (
+                      <p className="mt-3 text-sm text-muted-foreground">
+                        Enter the number of visits in a cycle to see what gets invoiced.
+                      </p>
+                    )
+                  }
+                  if (annualTotalPence <= 0) {
+                    return (
+                      <p className="mt-3 text-sm text-muted-foreground">
+                        Enter an annual value above to see what gets invoiced per visit.
+                      </p>
+                    )
+                  }
                   const shares = splitFullValue(annualTotalPence, n)
                   const even = shares[0]
                   const last = shares[shares.length - 1]
+                  const ordinal = (v: number) => {
+                    const s = ['th', 'st', 'nd', 'rd']
+                    const m = v % 100
+                    return `${v}${s[(m - 20) % 10] ?? s[m] ?? s[0]}`
+                  }
                   return (
-                    <p className="mt-2 text-sm font-medium">
-                      {n === 1
-                        ? `${formatPence(annualTotalPence)} billed on the single visit.`
-                        : last === even
-                          ? `${formatPence(even)} per visit × ${n}.`
-                          : `${formatPence(even)} per visit, ${formatPence(last)} on the final visit (×${n}).`}
-                    </p>
+                    <div className="mt-3 rounded-md bg-background/70 p-3 text-sm">
+                      <p className="mb-1 font-medium">What happens</p>
+                      {n === 1 ? (
+                        <p className="leading-relaxed text-muted-foreground">
+                          A single invoice of{' '}
+                          <span className="font-semibold text-foreground">
+                            {formatPence(annualTotalPence)}
+                          </span>{' '}
+                          is raised each time a visit is completed.
+                        </p>
+                      ) : last === even ? (
+                        <p className="leading-relaxed text-muted-foreground">
+                          An invoice of{' '}
+                          <span className="font-semibold text-foreground">
+                            {formatPence(even)}
+                          </span>{' '}
+                          is raised every time a visit is completed. After the {ordinal(n)}{' '}
+                          visit the full{' '}
+                          <span className="font-semibold text-foreground">
+                            {formatPence(annualTotalPence)}
+                          </span>{' '}
+                          will have been billed, then the cycle repeats.
+                        </p>
+                      ) : (
+                        <p className="leading-relaxed text-muted-foreground">
+                          An invoice of{' '}
+                          <span className="font-semibold text-foreground">
+                            {formatPence(even)}
+                          </span>{' '}
+                          is raised on visits 1&ndash;{n - 1}, then{' '}
+                          <span className="font-semibold text-foreground">
+                            {formatPence(last)}
+                          </span>{' '}
+                          on the {ordinal(n)} (final) visit. After the {ordinal(n)} visit the
+                          full{' '}
+                          <span className="font-semibold text-foreground">
+                            {formatPence(annualTotalPence)}
+                          </span>{' '}
+                          will have been billed, then the cycle repeats.
+                        </p>
+                      )}
+                    </div>
                   )
                 })()}
               </div>

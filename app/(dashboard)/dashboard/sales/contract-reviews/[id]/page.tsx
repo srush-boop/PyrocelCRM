@@ -43,20 +43,33 @@ export default async function ContractReviewDetailPage({
     .order('position')
 
   // Reference data for the pickers/selects.
-  const [clientsRes, sitesRes, systemTypesRes, serviceTypesRes, subsRes, siteSystemsRes, siteServicesRes] =
-    await Promise.all([
-      supabase.from('clients').select('id, name').order('name'),
-      supabase.from('sites').select('id, name, postcode, client_id').order('name'),
-      supabase.from('system_types').select('id, name').order('name'),
-      supabase.from('service_types').select('id, name').order('name'),
-      supabase
-        .from('suppliers')
-        .select('id, name')
-        .eq('supplier_type', 'subcontractor')
-        .order('name'),
-      supabase.from('site_systems').select('id, name, site_id, system_type_id').order('name'),
-      supabase.from('site_services').select('id, site_id, site_system_id, service_type_id'),
-    ])
+  const [
+    clientsRes,
+    sitesRes,
+    systemTypesRes,
+    serviceTypesRes,
+    subsRes,
+    siteSystemsRes,
+    siteServicesRes,
+    branchesRes,
+    propertyTypesRes,
+    nominalCodesRes,
+  ] = await Promise.all([
+    supabase.from('clients').select('id, name').order('name'),
+    supabase.from('sites').select('id, name, postcode, client_id').order('name'),
+    supabase.from('system_types').select('id, name').order('name'),
+    supabase.from('service_types').select('id, name').order('name'),
+    supabase
+      .from('suppliers')
+      .select('id, name')
+      .eq('supplier_type', 'subcontractor')
+      .order('name'),
+    supabase.from('site_systems').select('id, name, site_id, system_type_id').order('name'),
+    supabase.from('site_services').select('id, site_id, site_system_id, service_type_id'),
+    supabase.from('branches').select('id, name').order('name'),
+    supabase.from('property_types').select('id, name').eq('active', true).order('name'),
+    supabase.from('nominal_codes').select('id, code, name').eq('active', true).order('code'),
+  ])
 
   return (
     <ContractReviewDetail
@@ -80,6 +93,11 @@ export default async function ContractReviewDetailPage({
           site_system_id: string | null
           service_type_id: string
         }[]
+      }
+      branches={(branchesRes.data ?? []) as { id: string; name: string }[]}
+      propertyTypes={(propertyTypesRes.data ?? []) as { id: string; name: string }[]}
+      nominalCodes={
+        (nominalCodesRes.data ?? []) as { id: string; code: string; name: string }[]
       }
     />
   )

@@ -46,7 +46,7 @@ import {
   MaintenanceCalculatorDialog,
   type MaintenanceCalcResult,
 } from '@/components/dashboard/sales/maintenance-calculator-dialog'
-import type { MaintenanceRates } from '@/lib/maintenance-calculator'
+import type { MaintenanceLine, MaintenanceRates } from '@/lib/maintenance-calculator'
 import {
   InstallationCalculatorDialog,
   type InstallationCalcResult,
@@ -368,29 +368,128 @@ function ppmToDraft(p: QuoteSystemPpm | null): PpmDraft | null {
 // number of visits per year. The originating calculation snapshot is attached
 // to the first line so it can be re-opened and adjusted later. Sell-priced at
 // 0% margin (cost = sell) so the quote total reproduces the calculator exactly.
-function maintenanceResultToLines(result: MaintenanceCalcResult): EditLine[] {
+// Resolve the best-matching Service Type for a maintenance line. Preference:
+// (1) service types under the line's discipline system type, name-matched;
+// (2) any service type name-matched; (3) none. Name matching is keyword-based
+// (e.g. "Weekly Fire Alarm Testing" ~ "Fire Alarm Weekly Testing").
+function matchServiceTypeForLine(
+  line: MaintenanceLine,
+  serviceTypes: ServiceType[],
+  systemTypeId: string | null,
+): string | null {
+  const norm = (s: string) =>
+    s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\b(annual|monthly|weekly)\b/g, '').trim()
+  const target = norm(line.description)
+  const targetWords = new Set(target.split(' ').filter(Boolean))
+  const score = (name: string) => {
+    const words = norm(name).split(' ').filter(Boolean)
+    if (words.length === 0) return 0
+    const hits = words.filter((w) => targetWords.has(w)).length
+    return hits / words.length
+  }
+  const pools = [
+    systemTypeId ? serviceTypes.filter((t) => t.system_type_id === systemTypeId) : [],
+    serviceTypes,
+  ]
+  for (const pool of pools) {
+    let best: { id: string; s: number } | null = null
+    for (const t of pool) {
+      const s = score(t.name)
+      if (s > 0 && (!best || s > best.s)) best = { id: t.id, s }
+    }
+    if (best && best.s >= 0.5) return best.id
+  }
+  return null
+}
+
+// Match a discipline's system_types.code to a configured System Type id.
+function matchSystemTypeByCode(
+  code: string | undefined,
+  systemTypes: SystemType[],
+): string | null {
+  if (!code) return null
+  const hit = systemTypes.find((t) => (t.code ?? '').toUpperCase() === code.toUpperCase())
+  return hit?.id ?? null
+}
+
+// Convert a priced maintenance line into a typed, non-optional service EditLine.
+function maintenanceLineToEditLine(
+  l: MaintenanceLine,
+  systemTypeId: string | null,
+  serviceTypes: ServiceType[],
+  snapshot: CalculatorSnapshot | null,
+): EditLine {
+  const meta = [l.coverType, l.visits ? `${l.visits} visits/yr` : null].filter(Boolean).join(' · ')
+  const detail = [l.overview, meta].filter(Boolean).join('\n')
+  const description = l.coverType ? `${l.description} (${l.coverType} Cover)` : l.description
+  return {
+    key: uid(),
+    productCode: '',
+    description,
+    detail: detail || meta || '',
+    service_type_id: matchServiceTypeForLine(l, serviceTypes, systemTypeId),
+    is_service: true,
+    catalogue_item_id: null,
+    quantity: '1',
+    unit: 'year',
+    unitCost: l.sell.toFixed(2),
+    margin: '0',
+    is_optional: false,
+    option_group: null,
+    standard: l.standard ?? null,
+    calculatorSnapshot: snapshot,
+  }
+}
+
+// Flat list of typed service lines (used when adding to an existing system).
+function maintenanceResultToLines(
+  result: MaintenanceCalcResult,
+  systemTypes: SystemType[],
+  serviceTypes: ServiceType[],
+): EditLine[] {
   return result.lines.map((l, i) => {
-    const meta = [l.coverType, l.visits ? `${l.visits} visits/yr` : null]
-      .filter(Boolean)
-      .join(' · ')
-    const detail = [l.overview, meta].filter(Boolean).join('\n')
-    const description = l.coverType ? `${l.description} (${l.coverType} Cover)` : l.description
+    const systemTypeId = matchSystemTypeByCode(l.systemTypeCode, systemTypes)
+    return maintenanceLineToEditLine(l, systemTypeId, serviceTypes, i === 0 ? result.snapshot : null)
+  })
+}
+
+// Group priced maintenance lines into ONE typed EditSystem per discipline (Fire
+// Alarm, Emergency Lighting, Intruder, …). Lines without a discipline mapping
+// (e.g. sub-contracts) collect into a single untyped "Routine Maintenance"
+// system so nothing is lost. The calculator snapshot rides on the first line of
+// the first system so the whole calc can be re-opened later.
+function maintenanceResultToSystems(
+  result: MaintenanceCalcResult,
+  systemTypes: SystemType[],
+  serviceTypes: ServiceType[],
+  defaultMargin = 0,
+): EditSystem[] {
+  const groups = new Map<string, { name: string; systemTypeId: string | null; lines: EditLine[] }>()
+  const order: string[] = []
+  let snapshotAttached = false
+  for (const l of result.lines) {
+    const systemTypeId = matchSystemTypeByCode(l.systemTypeCode, systemTypes)
+    const systemType = systemTypeId ? systemTypes.find((t) => t.id === systemTypeId) : null
+    // Group by discipline system type when known, else one shared bucket.
+    const groupKey = systemTypeId ?? 'routine-maintenance'
+    const groupName = systemType?.name ?? 'Routine Maintenance'
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, { name: groupName, systemTypeId, lines: [] })
+      order.push(groupKey)
+    }
+    const snapshot = !snapshotAttached ? result.snapshot : null
+    snapshotAttached = true
+    groups.get(groupKey)!.lines.push(maintenanceLineToEditLine(l, systemTypeId, serviceTypes, snapshot))
+  }
+  return order.map((key, idx) => {
+    const g = groups.get(key)!
     return {
-      key: uid(),
-      productCode: '',
-      description,
-      detail: detail || meta || '',
-      service_type_id: null,
-      is_service: true,
-      catalogue_item_id: null,
-      quantity: '1',
-      unit: 'year',
-      unitCost: l.sell.toFixed(2),
+      ...blankSystem(idx + 1, defaultMargin),
+      system_type_id: g.systemTypeId,
+      system_name: g.name,
+      work_type: 'SVC',
       margin: '0',
-      is_optional: Boolean(l.optional),
-      option_group: l.optionGroup ?? null,
-      standard: l.standard ?? null,
-      calculatorSnapshot: i === 0 ? result.snapshot : null,
+      lines: g.lines,
     }
   })
 }
@@ -976,9 +1075,9 @@ export function QuoteBuilder({
 
       if (maintAddTarget) {
         const target = maintAddTarget
-        // Add one line per priced service (maintenance visits, weekly testing,
-        // EL testing, monitoring, etc.), each annotated with its visits/year.
-        const newLines = maintenanceResultToLines(result)
+        // Add one typed line per priced service (maintenance visits, weekly
+        // testing, EL testing, monitoring, etc.) to the targeted system.
+        const newLines = maintenanceResultToLines(result, systemTypes, serviceTypes)
         setSystems((prev) =>
           prev.map((s) => (s.key === target ? { ...s, lines: [...s.lines, ...newLines] } : s)),
         )
@@ -992,25 +1091,29 @@ export function QuoteBuilder({
         return
       }
 
-      // Maintenance-only isolated flow: itemised Routine Maintenance system.
-      const lines: EditLine[] = maintenanceResultToLines(result)
+      // Maintenance-only isolated flow: build ONE typed system per discipline
+      // (Fire Alarm, Emergency Lighting, Intruder, …) so the accepted quote maps
+      // straight onto a fully-typed contract review.
+      const newSystems = maintenanceResultToSystems(result, systemTypes, serviceTypes)
 
       setSystems((prev) => {
-        const idx = prev.findIndex((s) => s.system_name === 'Routine Maintenance')
-        if (idx >= 0) {
-          const next = prev.slice()
-          next[idx] = { ...next[idx], work_type: 'SVC', lines }
-          return next
-        }
-        const base = blankSystem(prev.length + 1, 0)
-        return [
-          ...prev,
-          { ...base, system_name: 'Routine Maintenance', work_type: 'SVC', margin: '0', lines },
-        ]
+        // Replace any prior calculator output (previous per-discipline systems or
+        // the legacy single "Routine Maintenance" system) and drop empty default
+        // systems, then append the freshly-built typed systems.
+        const kept = prev.filter(
+          (s) =>
+            s.work_type !== 'SVC' &&
+            !(s.lines.length === 0 && /^System \d+$/.test(s.system_name)),
+        )
+        return [...kept, ...newSystems]
       })
-      toast.success('Maintenance pricing added to the quote')
+      toast.success(
+        newSystems.length === 1
+          ? 'Maintenance pricing added to the quote'
+          : `Maintenance added as ${newSystems.length} systems`,
+      )
     },
-    [maintViewTarget, maintAddTarget, updateLinePriceFromCalc],
+    [maintViewTarget, maintAddTarget, updateLinePriceFromCalc, systemTypes, serviceTypes],
   )
 
   // Apply the installation calculator. In view/adjust mode the originating line
@@ -2099,24 +2202,6 @@ export function QuoteBuilder({
                 disabled={disabled}
               />
             </div>
-            <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
-              <div className="grid gap-0.5">
-                <Label htmlFor="q-show-optional" className="cursor-pointer">
-                  Show optional extras to client
-                </Label>
-                <span className="text-xs text-muted-foreground">
-                  {showOptionalExtras
-                    ? 'Optional extra lines are offered to the client, who can choose them or select "No optional extras".'
-                    : 'Optional extras are hidden from the client quote and PDF (default). Turn on to offer them.'}
-                </span>
-              </div>
-              <Switch
-                id="q-show-optional"
-                checked={showOptionalExtras}
-                onCheckedChange={setShowOptionalExtras}
-                disabled={disabled}
-              />
-            </div>
             <div className="grid gap-1.5">
               <Label htmlFor="q-terms">Terms &amp; conditions</Label>
               <Textarea
@@ -2410,65 +2495,6 @@ export function QuoteBuilder({
                         )}
                       </div>
 
-                      {/* Client-selectable option controls */}
-                      <div className="mt-3 border-t pt-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="grid gap-0.5">
-                            <Label htmlFor={`maint-opt-${line.key}`} className="cursor-pointer text-sm">
-                              Client-selectable option
-                            </Label>
-                            <span className="text-xs text-muted-foreground text-pretty">
-                              Excluded from the core price until the client ticks it on the quote.
-                            </span>
-                          </div>
-                          <Switch
-                            id={`maint-opt-${line.key}`}
-                            checked={line.is_optional}
-                            onCheckedChange={(checked) =>
-                              onUpdateLine(line.key, {
-                                is_optional: checked,
-                                option_group: checked ? line.option_group : null,
-                              })
-                            }
-                            disabled={disabled}
-                          />
-                        </div>
-                        {line.is_optional && (
-                          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                            <div className="grid gap-1.5">
-                              <Label htmlFor={`maint-group-${line.key}`} className="text-xs text-muted-foreground">
-                                Option group (optional)
-                              </Label>
-                              <Input
-                                id={`maint-group-${line.key}`}
-                                value={line.option_group ?? ''}
-                                onChange={(e) =>
-                                  onUpdateLine(line.key, { option_group: e.target.value || null })
-                                }
-                                disabled={disabled}
-                                placeholder="e.g. Cover level"
-                              />
-                              <span className="text-xs text-muted-foreground">
-                                Options in the same group are mutually exclusive.
-                              </span>
-                            </div>
-                            <div className="grid gap-1.5">
-                              <Label htmlFor={`maint-std-${line.key}`} className="text-xs text-muted-foreground">
-                                Relevant standard (optional)
-                              </Label>
-                              <Input
-                                id={`maint-std-${line.key}`}
-                                value={line.standard ?? ''}
-                                onChange={(e) =>
-                                  onUpdateLine(line.key, { standard: e.target.value || null })
-                                }
-                                disabled={disabled}
-                                placeholder="e.g. BS 5839-1"
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
                     </div>
                   ))}
 

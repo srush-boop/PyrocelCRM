@@ -75,6 +75,8 @@ export async function PUT(
       home_postcode,
       phone,
       secondary_phone,
+      cost_per_hour_pence,
+      can_view_labour_costs,
     } = body as {
       full_name?: string
       email?: string
@@ -92,6 +94,8 @@ export async function PUT(
       home_postcode?: string | null
       phone?: string | null
       secondary_phone?: string | null
+      cost_per_hour_pence?: number | null
+      can_view_labour_costs?: boolean
     }
 
     // Verify the caller is an authenticated admin
@@ -106,13 +110,18 @@ export async function PUT(
 
     const { data: callerProfile } = await serverClient
       .from('profiles')
-      .select('role')
+      .select('role, email')
       .eq('id', user.id)
       .single()
 
     if (!callerProfile || callerProfile.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden.' }, { status: 403 })
     }
+
+    // Only the owner may grant/revoke the labour-cost view permission.
+    const LABOUR_COST_OWNER_EMAIL = 'steve.rush@pyrocel.co.uk'
+    const callerIsOwner =
+      (callerProfile.email ?? '').trim().toLowerCase() === LABOUR_COST_OWNER_EMAIL
 
     const validRoles = ['admin', 'office', 'engineer', 'client']
     if (role && !validRoles.includes(role)) {
@@ -187,6 +196,20 @@ export async function PUT(
     }
     if (holiday_entitlement_hours !== undefined) {
       profilePatch.holiday_entitlement_hours = parseEntitlement(holiday_entitlement_hours)
+    }
+    // Per-user labour cost/hour override (integer pence). null = clear/inherit
+    // the assigned role's default.
+    if (cost_per_hour_pence !== undefined) {
+      const n = Number(cost_per_hour_pence)
+      profilePatch.cost_per_hour_pence =
+        cost_per_hour_pence === null || !Number.isFinite(n) || n < 0
+          ? null
+          : Math.round(n)
+    }
+    // Labour-cost view permission. Silently ignored unless the caller is the
+    // owner, so a non-owner admin cannot escalate visibility.
+    if (can_view_labour_costs !== undefined && callerIsOwner) {
+      profilePatch.can_view_labour_costs = Boolean(can_view_labour_costs)
     }
     // Engineer home postcode: store it and (re)geocode to coordinates so the
     // calls map can anchor the engineer's route. Clearing the postcode clears

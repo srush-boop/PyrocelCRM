@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { EngineersTable } from '@/components/dashboard/engineers/engineers-table'
 import { computeLeaveBalances, type LeaveBalance } from '@/lib/leave'
+import { canGrantLabourCosts } from '@/lib/auth/labour-costs'
 import type { Profile, Department, Branch, Role } from '@/lib/types/database'
 
 export default async function EngineersPage() {
@@ -53,6 +54,7 @@ export default async function EngineersPage() {
         branches={(branches || []) as Branch[]}
         roles={(roles || []) as Role[]}
         leaveBalances={leaveBalances}
+        canGrantLabourCosts={canGrantLabourCosts((profile as Profile).email)}
       />
     </div>
   )

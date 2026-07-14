@@ -38,6 +38,17 @@ import { format } from 'date-fns'
 import { formatDateUK, cn } from '@/lib/utils'
 import { isDamperService } from '@/lib/dampers'
 import { isExtinguisherService } from '@/lib/extinguishers'
+import { formatPence } from '@/lib/billing/invoices'
+import { formatMarginPct } from '@/lib/billing/labour-profit'
+
+/** Per-call margin figures returned by the permission-gated margins endpoint. */
+interface CallMargin {
+  costPence: number
+  revenuePence: number
+  profitPence: number
+  marginPct: number | null
+  revenueSource: 'invoice' | 'recurring_visit' | 'none'
+}
 
 /** Resolve the correct report viewer path for a service type. */
 function reportPath(serviceName: string, taskId: string): string {
@@ -87,6 +98,11 @@ export default function ReportsPage() {
   const [newAlternateEmail, setNewAlternateEmail] = useState('')
   const [bulkSending, setBulkSending] = useState(false)
   const [bulkResult, setBulkResult] = useState<{ sent: number; failed: number } | null>(null)
+
+  // Labour-cost margins, only populated when the current user is authorised to
+  // view labour costs. Keyed by task id. `canViewMargins` gates the extra column.
+  const [canViewMargins, setCanViewMargins] = useState(false)
+  const [margins, setMargins] = useState<Record<string, CallMargin>>({})
 
   // Filter states
   const [search, setSearch] = useState('')
@@ -196,6 +212,44 @@ export default function ReportsPage() {
       setLoading(false)
     }
   }
+
+  // Fetch labour-cost margins for the loaded completed calls. The endpoint is
+  // permission-gated server-side and returns `authorised: false` for everyone
+  // except users granted the labour-cost view permission, so the column simply
+  // never appears for unauthorised users.
+  useEffect(() => {
+    const completedTaskIds = reports
+      .filter((r) => r.overallStatus === 'completed' || r.completedAt)
+      .map((r) => r.taskId)
+    if (completedTaskIds.length === 0) {
+      setCanViewMargins(false)
+      setMargins({})
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/labour-costs/call-margins', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ taskIds: completedTaskIds }),
+        })
+        if (!res.ok) return
+        const data = (await res.json()) as {
+          authorised: boolean
+          margins?: Record<string, CallMargin>
+        }
+        if (cancelled) return
+        setCanViewMargins(data.authorised)
+        setMargins(data.margins ?? {})
+      } catch {
+        // Non-fatal: the margin column is purely additive.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [reports])
 
   const filteredReports = useMemo(() => {
     return reports.filter((report) => {
@@ -583,6 +637,9 @@ export default function ReportsPage() {
                   <TableHead>Service</TableHead>
                   <TableHead className="hidden lg:table-cell">Engineer</TableHead>
                   <TableHead>Status</TableHead>
+                  {canViewMargins && (
+                    <TableHead className="text-right">Margin</TableHead>
+                  )}
                   <TableHead className="hidden xl:table-cell">Email Sent</TableHead>
                   <TableHead className="hidden lg:table-cell">Date</TableHead>
                   <TableHead>Actions</TableHead>
@@ -591,13 +648,13 @@ export default function ReportsPage() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="h-24 text-center">
+                    <TableCell colSpan={canViewMargins ? 11 : 10} className="h-24 text-center">
                       Loading reports...
                     </TableCell>
                   </TableRow>
                 ) : filteredReports.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="h-24 text-center">
+                    <TableCell colSpan={canViewMargins ? 11 : 10} className="h-24 text-center">
                       <div className="flex flex-col items-center gap-2">
                         <AlertCircle className="h-8 w-8 text-muted-foreground/50" />
                         <p className="text-muted-foreground">No reports found matching your filters</p>
@@ -639,6 +696,30 @@ export default function ReportsPage() {
                             : 'Partial'}
                         </Badge>
                       </TableCell>
+                      {canViewMargins && (
+                        <TableCell className="text-right tabular-nums">
+                          {(() => {
+                            const m = margins[report.taskId]
+                            if (!m) return <span className="text-muted-foreground">—</span>
+                            const positive = m.profitPence >= 0
+                            return (
+                              <div className="flex flex-col items-end leading-tight">
+                                <span
+                                  className={cn(
+                                    'font-medium',
+                                    positive ? 'text-emerald-600' : 'text-destructive',
+                                  )}
+                                >
+                                  {formatMarginPct(m.marginPct)}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {formatPence(m.profitPence)}
+                                </span>
+                              </div>
+                            )
+                          })()}
+                        </TableCell>
+                      )}
                       <TableCell className="hidden xl:table-cell">
                         {report.emailSentAt ? (
                           <div className="flex items-center gap-2">

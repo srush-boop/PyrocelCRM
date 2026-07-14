@@ -129,6 +129,9 @@ export function SiteServicesManager({
   // is used by future charging logic to decide what a chargeable call costs.
   const [editComprehensiveCover, setEditComprehensiveCover] = useState(false)
   const [editComprehensiveCoverNote, setEditComprehensiveCoverNote] = useState('')
+  // Percentage uplift baked into a comprehensive service's charge. Stripped out
+  // when working out the "actual service" revenue used for profitability.
+  const [editComprehensiveUpliftPct, setEditComprehensiveUpliftPct] = useState('')
   const [newEmail, setNewEmail] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
 
@@ -278,6 +281,9 @@ export function SiteServicesManager({
     setEditAnchorNextToSchedule(ss.anchor_next_to_schedule ?? true)
     setEditComprehensiveCover(ss.comprehensive_cover ?? false)
     setEditComprehensiveCoverNote(ss.comprehensive_cover_note ?? '')
+    setEditComprehensiveUpliftPct(
+      ss.comprehensive_uplift_pct != null ? String(ss.comprehensive_uplift_pct) : '',
+    )
     setNewEmail('')
   }
 
@@ -394,6 +400,12 @@ export function SiteServicesManager({
         comprehensive_cover_note: editComprehensiveCover
           ? editComprehensiveCoverNote.trim() || null
           : null,
+        comprehensive_uplift_pct:
+          editComprehensiveCover && editComprehensiveUpliftPct.trim() !== '' &&
+          Number.isFinite(Number(editComprehensiveUpliftPct)) &&
+          Number(editComprehensiveUpliftPct) >= 0
+            ? Number(editComprehensiveUpliftPct)
+            : null,
       })
       .eq('id', editingId)
 
@@ -1130,17 +1142,40 @@ export function SiteServicesManager({
                 </div>
               </div>
               {editComprehensiveCover && (
-                <div className="space-y-1.5">
-                  <Label htmlFor="comprehensive-cover-note" className="text-xs">
-                    Cover note (optional)
-                  </Label>
-                  <Textarea
-                    id="comprehensive-cover-note"
-                    value={editComprehensiveCoverNote}
-                    onChange={(e) => setEditComprehensiveCoverNote(e.target.value)}
-                    placeholder="e.g. Parts and labour included under annual cover contract."
-                    rows={2}
-                  />
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="comprehensive-uplift" className="text-xs">
+                      Comprehensive uplift (%)
+                    </Label>
+                    <Input
+                      id="comprehensive-uplift"
+                      type="number"
+                      min={0}
+                      step="0.1"
+                      inputMode="decimal"
+                      value={editComprehensiveUpliftPct}
+                      onChange={(e) => setEditComprehensiveUpliftPct(e.target.value)}
+                      placeholder="e.g. 25"
+                      className="sm:max-w-[10rem]"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      The percentage added to the base service charge to cover parts/labour under
+                      comprehensive cover. It&apos;s stripped out when calculating the true labour
+                      revenue for profitability. Leave blank if the charge has no uplift.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="comprehensive-cover-note" className="text-xs">
+                      Cover note (optional)
+                    </Label>
+                    <Textarea
+                      id="comprehensive-cover-note"
+                      value={editComprehensiveCoverNote}
+                      onChange={(e) => setEditComprehensiveCoverNote(e.target.value)}
+                      placeholder="e.g. Parts and labour included under annual cover contract."
+                      rows={2}
+                    />
+                  </div>
                 </div>
               )}
             </div>

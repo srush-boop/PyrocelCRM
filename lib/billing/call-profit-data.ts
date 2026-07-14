@@ -178,18 +178,21 @@ async function recurringVisitRevenue(
     .eq('service_type_id', (siteService as any).service_type_id)
 
   const weights = (visitTypes ?? []) as { id: string; revenue_weight: number | null }[]
-  // Total weight across the year = sum of each type's weight × how many times
-  // that type occurs per year. With evenly spread visits and one of each type
-  // per cycle, this reduces to sum(weights) scaled by cycles/year, which cancels
-  // in the ratio — so summing the per-type weights is sufficient here.
   const totalWeight = weights.reduce((s, w) => s + (w.revenue_weight ?? 1), 0)
   const thisWeight =
     (visitTypeId && weights.find((w) => w.id === visitTypeId)?.revenue_weight) || 1
 
+  // Visit-type weights only apportion the cycle correctly when each defined type
+  // occurs exactly once in the year (distinct types === visits/year). When a
+  // type recurs we lack per-cycle occurrence counts, so summing distinct weights
+  // would over-attribute — fall back to an even split in that ambiguous case.
+  const weightsAreUnambiguous =
+    weights.length > 1 && visitsPerYear > 0 && weights.length === visitsPerYear
+
   return weightedVisitRevenuePence({
     actualAnnualPence: netAnnual,
-    thisVisitWeight: thisWeight,
-    totalAnnualWeight: totalWeight > 0 ? totalWeight : 0,
+    thisVisitWeight: weightsAreUnambiguous ? thisWeight : 0,
+    totalAnnualWeight: weightsAreUnambiguous && totalWeight > 0 ? totalWeight : 0,
     visitsPerYear,
   })
 }

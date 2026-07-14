@@ -338,10 +338,19 @@ function recurringVisitRevenue(
   const thisWeight =
     (task.visit_type_id && weights.find((w) => w.id === task.visit_type_id)?.revenue_weight) || 1
 
+  // Visit-type weights only apportion the cycle correctly when each defined
+  // visit type occurs exactly once in the year — i.e. the number of distinct
+  // types equals the visits/year. When a type recurs (e.g. 11 monthly Periodic
+  // + 1 Annual) we don't store per-cycle occurrence counts, so summing distinct
+  // weights would over-attribute. In that ambiguous case we fall back to an even
+  // split (weights ignored) rather than produce misleading shares.
+  const weightsAreUnambiguous =
+    weights.length > 1 && visitsPerYear > 0 && weights.length === visitsPerYear
+
   return weightedVisitRevenuePence({
     actualAnnualPence: netAnnual,
-    thisVisitWeight: thisWeight,
-    totalAnnualWeight: totalWeight > 0 ? totalWeight : 0,
+    thisVisitWeight: weightsAreUnambiguous ? thisWeight : 0,
+    totalAnnualWeight: weightsAreUnambiguous && totalWeight > 0 ? totalWeight : 0,
     visitsPerYear,
   })
 }

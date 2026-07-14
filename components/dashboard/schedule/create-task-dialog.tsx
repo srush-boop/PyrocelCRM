@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/select'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { SearchSelect } from '@/components/dashboard/schedule/search-select'
 import { Plus, Loader2, CalendarIcon, Siren, Mail, MapPin } from 'lucide-react'
 import { format } from 'date-fns'
 import type { Profile, SiteService, Site, ServiceType, SystemType } from '@/lib/types/database'
@@ -429,18 +430,18 @@ export function CreateTaskDialog({
               <>
                 <div className="grid gap-2">
                   <Label>Site *</Label>
-                  <Select value={siteId} onValueChange={handleSiteChange} disabled={lockSite}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a site" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {recurringSites.map((site) => (
-                        <SelectItem key={site.id} value={site.id}>
-                          {site.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchSelect
+                    value={siteId}
+                    onChange={handleSiteChange}
+                    disabled={lockSite}
+                    placeholder="Select a site"
+                    searchPlaceholder="Search sites…"
+                    emptyText="No matching site."
+                    options={recurringSites.map((site) => ({
+                      value: site.id,
+                      label: site.name ?? 'Unnamed site',
+                    }))}
+                  />
                 </div>
 
                 <div className="grid gap-2">
@@ -563,18 +564,18 @@ export function CreateTaskDialog({
 
                 <div className="grid gap-2">
                   <Label>Site *</Label>
-                  <Select value={siteId} onValueChange={handleReactiveSiteChange} disabled={lockSite}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a site" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {reactiveSites.map((site) => (
-                        <SelectItem key={site.id} value={site.id}>
-                          {site.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchSelect
+                    value={siteId}
+                    onChange={handleReactiveSiteChange}
+                    disabled={lockSite}
+                    placeholder="Select a site"
+                    searchPlaceholder="Search sites…"
+                    emptyText="No matching site."
+                    options={reactiveSites.map((site) => ({
+                      value: site.id,
+                      label: site.name ?? 'Unnamed site',
+                    }))}
+                  />
                 </div>
 
                 {reactiveSystemOptions.length > 0 && (
@@ -624,22 +625,17 @@ export function CreateTaskDialog({
 
             <div className="grid gap-2">
               <Label>Client</Label>
-              <Select
+              <SearchSelect
                 value={clientId || NO_CLIENT}
-                onValueChange={(value) => setClientId(value === NO_CLIENT ? '' : value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a client" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_CLIENT}>No client</SelectItem>
-                  {clients.map((client) => (
-                    <SelectItem key={client.id} value={client.id}>
-                      {client.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(value) => setClientId(value === NO_CLIENT ? '' : value)}
+                placeholder="Select a client"
+                searchPlaceholder="Search clients…"
+                emptyText="No matching client."
+                options={[
+                  { value: NO_CLIENT, label: 'No client' },
+                  ...clients.map((client) => ({ value: client.id, label: client.name })),
+                ]}
+              />
               {(selectedRecurringSite || selectedReactiveSite) && (
                 <p className="text-xs text-muted-foreground">
                   Defaults to the site&apos;s client. Change it to bill this call to a different client.

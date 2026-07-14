@@ -5,6 +5,7 @@ import { loadQuoteCatalogue } from '@/lib/sales/equipment-spec'
   import { createRemedialCallsForQuote } from '@/lib/remedial'
   import { createJobForAcceptedQuote } from '@/lib/jobs/convert'
   import { buildContractReviewDraft } from '@/lib/contracts/build-draft'
+  import { classifyAcceptedQuote } from '@/lib/contracts/classify'
 import { computeQuoteTotals } from '@/lib/sales'
 import type { QuoteLineItem, QuoteMessage } from '@/lib/types/database'
 
@@ -160,12 +161,10 @@ export async function respondToPublicQuote(args: {
   // non-blocking. Uses the admin client so RLS never gets in the way.
   if (args.decision === 'accepted') {
     await createRemedialCallsForQuote(supabase, quote.id)
-    const { data: acceptedQuote } = await supabase
-      .from('quotes')
-      .select('quote_type')
-      .eq('id', quote.id)
-      .single()
-    if (acceptedQuote?.quote_type === 'service_contract') {
+    // Route on the quote's actual systems (ignoring empty ones), not the stored
+    // quote_type which can be stale. This also self-heals quote_type.
+    const route = await classifyAcceptedQuote(supabase, quote.id)
+    if (route === 'contract_review') {
       await buildContractReviewDraft(supabase, quote.id)
     } else {
       await createJobForAcceptedQuote(supabase, quote.id)

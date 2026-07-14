@@ -98,6 +98,42 @@ export function quoteTypeFromWorkType(code: string | null | undefined): string {
   return WORK_TYPE_TO_QUOTE_TYPE[code] ?? 'other'
 }
 
+// A quote can hold several systems (e.g. an empty default "System 1" plus the
+// real work). Deriving the quote type from ONLY the first system is wrong — a
+// stray empty Supply-Only system would mask a Routine-Maintenance quote and
+// mis-route acceptance to a Job instead of Contract Review. These helpers
+// derive the quote type / maintenance classification from the *meaningful*
+// systems only (those with at least one line item), falling back to all
+// systems when none have content yet (e.g. a brand-new draft).
+export interface SystemClassification {
+  work_type: string | null | undefined
+  // True when the system has at least one line item (i.e. carries real content).
+  hasContent: boolean
+}
+
+function meaningfulSystems<T extends SystemClassification>(systems: T[]): T[] {
+  const withContent = systems.filter((s) => s.hasContent)
+  return withContent.length > 0 ? withContent : systems
+}
+
+// Derive the persisted quote_type from the systems. Routine Maintenance wins
+// only when EVERY meaningful system is SVC; otherwise a non-SVC system defines
+// the type (first non-SVC meaningful system, else the first meaningful system).
+export function deriveQuoteTypeFromSystems(systems: SystemClassification[]): string {
+  const meaningful = meaningfulSystems(systems)
+  if (meaningful.length === 0) return 'other'
+  if (meaningful.every((s) => s.work_type === 'SVC')) return 'service_contract'
+  const firstNonSvc = meaningful.find((s) => s.work_type !== 'SVC')
+  return quoteTypeFromWorkType((firstNonSvc ?? meaningful[0]).work_type)
+}
+
+// True when the quote is entirely Routine Maintenance (ignoring empty systems),
+// i.e. it should route to Contract Review rather than a delivery Job on accept.
+export function isRoutineMaintenanceOnly(systems: SystemClassification[]): boolean {
+  const meaningful = meaningfulSystems(systems)
+  return meaningful.length > 0 && meaningful.every((s) => s.work_type === 'SVC')
+}
+
 // Who produced the design for a system.
 export const DESIGNED_BY_OPTIONS = [
   { value: 'pyrocel', label: 'Pyrocel' },

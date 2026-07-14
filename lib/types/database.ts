@@ -1812,6 +1812,13 @@ export interface Quote {
   prospect_email: string | null
   prospect_phone: string | null
   prospect_address: string | null
+  // New-prospect SITE details, independent of the client above (a quote can pair
+  // an existing client with a new site, or a new client with a new site).
+  prospect_site_name: string | null
+  prospect_site_address: string | null
+  prospect_site_contact: string | null
+  prospect_site_email: string | null
+  prospect_site_phone: string | null
   summary: string | null
   notes: string | null
   terms: string | null

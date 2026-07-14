@@ -10,7 +10,8 @@ import { renderQuotePdfBuffer } from '@/lib/pdf/quote-pdf'
 import { loadQuoteCatalogue } from '@/lib/sales/equipment-spec'
 import { createRemedialCallsForQuote } from '@/lib/remedial'
 import { createJobForAcceptedQuote } from '@/lib/jobs/convert'
-import { buildContractReviewDraft } from '@/lib/contracts/build-draft'
+  import { buildContractReviewDraft } from '@/lib/contracts/build-draft'
+  import { classifyAcceptedQuote } from '@/lib/contracts/classify'
 import type { CalculatorSnapshot } from '@/lib/calculator-snapshot'
 import type {
   QuoteStatus,
@@ -121,6 +122,11 @@ export interface QuoteInput {
   prospect_email?: string | null
   prospect_phone?: string | null
   prospect_address?: string | null
+  prospect_site_name?: string | null
+  prospect_site_contact?: string | null
+  prospect_site_email?: string | null
+  prospect_site_phone?: string | null
+  prospect_site_address?: string | null
   summary?: string | null
   notes?: string | null
   terms?: string | null
@@ -902,12 +908,10 @@ export async function setQuoteStatus(
  */
 async function applyQuoteAcceptedEffects(supabase: SupabaseClient, id: string) {
   await createRemedialCallsForQuote(supabase, id)
-  const { data: acceptedQuote } = await supabase
-    .from('quotes')
-    .select('quote_type')
-    .eq('id', id)
-    .single()
-  if (acceptedQuote?.quote_type === 'service_contract') {
+  // Route on the quote's actual systems (ignoring empty ones), not the stored
+  // quote_type which can be stale. This also self-heals quote_type.
+  const route = await classifyAcceptedQuote(supabase, id)
+  if (route === 'contract_review') {
     await buildContractReviewDraft(supabase, id)
     revalidatePath('/dashboard/sales/contract-reviews')
     revalidatePath('/dashboard/service')

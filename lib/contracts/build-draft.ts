@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { isRoutineMaintenanceOnly } from '@/lib/sales'
 
 /**
  * Contract Review draft builder.
@@ -126,11 +127,6 @@ export async function buildContractReviewDraft(
       return { ok: false, error: 'Quote not found.' }
     }
 
-    // Only Routine Maintenance quotes generate a contract review.
-    if (quote.quote_type !== 'service_contract') {
-      return { ok: true, skipped: true }
-    }
-
     // Load systems + PPM pricing for this quote.
     const { data: systems } = await supabase
       .from('quote_systems')
@@ -139,6 +135,29 @@ export async function buildContractReviewDraft(
       .order('position')
     const systemList = systems ?? []
     const systemIds = systemList.map((s) => s.id as string)
+
+    // Only entirely-Routine-Maintenance quotes generate a contract review
+    // (ignoring empty systems). Classify from the systems + their line content
+    // rather than the persisted quote_type, which can be stale.
+    const contentSystemIds = new Set<string>()
+    if (systemIds.length > 0) {
+      const { data: lineRows } = await supabase
+        .from('quote_line_items')
+        .select('system_id')
+        .eq('quote_id', quoteId)
+      for (const l of (lineRows ?? []) as { system_id: string | null }[]) {
+        if (l.system_id) contentSystemIds.add(l.system_id)
+      }
+    }
+    const maintenanceOnly = isRoutineMaintenanceOnly(
+      systemList.map((s) => ({
+        work_type: s.work_type as string | null,
+        hasContent: contentSystemIds.has(s.id as string),
+      })),
+    )
+    if (!maintenanceOnly) {
+      return { ok: true, skipped: true }
+    }
 
     const ppmBySystem = new Map<string, Record<string, unknown>>()
     if (systemIds.length > 0) {

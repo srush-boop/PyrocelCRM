@@ -1020,7 +1020,7 @@ function buildQuoteEmailHtml(args: {
   // clickable; the visible link guarantees the recipient can always reach the
   // page to view and approve the quote.
   const button = args.quoteLink
-    ? `<p style="margin:24px 0;"><a href="${args.quoteLink}" style="background:#b91c1c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;display:inline-block;">View &amp; approve your quote</a></p>
+    ? `<p style="margin:28px 0;text-align:center;"><a href="${args.quoteLink}" style="background:#b91c1c;color:#ffffff;text-decoration:none;padding:18px 40px;border-radius:8px;font-weight:700;font-size:18px;line-height:1.2;display:inline-block;">View &amp; approve your quote</a></p>
        <p style="font-size:13px;color:#334155;margin:0 0 8px;">Or open this link in your browser:</p>
        <p style="font-size:13px;margin:0 0 8px;word-break:break-all;"><a href="${args.quoteLink}" style="color:#b91c1c;text-decoration:underline;">${escapeHtml(args.quoteLink)}</a></p>`
     : ''

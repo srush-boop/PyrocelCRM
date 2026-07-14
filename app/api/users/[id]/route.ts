@@ -77,6 +77,7 @@ export async function PUT(
       secondary_phone,
       cost_per_hour_pence,
       can_view_labour_costs,
+      can_use_query_tools,
     } = body as {
       full_name?: string
       email?: string
@@ -96,6 +97,7 @@ export async function PUT(
       secondary_phone?: string | null
       cost_per_hour_pence?: number | null
       can_view_labour_costs?: boolean
+      can_use_query_tools?: boolean
     }
 
     // Verify the caller is an authenticated admin
@@ -210,6 +212,11 @@ export async function PUT(
     // owner, so a non-owner admin cannot escalate visibility.
     if (can_view_labour_costs !== undefined && callerIsOwner) {
       profilePatch.can_view_labour_costs = Boolean(can_view_labour_costs)
+    }
+    // Query-tools (Query Builder + User Cost Calculator) access. Same owner-only
+    // gate: a non-owner admin cannot grant themselves or others these tools.
+    if (can_use_query_tools !== undefined && callerIsOwner) {
+      profilePatch.can_use_query_tools = Boolean(can_use_query_tools)
     }
     // Engineer home postcode: store it and (re)geocode to coordinates so the
     // calls map can anchor the engineer's route. Clearing the postcode clears

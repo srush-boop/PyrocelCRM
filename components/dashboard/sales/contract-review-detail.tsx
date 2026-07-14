@@ -17,6 +17,7 @@ import {
   FileSignature,
   ExternalLink,
   Send,
+  ChevronDown,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -24,6 +25,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
 import {
   Select,
@@ -81,6 +83,9 @@ interface Props {
   subcontractors: IdName[]
   siteSystems: SiteSystemRef[]
   siteServices: SiteServiceRef[]
+  branches: IdName[]
+  propertyTypes: IdName[]
+  nominalCodes: { id: string; code: string; name: string }[]
 }
 
 const NONE = '__none__'
@@ -382,6 +387,42 @@ export function ContractReviewDetail(props: Props) {
                   onChange={(e) => setPayload(clientItem.id, 'contact_phone', e.target.value)}
                 />
               </Field>
+              <Field label="Address" className="sm:col-span-2">
+                <Textarea
+                  disabled={!editable}
+                  rows={2}
+                  value={(state[clientItem.id].payload.address as string) ?? ''}
+                  onChange={(e) => setPayload(clientItem.id, 'address', e.target.value)}
+                />
+              </Field>
+              <div className="sm:col-span-2">
+                <MoreDetails>
+                  <Field label="Notes">
+                    <Textarea
+                      disabled={!editable}
+                      rows={2}
+                      placeholder="Internal notes about this client"
+                      value={(state[clientItem.id].payload.notes as string) ?? ''}
+                      onChange={(e) => setPayload(clientItem.id, 'notes', e.target.value)}
+                    />
+                  </Field>
+                  <SwitchField
+                    label="Requires a PO before work"
+                    checked={state[clientItem.id].payload.requires_po === true}
+                    onChange={(v) => setPayload(clientItem.id, 'requires_po', v)}
+                    editable={editable}
+                  />
+                </MoreDetails>
+              </div>
+              <div className="sm:col-span-2">
+                <MissingInfo
+                  fields={[
+                    !state[clientItem.id].payload.contact_name && 'contact name',
+                    !state[clientItem.id].payload.contact_email && 'contact email',
+                    !state[clientItem.id].payload.contact_phone && 'contact phone',
+                  ].filter(Boolean) as string[]}
+                />
+              </div>
             </div>
           )}
         </EntityCard>
@@ -439,6 +480,120 @@ export function ContractReviewDetail(props: Props) {
                   onChange={(e) => setPayload(siteItem.id, 'address', e.target.value)}
                 />
               </Field>
+              <Field label="Branch">
+                <TypeSelect
+                  editable={editable}
+                  allowClear
+                  placeholder="Select branch"
+                  value={(state[siteItem.id].payload.branch_id as string) ?? null}
+                  options={props.branches}
+                  onChange={(v) => setPayload(siteItem.id, 'branch_id', v)}
+                />
+              </Field>
+              <Field label="Property type">
+                <TypeSelect
+                  editable={editable}
+                  allowClear
+                  placeholder="Select property type"
+                  value={(state[siteItem.id].payload.property_type_id as string) ?? null}
+                  options={props.propertyTypes}
+                  onChange={(v) => setPayload(siteItem.id, 'property_type_id', v)}
+                />
+              </Field>
+              <div className="sm:col-span-2">
+                <MoreDetails>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Site ID (CASH)">
+                      <Input
+                        disabled={!editable}
+                        value={(state[siteItem.id].payload.site_id_cash as string) ?? ''}
+                        onChange={(e) => setPayload(siteItem.id, 'site_id_cash', e.target.value)}
+                      />
+                    </Field>
+                    <Field label="UPRN">
+                      <Input
+                        disabled={!editable}
+                        value={(state[siteItem.id].payload.uprn as string) ?? ''}
+                        onChange={(e) => setPayload(siteItem.id, 'uprn', e.target.value)}
+                      />
+                    </Field>
+                  </div>
+                  <Field label="Reporting emails">
+                    <Textarea
+                      disabled={!editable}
+                      rows={2}
+                      placeholder="Comma-separated addresses for service reports"
+                      value={emailsToText(state[siteItem.id].payload.reporting_emails)}
+                      onChange={(e) =>
+                        setPayload(siteItem.id, 'reporting_emails', textToEmails(e.target.value))
+                      }
+                    />
+                  </Field>
+                  <Field label="Notes">
+                    <Textarea
+                      disabled={!editable}
+                      rows={2}
+                      value={(state[siteItem.id].payload.notes as string) ?? ''}
+                      onChange={(e) => setPayload(siteItem.id, 'notes', e.target.value)}
+                    />
+                  </Field>
+                  <div className="space-y-2 rounded-md border p-3">
+                    <SwitchField
+                      label="Has remote monitoring"
+                      checked={state[siteItem.id].payload.has_remote_monitoring === true}
+                      onChange={(v) => setPayload(siteItem.id, 'has_remote_monitoring', v)}
+                      editable={editable}
+                    />
+                    {state[siteItem.id].payload.has_remote_monitoring === true && (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Field label="Monitoring station">
+                          <Input
+                            disabled={!editable}
+                            value={
+                              (state[siteItem.id].payload.monitoring_station_name as string) ?? ''
+                            }
+                            onChange={(e) =>
+                              setPayload(siteItem.id, 'monitoring_station_name', e.target.value)
+                            }
+                          />
+                        </Field>
+                        <Field label="Station phone">
+                          <Input
+                            disabled={!editable}
+                            value={
+                              (state[siteItem.id].payload.monitoring_station_phone as string) ?? ''
+                            }
+                            onChange={(e) =>
+                              setPayload(siteItem.id, 'monitoring_station_phone', e.target.value)
+                            }
+                          />
+                        </Field>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <div className="mb-2 text-xs font-medium text-muted-foreground">
+                      Visit requirements
+                    </div>
+                    <FlagsGrid
+                      payload={state[siteItem.id].payload}
+                      onToggle={(k, v) => setPayload(siteItem.id, k, v)}
+                      editable={editable}
+                    />
+                  </div>
+                </MoreDetails>
+              </div>
+              <div className="sm:col-span-2">
+                <MissingInfo
+                  fields={[
+                    !state[siteItem.id].payload.postcode && 'postcode',
+                    !state[siteItem.id].payload.branch_id && 'branch',
+                    !state[siteItem.id].payload.property_type_id && 'property type',
+                    emailsToText(state[siteItem.id].payload.reporting_emails).length === 0 &&
+                      'reporting emails',
+                  ].filter(Boolean) as string[]}
+                />
+              </div>
             </div>
           )}
         </EntityCard>
@@ -446,12 +601,9 @@ export function ContractReviewDetail(props: Props) {
 
       {/* Systems + nested service + charge */}
       {systemItems.map((sys) => {
-        const service = items.find(
+        const services = items.filter(
           (i) => i.entity_type === 'service' && i.parent_key === sys.local_key,
         )
-        const charge = service
-          ? items.find((i) => i.entity_type === 'charge' && i.parent_key === service.local_key)
-          : undefined
         const systemsForSite = resolvedSiteId
           ? props.siteSystems.filter((s) => s.site_id === resolvedSiteId)
           : []
@@ -488,29 +640,68 @@ export function ContractReviewDetail(props: Props) {
                 onChange={(v) => save(sys.id, { linkedId: v })}
               />
             ) : state[sys.id].action === 'create' ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="System name">
-                  <Input
-                    disabled={!editable}
-                    value={(state[sys.id].payload.name as string) ?? ''}
-                    onChange={(e) => setPayload(sys.id, 'name', e.target.value)}
-                  />
-                </Field>
-                <Field label="System type">
-                  <TypeSelect
-                    editable={editable}
-                    value={(state[sys.id].payload.system_type_id as string) ?? null}
-                    options={props.systemTypes}
-                    onChange={(v) => setPayload(sys.id, 'system_type_id', v)}
-                  />
-                </Field>
+              <div className="space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="System name">
+                    <Input
+                      disabled={!editable}
+                      value={(state[sys.id].payload.name as string) ?? ''}
+                      onChange={(e) => setPayload(sys.id, 'name', e.target.value)}
+                    />
+                  </Field>
+                  <Field label="System type">
+                    <TypeSelect
+                      editable={editable}
+                      value={(state[sys.id].payload.system_type_id as string) ?? null}
+                      options={props.systemTypes}
+                      onChange={(v) => setPayload(sys.id, 'system_type_id', v)}
+                    />
+                  </Field>
+                </div>
+                <MoreDetails>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Location">
+                      <Input
+                        disabled={!editable}
+                        placeholder="e.g. Plant room, Level 2"
+                        value={(state[sys.id].payload.location as string) ?? ''}
+                        onChange={(e) => setPayload(sys.id, 'location', e.target.value)}
+                      />
+                    </Field>
+                    <Field label="Install date">
+                      <Input
+                        type="date"
+                        disabled={!editable}
+                        value={(state[sys.id].payload.install_date as string) ?? ''}
+                        onChange={(e) => setPayload(sys.id, 'install_date', e.target.value || null)}
+                      />
+                    </Field>
+                  </div>
+                  <div>
+                    <div className="mb-2 text-xs font-medium text-muted-foreground">
+                      Visit requirements
+                    </div>
+                    <FlagsGrid
+                      payload={state[sys.id].payload}
+                      onToggle={(k, v) => setPayload(sys.id, k, v)}
+                      editable={editable}
+                    />
+                  </div>
+                </MoreDetails>
               </div>
             ) : null}
 
-            {/* Service */}
-            {service && state[sys.id].action !== 'skip' && (
-              <>
-                <Separator className="my-2" />
+            {/* Services + their charges (one per priced line) */}
+            {state[sys.id].action !== 'skip' &&
+              services.map((service) => {
+                const charge = items.find(
+                  (i) => i.entity_type === 'charge' && i.parent_key === service.local_key,
+                )
+                return (
+                  <div
+                    key={service.id}
+                    className="mt-3 space-y-3 rounded-md border bg-muted/20 p-3"
+                  >
                 <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                   <Wrench className="h-4 w-4" /> Service
                 </div>
@@ -607,14 +798,64 @@ export function ContractReviewDetail(props: Props) {
                         />
                       </Field>
                     )}
+                    <Field label="First / next service date">
+                      <Input
+                        type="date"
+                        disabled={!editable}
+                        value={(state[service.id].payload.next_service_date as string) ?? ''}
+                        onChange={(e) =>
+                          setPayload(service.id, 'next_service_date', e.target.value || null)
+                        }
+                      />
+                    </Field>
+                    <div className="sm:col-span-2">
+                      <MoreDetails>
+                        <SwitchField
+                          label="Comprehensive cover"
+                          checked={state[service.id].payload.comprehensive_cover === true}
+                          onChange={(v) => setPayload(service.id, 'comprehensive_cover', v)}
+                          editable={editable}
+                        />
+                        <Field label="Reporting emails">
+                          <Textarea
+                            disabled={!editable}
+                            rows={2}
+                            placeholder="Comma-separated addresses for this service's reports"
+                            value={emailsToText(state[service.id].payload.reporting_emails)}
+                            onChange={(e) =>
+                              setPayload(
+                                service.id,
+                                'reporting_emails',
+                                textToEmails(e.target.value),
+                              )
+                            }
+                          />
+                        </Field>
+                        <div>
+                          <div className="mb-2 text-xs font-medium text-muted-foreground">
+                            Visit requirements
+                          </div>
+                          <FlagsGrid
+                            payload={state[service.id].payload}
+                            onToggle={(k, v) => setPayload(service.id, k, v)}
+                            editable={editable}
+                          />
+                        </div>
+                      </MoreDetails>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <MissingInfo
+                        fields={[
+                          !state[service.id].payload.service_type_id && 'service type',
+                          !state[service.id].payload.next_service_date && 'first service date',
+                        ].filter(Boolean) as string[]}
+                      />
+                    </div>
                   </div>
                 ) : null}
-              </>
-            )}
-
-            {/* Charge */}
-            {charge && state[sys.id].action !== 'skip' && state[service!.id].action !== 'skip' && (
-              <>
+                {/* Charge for this service */}
+                {charge && state[service.id].action !== 'skip' && (
+                  <>
                 <Separator className="my-2" />
                 <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                   <Coins className="h-4 w-4" /> Recurring charge
@@ -727,10 +968,57 @@ export function ContractReviewDetail(props: Props) {
                         />
                       </Field>
                     )}
+                    <div className="sm:col-span-2">
+                      <MoreDetails>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <Field label="Billing timing">
+                            <Select
+                              disabled={!editable}
+                              value={(state[charge.id].payload.timing as string) ?? 'advance'}
+                              onValueChange={(v) => setPayload(charge.id, 'timing', v)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="advance">In advance</SelectItem>
+                                <SelectItem value="arrears">In arrears</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </Field>
+                          <Field label="Start date">
+                            <Input
+                              type="date"
+                              disabled={!editable}
+                              value={(state[charge.id].payload.start_date as string) ?? ''}
+                              onChange={(e) =>
+                                setPayload(charge.id, 'start_date', e.target.value || null)
+                              }
+                            />
+                          </Field>
+                          <Field label="Nominal code" className="sm:col-span-2">
+                            <TypeSelect
+                              editable={editable}
+                              allowClear
+                              placeholder="Resolve automatically"
+                              value={(state[charge.id].payload.nominal_code_id as string) ?? null}
+                              options={props.nominalCodes.map((n) => ({
+                                id: n.id,
+                                name: `${n.code} — ${n.name}`,
+                              }))}
+                              onChange={(v) => setPayload(charge.id, 'nominal_code_id', v)}
+                            />
+                          </Field>
+                        </div>
+                      </MoreDetails>
+                    </div>
                   </div>
                 )}
-              </>
-            )}
+                  </>
+                )}
+                  </div>
+                )
+              })}
           </EntityCard>
         )
       })}
@@ -943,11 +1231,15 @@ function TypeSelect({
   options,
   onChange,
   editable,
+  placeholder = 'Select',
+  allowClear = false,
 }: {
   value: string | null
   options: IdName[]
   onChange: (v: string | null) => void
   editable: boolean
+  placeholder?: string
+  allowClear?: boolean
 }) {
   return (
     <Select
@@ -956,9 +1248,14 @@ function TypeSelect({
       onValueChange={(v) => onChange(v === NONE ? null : v)}
     >
       <SelectTrigger>
-        <SelectValue placeholder="Select" />
+        <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
+        {allowClear && (
+          <SelectItem value={NONE}>
+            <span className="text-muted-foreground">None</span>
+          </SelectItem>
+        )}
         {options.map((o) => (
           <SelectItem key={o.id} value={o.id}>
             {o.name}
@@ -967,4 +1264,100 @@ function TypeSelect({
       </SelectContent>
     </Select>
   )
+}
+
+// Collapsible "More details" area so secondary setup fields stay out of the way
+// but remain fully editable before commit.
+function MoreDetails({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="rounded-md border border-dashed">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+      >
+        <span>More details</span>
+        <ChevronDown className={cn('h-4 w-4 transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && <div className="space-y-3 border-t p-3">{children}</div>}
+    </div>
+  )
+}
+
+// Amber, non-blocking hint listing recommended-but-empty fields for an entity.
+function MissingInfo({ fields }: { fields: string[] }) {
+  if (fields.length === 0) return null
+  return (
+    <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <span>
+        <span className="font-medium">Recommended: </span>
+        {fields.join(', ')}
+      </span>
+    </div>
+  )
+}
+
+function SwitchField({
+  label,
+  checked,
+  onChange,
+  editable,
+}: {
+  label: string
+  checked: boolean
+  onChange: (v: boolean) => void
+  editable: boolean
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+      <Label className="text-sm font-normal">{label}</Label>
+      <Switch checked={checked} onCheckedChange={onChange} disabled={!editable} />
+    </div>
+  )
+}
+
+// Shared booking/access/keys/two-engineers requirement flags used by site,
+// system and service entities.
+function FlagsGrid({
+  payload,
+  onToggle,
+  editable,
+}: {
+  payload: Record<string, unknown>
+  onToggle: (key: string, v: boolean) => void
+  editable: boolean
+}) {
+  const flags: { key: string; label: string }[] = [
+    { key: 'booking_required', label: 'Booking required' },
+    { key: 'access_required', label: 'Access required' },
+    { key: 'keys_required', label: 'Keys required' },
+    { key: 'two_engineers_required', label: 'Two engineers' },
+  ]
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {flags.map((f) => (
+        <SwitchField
+          key={f.key}
+          label={f.label}
+          checked={payload[f.key] === true}
+          onChange={(v) => onToggle(f.key, v)}
+          editable={editable}
+        />
+      ))}
+    </div>
+  )
+}
+
+// Reporting emails are stored as a string[]; edited as a comma/newline list.
+function emailsToText(v: unknown): string {
+  if (Array.isArray(v)) return (v as string[]).join(', ')
+  return typeof v === 'string' ? v : ''
+}
+function textToEmails(text: string): string[] {
+  return text
+    .split(/[,\n;]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
 }

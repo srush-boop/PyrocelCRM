@@ -170,6 +170,15 @@ function int(payload: Record<string, unknown>, key: string, fallback = 0): numbe
   const v = payload[key]
   return typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : fallback
 }
+function bool(payload: Record<string, unknown>, key: string): boolean {
+  return payload[key] === true
+}
+// String array (e.g. reporting_emails), trimmed and de-blanked.
+function arr(payload: Record<string, unknown>, key: string): string[] {
+  const v = payload[key]
+  if (!Array.isArray(v)) return []
+  return (v as unknown[]).map((x) => String(x).trim()).filter(Boolean)
+}
 
 /**
  * Commit a contract review: create/link live records in dependency order
@@ -236,6 +245,8 @@ export async function commitContractReview(
             contact_email: str(p, 'contact_email'),
             contact_phone: str(p, 'contact_phone'),
             address: str(p, 'address'),
+            notes: str(p, 'notes'),
+            requires_po: bool(p, 'requires_po'),
           })
           .select('id')
           .single()
@@ -305,6 +316,21 @@ export async function commitContractReview(
             contact_name: str(p, 'contact_name'),
             contact_email: str(p, 'contact_email'),
             contact_phone: str(p, 'contact_phone'),
+            branch_id: str(p, 'branch_id'),
+            property_type_id: str(p, 'property_type_id'),
+            site_id_cash: str(p, 'site_id_cash'),
+            uprn: str(p, 'uprn'),
+            notes: str(p, 'notes'),
+            reporting_emails: arr(p, 'reporting_emails'),
+            has_remote_monitoring: bool(p, 'has_remote_monitoring'),
+            remote_monitoring_type: str(p, 'remote_monitoring_type'),
+            monitoring_station_name: str(p, 'monitoring_station_name'),
+            monitoring_station_phone: str(p, 'monitoring_station_phone'),
+            monitoring_station_url: str(p, 'monitoring_station_url'),
+            booking_required: bool(p, 'booking_required'),
+            access_required: bool(p, 'access_required'),
+            keys_required: bool(p, 'keys_required'),
+            two_engineers_required: bool(p, 'two_engineers_required'),
             client_id: clientId,
             status: 'live',
             created_by: userId,
@@ -336,6 +362,12 @@ export async function commitContractReview(
             system_type_id: (p.system_type_id as string) ?? null,
             name: str(p, 'name') ?? 'System',
             description: str(p, 'description'),
+            location: str(p, 'location'),
+            install_date: str(p, 'install_date'),
+            booking_required: bool(p, 'booking_required'),
+            access_required: bool(p, 'access_required'),
+            keys_required: bool(p, 'keys_required'),
+            two_engineers_required: bool(p, 'two_engineers_required'),
           })
           .select('id')
           .single()
@@ -381,6 +413,13 @@ export async function commitContractReview(
             subcontractor_id: workerType === 'subcontractor' ? (p.subcontractor_id as string) ?? null : null,
             subcontractor_annual_cost_pence:
               workerType === 'subcontractor' ? (p.subcontractor_annual_cost_pence as number) ?? null : null,
+            next_service_date: str(p, 'next_service_date'),
+            comprehensive_cover: bool(p, 'comprehensive_cover'),
+            reporting_emails: arr(p, 'reporting_emails'),
+            booking_required: bool(p, 'booking_required'),
+            access_required: bool(p, 'access_required'),
+            keys_required: bool(p, 'keys_required'),
+            two_engineers_required: bool(p, 'two_engineers_required'),
             active: true,
           })
           .select('id')
@@ -422,6 +461,9 @@ export async function commitContractReview(
           frequency: str(p, 'frequency') ?? 'annual',
           price_basis: str(p, 'price_basis') ?? 'per_period',
           renewal_month: renewalMonth,
+          timing: str(p, 'timing') ?? 'advance',
+          start_date: str(p, 'start_date'),
+          nominal_code_id: str(p, 'nominal_code_id'),
           is_subcontracted: isSub,
           subcontract_price_pence: isSub ? (p.subcontract_price_pence as number) ?? null : null,
           active: true,

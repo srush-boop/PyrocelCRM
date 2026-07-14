@@ -170,6 +170,33 @@ export async function buildContractReviewDraft(
       }
     }
 
+    // Full line items per system — each priced service line becomes its own
+    // service + charge so the committed contract mirrors the quote line-for-line.
+    const linesBySystem = new Map<string, Record<string, unknown>[]>()
+    if (systemIds.length > 0) {
+      const { data: allLines } = await supabase
+        .from('quote_line_items')
+        .select('*')
+        .eq('quote_id', quoteId)
+        .order('position')
+      for (const l of (allLines ?? []) as Record<string, unknown>[]) {
+        const sid = l.system_id as string | null
+        if (!sid) continue
+        if (!linesBySystem.has(sid)) linesBySystem.set(sid, [])
+        linesBySystem.get(sid)!.push(l)
+      }
+    }
+
+    // Service types power per-line frequency/worker defaults on the service +
+    // charge drafts.
+    const { data: serviceTypeRows } = await supabase
+      .from('service_types')
+      .select('id, name, default_frequency_months, default_worker_type, default_chargeable')
+    const serviceTypeById = new Map<string, Record<string, unknown>>()
+    for (const st of (serviceTypeRows ?? []) as Record<string, unknown>[]) {
+      serviceTypeById.set(st.id as string, st)
+    }
+
     const { data: { user } } = await supabase.auth.getUser()
 
     // --- Client item ---
@@ -188,6 +215,8 @@ export async function buildContractReviewDraft(
       contact_email: quote.prospect_email || null,
       contact_phone: quote.prospect_phone || null,
       address: quote.prospect_address || null,
+      notes: null as string | null,
+      requires_po: false,
     }
 
     // --- Site item ---
@@ -220,13 +249,33 @@ export async function buildContractReviewDraft(
         .eq('site_id', siteLinkedId)
       existingServices = (svcRows ?? []) as typeof existingServices
     }
+    const siteContactEmail = quote.prospect_site_email || quote.prospect_email || null
     const siteCreatePayload = {
       name: quote.prospect_site_name || quote.prospect_name || quote.title || 'New site',
       address: quote.prospect_site_address || quote.prospect_address || '',
       postcode: null as string | null,
       contact_name: quote.prospect_site_contact || quote.prospect_contact || null,
-      contact_email: quote.prospect_site_email || quote.prospect_email || null,
+      contact_email: siteContactEmail,
       contact_phone: quote.prospect_site_phone || quote.prospect_phone || null,
+      branch_id: (quote.branch_id as string) ?? null,
+      property_type_id: null as string | null,
+      site_id_cash: null as string | null,
+      uprn: null as string | null,
+      notes: null as string | null,
+      // Reporting emails seed from the site contact so service reports have a
+      // destination out of the box; the reviewer can add more.
+      reporting_emails: siteContactEmail ? [siteContactEmail] : [],
+      // Remote monitoring defaults off; reviewer can enable + fill station details.
+      has_remote_monitoring: false,
+      remote_monitoring_type: null as string | null,
+      monitoring_station_name: null as string | null,
+      monitoring_station_phone: null as string | null,
+      monitoring_station_url: null as string | null,
+      // Site-level visit requirement flags (default off).
+      booking_required: false,
+      access_required: false,
+      keys_required: false,
+      two_engineers_required: false,
     }
 
     const items: ItemDraft[] = []
@@ -258,18 +307,27 @@ export async function buildContractReviewDraft(
       position: pos++,
     })
 
+    // Default renewal month for seeded charges = the acceptance/current month, so
+    // charge generation has a valid anchor without the approver hunting for it.
+    const defaultRenewalMonth = new Date().getMonth() + 1
+
     // --- System / Service / Charge items per quote system ---
+    // One system item per (maintenance-bearing) quote system, then one service +
+    // one charge per priced line under it so the committed contract mirrors the
+    // quote line-for-line. Systems priced purely via a PPM calc (no line items)
+    // keep the single-service fallback.
     for (const sys of systemList) {
       const ppm = ppmBySystem.get(sys.id as string)
-      // Maintenance-bearing systems: those with a PPM calc, a service type, or a
-      // Service/Maintenance work type (SVC). SVC systems priced purely via line
-      // items still need a service + recurring charge on the resulting contract.
-      const isMaintenance = !!ppm || !!sys.service_type_id || sys.work_type === 'SVC'
+      const sysLines = (linesBySystem.get(sys.id as string) ?? []).filter(
+        (l) => l.is_service !== false,
+      )
+      // Maintenance-bearing systems: those with a PPM calc, a service type, a
+      // Service/Maintenance work type (SVC), or priced service lines.
+      const isMaintenance =
+        !!ppm || !!sys.service_type_id || sys.work_type === 'SVC' || sysLines.length > 0
       if (!isMaintenance) continue
 
       const sysKey = `system:${sys.id}`
-      const svcKey = `service:${sys.id}`
-      const chargeKey = `charge:${sys.id}`
 
       // System match within a linked site by system type.
       let sysSuggested: BestMatch = { id: null, confidence: 0 }
@@ -296,64 +354,115 @@ export async function buildContractReviewDraft(
           name: sys.system_name || 'System',
           system_type_id: sys.system_type_id ?? null,
           description: sys.specification || null,
+          location: null,
+          install_date: null,
+          booking_required: false,
+          access_required: false,
+          keys_required: false,
+          two_engineers_required: false,
         },
         source_quote_system_id: sys.id as string,
         position: pos++,
       })
 
-      // Service (site_service) for this system's service type.
-      const numVisits = Number(ppm?.num_visits ?? 1)
-      const months = monthsFromVisits(numVisits)
-      let svcSuggested: BestMatch = { id: null, confidence: 0 }
-      if (siteLinkedId && sys.service_type_id && sysSuggested.id) {
-        const sameSvc = existingServices.filter(
-          (e) => e.service_type_id === sys.service_type_id && e.site_system_id === sysSuggested.id,
-        )
-        if (sameSvc.length >= 1) svcSuggested = { id: sameSvc[0].id, confidence: 1 }
+      // Helper: push a service + its charge, parented to this system.
+      const pushServiceAndCharge = (args: {
+        idx: number
+        serviceTypeId: string | null
+        description: string
+        pricePence: number
+      }) => {
+        const { idx, serviceTypeId, description, pricePence } = args
+        const svcKey = `service:${sys.id}:${idx}`
+        const chargeKey = `charge:${sys.id}:${idx}`
+        const st = serviceTypeId ? serviceTypeById.get(serviceTypeId) : null
+        const months = st ? Number(st.default_frequency_months ?? 12) : monthsFromVisits(Number(ppm?.num_visits ?? 1))
+        const workerType = (st?.default_worker_type as string) || 'cdo'
+
+        // Suggest an existing matching service on a linked site.
+        let svcSuggested: BestMatch = { id: null, confidence: 0 }
+        if (siteLinkedId && serviceTypeId && sysSuggested.id) {
+          const sameSvc = existingServices.filter(
+            (e) => e.service_type_id === serviceTypeId && e.site_system_id === sysSuggested.id,
+          )
+          if (sameSvc.length >= 1) svcSuggested = { id: sameSvc[0].id, confidence: 1 }
+        }
+
+        items.push({
+          entity_type: 'service',
+          action: svcSuggested.confidence >= MATCH_THRESHOLD ? 'link' : 'create',
+          linked_id: null,
+          suggested_id: svcSuggested.id,
+          match_confidence: svcSuggested.id ? svcSuggested.confidence : null,
+          local_key: svcKey,
+          parent_key: sysKey,
+          payload: {
+            service_type_id: serviceTypeId,
+            frequency_value: months,
+            frequency_unit: 'months',
+            frequency_months: months,
+            worker_type: workerType,
+            subcontractor_id: null,
+            subcontractor_annual_cost_pence: null,
+            next_service_date: null,
+            comprehensive_cover: false,
+            booking_required: false,
+            access_required: false,
+            keys_required: false,
+            two_engineers_required: false,
+            reporting_emails: siteContactEmail ? [siteContactEmail] : [],
+          },
+          source_quote_system_id: sys.id as string,
+          position: pos++,
+        })
+
+        items.push({
+          entity_type: 'charge',
+          action: 'create',
+          linked_id: null,
+          suggested_id: null,
+          match_confidence: null,
+          local_key: chargeKey,
+          parent_key: svcKey,
+          payload: {
+            description,
+            unit_price_pence: pricePence,
+            quantity: 1,
+            frequency: chargeFrequencyFromMonths(months),
+            price_basis: 'per_period',
+            timing: 'advance',
+            renewal_month: defaultRenewalMonth,
+            start_date: null,
+            nominal_code_id: null,
+            is_subcontracted: false,
+            subcontract_price_pence: null,
+          },
+          source_quote_system_id: sys.id as string,
+          position: pos++,
+        })
       }
-      items.push({
-        entity_type: 'service',
-        action: svcSuggested.confidence >= MATCH_THRESHOLD ? 'link' : 'create',
-        linked_id: null,
-        suggested_id: svcSuggested.id,
-        match_confidence: svcSuggested.id ? svcSuggested.confidence : null,
-        local_key: svcKey,
-        parent_key: sysKey,
-        payload: {
-          service_type_id: sys.service_type_id ?? null,
-          frequency_value: months,
-          frequency_unit: 'months',
-          frequency_months: months,
-          worker_type: 'cdo',
-          subcontractor_id: null,
-          subcontractor_annual_cost_pence: null,
-        },
-        source_quote_system_id: sys.id as string,
-        position: pos++,
-      })
 
-      // Recurring charge from the PPM price (annualised).
-      const pricePence = Number(ppm?.computed_price_pence ?? sys.subtotal_pence ?? 0)
-      items.push({
-        entity_type: 'charge',
-        action: 'create',
-        linked_id: null,
-        suggested_id: null,
-        match_confidence: null,
-        local_key: chargeKey,
-        parent_key: svcKey,
-        payload: {
+      if (sysLines.length > 0) {
+        // One service + charge per priced service line.
+        sysLines.forEach((l, idx) => {
+          const total = Number(l.line_total_pence ?? 0)
+          pushServiceAndCharge({
+            idx,
+            serviceTypeId: (l.service_type_id as string) ?? sys.service_type_id ?? null,
+            description: (l.description as string) || `${sys.system_name || 'Maintenance'} service`,
+            pricePence: total,
+          })
+        })
+      } else {
+        // PPM-only / untyped fallback: single service + charge for the system.
+        const pricePence = Number(ppm?.computed_price_pence ?? sys.subtotal_pence ?? 0)
+        pushServiceAndCharge({
+          idx: 0,
+          serviceTypeId: (sys.service_type_id as string) ?? null,
           description: `${sys.system_name || 'Maintenance'} — routine maintenance`,
-          unit_price_pence: pricePence,
-          quantity: 1,
-          frequency: chargeFrequencyFromMonths(months),
-          price_basis: 'per_period',
-          is_subcontracted: false,
-          subcontract_price_pence: null,
-        },
-        source_quote_system_id: sys.id as string,
-        position: pos++,
-      })
+          pricePence,
+        })
+      }
     }
 
     // Create the review + items.

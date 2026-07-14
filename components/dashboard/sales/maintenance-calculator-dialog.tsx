@@ -272,7 +272,7 @@ export function MaintenanceCalculatorDialog({
           assets: intruderAssets as Partial<Record<keyof typeof INTRUDER_HOURS, number>>,
           visits: intruderVisits,
           platinum: intruderPlatinum,
-          // Out-of-hours cover is emitted as an optional add-on line instead.
+          // Out-of-hours cover is not offered from the maintenance calculator.
           outOfHours: false,
         },
         cctv: {
@@ -476,9 +476,6 @@ export function MaintenanceCalculatorDialog({
                     <Switch id="intruder-plat" checked={intruderPlatinum} onCheckedChange={setIntruderPlatinum} disabled={disabled} />
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Out-of-hours cover is added automatically as an optional add-on the client can select.
-                </p>
                 <Separator />
                 <AssetGrid labels={INTRUDER_ASSET_LABELS} counts={intruderAssets} setCounts={setIntruderAssets} disabled={disabled} />
               </TabsContent>
@@ -512,9 +509,6 @@ export function MaintenanceCalculatorDialog({
                     </div>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Out-of-hours cover is added automatically as an optional add-on the client can select.
-                </p>
                 <Separator />
                 <AssetGrid labels={CCTV_ASSET_LABELS} counts={cctvAssets} setCounts={setCctvAssets} disabled={disabled} />
               </TabsContent>
@@ -527,9 +521,6 @@ export function MaintenanceCalculatorDialog({
                     <Input type="number" min={1} className="h-9" value={accessVisits || ''} onChange={(e) => setAccessVisits(Math.max(1, Number.parseInt(e.target.value, 10) || 1))} disabled={disabled} />
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Out-of-hours cover is added automatically as an optional add-on the client can select.
-                </p>
                 <Separator />
                 <AssetGrid labels={ACCESS_ASSET_LABELS} counts={accessAssets} setCounts={setAccessAssets} disabled={disabled} />
               </TabsContent>
@@ -542,9 +533,6 @@ export function MaintenanceCalculatorDialog({
                     <Input type="number" min={1} className="h-9" value={damperVisits || ''} onChange={(e) => setDamperVisits(Math.max(1, Number.parseInt(e.target.value, 10) || 1))} disabled={disabled} />
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Out-of-hours cover is added automatically as an optional add-on the client can select.
-                </p>
                 <Separator />
                 <CountRow label="Mechanical dampers" value={mechanicalDampers} onChange={setMechanicalDampers} disabled={disabled} />
                 <CountRow label="Automatic dampers" value={automaticDampers} onChange={setAutomaticDampers} disabled={disabled} />
@@ -702,26 +690,15 @@ export function MaintenanceCalculatorDialog({
                           {l.description}
                           {l.coverType ? <span className="text-muted-foreground"> · {l.coverType}</span> : null}
                           {l.visits ? <span className="text-muted-foreground"> · {l.visits} visits</span> : null}
-                          {l.optional ? (
-                            <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                              Optional
-                            </span>
-                          ) : null}
                         </span>
                         <span className="shrink-0 font-medium tabular-nums">{GBP.format(l.sell)}</span>
                       </div>
                     ))}
                     <Separator className="my-2" />
                     <div className="flex items-center justify-between text-base font-bold">
-                      <span>Core annual price</span>
+                      <span>Annual price</span>
                       <span className="tabular-nums">{GBP.format(overview.totalSale)}</span>
                     </div>
-                    {overview.lines.some((l) => l.optional) ? (
-                      <p className="text-xs text-muted-foreground">
-                        Optional cover choices and out-of-hours add-ons are excluded from the core price
-                        — the client selects the ones they want on the quote.
-                      </p>
-                    ) : null}
                   </div>
                 ) : (
                   <p className="py-6 text-center text-sm text-muted-foreground">
@@ -748,7 +725,6 @@ export function MaintenanceCalculatorDialog({
                         {l.description}
                         {l.coverType ? ` · ${l.coverType}` : ''}
                         {l.visits ? ` · ${l.visits} visits` : ''}
-                        {l.optional ? ' · optional' : ''}
                       </span>
                       <span className="shrink-0 font-medium tabular-nums text-foreground">{GBP.format(l.sell)}</span>
                     </div>

@@ -606,6 +606,42 @@ export interface MaintenanceLine {
   optional?: boolean
   /** Optional lines sharing a group are mutually exclusive (client picks one). */
   optionGroup?: string
+  /** Discipline key (e.g. 'fire', 'el', 'intruder') — carried onto the quote so
+   *  the contract review can type the resulting system/service. */
+  serviceKey?: string
+  /** Matching `system_types.code` for this discipline (FA, EL, INTR, CCTV, AC,
+   *  FD, REM-MON…), used to build one typed system per discipline. */
+  systemTypeCode?: string
+  /** Recurring maintenance cadence in months where it maps cleanly (annual = 12,
+   *  monthly = 1). Left undefined for weekly/irregular cadences. */
+  frequencyMonths?: number
+}
+
+// Discipline (serviceKey) → matching system_types.code. Lines without a mapping
+// (e.g. sub-contracts) fall back to an untyped "Routine Maintenance" system.
+export const SERVICE_KEY_SYSTEM_CODE: Record<string, string> = {
+  fire: 'FA',
+  fireWeekly: 'FA',
+  el: 'EL',
+  elMonthly: 'EL',
+  intruder: 'INTR',
+  cctv: 'CCTV',
+  access: 'AC',
+  dampers: 'FD',
+  monitoring: 'REM-MON',
+}
+
+// Discipline (serviceKey) → clean recurring cadence in months (omitted = leave
+// to the matched service type's default, e.g. weekly testing).
+const SERVICE_KEY_FREQUENCY_MONTHS: Record<string, number> = {
+  fire: 12,
+  el: 12,
+  elMonthly: 1,
+  intruder: 12,
+  cctv: 12,
+  access: 12,
+  dampers: 12,
+  monitoring: 12,
 }
 
 export interface SubcontractInput {
@@ -714,7 +750,7 @@ export function calcOverview(
     description: string,
     price: number,
     serviceKey: keyof typeof MAINTENANCE_SERVICE_META,
-    extra: { coverType?: string; visits?: number | string; optional?: boolean; optionGroup?: string } = {},
+    extra: { coverType?: string; visits?: number | string } = {},
   ) => {
     if (price <= 0) return
     const meta = MAINTENANCE_SERVICE_META[serviceKey]
@@ -725,22 +761,10 @@ export function calcOverview(
       category: 'direct',
       standard: meta?.standard || undefined,
       overview: meta?.overview || undefined,
+      serviceKey,
+      systemTypeCode: SERVICE_KEY_SYSTEM_CODE[serviceKey],
+      frequencyMonths: SERVICE_KEY_FREQUENCY_MONTHS[serviceKey],
       ...extra,
-    })
-  }
-
-  // Push an optional out-of-hours add-on for a service (client opt-in). The
-  // uplift is 50% of the standard base price.
-  const pushOutOfHours = (label: string, base: number) => {
-    if (base <= 0) return
-    const meta = MAINTENANCE_SERVICE_META.outOfHours
-    lines.push({
-      description: `${label} — Out of Hours Cover`,
-      price: round2(base * 0.5),
-      sell: applyDiscount(base * 0.5),
-      category: 'direct',
-      overview: meta.overview,
-      optional: true,
     })
   }
 
@@ -750,29 +774,19 @@ export function calcOverview(
     const visits = input.fire.visits
     const stdPrice = visits === 4 ? f.standardFour : f.standardTwo
     const compPrice = visits === 4 ? f.comprehensiveFour : f.comprehensiveTwo
+    // Comprehensive cover (when selected) is quoted as the single core line;
+    // otherwise Standard. No optional cover choices are emitted.
     if (input.fire.includeComprehensive) {
-      // Offer Standard and Comprehensive cover as mutually-exclusive options so
-      // the client selects the level they want.
-      pushDirect('Annual Fire Alarm Maintenance', stdPrice, 'fire', {
-        coverType: 'Standard',
-        visits,
-        optional: true,
-        optionGroup: 'fire-cover',
-      })
       pushDirect('Annual Fire Alarm Maintenance', compPrice, 'fire', {
         coverType: 'Comprehensive',
         visits,
-        optional: true,
-        optionGroup: 'fire-cover',
       })
     } else {
-      // Standard cover only: quote it as the core (non-optional) line.
       pushDirect('Annual Fire Alarm Maintenance', stdPrice, 'fire', {
         coverType: 'Standard',
         visits,
       })
     }
-    pushOutOfHours('Fire Alarm Maintenance', stdPrice)
     pushDirect('Fire Alarm Weekly Testing', f.weeklyFireTesting, 'fireWeekly', {
       visits: input.fire.weeklyFireTestingVisits,
     })
@@ -792,7 +806,6 @@ export function calcOverview(
       coverType: input.intruder.platinum ? 'Platinum' : 'Standard',
       visits: input.intruder.visits || 2,
     })
-    pushOutOfHours('Intruder Alarm Maintenance', r.base)
   }
 
   // CCTV (OVERVIEW row 13)
@@ -801,7 +814,6 @@ export function calcOverview(
     pushDirect('Annual CCTV Maintenance', r.total - r.outOfHoursUplift, 'cctv', {
       visits: input.cctv.visits || 1,
     })
-    pushOutOfHours('CCTV Maintenance', r.base)
   }
 
   // Access (OVERVIEW row 14)
@@ -810,7 +822,6 @@ export function calcOverview(
     pushDirect('Annual Access Control Maintenance', r.total - r.outOfHoursUplift, 'access', {
       visits: input.access.visits || 1,
     })
-    pushOutOfHours('Access Control Maintenance', r.base)
   }
 
   // Dampers (OVERVIEW row 15)
@@ -819,7 +830,6 @@ export function calcOverview(
     pushDirect('Annual Damper Maintenance', r.total - r.outOfHoursUplift, 'dampers', {
       visits: input.dampers.visits || 1,
     })
-    pushOutOfHours('Damper Maintenance', r.base)
   }
 
   // Monitoring (OVERVIEW rows 18-20)
@@ -835,6 +845,9 @@ export function calcOverview(
         category: 'monitoring',
         standard: meta.standard,
         overview: meta.overview,
+        serviceKey: 'monitoring',
+        systemTypeCode: SERVICE_KEY_SYSTEM_CODE.monitoring,
+        frequencyMonths: SERVICE_KEY_FREQUENCY_MONTHS.monitoring,
       })
     }
     pushMonitoring('Annual Fire Alarm Monitoring', m.fireSell)

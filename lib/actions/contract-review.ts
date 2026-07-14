@@ -305,6 +305,15 @@ export async function commitContractReview(
         if (!serviceId) return { ok: false, error: 'Select a service to link, or choose Create.' }
       } else {
         const p = svc.payload
+        const serviceTypeId = str(p, 'service_type_id')
+        // service_type_id is required on site_services — a service with no type
+        // can't be committed. Ask the reviewer to pick one or skip the service.
+        if (!serviceTypeId) {
+          return {
+            ok: false,
+            error: 'A service is missing its service type. Set a service type or skip it, then commit again.',
+          }
+        }
         const months = int(p, 'frequency_months', int(p, 'frequency_value', 12))
         const workerType = str(p, 'worker_type') ?? 'cdo'
         const { data, error } = await supabase
@@ -312,7 +321,7 @@ export async function commitContractReview(
           .insert({
             site_id: siteId,
             site_system_id: systemId,
-            service_type_id: (p.service_type_id as string) ?? null,
+            service_type_id: serviceTypeId,
             frequency_value: int(p, 'frequency_value', months),
             frequency_unit: str(p, 'frequency_unit') ?? 'months',
             frequency_months: months,

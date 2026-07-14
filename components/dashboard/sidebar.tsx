@@ -23,7 +23,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import { ChevronRight, Settings, BookOpen, HelpCircle } from 'lucide-react'
+import { ChevronRight, Settings, BookOpen, HelpCircle, Wallet } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 import { getVisibleMenu, type NavItem, type NavChild } from '@/lib/config/navigation'
 import { ChatNavBadge } from '@/components/dashboard/chat/chat-nav-badge'
@@ -148,6 +148,25 @@ export function DashboardSidebar({ profile }: DashboardSidebarProps) {
   const pathname = usePathname()
   const navItems = getVisibleMenu(profile.role, profile.menu_permissions)
 
+  // Labour Costs is a sensitive, individually-granted view (not a role menu key),
+  // so we inject it here rather than in the shared role menus. Mirrors the pure
+  // predicate in lib/auth/labour-costs.ts (which is server-only and can't be
+  // imported into this client component).
+  const canViewLabourCosts =
+    profile.can_view_labour_costs === true ||
+    (profile.email ?? '').toLowerCase() === 'steve.rush@pyrocel.co.uk'
+  const menuItems: NavItem[] = canViewLabourCosts
+    ? [
+        ...navItems,
+        {
+          key: 'labour-costs',
+          title: 'Labour Costs',
+          href: '/dashboard/labour-costs',
+          icon: Wallet,
+        },
+      ]
+    : navItems
+
   return (
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border px-6 py-4">
@@ -171,7 +190,7 @@ export function DashboardSidebar({ profile }: DashboardSidebarProps) {
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) =>
+              {menuItems.map((item) =>
                 item.children ? (
                   <NavGroupItem key={item.key} item={item} />
                 ) : (

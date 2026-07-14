@@ -150,6 +150,26 @@ export function ServiceVisitTypesManager({
       .eq('id', id)
   }
 
+  // Relative revenue weight of a visit type. When a cycle contains differently
+  // valued visits (e.g. a heavy Annual vs a light Periodic), the cycle's revenue
+  // is apportioned across visits in proportion to these weights.
+  const setWeight = (id: string, weight: number) => {
+    setVisits((prev) => prev.map((v) => (v.id === id ? { ...v, revenue_weight: weight } : v)))
+  }
+
+  const persistWeight = async (id: string, raw: string) => {
+    const n = Number.parseFloat(raw)
+    const weight = Number.isFinite(n) && n > 0 ? n : 1
+    setWeight(id, weight)
+    await supabase
+      .from('service_visit_types')
+      .update({ revenue_weight: weight, updated_at: new Date().toISOString() })
+      .eq('id', id)
+  }
+
+  // Sum of weights, used to show each visit's share of the cycle revenue.
+  const totalWeight = visits.reduce((sum, v) => sum + (v.revenue_weight ?? 1), 0) || 1
+
   const removeVisit = async (id: string) => {
     setBusy(true)
     // Remove the visit's own checklist first so it isn't left orphaned.
@@ -262,6 +282,32 @@ export function ServiceVisitTypesManager({
                     </Button>
                   </div>
                 </div>
+
+                {/* Revenue weight: how much of the cycle's value this visit carries,
+                    relative to the others. Only meaningful with 2+ visits. */}
+                {visits.length > 1 && (
+                  <div className="flex flex-wrap items-center gap-2 pl-7">
+                    <Label
+                      htmlFor={`weight-${visit.id}`}
+                      className="text-xs text-muted-foreground"
+                    >
+                      Revenue weight
+                    </Label>
+                    <Input
+                      id={`weight-${visit.id}`}
+                      type="number"
+                      min={0.1}
+                      step="0.1"
+                      defaultValue={visit.revenue_weight ?? 1}
+                      onBlur={(e) => persistWeight(visit.id, e.target.value)}
+                      className="h-8 w-20 bg-background"
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      ≈ {Math.round(((visit.revenue_weight ?? 1) / totalWeight) * 100)}% of cycle
+                      revenue
+                    </span>
+                  </div>
+                )}
 
                 {/* Per-visit checklist: each visit type owns its own checklist. */}
                 <div className="flex items-center gap-2 pl-7">

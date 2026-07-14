@@ -18,6 +18,9 @@ import { resolveSiteFlags } from '@/lib/site-flags'
 import { getOpenRemedialForSite } from '@/lib/remedial'
 import { DeadlineFailedPanel } from '@/components/dashboard/tasks/deadline-failed-panel'
 import { CallNotesCard } from '@/components/dashboard/tasks/call-notes-card'
+import { CallCostCard } from '@/components/dashboard/tasks/call-cost-card'
+import { getCallProfit } from '@/lib/billing/call-profit-data'
+import { profileCanViewLabourCosts } from '@/lib/auth/labour-costs'
 import { getGlobalConfig } from '@/lib/actions/global-config'
 import { getAllDocumentTags, getOwnerDocuments } from '@/lib/documents/data'
 import type { SiteInternalNote } from '@/lib/types/database'
@@ -279,6 +282,21 @@ export default async function TaskPage({ params }: PageProps) {
         {preAttendancePanel}
       </>
     )
+  }
+
+  // Restricted labour-cost / profitability card. Only for viewers with the
+  // permission, and only once the call is completed (before that there's no
+  // on-site time to cost). Prepended last so it sits at the very top.
+  if (task.status === 'completed' && profileCanViewLabourCosts(profile as Profile)) {
+    const callProfit = await getCallProfit(id)
+    if (callProfit) {
+      preAttendancePanel = (
+        <>
+          <CallCostCard profit={callProfit} />
+          {preAttendancePanel}
+        </>
+      )
+    }
   }
 
   // The shared pre-attendance panel is passed into each execution flow so it can

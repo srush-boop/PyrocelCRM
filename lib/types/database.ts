@@ -620,14 +620,17 @@ export interface ServiceType {
 
 // A distinct visit within a multi-visit service cycle. Visits are evenly split
 // across the service frequency (2 visits over 12 months = 6 months apart).
-export interface ServiceVisitType {
+  export interface ServiceVisitType {
   id: string
   service_type_id: string
   name: string
   sort_order: number
+  // Relative share of a cycle's revenue this visit carries when a cycle mixes
+  // differently valued visit types. Defaults to 1 (equal split).
+  revenue_weight: number
   created_at: string
   updated_at: string
-}
+  }
 
 // A reusable, global non-product service that can be added to any quote system
 // (e.g. Installation, Decommission redundant equipment). Configured under
@@ -1072,6 +1075,9 @@ export interface Site {
   // client (comprehensive cover typically means no/reduced charge). Store-only today.
   comprehensive_cover: boolean
   comprehensive_cover_note: string | null
+  // % uplift baked into a comprehensive service's charge, stripped out to leave
+  // the base service revenue used for profitability. null = no uplift.
+  comprehensive_uplift_pct: number | null
   // Billing account this specific service is invoiced under. null = inherit the
   // site's billing account (which itself falls back to the client default). This
   // is how a single service can be billed to a different (sub-)client than its

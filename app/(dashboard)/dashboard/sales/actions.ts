@@ -1140,6 +1140,111 @@ export async function sendQuote(args: {
   }
 }
 
+/**
+ * Email a copy of the approved contract (the signed quote PDF) to the client
+ * after Pyrocel has committed the contract review. Stamps
+ * contract_reviews.contract_sent_at so the UI reflects that the copy has gone
+ * out. Reuses the same PDF renderer and email transport as sendQuote.
+ */
+export async function sendContractCopy(args: {
+  reviewId: string
+  to: string
+  cc?: string[]
+  subject: string
+  message: string
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const { supabase, user, error } = await requireStaff()
+    if (error || !user) return { ok: false, error: error ?? 'Not authorised.' }
+
+    const to = args.to.trim()
+    if (!/.+@.+\..+/.test(to)) {
+      return { ok: false, error: 'Please enter a valid recipient email address.' }
+    }
+    if (!args.subject.trim()) return { ok: false, error: 'Please enter a subject.' }
+
+    const { data: review } = await supabase
+      .from('contract_reviews')
+      .select('id, quote_id, status')
+      .eq('id', args.reviewId)
+      .single()
+    if (!review) return { ok: false, error: 'Contract review not found.' }
+    if (review.status !== 'committed') {
+      return { ok: false, error: 'Approve (commit) the contract before sending the copy.' }
+    }
+
+    const { data: quote } = await supabase
+      .from('quotes')
+      .select('*, client:clients(*), site:sites(*), preparer:profiles!quotes_created_by_fkey(id, full_name)')
+      .eq('id', review.quote_id)
+      .single()
+    if (!quote) return { ok: false, error: 'Contract quote not found.' }
+
+    const [{ data: systems }, { data: lines }, { data: company }] = await Promise.all([
+      supabase.from('quote_systems').select('*').eq('quote_id', review.quote_id).order('position'),
+      supabase.from('quote_line_items').select('*').eq('quote_id', review.quote_id).order('position'),
+      supabase.from('company_info').select('*').limit(1).maybeSingle(),
+    ])
+
+    const typedQuote = quote as Quote
+    const companyName = (company as CompanyInfo | null)?.name || 'Pyrocel Ltd'
+    const typedLines = (lines ?? []) as QuoteLineItem[]
+    const catalogue = typedQuote.show_equipment_spec
+      ? await loadQuoteCatalogue(supabase, typedLines)
+      : []
+
+    let pdf: Buffer
+    try {
+      pdf = await renderQuotePdfBuffer({
+        quote: typedQuote,
+        systems: (systems ?? []) as QuoteSystem[],
+        lines: typedLines,
+        company: (company ?? null) as CompanyInfo | null,
+        catalogue,
+      })
+    } catch (e) {
+      console.error('[v0] Contract PDF generation failed:', e)
+      return { ok: false, error: 'Could not generate the contract PDF.' }
+    }
+
+    const html = buildQuoteEmailHtml({ message: args.message, companyName })
+    const fileName = `Contract-${(typedQuote.reference ?? typedQuote.quote_number ?? typedQuote.id).toString().replace(/[^a-zA-Z0-9-_]/g, '')}.pdf`
+
+    const result = await sendEmail(to, args.subject.trim(), html, {
+      cc: args.cc,
+      attachments: [{ filename: fileName, content: pdf }],
+    })
+    if (!result.success) {
+      if (result.error === 'Email service not configured') {
+        return {
+          ok: false,
+          error:
+            'Email isn’t configured in this environment, so the contract couldn’t be sent. Add a RESEND_API_KEY to enable sending. You can still use "View signed document" to download and share it manually.',
+        }
+      }
+      return { ok: false, error: result.error || 'The email could not be sent.' }
+    }
+
+    await supabase
+      .from('contract_reviews')
+      .update({ contract_sent_at: new Date().toISOString() })
+      .eq('id', args.reviewId)
+
+    revalidatePath('/dashboard/sales/contract-reviews')
+    revalidatePath(`/dashboard/sales/contract-reviews/${args.reviewId}`)
+    return { ok: true }
+  } catch (e) {
+    console.error('[v0] sendContractCopy unexpected failure:', e)
+    return {
+      ok: false,
+      error:
+        e instanceof Error
+          ? `The contract could not be sent: ${e.message}`
+          : 'The contract could not be sent due to an unexpected error.',
+    }
+  }
+}
+
 /** Delete a quote (systems and line items cascade). */
 export async function deleteQuote(id: string): Promise<{ ok: boolean; error?: string }> {
   const { supabase, user, error } = await requireStaff()

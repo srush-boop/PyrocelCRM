@@ -855,6 +855,53 @@ export function QuoteDocument({
           />
         )}
 
+        {/* Client acceptance / signature — once signed, the document reads as an
+            executed contract (shown on the public page, the PDF and in review). */}
+        {(quote.signature_name || quote.signature_image_url || quote.signed_at) && (
+          <div className="mt-10 break-inside-avoid rounded-lg border-2 border-primary/30 bg-primary/5 p-5">
+            <FieldLabel>Client acceptance</FieldLabel>
+            <p className="mb-4 text-xs text-muted-foreground text-pretty">
+              This quotation has been accepted and electronically signed by the client, and forms a
+              binding contract for the works and services described above.
+            </p>
+            <div className="flex flex-wrap items-end justify-between gap-6">
+              <div className="min-w-[12rem]">
+                {quote.signature_image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={quote.signature_image_url || '/placeholder.svg'}
+                    alt={`Signature of ${quote.signature_name ?? 'client'}`}
+                    className="h-20 w-auto max-w-full object-contain"
+                    crossOrigin="anonymous"
+                  />
+                ) : (
+                  <div className="flex h-20 items-end">
+                    <span className="font-serif text-2xl italic text-foreground">
+                      {quote.signature_name}
+                    </span>
+                  </div>
+                )}
+                <div className="mt-1 border-t pt-1 text-sm font-medium">
+                  {quote.signature_name ?? 'Client'}
+                </div>
+                <div className="text-xs text-muted-foreground">Signed for and on behalf of the client</div>
+              </div>
+              <div className="text-sm">
+                <div className="text-xs text-muted-foreground">Date accepted</div>
+                <div className="font-medium">
+                  {formatDateUK(quote.signed_at ?? quote.decided_at ?? quote.updated_at)}
+                </div>
+                {quote.po_number && (
+                  <div className="mt-2">
+                    <div className="text-xs text-muted-foreground">PO number</div>
+                    <div className="font-medium">{quote.po_number}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Footer */}
         <footer className="mt-10 border-t pt-4 text-center text-xs text-muted-foreground">
           <p>

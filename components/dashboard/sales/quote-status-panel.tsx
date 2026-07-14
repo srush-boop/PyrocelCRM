@@ -13,6 +13,7 @@ import { QUOTE_STATUS_META } from '@/lib/sales'
 import type { Quote, QuoteStatus } from '@/lib/types/database'
 import { setQuoteStatus } from '@/app/(dashboard)/dashboard/sales/actions'
 import { SendQuoteDialog } from './send-quote-dialog'
+import { MarkAcceptedDialog } from './mark-accepted-dialog'
 
 export function QuoteStatusPanel({ quote }: { quote: Quote }) {
   const router = useRouter()

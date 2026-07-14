@@ -14,6 +14,9 @@ import {
   CheckCircle2,
   AlertTriangle,
   Loader2,
+  FileSignature,
+  ExternalLink,
+  Send,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -40,9 +43,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { cn } from '@/lib/utils'
+import { cn, formatDateUK } from '@/lib/utils'
 import { quoteTypeLabel } from '@/lib/sales'
 import { MONTH_LABELS } from '@/lib/billing/recurring'
+import { SendContractDialog } from './send-contract-dialog'
 import {
   updateContractReviewItem,
   updateContractReviewNotes,
@@ -212,11 +216,32 @@ export function ContractReviewDetail(props: Props) {
 
       {!editable && (
         <Card className="border-emerald-200 bg-emerald-50">
-          <CardContent className="flex items-center gap-2 py-3 text-sm text-emerald-800">
-            <CheckCircle2 className="h-4 w-4" />
-            {review.status === 'committed'
-              ? 'This contract has been committed to live records.'
-              : 'This review was cancelled.'}
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm text-emerald-800">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4" />
+              {review.status === 'committed'
+                ? 'This contract has been committed to live records.'
+                : 'This review was cancelled.'}
+            </div>
+            {review.status === 'committed' && quote && (
+              <div className="flex items-center gap-3">
+                {review.contract_sent_at && (
+                  <span className="text-xs text-emerald-700">
+                    Copy sent {formatDateUK(review.contract_sent_at)}
+                  </span>
+                )}
+                <SendContractDialog
+                  reviewId={review.id}
+                  quote={quote}
+                  trigger={
+                    <Button size="sm" variant="outline" className="bg-card">
+                      <Send className="mr-2 h-4 w-4" />
+                      {review.contract_sent_at ? 'Resend contract copy' : 'Email contract copy'}
+                    </Button>
+                  }
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -233,6 +258,71 @@ export function ContractReviewDetail(props: Props) {
                 <li key={a}>{a}</li>
               ))}
             </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Signed contract: the accepted quote, presented for Pyrocel approval. */}
+      {quote && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <FileSignature className="h-5 w-5 text-primary" />
+              Signed contract
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground text-pretty">
+              This Routine Maintenance quotation was accepted by the client and is presented here as
+              a contract for approval. Review the signed document and the draft records below, then
+              commit to create the live client, site, systems, services and charges.
+            </p>
+
+            <div className="flex flex-wrap items-end justify-between gap-6 rounded-lg border bg-card p-4">
+              <div className="min-w-[12rem]">
+                <div className="text-xs text-muted-foreground">Signed by</div>
+                {quote.signature_image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={quote.signature_image_url || '/placeholder.svg'}
+                    alt={`Signature of ${quote.signature_name ?? 'client'}`}
+                    className="mt-1 h-16 w-auto max-w-full object-contain"
+                    crossOrigin="anonymous"
+                  />
+                ) : quote.signature_name ? (
+                  <div className="mt-1 font-serif text-xl italic">{quote.signature_name}</div>
+                ) : (
+                  <div className="mt-1 text-sm text-muted-foreground">
+                    No electronic signature captured
+                  </div>
+                )}
+                {quote.signature_name && (
+                  <div className="mt-1 border-t pt-1 text-sm font-medium">
+                    {quote.signature_name}
+                  </div>
+                )}
+              </div>
+              <div className="text-sm">
+                <div className="text-xs text-muted-foreground">Date accepted</div>
+                <div className="font-medium">
+                  {quote.signed_at || quote.decided_at
+                    ? formatDateUK(quote.signed_at ?? quote.decided_at!)
+                    : '—'}
+                </div>
+                {quote.po_number && (
+                  <div className="mt-2">
+                    <div className="text-xs text-muted-foreground">PO number</div>
+                    <div className="font-medium">{quote.po_number}</div>
+                  </div>
+                )}
+              </div>
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/dashboard/sales/${quote.id}`} target="_blank">
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  View signed document
+                </Link>
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}

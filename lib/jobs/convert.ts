@@ -154,11 +154,24 @@ async function resolveProspectClientAndSite(
     prospect_email: string | null
     prospect_phone: string | null
     prospect_address: string | null
+    prospect_site_name?: string | null
+    prospect_site_contact?: string | null
+    prospect_site_email?: string | null
+    prospect_site_phone?: string | null
+    prospect_site_address?: string | null
     title: string
   },
 ): Promise<{ clientId: string | null; siteId: string | null }> {
   let clientId = quote.client_id ?? null
   let siteId = quote.site_id ?? null
+
+  // Site prospect fields fall back to the client prospect fields when a separate
+  // site wasn't captured (e.g. a new client whose site is the same address).
+  const siteName = quote.prospect_site_name?.trim() || quote.prospect_name?.trim() || quote.title
+  const siteAddress = quote.prospect_site_address ?? quote.prospect_address ?? ''
+  const siteContact = quote.prospect_site_contact ?? quote.prospect_contact ?? null
+  const siteEmail = quote.prospect_site_email ?? quote.prospect_email ?? null
+  const sitePhone = quote.prospect_site_phone ?? quote.prospect_phone ?? null
 
   // Create the client if missing.
   if (!clientId) {
@@ -186,12 +199,12 @@ async function resolveProspectClientAndSite(
     const { data: site, error: sErr } = await supabase
       .from('sites')
       .insert({
-        name: quote.prospect_name?.trim() || quote.title || 'New site',
+        name: siteName || 'New site',
         client_id: clientId,
-        address: quote.prospect_address ?? '',
-        contact_name: quote.prospect_contact ?? null,
-        contact_email: quote.prospect_email ?? null,
-        contact_phone: quote.prospect_phone ?? null,
+        address: siteAddress,
+        contact_name: siteContact,
+        contact_email: siteEmail,
+        contact_phone: sitePhone,
         branch_id: quote.branch_id ?? null,
         status: 'new',
         notes: 'Created automatically from an accepted prospect quote.',

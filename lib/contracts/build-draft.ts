@@ -199,8 +199,10 @@ export async function buildContractReviewDraft(
       []
     if (!siteLinkedId) {
       const { data: sites } = await supabase.from('sites').select('id, name, postcode, address')
+      const siteMatchName = quote.prospect_site_name ?? quote.prospect_name ?? ''
+      const siteMatchAddress = quote.prospect_site_address ?? quote.prospect_address ?? ''
       siteSuggested = bestMatch(
-        `${quote.prospect_name ?? ''} ${quote.prospect_address ?? ''}`.trim() || quote.title,
+        `${siteMatchName} ${siteMatchAddress}`.trim() || quote.title,
         (sites ?? []).map((s) => ({
           id: s.id as string,
           text: `${s.name ?? ''} ${s.postcode ?? ''} ${s.address ?? ''}`.trim(),
@@ -219,12 +221,12 @@ export async function buildContractReviewDraft(
       existingServices = (svcRows ?? []) as typeof existingServices
     }
     const siteCreatePayload = {
-      name: quote.prospect_name || quote.title || 'New site',
-      address: quote.prospect_address || '',
+      name: quote.prospect_site_name || quote.prospect_name || quote.title || 'New site',
+      address: quote.prospect_site_address || quote.prospect_address || '',
       postcode: null as string | null,
-      contact_name: quote.prospect_contact || null,
-      contact_email: quote.prospect_email || null,
-      contact_phone: quote.prospect_phone || null,
+      contact_name: quote.prospect_site_contact || quote.prospect_contact || null,
+      contact_email: quote.prospect_site_email || quote.prospect_email || null,
+      contact_phone: quote.prospect_site_phone || quote.prospect_phone || null,
     }
 
     const items: ItemDraft[] = []
@@ -259,8 +261,10 @@ export async function buildContractReviewDraft(
     // --- System / Service / Charge items per quote system ---
     for (const sys of systemList) {
       const ppm = ppmBySystem.get(sys.id as string)
-      // Only maintenance-bearing systems (have a PPM calc or a service type).
-      const isMaintenance = !!ppm || !!sys.service_type_id
+      // Maintenance-bearing systems: those with a PPM calc, a service type, or a
+      // Service/Maintenance work type (SVC). SVC systems priced purely via line
+      // items still need a service + recurring charge on the resulting contract.
+      const isMaintenance = !!ppm || !!sys.service_type_id || sys.work_type === 'SVC'
       if (!isMaintenance) continue
 
       const sysKey = `system:${sys.id}`

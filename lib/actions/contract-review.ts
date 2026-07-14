@@ -3,6 +3,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import type { Profile, ContractReviewItem } from '@/lib/types/database'
+import { buildContractReviewDraft } from '@/lib/contracts/build-draft'
+import { classifyAcceptedQuote } from '@/lib/contracts/classify'
 
 // Server actions for the Contract Review workflow: reviewers (admin/office)
 // amend the draft items produced from an accepted Routine Maintenance quote and
@@ -28,6 +30,56 @@ async function requireReviewer() {
 }
 
 const QUEUE_PATH = '/dashboard/sales/contract-reviews'
+
+// --- Recovery -----------------------------------------------------------
+
+/**
+ * Build a Contract Review for an accepted Routine-Maintenance quote that never
+ * got one (e.g. it was accepted before the routing fix, or a transient error).
+ * Guards: quote must be accepted and route to contract review. If a delivery
+ * Job was created for the quote in error, it is removed first so the quote is
+ * routed correctly. Idempotent — reuses any existing review.
+ */
+export async function buildContractReviewForQuote(
+  quoteId: string,
+): Promise<{ ok: boolean; error?: string; reviewId?: string }> {
+  const auth = await requireReviewer()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase } = auth
+
+  const { data: quote } = await supabase
+    .from('quotes')
+    .select('id, status')
+    .eq('id', quoteId)
+    .single()
+  if (!quote) return { ok: false, error: 'Quote not found.' }
+  if (quote.status !== 'accepted') {
+    return { ok: false, error: 'Only accepted quotes can be sent to Contract Review.' }
+  }
+
+  // classifyAcceptedQuote self-heals quote_type and tells us the correct route.
+  const route = await classifyAcceptedQuote(supabase, quoteId)
+  if (route !== 'contract_review') {
+    return {
+      ok: false,
+      error: 'This quote is not entirely Routine Maintenance, so it does not use Contract Review.',
+    }
+  }
+
+  // Remove any Job (and its stages/history cascade) created for this quote in
+  // error, so the contract is the single source of truth.
+  await supabase.from('jobs').delete().eq('quote_id', quoteId)
+
+  const result = await buildContractReviewDraft(supabase, quoteId)
+  if (!result.ok) return { ok: false, error: result.error ?? 'Could not build the contract review.' }
+
+  revalidatePath(QUEUE_PATH)
+  if (result.reviewId) revalidatePath(`${QUEUE_PATH}/${result.reviewId}`)
+  revalidatePath('/dashboard/service')
+  revalidatePath('/dashboard/jobs')
+  revalidatePath(`/dashboard/sales/${quoteId}`)
+  return { ok: true, reviewId: result.reviewId }
+}
 
 // --- Item edits ---------------------------------------------------------
 

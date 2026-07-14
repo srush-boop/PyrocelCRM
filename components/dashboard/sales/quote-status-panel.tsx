@@ -6,16 +6,27 @@ import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Printer, Send, X, RotateCcw, Clock, FileText } from 'lucide-react'
+import { Printer, Send, X, RotateCcw, Clock, FileText, ClipboardCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn, formatDateUK } from '@/lib/utils'
 import { QUOTE_STATUS_META } from '@/lib/sales'
 import type { Quote, QuoteStatus } from '@/lib/types/database'
 import { setQuoteStatus } from '@/app/(dashboard)/dashboard/sales/actions'
+import { buildContractReviewForQuote } from '@/lib/actions/contract-review'
 import { SendQuoteDialog } from './send-quote-dialog'
 import { MarkAcceptedDialog } from './mark-accepted-dialog'
 
-export function QuoteStatusPanel({ quote }: { quote: Quote }) {
+export function QuoteStatusPanel({
+  quote,
+  contractReviewId = null,
+  isMaintenanceOnly = false,
+}: {
+  quote: Quote
+  // If a Contract Review already exists for this quote, its id (to link to it).
+  contractReviewId?: string | null
+  // True when the quote routes to Contract Review (entirely Routine Maintenance).
+  isMaintenanceOnly?: boolean
+}) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -27,6 +38,18 @@ export function QuoteStatusPanel({ quote }: { quote: Quote }) {
         router.refresh()
       } else {
         toast.error(res.error ?? 'Could not update status')
+      }
+    })
+  }
+
+  function buildReview() {
+    startTransition(async () => {
+      const res = await buildContractReviewForQuote(quote.id)
+      if (res.ok && res.reviewId) {
+        toast.success('Contract review ready.')
+        router.push(`/dashboard/sales/contract-reviews/${res.reviewId}`)
+      } else {
+        toast.error(res.error ?? 'Could not build the contract review.')
       }
     })
   }
@@ -117,6 +140,24 @@ export function QuoteStatusPanel({ quote }: { quote: Quote }) {
               Expired
             </Button>
           </>
+        )}
+
+        {/* Accepted Routine-Maintenance quotes belong in Contract Review. Link
+            to the existing review, or (recovery) build one if it is missing. */}
+        {quote.status === 'accepted' && isMaintenanceOnly && (
+          contractReviewId ? (
+            <Button size="sm" variant="outline" asChild>
+              <Link href={`/dashboard/sales/contract-reviews/${contractReviewId}`}>
+                <ClipboardCheck className="mr-2 h-4 w-4" />
+                Open contract review
+              </Link>
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline" onClick={buildReview} disabled={isPending}>
+              <ClipboardCheck className="mr-2 h-4 w-4" />
+              Build contract review
+            </Button>
+          )
         )}
 
         {quote.status !== 'draft' && (

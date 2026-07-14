@@ -355,6 +355,10 @@ export async function saveQuote(
   if (!input.client_id && !input.prospect_name?.trim()) {
     return { ok: false, error: 'Select a client or enter a prospect name.' }
   }
+  // A new-site prospect (no existing site id) needs at least a site name.
+  if (!input.site_id && (input.prospect_site_address?.trim() || input.prospect_site_contact?.trim()) && !input.prospect_site_name?.trim()) {
+    return { ok: false, error: 'Enter a site name for the new site.' }
+  }
 
   // Flatten lines, deriving each line's authoritative sell price from its unit
   // cost + effective margin (per-line override, else the system margin).
@@ -388,6 +392,11 @@ export async function saveQuote(
     prospect_email: input.prospect_email?.trim() || null,
     prospect_phone: input.prospect_phone?.trim() || null,
     prospect_address: input.prospect_address?.trim() || null,
+    prospect_site_name: input.prospect_site_name?.trim() || null,
+    prospect_site_contact: input.prospect_site_contact?.trim() || null,
+    prospect_site_email: input.prospect_site_email?.trim() || null,
+    prospect_site_phone: input.prospect_site_phone?.trim() || null,
+    prospect_site_address: input.prospect_site_address?.trim() || null,
     summary: input.summary?.trim() || null,
     notes: input.notes?.trim() || null,
     terms: input.terms?.trim() || null,

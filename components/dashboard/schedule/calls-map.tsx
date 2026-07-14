@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { CreateTaskDialog } from '@/components/dashboard/schedule/create-task-dialog'
 import { LoneWorkerHeaderCounters } from '@/components/dashboard/lone-worker/lone-worker-header-counters'
+import { EmergencyCallsHeaderCounters } from '@/components/dashboard/schedule/emergency-calls-header-counters'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -341,6 +342,14 @@ export function CallsMap({
   const startedCount = calls.filter(isStarted).length
   const emergencyCalls = useMemo(() => calls.filter((c) => c.isEmergency), [calls])
 
+  // Emergency-call assignment split for the header counters: "assigned" =
+  // currently being attended to, "to assign" = still needs an engineer.
+  const emergencyAssignedCount = useMemo(
+    () => emergencyCalls.filter((c) => c.assignedEngineerId).length,
+    [emergencyCalls],
+  )
+  const emergencyToAssignCount = emergencyCalls.length - emergencyAssignedCount
+
   // Engineers currently assigned to emergency calls — options for the
   // "assigned to" filter (kept scoped to who actually has an emergency).
   const emergencyEngineers = useMemo(() => {
@@ -437,10 +446,22 @@ export function CallsMap({
             nearest work.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           {/* Live lone-worker safety counters — visible while dispatching so a
               raised warning/emergency is noticed here, not just on the board. */}
           <LoneWorkerHeaderCounters />
+          {/* Emergency-CALL counters (assigned vs still to assign). Clicking a
+              pill filters the emergency list by that status. */}
+          {emergencyCalls.length > 0 && (
+            <EmergencyCallsHeaderCounters
+              assigned={emergencyAssignedCount}
+              toAssign={emergencyToAssignCount}
+              onSelect={(filter) => {
+                setEmergencyAssignedFilter(filter)
+                setShowCalls(true)
+              }}
+            />
+          )}
           {reactiveServiceTypes.length > 0 && (
             <CreateTaskDialog
               siteServices={[]}

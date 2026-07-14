@@ -279,6 +279,31 @@ export default async function ServiceDashboardPage() {
     }
   })
 
+  // Maintenance contract reviews awaiting approval: accepted Routine Maintenance
+  // quotes converted to draft client/site/system/service records that a
+  // responsible user still needs to check and commit to go live.
+  const { data: pendingReviewsData } = await supabase
+    .from('contract_reviews')
+    .select(
+      `id, created_at, quote:quotes(id, quote_number, prospect_name, client:clients(name), site:sites(name))`,
+    )
+    .eq('status', 'draft')
+    .order('created_at', { ascending: false })
+    .limit(10)
+
+  const pendingReviews = (pendingReviewsData || []).map((r) => {
+    const quote = Array.isArray((r as any).quote) ? (r as any).quote[0] ?? null : (r as any).quote
+    const client = Array.isArray(quote?.client) ? quote?.client[0] ?? null : quote?.client
+    const site = Array.isArray(quote?.site) ? quote?.site[0] ?? null : quote?.site
+    return {
+      id: r.id as string,
+      quoteNumber: (quote?.quote_number as string) ?? null,
+      clientName:
+        (client?.name as string) ?? (quote?.prospect_name as string) ?? 'New client',
+      siteName: (site?.name as string) ?? (quote?.prospect_name as string) ?? 'New site',
+    }
+  })
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -343,7 +368,54 @@ export default async function ServiceDashboardPage() {
         </Card>
       )}
 
-      {/* Stat tiles */}
+      {/* Maintenance contract reviews awaiting approval before going live */}
+      {pendingReviews.length > 0 && (
+        <Card className="border-2 border-amber-500 bg-amber-500/5">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/15 text-amber-600">
+                <ClipboardCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <CardTitle className="text-amber-700">
+                  {pendingReviews.length} maintenance contract
+                  {pendingReviews.length === 1 ? '' : 's'} awaiting review
+                </CardTitle>
+                <CardDescription>
+                  Accepted maintenance quotes converted to draft records — check and commit to
+                  go live.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {pendingReviews.map((r) => (
+              <Link
+                key={r.id}
+                href={`/dashboard/sales/contract-reviews/${r.id}`}
+                className="flex items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-background px-3 py-2.5 transition-colors hover:bg-amber-500/5"
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <Building2 className="h-4 w-4 shrink-0 text-amber-600" />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{r.clientName}</p>
+                    <p className="truncate text-xs text-muted-foreground">{r.siteName}</p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {r.quoteNumber && (
+                    <Badge variant="outline" className="text-xs">
+                      {r.quoteNumber}
+                    </Badge>
+                  )}
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </div>
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         {stats.map((s) => (
           <Link

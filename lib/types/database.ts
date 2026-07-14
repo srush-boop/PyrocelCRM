@@ -2210,6 +2210,56 @@ export interface QuoteSystemPpm {
   updated_at: string
 }
 
+// ---------- Contract Review (accepted quote -> live records) ----------
+
+export type ContractReviewStatus = 'draft' | 'committed' | 'cancelled'
+
+// The kind of live entity a draft item will create or link. Also drives the
+// dependency order used on commit: client -> site -> system -> service -> charge.
+export type ContractReviewEntity = 'client' | 'site' | 'system' | 'service' | 'charge'
+
+// How the reviewer chose to resolve a draft item on commit.
+export type ContractReviewAction = 'create' | 'link' | 'skip'
+
+// A holding-area draft bundle created when a Routine Maintenance quote is
+// accepted. One per quote (unique). The reviewer confirms/amends each item and
+// then commits, turning drafts into live clients/sites/systems/services/charges.
+export interface ContractReview {
+  id: string
+  quote_id: string
+  status: ContractReviewStatus
+  notes: string | null
+  created_by: string | null
+  committed_by: string | null
+  committed_at: string | null
+  created_at: string
+  updated_at: string
+  // Optional joins
+  quote?: Quote | null
+  items?: ContractReviewItem[]
+}
+
+// One draft entity within a review. `payload` holds the editable field values
+// for the entity (names, prices, subcontractor, frequency, etc.). Parent/child
+// wiring uses local_key/parent_key before real ids exist.
+export interface ContractReviewItem {
+  id: string
+  review_id: string
+  entity_type: ContractReviewEntity
+  action: ContractReviewAction
+  linked_id: string | null
+  suggested_id: string | null
+  match_confidence: number | null
+  local_key: string
+  parent_key: string | null
+  payload: Record<string, unknown>
+  source_quote_system_id: string | null
+  committed_id: string | null
+  position: number
+  created_at: string
+  updated_at: string
+}
+
 // A single row of the quote_bank_values view (historical system values for
 // benchmarking, filtered to sent/accepted quotes).
 export interface QuoteBankValue {

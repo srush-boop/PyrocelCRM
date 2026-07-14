@@ -9,6 +9,7 @@ import { renderQuotePdfBuffer } from '@/lib/pdf/quote-pdf'
 import { loadQuoteCatalogue } from '@/lib/sales/equipment-spec'
 import { createRemedialCallsForQuote } from '@/lib/remedial'
 import { createJobForAcceptedQuote } from '@/lib/jobs/convert'
+import { buildContractReviewDraft } from '@/lib/contracts/build-draft'
 import type { CalculatorSnapshot } from '@/lib/calculator-snapshot'
 import type {
   QuoteStatus,
@@ -880,10 +881,23 @@ export async function setQuoteStatus(
   // internally). Neither path is allowed to block the status change.
   if (status === 'accepted') {
     await createRemedialCallsForQuote(supabase, id)
-    await createJobForAcceptedQuote(supabase, id)
+    // Routine Maintenance quotes go through Contract Review (draft client/site/
+    // system/service/charge records awaiting approval) instead of a delivery Job.
+    const { data: acceptedQuote } = await supabase
+      .from('quotes')
+      .select('quote_type')
+      .eq('id', id)
+      .single()
+    if (acceptedQuote?.quote_type === 'service_contract') {
+      await buildContractReviewDraft(supabase, id)
+      revalidatePath('/dashboard/sales/contract-reviews')
+      revalidatePath('/dashboard/service')
+    } else {
+      await createJobForAcceptedQuote(supabase, id)
+      revalidatePath('/dashboard/jobs')
+    }
     revalidatePath('/dashboard/schedule')
     revalidatePath('/dashboard/defects')
-    revalidatePath('/dashboard/jobs')
   }
 
   revalidatePath('/dashboard/sales')

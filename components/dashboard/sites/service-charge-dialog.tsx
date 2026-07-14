@@ -65,6 +65,21 @@ const formatPence = (pence: number) =>
 const FREQUENCIES = Object.keys(RECURRING_FREQUENCY_LABELS) as RecurringFrequency[]
 const TIMINGS = Object.keys(RECURRING_TIMING_LABELS) as RecurringTiming[]
 
+// Whole numbers that divide `n` exactly, ascending. These are the only valid
+// "visits per cycle" values for a service with `n` visits a year — anything
+// else leaves a partial cycle that would under- or over-bill.
+const divisorsOf = (n: number): number[] => {
+  const out: number[] = []
+  for (let d = 1; d <= n; d++) if (n % d === 0) out.push(d)
+  return out
+}
+
+const ordinal = (v: number) => {
+  const s = ['th', 'st', 'nd', 'rd']
+  const m = v % 100
+  return `${v}${s[(m - 20) % 10] ?? s[m] ?? s[0]}`
+}
+
 export function ServiceChargeDialog({
   open,
   onOpenChange,
@@ -157,9 +172,24 @@ export function ServiceChargeDialog({
     setLoading(false)
   }, [siteServiceId, resetForm])
 
+  // Visits this service makes per year, and the only "visits per cycle" values
+  // that divide into it cleanly (so a cycle always finishes within the year).
+  const visitsPerYear = Math.max(1, ctx?.serviceVisitsPerYear ?? 1)
+  const cycleOptions = divisorsOf(visitsPerYear)
+
   useEffect(() => {
     if (open) load()
   }, [open, load])
+
+  // Self-heal: if a saved override is no longer a clean divisor of the service's
+  // current visit count (e.g. legacy data, or the visit frequency changed), drop
+  // back to the "every visit" default so the Select never shows a stale value.
+  useEffect(() => {
+    if (timing !== 'per_visit' || !visitsPerCycle) return
+    const n = Number.parseInt(visitsPerCycle, 10)
+    if (!cycleOptions.includes(n)) setVisitsPerCycle('')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timing, visitsPerCycle, cycleOptions.join(',')])
 
   // Picking a catalog charge prefills description, price and codes (all still
   // editable). "Custom" clears back to a blank line.
@@ -219,9 +249,13 @@ export function ServiceChargeDialog({
         nominal_code_id: nominalCodeId,
         timing,
         frequency,
-        // Only meaningful for per_visit; store the override or null to auto-derive.
+        // Only meaningful for per_visit. Store null for the "every visit" default
+        // (== the service's visits/year) so it keeps tracking the service; store
+        // the explicit divisor only when the user picked a smaller cycle.
         visits_per_cycle:
-          timing === 'per_visit' && Number.parseInt(visitsPerCycle, 10) > 0
+          timing === 'per_visit' &&
+          Number.parseInt(visitsPerCycle, 10) > 0 &&
+          Number.parseInt(visitsPerCycle, 10) !== visitsPerYear
             ? Number.parseInt(visitsPerCycle, 10)
             : null,
         renewal_month: Number.parseInt(renewalMonth, 10),
@@ -528,31 +562,32 @@ export function ServiceChargeDialog({
               <div className="rounded-md border border-amber-200 bg-amber-50/60 p-3 dark:bg-amber-950/20">
                 <div className="grid gap-1.5">
                   <Label htmlFor="sc-vpc">Visits per cycle</Label>
-                  <Input
-                    id="sc-vpc"
-                    type="number"
-                    min={1}
-                    step={1}
-                    value={visitsPerCycle}
-                    placeholder="Auto from service frequency"
-                    onChange={(e) => setVisitsPerCycle(e.target.value)}
-                    className="sm:max-w-[12rem]"
-                  />
+                  <Select
+                    value={visitsPerCycle || String(visitsPerYear)}
+                    onValueChange={setVisitsPerCycle}
+                  >
+                    <SelectTrigger id="sc-vpc" className="sm:max-w-[16rem]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cycleOptions.map((d) => (
+                        <SelectItem key={d} value={String(d)}>
+                          {d} visit{d === 1 ? '' : 's'}
+                          {d === visitsPerYear ? ' — every visit' : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <p className="text-xs text-muted-foreground">
-                    The full annual value is split evenly across this many completed visits,
-                    one invoice raised per visit. Leave blank to derive it from the
-                    service&apos;s visit frequency.
+                    The full annual value is split evenly across this many completed visits.
+                    Only values that divide cleanly into this service&apos;s{' '}
+                    <span className="font-medium text-foreground">
+                      {visitsPerYear} visit{visitsPerYear === 1 ? '' : 's'} a year
+                    </span>{' '}
+                    are offered, so a cycle always finishes within the year.
                   </p>
                 </div>
                 {(() => {
-                  const n = Number.parseInt(visitsPerCycle, 10)
-                  if (!(n >= 1)) {
-                    return (
-                      <p className="mt-3 text-sm text-muted-foreground">
-                        Enter the number of visits in a cycle to see what gets invoiced.
-                      </p>
-                    )
-                  }
                   if (annualTotalPence <= 0) {
                     return (
                       <p className="mt-3 text-sm text-muted-foreground">
@@ -560,24 +595,22 @@ export function ServiceChargeDialog({
                       </p>
                     )
                   }
+                  const n = Number.parseInt(visitsPerCycle || String(visitsPerYear), 10)
                   const shares = splitFullValue(annualTotalPence, n)
                   const even = shares[0]
                   const last = shares[shares.length - 1]
-                  const ordinal = (v: number) => {
-                    const s = ['th', 'st', 'nd', 'rd']
-                    const m = v % 100
-                    return `${v}${s[(m - 20) % 10] ?? s[m] ?? s[0]}`
-                  }
+                  const cyclesPerYear = Math.max(1, Math.round(visitsPerYear / n))
+                  const annualBilled = annualTotalPence * cyclesPerYear
                   return (
                     <div className="mt-3 rounded-md bg-background/70 p-3 text-sm">
                       <p className="mb-1 font-medium">What happens</p>
                       {n === 1 ? (
                         <p className="leading-relaxed text-muted-foreground">
-                          A single invoice of{' '}
+                          A full{' '}
                           <span className="font-semibold text-foreground">
                             {formatPence(annualTotalPence)}
                           </span>{' '}
-                          is raised each time a visit is completed.
+                          invoice is raised on every completed visit.
                         </p>
                       ) : last === even ? (
                         <p className="leading-relaxed text-muted-foreground">
@@ -585,8 +618,7 @@ export function ServiceChargeDialog({
                           <span className="font-semibold text-foreground">
                             {formatPence(even)}
                           </span>{' '}
-                          is raised every time a visit is completed. After the {ordinal(n)}{' '}
-                          visit the full{' '}
+                          is raised on each completed visit. Every {n} visits the full{' '}
                           <span className="font-semibold text-foreground">
                             {formatPence(annualTotalPence)}
                           </span>{' '}
@@ -602,14 +634,22 @@ export function ServiceChargeDialog({
                           <span className="font-semibold text-foreground">
                             {formatPence(last)}
                           </span>{' '}
-                          on the {ordinal(n)} (final) visit. After the {ordinal(n)} visit the
-                          full{' '}
+                          on the {ordinal(n)} (final) visit of the cycle — completing the full{' '}
                           <span className="font-semibold text-foreground">
                             {formatPence(annualTotalPence)}
-                          </span>{' '}
-                          will have been billed, then the cycle repeats.
+                          </span>
+                          .
                         </p>
                       )}
+                      <p className="mt-2 leading-relaxed text-muted-foreground">
+                        Across this service&apos;s {visitsPerYear} visit
+                        {visitsPerYear === 1 ? '' : 's'} a year that&apos;s{' '}
+                        <span className="font-semibold text-foreground">
+                          {cyclesPerYear === 1
+                            ? `one cycle — ${formatPence(annualBilled)} invoiced a year.`
+                            : `${cyclesPerYear} cycles — ${formatPence(annualBilled)} invoiced a year.`}
+                        </span>
+                      </p>
                     </div>
                   )
                 })()}

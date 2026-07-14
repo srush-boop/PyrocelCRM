@@ -10,7 +10,8 @@ import {
   formatInvoiceNumber,
   lineAmountPence,
 } from '@/lib/billing/invoices'
-import { isDueNow, nextDueDate, toISODate } from '@/lib/billing/recurring'
+import { isDueNow, nextDueDate, toISODate, perVisitAmountPence } from '@/lib/billing/recurring'
+import { generateVisitCompletionInvoice } from '@/lib/actions/visit-billing'
 
 // Phase B: assemble & raise invoices from DUE recurring charges. These invoices
 // are stamped origin='recurring' and are hard-segregated from ad-hoc/call
@@ -46,6 +47,8 @@ export interface RecurringDueCharge {
   timing: string
   groupKey: string | null
   nextDueDate: string
+  /** For per_visit charges: completed visits awaiting billing (drives the raise). */
+  perVisitTaskIds?: string[]
 }
 
 export interface RecurringDueGroup {
@@ -68,6 +71,7 @@ interface ChargeRow {
   quantity: number | string
   frequency: string
   timing: string
+  visits_per_cycle: number | null
   group_key: string | null
   active: boolean
   start_date: string | null
@@ -95,7 +99,7 @@ export async function getRecurringDue(): Promise<RecurringDueGroup[]> {
     .select(
       `
       id, billing_account_id, site_service_id, description, unit_price_pence,
-      quantity, frequency, timing, group_key, active, start_date, last_invoiced_date,
+      quantity, frequency, timing, visits_per_cycle, group_key, active, start_date, last_invoiced_date,
       billing_account:billing_accounts(id, name, status, client_id, client:clients(name))
     `,
     )
@@ -125,7 +129,104 @@ export async function getRecurringDue(): Promise<RecurringDueGroup[]> {
     }
   }
 
+  // --- per_visit backstop -------------------------------------------------
+  // For per_visit charges, surface any completed, eligible PPM visit that has
+  // not yet been billed for the charge (i.e. has no recurring_visit_billings
+  // row). Amounts use the same split maths as the completion engine so the
+  // queue total matches what raising will actually invoice.
+  const perVisitCharges = rows.filter((r) => r.timing === 'per_visit' && r.site_service_id)
+  // chargeId -> { taskIds (unbilled, oldest first), amountPence (sum of shares) }
+  const perVisitDue = new Map<string, { taskIds: string[]; amountPence: number }>()
+  if (perVisitCharges.length > 0) {
+    const serviceIds = Array.from(new Set(perVisitCharges.map((r) => r.site_service_id as string)))
+
+    // Service visit intervals drive the default split denominator.
+    const { data: svcRows } = await supabase
+      .from('site_services')
+      .select('id, frequency_months')
+      .in('id', serviceIds)
+    const freqByService = new Map<string, number | null>(
+      (svcRows ?? []).map((s: { id: string; frequency_months: number | null }) => [
+        s.id,
+        s.frequency_months,
+      ]),
+    )
+
+    // Completed, genuinely-recurring visits per service (exclude remedial /
+    // emergency / commissioning / follow-up, matching the engine).
+    const { data: pvTasks } = await supabase
+      .from('tasks')
+      .select(
+        'id, site_service_id, completed_at, is_remedial, is_emergency, is_commissioning, follow_up_to_id',
+      )
+      .in('site_service_id', serviceIds)
+      .eq('status', 'completed')
+      .not('completed_at', 'is', null)
+      .order('completed_at', { ascending: true })
+    const eligibleByService = new Map<string, { id: string }[]>()
+    for (const t of (pvTasks ?? []) as {
+      id: string
+      site_service_id: string
+      is_remedial: boolean
+      is_emergency: boolean
+      is_commissioning: boolean
+      follow_up_to_id: string | null
+    }[]) {
+      if (t.is_remedial || t.is_emergency || t.is_commissioning || t.follow_up_to_id) continue
+      const list = eligibleByService.get(t.site_service_id) ?? []
+      list.push({ id: t.id })
+      eligibleByService.set(t.site_service_id, list)
+    }
+
+    // Already-billed (charge, task) pairs.
+    const { data: billed } = await supabase
+      .from('recurring_visit_billings')
+      .select('recurring_charge_id, task_id')
+      .in(
+        'recurring_charge_id',
+        perVisitCharges.map((r) => r.id),
+      )
+    const billedByCharge = new Map<string, Set<string>>()
+    let priorCountByCharge = new Map<string, number>()
+    for (const b of (billed ?? []) as { recurring_charge_id: string; task_id: string }[]) {
+      const set = billedByCharge.get(b.recurring_charge_id) ?? new Set<string>()
+      set.add(b.task_id)
+      billedByCharge.set(b.recurring_charge_id, set)
+      priorCountByCharge.set(
+        b.recurring_charge_id,
+        (priorCountByCharge.get(b.recurring_charge_id) ?? 0) + 1,
+      )
+    }
+
+    for (const c of perVisitCharges) {
+      const eligible = eligibleByService.get(c.site_service_id as string) ?? []
+      const billedSet = billedByCharge.get(c.id) ?? new Set<string>()
+      const unbilled = eligible.filter((t) => !billedSet.has(t.id))
+      if (unbilled.length === 0) continue
+
+      const qty = typeof c.quantity === 'string' ? Number.parseFloat(c.quantity) : c.quantity
+      let prior = priorCountByCharge.get(c.id) ?? 0
+      let total = 0
+      for (const _t of unbilled) {
+        const { amountPence } = perVisitAmountPence(
+          {
+            unit_price_pence: c.unit_price_pence,
+            quantity: qty || 1,
+            frequency: c.frequency as never,
+            visits_per_cycle: c.visits_per_cycle,
+          },
+          freqByService.get(c.site_service_id as string) ?? null,
+          prior,
+        )
+        total += amountPence
+        prior += 1
+      }
+      perVisitDue.set(c.id, { taskIds: unbilled.map((t) => t.id), amountPence: total })
+    }
+  }
+
   function isCharDue(r: ChargeRow): boolean {
+    if (r.timing === 'per_visit') return perVisitDue.has(r.id)
     if (r.timing === 'on_completion') {
       if (!r.site_service_id) return false
       const completions = completedByService.get(r.site_service_id) ?? []
@@ -149,7 +250,8 @@ export async function getRecurringDue(): Promise<RecurringDueGroup[]> {
     if (!isCharDue(r)) continue
 
     const qty = typeof r.quantity === 'string' ? Number.parseFloat(r.quantity) : r.quantity
-    const amountPence = lineAmountPence(qty || 1, r.unit_price_pence)
+    const pv = r.timing === 'per_visit' ? perVisitDue.get(r.id) : undefined
+    const amountPence = pv ? pv.amountPence : lineAmountPence(qty || 1, r.unit_price_pence)
     const key = `${r.billing_account_id}::${r.group_key ?? ''}`
 
     let group = groups.get(key)
@@ -180,6 +282,7 @@ export async function getRecurringDue(): Promise<RecurringDueGroup[]> {
         last_invoiced_date: r.last_invoiced_date,
         start_date: r.start_date,
       }),
+      perVisitTaskIds: pv?.taskIds,
     })
     group.totalPence += amountPence
   }
@@ -217,19 +320,77 @@ export async function createInvoiceFromRecurringCharges(
   // Re-fetch charges server-side (trusted amounts) and confirm ownership + active.
   const { data: charges } = await supabase
     .from('recurring_charges')
-    .select('id, description, unit_price_pence, quantity, tax_code, nominal_code, nominal_code_id')
+    .select(
+      'id, description, unit_price_pence, quantity, tax_code, nominal_code, nominal_code_id, timing, site_service_id',
+    )
     .in('id', chargeIds)
     .eq('billing_account_id', billingAccountId)
     .eq('active', true)
 
-  const rows = (charges ?? []) as {
+  const allRows = (charges ?? []) as {
     id: string
     description: string
     unit_price_pence: number
     quantity: number | string
     nominal_code_id: string | null
+    timing: string
+    site_service_id: string | null
   }[]
-  if (rows.length === 0) return { error: 'These charges are no longer available to invoice' }
+  if (allRows.length === 0) return { error: 'These charges are no longer available to invoice' }
+
+  // Per-visit charges are billed through the completion engine (correct split +
+  // idempotency ledger), never via the flat full-amount path below. Raise them
+  // first by replaying each affected charge's unbilled completed visits.
+  const perVisitRows = allRows.filter((r) => r.timing === 'per_visit')
+  const engineInvoiceIds: string[] = []
+  if (perVisitRows.length > 0) {
+    const serviceIds = Array.from(
+      new Set(perVisitRows.map((r) => r.site_service_id).filter((v): v is string => !!v)),
+    )
+    if (serviceIds.length > 0) {
+      // Completed, genuinely-recurring visits on the affected services.
+      const { data: pvTasks } = await supabase
+        .from('tasks')
+        .select(
+          'id, completed_at, is_remedial, is_emergency, is_commissioning, follow_up_to_id',
+        )
+        .in('site_service_id', serviceIds)
+        .eq('status', 'completed')
+        .not('completed_at', 'is', null)
+        .order('completed_at', { ascending: true })
+      // Visits already fully billed for every selected per_visit charge are skipped
+      // naturally by the engine's ledger; we just replay all completed visits.
+      const taskIds = Array.from(
+        new Set(
+          ((pvTasks ?? []) as {
+            id: string
+            is_remedial: boolean
+            is_emergency: boolean
+            is_commissioning: boolean
+            follow_up_to_id: string | null
+          }[])
+            .filter(
+              (t) =>
+                !t.is_remedial && !t.is_emergency && !t.is_commissioning && !t.follow_up_to_id,
+            )
+            .map((t) => t.id),
+        ),
+      )
+      for (const tId of taskIds) {
+        const res = await generateVisitCompletionInvoice(tId)
+        for (const id of res.invoiceIds ?? []) {
+          if (!engineInvoiceIds.includes(id)) engineInvoiceIds.push(id)
+        }
+      }
+    }
+  }
+
+  // Remaining (advance/arrears/on_completion) charges use the flat path.
+  const rows = allRows.filter((r) => r.timing !== 'per_visit')
+  if (rows.length === 0) {
+    revalidatePath('/dashboard/invoices')
+    return { error: null, invoiceId: engineInvoiceIds[0] }
+  }
 
   // Map nominal-code id → code text for a stable per-line snapshot.
   const { data: ncRows } = await supabase.from('nominal_codes').select('id, code')

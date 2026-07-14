@@ -37,6 +37,7 @@ import {
   annualOccurrences,
   perPeriodFromAnnual,
   annualFromPerPeriod,
+  splitFullValue,
 } from '@/lib/billing/recurring'
 import { resolveNominalCode, nominalSourceLabel } from '@/lib/billing/nominal-codes'
 import { NominalCodeSelect } from '@/components/dashboard/billing/nominal-code-select'
@@ -88,6 +89,9 @@ export function ServiceChargeDialog({
   const [quantity, setQuantity] = useState('1')
   const [frequency, setFrequency] = useState<RecurringFrequency>('annual')
   const [timing, setTiming] = useState<RecurringTiming>('advance')
+  // Optional override for how many visits a per_visit cycle splits across.
+  // Blank = derive from the service's visit frequency.
+  const [visitsPerCycle, setVisitsPerCycle] = useState<string>('')
   const [renewalMonth, setRenewalMonth] = useState<string>('')
   const [billingAccountId, setBillingAccountId] = useState<string>('')
   const [taxCode, setTaxCode] = useState('')
@@ -105,6 +109,7 @@ export function ServiceChargeDialog({
     setQuantity('1')
     setFrequency('annual')
     setTiming('advance')
+    setVisitsPerCycle('')
     setRenewalMonth('')
     setBillingAccountId(c?.defaultBillingAccountId ?? '')
     setTaxCode('')
@@ -134,6 +139,7 @@ export function ServiceChargeDialog({
     setQuantity(String(charge.quantity ?? 1))
     setFrequency(charge.frequency)
     setTiming(charge.timing)
+    setVisitsPerCycle(charge.visits_per_cycle ? String(charge.visits_per_cycle) : '')
     setRenewalMonth(charge.renewal_month ? String(charge.renewal_month) : '')
     setBillingAccountId(charge.billing_account_id)
     setTaxCode(charge.tax_code ?? '')
@@ -213,6 +219,11 @@ export function ServiceChargeDialog({
         nominal_code_id: nominalCodeId,
         timing,
         frequency,
+        // Only meaningful for per_visit; store the override or null to auto-derive.
+        visits_per_cycle:
+          timing === 'per_visit' && Number.parseInt(visitsPerCycle, 10) > 0
+            ? Number.parseInt(visitsPerCycle, 10)
+            : null,
         renewal_month: Number.parseInt(renewalMonth, 10),
       }
       // Editing preserves fields this dialog doesn't expose (subcontracting,
@@ -506,6 +517,45 @@ export function ServiceChargeDialog({
               </div>
             </div>
 
+            {timing === 'per_visit' && (
+              <div className="rounded-md border border-amber-200 bg-amber-50/60 p-3 dark:bg-amber-950/20">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="sc-vpc">Visits per cycle</Label>
+                  <Input
+                    id="sc-vpc"
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={visitsPerCycle}
+                    placeholder="Auto from service frequency"
+                    onChange={(e) => setVisitsPerCycle(e.target.value)}
+                    className="sm:max-w-[12rem]"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The full annual value is split evenly across this many completed visits,
+                    one invoice raised per visit. Leave blank to derive it from the
+                    service&apos;s visit frequency.
+                  </p>
+                </div>
+                {(() => {
+                  const n = Number.parseInt(visitsPerCycle, 10)
+                  if (!(n >= 1) || annualTotalPence <= 0) return null
+                  const shares = splitFullValue(annualTotalPence, n)
+                  const even = shares[0]
+                  const last = shares[shares.length - 1]
+                  return (
+                    <p className="mt-2 text-sm font-medium">
+                      {n === 1
+                        ? `${formatPence(annualTotalPence)} billed on the single visit.`
+                        : last === even
+                          ? `${formatPence(even)} per visit × ${n}.`
+                          : `${formatPence(even)} per visit, ${formatPence(last)} on the final visit (×${n}).`}
+                    </p>
+                  )
+                })()}
+              </div>
+            )}
+
             <div className="grid gap-1.5">
               <Label htmlFor="sc-qty">Quantity</Label>
               <Input
@@ -523,19 +573,25 @@ export function ServiceChargeDialog({
                 each invoice at the chosen frequency. */}
             <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/40 px-3 py-2.5">
               <div className="min-w-0">
-                <p className="text-sm font-medium">Amount per invoice</p>
+                <p className="text-sm font-medium">
+                  {timing === 'per_visit' ? 'Full annual value' : 'Amount per invoice'}
+                </p>
                 <p className="text-xs text-muted-foreground">
                   {pricePounds.trim() === ''
                     ? 'Enter a value to see the per-invoice amount.'
-                    : `${formatPence(annualTotalPence)}/yr ${
-                        priceBasis === 'annual' ? 'split across' : 'across'
-                      } ${annualOccurrences(frequency)} ${RECURRING_FREQUENCY_LABELS[
-                        frequency
-                      ].toLowerCase()} invoice${annualOccurrences(frequency) === 1 ? '' : 's'}.`}
+                    : timing === 'per_visit'
+                      ? 'Billed in shares as visits complete (see split above).'
+                      : `${formatPence(annualTotalPence)}/yr ${
+                          priceBasis === 'annual' ? 'split across' : 'across'
+                        } ${annualOccurrences(frequency)} ${RECURRING_FREQUENCY_LABELS[
+                          frequency
+                        ].toLowerCase()} invoice${annualOccurrences(frequency) === 1 ? '' : 's'}.`}
                 </p>
               </div>
               <span className="whitespace-nowrap text-lg font-semibold tabular-nums">
-                {formatPence(perInvoicePence * (Number.parseInt(quantity, 10) || 1))}
+                {timing === 'per_visit'
+                  ? formatPence(annualTotalPence)
+                  : formatPence(perInvoicePence * (Number.parseInt(quantity, 10) || 1))}
               </span>
             </div>
 

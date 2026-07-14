@@ -42,6 +42,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
 import { quoteTypeLabel } from '@/lib/sales'
+import { MONTH_LABELS } from '@/lib/billing/recurring'
 import {
   updateContractReviewItem,
   updateContractReviewNotes,
@@ -576,6 +577,28 @@ export function ContractReviewDetail(props: Props) {
                           <SelectItem value="bi_monthly">Bi-monthly</SelectItem>
                           <SelectItem value="monthly">Monthly</SelectItem>
                           <SelectItem value="on_demand">On demand</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field label="Renewal month *">
+                      <Select
+                        disabled={!editable}
+                        value={
+                          state[charge.id].payload.renewal_month
+                            ? String(state[charge.id].payload.renewal_month)
+                            : ''
+                        }
+                        onValueChange={(v) => setPayload(charge.id, 'renewal_month', Number(v))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select month" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {MONTH_LABELS.map((m, i) => (
+                            <SelectItem key={m} value={String(i + 1)}>
+                              {m}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </Field>

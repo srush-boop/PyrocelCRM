@@ -347,6 +347,16 @@ export async function commitContractReview(
       const serviceId = ch.parent_key ? resolved.get(ch.parent_key) ?? null : null
       const p = ch.payload
       const isSub = p.is_subcontracted === true
+      // Renewal month drives charge generation, so every committed charge needs one.
+      const renewalMonth = int(p, 'renewal_month', 0)
+      if (!(renewalMonth >= 1 && renewalMonth <= 12)) {
+        return {
+          ok: false,
+          error: `Set a renewal month on the charge "${
+            str(p, 'description') ?? 'Routine maintenance'
+          }" before committing — the system relies on it to generate the charge.`,
+        }
+      }
       const { data, error } = await supabase
         .from('recurring_charges')
         .insert({
@@ -359,6 +369,7 @@ export async function commitContractReview(
           quantity: 1,
           frequency: str(p, 'frequency') ?? 'annual',
           price_basis: str(p, 'price_basis') ?? 'per_period',
+          renewal_month: renewalMonth,
           is_subcontracted: isSub,
           subcontract_price_pence: isSub ? (p.subcontract_price_pence as number) ?? null : null,
           active: true,

@@ -423,15 +423,22 @@ export function TaskExecution({
     // Lone workers must be on shift (safety check-ins active) before starting.
     if (!(await ensureOnShift())) return
 
+    const now = new Date()
+
     await supabase
       .from('tasks')
       .update({
         status: 'in_progress',
-        started_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        started_at: now.toISOString(),
+        updated_at: now.toISOString(),
       })
       .eq('id', task.id)
-    
+
+    // Auto-populate the on-site Start Time with the moment work begins so the
+    // engineer doesn't have to set it manually. Never overwrite an existing
+    // value (e.g. when a paused/reopened call is restarted).
+    setTestingStartTime((prev) => prev ?? now)
+
     setStatus('in_progress')
     router.refresh()
   }

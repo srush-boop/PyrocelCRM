@@ -79,6 +79,7 @@ import {
   resolveLineMargin,
   resolveSystemWorkTypeMargin,
   quoteTypeFromWorkType,
+  deriveQuoteTypeFromSystems,
   WORK_TYPES,
   DESIGNED_BY_OPTIONS,
 } from '@/lib/sales'
@@ -507,8 +508,15 @@ export function QuoteBuilder({
     const svc = initialSystems?.filter((s) => s.work_type === 'SVC') ?? []
     return svc.length > 0 && svc.length === (initialSystems?.length ?? 0)
   })
-  const [targetMode, setTargetMode] = useState<'client' | 'prospect'>(
-    quote?.prospect_name && !quote?.client_id ? 'prospect' : 'client',
+  // Client and site targets are chosen INDEPENDENTLY: a quote can pair an
+  // existing client with a brand-new site, a new prospect client with an
+  // existing site, etc. `clientMode`/`siteMode` drive which set of fields is
+  // persisted (existing id XOR new prospect fields), per target.
+  const [clientMode, setClientMode] = useState<'existing' | 'new'>(
+    quote?.prospect_name && !quote?.client_id ? 'new' : 'existing',
+  )
+  const [siteMode, setSiteMode] = useState<'existing' | 'new'>(
+    (quote?.prospect_site_name || quote?.prospect_name) && !quote?.site_id ? 'new' : 'existing',
   )
   // Issuing branch: existing quote's branch, else the preparer's own branch.
   const [branchId, setBranchId] = useState(quote?.branch_id ?? defaultBranchId ?? '')
@@ -521,6 +529,12 @@ export function QuoteBuilder({
   const [prospectEmail, setProspectEmail] = useState(quote?.prospect_email ?? '')
   const [prospectPhone, setProspectPhone] = useState(quote?.prospect_phone ?? '')
   const [prospectAddress, setProspectAddress] = useState(quote?.prospect_address ?? '')
+  // New-site prospect fields (independent of the client prospect fields above).
+  const [prospectSiteName, setProspectSiteName] = useState(quote?.prospect_site_name ?? '')
+  const [prospectSiteContact, setProspectSiteContact] = useState(quote?.prospect_site_contact ?? '')
+  const [prospectSiteEmail, setProspectSiteEmail] = useState(quote?.prospect_site_email ?? '')
+  const [prospectSitePhone, setProspectSitePhone] = useState(quote?.prospect_site_phone ?? '')
+  const [prospectSiteAddress, setProspectSiteAddress] = useState(quote?.prospect_site_address ?? '')
   // Scope / summary is no longer edited in the form, but we preserve any
   // previously-saved value so editing a quote doesn't wipe it.
   const [summary] = useState(quote?.summary ?? '')
@@ -532,6 +546,11 @@ export function QuoteBuilder({
   const [validUntil, setValidUntil] = useState(quote?.valid_until ?? '')
   const [showLineItems, setShowLineItems] = useState(quote?.show_line_items ?? true)
   const [showEquipmentSpec, setShowEquipmentSpec] = useState(quote?.show_equipment_spec ?? false)
+  // Optional extras are hidden from the client quote by default; staff opt in
+  // per-quote. When off, optional lines never render on the public quote/PDF.
+  const [showOptionalExtras, setShowOptionalExtras] = useState(
+    quote?.show_optional_extras ?? false,
+  )
 
   // Append the modernised maintenance service agreement to the quote document.
   // Defaults on so it's auto-included on maintenance quotes (payload gates it on
@@ -636,19 +655,28 @@ export function QuoteBuilder({
     return [base]
   })
 
-  const sitesForClient = useMemo(
-    () => (clientId ? sites.filter((s) => s.client_id === clientId) : []),
-    [sites, clientId],
-  )
+  // Existing-site options: scoped to the selected client when one is chosen,
+  // otherwise every site (so an existing site can be picked even when the client
+  // is a new prospect). Labelled with the owning client name when unscoped.
+  const siteOptions = useMemo(() => {
+    const list = clientId ? sites.filter((s) => s.client_id === clientId) : sites
+    const clientName = (id: string | null) =>
+      id ? clients.find((c) => c.id === id)?.name ?? null : null
+    return list.map((s) => ({
+      id: s.id,
+      name: s.name,
+      clientName: clientId ? null : clientName(s.client_id),
+    }))
+  }, [sites, clients, clientId])
 
-  // Auto-fill the quote title from the selected site's name until the user
-  // edits the title themselves (tracked via titleDirty).
+  // Auto-fill the quote title from the selected existing site's name until the
+  // user edits the title themselves (tracked via titleDirty).
   useEffect(() => {
     if (titleDirty.current) return
-    if (targetMode !== 'client' || !siteId) return
-    const site = sitesForClient.find((s) => s.id === siteId)
+    if (siteMode !== 'existing' || !siteId) return
+    const site = siteOptions.find((s) => s.id === siteId)
     if (site?.name) setTitle(site.name)
-  }, [siteId, targetMode, sitesForClient])
+  }, [siteId, siteMode, siteOptions])
 
   // ----- Live totals -----
   const totals = useMemo(() => {
@@ -1072,17 +1100,27 @@ export function QuoteBuilder({
     return {
       id: quote?.id,
       title,
-      // Quote type is no longer a header field — derive it from the first
-      // system's work type so the persisted value stays meaningful.
-      quote_type: quoteTypeFromWorkType(systems[0]?.work_type),
+      // Quote type is no longer a header field — derive it from the systems.
+      // Routine Maintenance only wins when every meaningful (non-empty) system
+      // is SVC, so a stray empty system can't mask the real quote type.
+      quote_type: deriveQuoteTypeFromSystems(
+        systems.map((s) => ({ work_type: s.work_type, hasContent: s.lines.length > 0 })),
+      ),
       branch_id: branchId || null,
-      client_id: targetMode === 'client' ? clientId || null : null,
-      site_id: targetMode === 'client' ? siteId || null : null,
-      prospect_name: targetMode === 'prospect' ? prospectName || null : null,
-      prospect_contact: targetMode === 'prospect' ? prospectContact || null : null,
-      prospect_email: targetMode === 'prospect' ? prospectEmail || null : null,
-      prospect_phone: targetMode === 'prospect' ? prospectPhone || null : null,
-      prospect_address: targetMode === 'prospect' ? prospectAddress || null : null,
+      // Client and site are independent: persist an existing id XOR the new
+      // prospect fields for each, so any combination is supported.
+      client_id: clientMode === 'existing' ? clientId || null : null,
+      site_id: siteMode === 'existing' ? siteId || null : null,
+      prospect_name: clientMode === 'new' ? prospectName || null : null,
+      prospect_contact: clientMode === 'new' ? prospectContact || null : null,
+      prospect_email: clientMode === 'new' ? prospectEmail || null : null,
+      prospect_phone: clientMode === 'new' ? prospectPhone || null : null,
+      prospect_address: clientMode === 'new' ? prospectAddress || null : null,
+      prospect_site_name: siteMode === 'new' ? prospectSiteName || null : null,
+      prospect_site_contact: siteMode === 'new' ? prospectSiteContact || null : null,
+      prospect_site_email: siteMode === 'new' ? prospectSiteEmail || null : null,
+      prospect_site_phone: siteMode === 'new' ? prospectSitePhone || null : null,
+      prospect_site_address: siteMode === 'new' ? prospectSiteAddress || null : null,
       summary: summary || null,
       terms: terms || null,
       notes: notes || null,
@@ -1090,6 +1128,7 @@ export function QuoteBuilder({
       discount_pence: poundsToPence(discount),
       show_line_items: showLineItems,
       show_equipment_spec: showEquipmentSpec,
+      show_optional_extras: showOptionalExtras,
       // Design overview / survey section has been removed from the quote
       // document, so it is never included.
       show_design_overview: false,
@@ -1153,7 +1192,8 @@ export function QuoteBuilder({
     branchId,
     isMaintenanceQuote,
     showMaintenanceAgreement,
-    targetMode,
+    clientMode,
+    siteMode,
     clientId,
     siteId,
     prospectName,
@@ -1161,6 +1201,11 @@ export function QuoteBuilder({
     prospectEmail,
     prospectPhone,
     prospectAddress,
+    prospectSiteName,
+    prospectSiteContact,
+    prospectSiteEmail,
+    prospectSitePhone,
+    prospectSiteAddress,
     summary,
     terms,
     notes,
@@ -1169,6 +1214,7 @@ export function QuoteBuilder({
     validUntil,
     showLineItems,
     showEquipmentSpec,
+    showOptionalExtras,
     systems,
   ])
 
@@ -1250,7 +1296,8 @@ export function QuoteBuilder({
         titleDirty.current = Boolean(d.title)
       }
       if (typeof d.maintenanceOnly === 'boolean') setMaintenanceOnly(d.maintenanceOnly)
-      if (d.targetMode === 'client' || d.targetMode === 'prospect') setTargetMode(d.targetMode)
+      if (d.clientMode === 'existing' || d.clientMode === 'new') setClientMode(d.clientMode)
+      if (d.siteMode === 'existing' || d.siteMode === 'new') setSiteMode(d.siteMode)
       if (typeof d.branchId === 'string') setBranchId(d.branchId)
       if (typeof d.clientId === 'string') setClientId(d.clientId)
       if (typeof d.siteId === 'string') setSiteId(d.siteId)
@@ -1259,6 +1306,11 @@ export function QuoteBuilder({
       if (typeof d.prospectEmail === 'string') setProspectEmail(d.prospectEmail)
       if (typeof d.prospectPhone === 'string') setProspectPhone(d.prospectPhone)
       if (typeof d.prospectAddress === 'string') setProspectAddress(d.prospectAddress)
+      if (typeof d.prospectSiteName === 'string') setProspectSiteName(d.prospectSiteName)
+      if (typeof d.prospectSiteContact === 'string') setProspectSiteContact(d.prospectSiteContact)
+      if (typeof d.prospectSiteEmail === 'string') setProspectSiteEmail(d.prospectSiteEmail)
+      if (typeof d.prospectSitePhone === 'string') setProspectSitePhone(d.prospectSitePhone)
+      if (typeof d.prospectSiteAddress === 'string') setProspectSiteAddress(d.prospectSiteAddress)
       if (typeof d.terms === 'string') setTerms(d.terms)
       if (typeof d.notes === 'string') setNotes(d.notes)
       if (typeof d.vatRate === 'string') setVatRate(d.vatRate)
@@ -1266,6 +1318,7 @@ export function QuoteBuilder({
       if (typeof d.validUntil === 'string') setValidUntil(d.validUntil)
       if (typeof d.showLineItems === 'boolean') setShowLineItems(d.showLineItems)
       if (typeof d.showEquipmentSpec === 'boolean') setShowEquipmentSpec(d.showEquipmentSpec)
+    if (typeof d.showOptionalExtras === 'boolean') setShowOptionalExtras(d.showOptionalExtras)
       if (typeof d.showMaintenanceAgreement === 'boolean')
         setShowMaintenanceAgreement(d.showMaintenanceAgreement)
       if (typeof d.showRequirementsMatrix === 'boolean')
@@ -1293,7 +1346,8 @@ export function QuoteBuilder({
     const draft = {
       title,
       maintenanceOnly,
-      targetMode,
+      clientMode,
+      siteMode,
       branchId,
       clientId,
       siteId,
@@ -1302,6 +1356,11 @@ export function QuoteBuilder({
       prospectEmail,
       prospectPhone,
       prospectAddress,
+      prospectSiteName,
+      prospectSiteContact,
+      prospectSiteEmail,
+      prospectSitePhone,
+      prospectSiteAddress,
       terms,
       notes,
       vatRate,
@@ -1309,6 +1368,7 @@ export function QuoteBuilder({
       validUntil,
       showLineItems,
       showEquipmentSpec,
+      showOptionalExtras,
       showMaintenanceAgreement,
       showRequirementsMatrix,
       requirements,
@@ -1328,7 +1388,8 @@ export function QuoteBuilder({
     draftKey,
     title,
     maintenanceOnly,
-    targetMode,
+    clientMode,
+    siteMode,
     branchId,
     clientId,
     siteId,
@@ -1337,6 +1398,11 @@ export function QuoteBuilder({
     prospectEmail,
     prospectPhone,
     prospectAddress,
+    prospectSiteName,
+    prospectSiteContact,
+    prospectSiteEmail,
+    prospectSitePhone,
+    prospectSiteAddress,
     terms,
     notes,
     vatRate,
@@ -1344,6 +1410,7 @@ export function QuoteBuilder({
     validUntil,
     showLineItems,
     showEquipmentSpec,
+    showOptionalExtras,
     showMaintenanceAgreement,
     showRequirementsMatrix,
     requirements,
@@ -1408,164 +1475,240 @@ export function QuoteBuilder({
             </div>
           )}
 
-          {/* Target: client vs prospect */}
-          <div className="grid gap-1.5">
-            <Label>Quote for</Label>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant={targetMode === 'client' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setTargetMode('client')}
-                disabled={disabled}
-              >
-                Existing client
-              </Button>
-              <Button
-                type="button"
-                variant={targetMode === 'prospect' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setTargetMode('prospect')}
-                disabled={disabled}
-              >
-                New prospect
-              </Button>
+          {/* ---- Client: existing record OR new prospect ---- */}
+          <div className="grid gap-2 rounded-lg border p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label className="text-sm font-medium">Client</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={clientMode === 'existing' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setClientMode('existing')}
+                  disabled={disabled}
+                >
+                  Existing client
+                </Button>
+                <Button
+                  type="button"
+                  variant={clientMode === 'new' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setClientMode('new')}
+                  disabled={disabled}
+                >
+                  New client
+                </Button>
+              </div>
             </div>
+
+            {clientMode === 'existing' ? (
+              <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="q-client"
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={clientPickerOpen}
+                    disabled={disabled}
+                    className="justify-between font-normal"
+                  >
+                    <span className="truncate">
+                      {clientId ? clients.find((c) => c.id === clientId)?.name ?? 'Select client' : 'Select client'}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search clients..." />
+                    <CommandList>
+                      <CommandEmpty>No client found.</CommandEmpty>
+                      <CommandGroup>
+                        {clients.map((c) => (
+                          <CommandItem
+                            key={c.id}
+                            value={c.name}
+                            onSelect={() => {
+                              setClientId(c.id === clientId ? '' : c.id)
+                              // Existing sites are client-scoped, so clear a stale pick.
+                              if (siteMode === 'existing') setSiteId('')
+                              setClientPickerOpen(false)
+                            }}
+                          >
+                            <Check className={`mr-2 h-4 w-4 ${clientId === c.id ? 'opacity-100' : 'opacity-0'}`} />
+                            <span className="truncate">{c.name}</span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {!disabled && (
+                  <div className="sm:col-span-2">
+                    <AddressFinder
+                      label="Find prospect business or address"
+                      hint="Search by business name or address to auto-fill the client details."
+                      onSelect={(p: PlaceResult) => {
+                        if (p.name && !prospectName) setProspectName(p.name)
+                        if (p.address) setProspectAddress(p.address)
+                        if (p.phone && !prospectPhone) setProspectPhone(p.phone)
+                      }}
+                    />
+                  </div>
+                )}
+                <div className="grid gap-1.5">
+                  <Label htmlFor="p-name">Client / prospect name *</Label>
+                  <Input id="p-name" value={prospectName} onChange={(e) => setProspectName(e.target.value)} disabled={disabled} />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="p-contact">Contact name</Label>
+                  <Input id="p-contact" value={prospectContact} onChange={(e) => setProspectContact(e.target.value)} disabled={disabled} />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="p-email">Email</Label>
+                  <Input id="p-email" type="email" value={prospectEmail} onChange={(e) => setProspectEmail(e.target.value)} disabled={disabled} />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="p-phone">Phone</Label>
+                  <Input id="p-phone" value={prospectPhone} onChange={(e) => setProspectPhone(e.target.value)} disabled={disabled} />
+                </div>
+                <div className="grid gap-1.5 sm:col-span-2">
+                  <Label htmlFor="p-address">Client address</Label>
+                  <Input id="p-address" value={prospectAddress} onChange={(e) => setProspectAddress(e.target.value)} disabled={disabled} />
+                </div>
+              </div>
+            )}
           </div>
 
-          {targetMode === 'client' ? (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="grid gap-1.5">
-                <Label htmlFor="q-client">Client</Label>
-                <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      id="q-client"
-                      type="button"
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={clientPickerOpen}
-                      disabled={disabled}
-                      className="justify-between font-normal"
-                    >
-                      <span className="truncate">
-                        {clientId ? clients.find((c) => c.id === clientId)?.name ?? 'Select client' : 'Select client'}
-                      </span>
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Search clients..." />
-                      <CommandList>
-                        <CommandEmpty>No client found.</CommandEmpty>
-                        <CommandGroup>
-                          {clients.map((c) => (
-                            <CommandItem
-                              key={c.id}
-                              value={c.name}
-                              onSelect={() => {
-                                setClientId(c.id === clientId ? '' : c.id)
-                                setSiteId('')
-                                setClientPickerOpen(false)
-                              }}
-                            >
-                              <Check className={`mr-2 h-4 w-4 ${clientId === c.id ? 'opacity-100' : 'opacity-0'}`} />
-                              <span className="truncate">{c.name}</span>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="q-site">Site (optional)</Label>
-                <Popover open={sitePickerOpen} onOpenChange={setSitePickerOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      id="q-site"
-                      type="button"
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={sitePickerOpen}
-                      disabled={disabled || !clientId}
-                      className="justify-between font-normal"
-                    >
-                      <span className="truncate">
-                        {siteId
-                          ? sitesForClient.find((s) => s.id === siteId)?.name ?? 'Select site'
-                          : clientId
-                            ? 'Select site'
-                            : 'Choose a client first'}
-                      </span>
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Search sites..." />
-                      <CommandList>
-                        <CommandEmpty>No site found.</CommandEmpty>
-                        <CommandGroup>
-                          {sitesForClient.map((s) => (
-                            <CommandItem
-                              key={s.id}
-                              value={s.name}
-                              onSelect={() => {
-                                setSiteId(s.id === siteId ? '' : s.id)
-                                setSitePickerOpen(false)
-                              }}
-                            >
-                              <Check className={`mr-2 h-4 w-4 ${siteId === s.id ? 'opacity-100' : 'opacity-0'}`} />
-                              <span className="truncate">{s.name}</span>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+          {/* ---- Site: existing record OR new address (independent of client) ---- */}
+          <div className="grid gap-2 rounded-lg border p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label className="text-sm font-medium">Site</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={siteMode === 'existing' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setSiteMode('existing')}
+                  disabled={disabled}
+                >
+                  Existing site
+                </Button>
+                <Button
+                  type="button"
+                  variant={siteMode === 'new' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setSiteMode('new')}
+                  disabled={disabled}
+                >
+                  New site
+                </Button>
               </div>
             </div>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2">
-              {!disabled && (
-                <div className="sm:col-span-2">
-                  <AddressFinder
-                    label="Find prospect business or address"
-                    hint="Search by business name or address to auto-fill the prospect details."
-                    onSelect={(p: PlaceResult) => {
-                      if (p.name && !prospectName) setProspectName(p.name)
-                      if (p.address) setProspectAddress(p.address)
-                      if (p.phone && !prospectPhone) setProspectPhone(p.phone)
-                    }}
-                  />
+
+            {siteMode === 'existing' ? (
+              <Popover open={sitePickerOpen} onOpenChange={setSitePickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="q-site"
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={sitePickerOpen}
+                    disabled={disabled}
+                    className="justify-between font-normal"
+                  >
+                    <span className="truncate">
+                      {siteId ? siteOptions.find((s) => s.id === siteId)?.name ?? 'Select site' : 'Select site (optional)'}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search sites..." />
+                    <CommandList>
+                      <CommandEmpty>No site found.</CommandEmpty>
+                      <CommandGroup>
+                        {siteOptions.map((s) => (
+                          <CommandItem
+                            key={s.id}
+                            value={`${s.name} ${s.clientName ?? ''}`}
+                            onSelect={() => {
+                              setSiteId(s.id === siteId ? '' : s.id)
+                              setSitePickerOpen(false)
+                            }}
+                          >
+                            <Check className={`mr-2 h-4 w-4 ${siteId === s.id ? 'opacity-100' : 'opacity-0'}`} />
+                            <span className="truncate">
+                              {s.name}
+                              {s.clientName ? <span className="text-muted-foreground"> · {s.clientName}</span> : null}
+                            </span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {!disabled && (
+                  <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
+                    <div className="min-w-[220px] flex-1">
+                      <AddressFinder
+                        label="Find site business or address"
+                        hint="Search by business name or address to auto-fill the site details."
+                        onSelect={(p: PlaceResult) => {
+                          if (p.name && !prospectSiteName) setProspectSiteName(p.name)
+                          if (p.address) setProspectSiteAddress(p.address)
+                          if (p.phone && !prospectSitePhone) setProspectSitePhone(p.phone)
+                        }}
+                      />
+                    </div>
+                    {clientMode === 'new' && (prospectName || prospectAddress) && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (!prospectSiteName && prospectName) setProspectSiteName(prospectName)
+                          if (prospectAddress) setProspectSiteAddress(prospectAddress)
+                        }}
+                        disabled={disabled}
+                      >
+                        Same as client address
+                      </Button>
+                    )}
+                  </div>
+                )}
+                <div className="grid gap-1.5">
+                  <Label htmlFor="ps-name">Site name *</Label>
+                  <Input id="ps-name" value={prospectSiteName} onChange={(e) => setProspectSiteName(e.target.value)} disabled={disabled} />
                 </div>
-              )}
-              <div className="grid gap-1.5">
-                <Label htmlFor="p-name">Prospect name *</Label>
-                <Input id="p-name" value={prospectName} onChange={(e) => setProspectName(e.target.value)} disabled={disabled} />
+                <div className="grid gap-1.5">
+                  <Label htmlFor="ps-contact">Site contact</Label>
+                  <Input id="ps-contact" value={prospectSiteContact} onChange={(e) => setProspectSiteContact(e.target.value)} disabled={disabled} />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="ps-email">Email</Label>
+                  <Input id="ps-email" type="email" value={prospectSiteEmail} onChange={(e) => setProspectSiteEmail(e.target.value)} disabled={disabled} />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="ps-phone">Phone</Label>
+                  <Input id="ps-phone" value={prospectSitePhone} onChange={(e) => setProspectSitePhone(e.target.value)} disabled={disabled} />
+                </div>
+                <div className="grid gap-1.5 sm:col-span-2">
+                  <Label htmlFor="ps-address">Site address</Label>
+                  <Input id="ps-address" value={prospectSiteAddress} onChange={(e) => setProspectSiteAddress(e.target.value)} disabled={disabled} />
+                </div>
               </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="p-contact">Contact name</Label>
-                <Input id="p-contact" value={prospectContact} onChange={(e) => setProspectContact(e.target.value)} disabled={disabled} />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="p-email">Email</Label>
-                <Input id="p-email" type="email" value={prospectEmail} onChange={(e) => setProspectEmail(e.target.value)} disabled={disabled} />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="p-phone">Phone</Label>
-                <Input id="p-phone" value={prospectPhone} onChange={(e) => setProspectPhone(e.target.value)} disabled={disabled} />
-              </div>
-              <div className="grid gap-1.5 sm:col-span-2">
-                <Label htmlFor="p-address">Address</Label>
-                <Input id="p-address" value={prospectAddress} onChange={(e) => setProspectAddress(e.target.value)} disabled={disabled} />
-              </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Title — placed after client/site so it reads naturally and can
               auto-follow the selected site name until manually edited. */}
@@ -1953,6 +2096,24 @@ export function QuoteBuilder({
                 id="q-show-spec"
                 checked={showEquipmentSpec}
                 onCheckedChange={setShowEquipmentSpec}
+                disabled={disabled}
+              />
+            </div>
+            <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+              <div className="grid gap-0.5">
+                <Label htmlFor="q-show-optional" className="cursor-pointer">
+                  Show optional extras to client
+                </Label>
+                <span className="text-xs text-muted-foreground">
+                  {showOptionalExtras
+                    ? 'Optional extra lines are offered to the client, who can choose them or select "No optional extras".'
+                    : 'Optional extras are hidden from the client quote and PDF (default). Turn on to offer them.'}
+                </span>
+              </div>
+              <Switch
+                id="q-show-optional"
+                checked={showOptionalExtras}
+                onCheckedChange={setShowOptionalExtras}
                 disabled={disabled}
               />
             </div>

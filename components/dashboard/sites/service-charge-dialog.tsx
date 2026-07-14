@@ -53,8 +53,7 @@ interface ServiceChargeDialogProps {
   siteServiceId: string
 }
 
-const NO_TEMPLATE = '__custom__'
-const NO_RENEWAL = '__none__'
+  const NO_TEMPLATE = '__custom__'
 
 const penceFromPounds = (pounds: string) =>
   Math.max(0, Math.round((Number.parseFloat(pounds) || 0) * 100))
@@ -89,7 +88,7 @@ export function ServiceChargeDialog({
   const [quantity, setQuantity] = useState('1')
   const [frequency, setFrequency] = useState<RecurringFrequency>('annual')
   const [timing, setTiming] = useState<RecurringTiming>('advance')
-  const [renewalMonth, setRenewalMonth] = useState<string>(NO_RENEWAL)
+  const [renewalMonth, setRenewalMonth] = useState<string>('')
   const [billingAccountId, setBillingAccountId] = useState<string>('')
   const [taxCode, setTaxCode] = useState('')
   // Managed nominal code. `nominalManual` tracks whether the user overrode the
@@ -106,7 +105,7 @@ export function ServiceChargeDialog({
     setQuantity('1')
     setFrequency('annual')
     setTiming('advance')
-    setRenewalMonth(NO_RENEWAL)
+    setRenewalMonth('')
     setBillingAccountId(c?.defaultBillingAccountId ?? '')
     setTaxCode('')
     // Auto-resolve to the service type's nominal code (no dept context here).
@@ -135,7 +134,7 @@ export function ServiceChargeDialog({
     setQuantity(String(charge.quantity ?? 1))
     setFrequency(charge.frequency)
     setTiming(charge.timing)
-    setRenewalMonth(charge.renewal_month ? String(charge.renewal_month) : NO_RENEWAL)
+    setRenewalMonth(charge.renewal_month ? String(charge.renewal_month) : '')
     setBillingAccountId(charge.billing_account_id)
     setTaxCode(charge.tax_code ?? '')
     setNominalCodeId(charge.nominal_code_id ?? null)
@@ -191,6 +190,10 @@ export function ServiceChargeDialog({
       setError('Select a billing account.')
       return
     }
+    if (!renewalMonth) {
+      setError('Select a renewal month — the system relies on it to generate this charge.')
+      return
+    }
     setSaving(true)
     setError(null)
     void (async () => {
@@ -210,7 +213,7 @@ export function ServiceChargeDialog({
         nominal_code_id: nominalCodeId,
         timing,
         frequency,
-        renewal_month: renewalMonth === NO_RENEWAL ? null : Number.parseInt(renewalMonth, 10),
+        renewal_month: Number.parseInt(renewalMonth, 10),
       }
       // Editing preserves fields this dialog doesn't expose (subcontracting,
       // grouping, date window) so an update never wipes them.
@@ -555,13 +558,14 @@ export function ServiceChargeDialog({
                 </Select>
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="sc-renewal">Renewal month</Label>
+                <Label htmlFor="sc-renewal">
+                  Renewal month <span className="text-destructive">*</span>
+                </Label>
                 <Select value={renewalMonth} onValueChange={setRenewalMonth}>
                   <SelectTrigger id="sc-renewal">
-                    <SelectValue />
+                    <SelectValue placeholder="Select month" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={NO_RENEWAL}>None</SelectItem>
                     {MONTH_LABELS.map((m, i) => (
                       <SelectItem key={m} value={String(i + 1)}>
                         {m}
@@ -569,6 +573,9 @@ export function ServiceChargeDialog({
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  Required — the month this charge renews and is invoiced.
+                </p>
               </div>
             </div>
 

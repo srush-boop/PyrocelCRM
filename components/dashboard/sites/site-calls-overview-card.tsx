@@ -43,6 +43,14 @@ export interface UpcomingVisit {
   isWeeklyRecurring: boolean
   /** Further occurrences of this same service within the window (ISO dates). */
   otherDates: string[]
+  /**
+   * For high-frequency cadences (weekly / monthly) we summarise rather than list
+   * every date: e.g. "26 visits · Weekly". Null for low-frequency services, which
+   * keep the individual-date `otherDates` note.
+   */
+  frequencyLabel: string | null
+  /** Total occurrences of this service within the 6-month window. */
+  visitCount: number
 }
 
 interface SiteCallsOverviewCardProps {
@@ -286,11 +294,20 @@ export function SiteCallsOverviewCard({
                           </>
                         )}
                       </p>
-                      {visit.otherDates.length > 0 && (
+                      {visit.frequencyLabel ? (
                         <p className="mt-0.5 truncate text-xs text-muted-foreground/80">
-                          {visit.otherDates.length === 1 ? 'Also due ' : `+${visit.otherDates.length} more: `}
-                          {visit.otherDates.map((d) => formatDateUK(d)).join(', ')}
+                          {visit.visitCount} visit{visit.visitCount === 1 ? '' : 's'} ·{' '}
+                          {visit.frequencyLabel}
                         </p>
+                      ) : (
+                        visit.otherDates.length > 0 && (
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground/80">
+                            {visit.otherDates.length === 1
+                              ? 'Also due '
+                              : `+${visit.otherDates.length} more: `}
+                            {visit.otherDates.map((d) => formatDateUK(d)).join(', ')}
+                          </p>
+                        )
                       )}
                     </div>
                     {visit.isWeeklyRecurring ? (

@@ -66,6 +66,9 @@ interface QuoteDocumentProps {
   // the persisted `client_selected` flags.
   optionSelection?: Set<string>
   onToggleOption?: (line: QuoteLineItem) => void
+  // Interactive only: clears every optional extra in a system ("No optional
+  // extras"). Lets the client positively decline rather than leaving items unticked.
+  onDeclineSystemOptions?: (systemId: string) => void
 }
 
 // Map a service line to a representative icon by keyword so the document reads
@@ -179,6 +182,7 @@ export function QuoteDocument({
   backHref,
   optionSelection,
   onToggleOption,
+  onDeclineSystemOptions,
 }: QuoteDocumentProps) {
   // Interactive mode: the client can tick/untick optional extras right in the
   // document and see totals move. Otherwise we render the persisted selection.
@@ -365,9 +369,17 @@ export function QuoteDocument({
               const coreLines = systemLines.filter((l) => !l.is_optional)
               const productLines = coreLines.filter((l) => !l.is_service)
               const serviceLines = coreLines.filter((l) => l.is_service)
-              const optionalLines = systemLines.filter((l) => l.is_optional)
+              // Optional extras are only offered to the client when the quote opts
+              // in; otherwise they are hidden and never counted in any total.
+              const optionalLines = quote.show_optional_extras
+                ? systemLines.filter((l) => l.is_optional)
+                : []
               const systemTotal = systemLines.reduce(
-                (sum, l) => sum + (l.is_optional && !isOptionSelected(l) ? 0 : l.line_total_pence),
+                (sum, l) =>
+                  sum +
+                  (l.is_optional && (!quote.show_optional_extras || !isOptionSelected(l))
+                    ? 0
+                    : l.line_total_pence),
                 0,
               )
               // Keys belonging to sections the user marked "not required", plus
@@ -536,7 +548,7 @@ export function QuoteDocument({
                       {/* Client-selectable options. In interactive mode these are
                           real checkboxes that update the totals live; otherwise
                           they show the client's saved selection. */}
-                      {quote.show_line_items && optionalLines.length > 0 && (
+                      {optionalLines.length > 0 && (
                         <div className="mt-5 rounded-lg border border-dashed bg-muted/20 p-4 print:break-inside-avoid">
                           <div className="mb-3 flex items-center gap-2">
                             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -546,7 +558,7 @@ export function QuoteDocument({
                           </div>
                           <p className="mb-3 text-xs text-muted-foreground text-pretty">
                             {interactive
-                              ? 'Tick any options you would like to include — the section and quote totals update instantly.'
+                              ? 'Tick any options you would like to include, or choose "No optional extras" — the section and quote totals update instantly.'
                               : 'Options marked as selected are included in the section total above.'}
                           </p>
                           <div className="space-y-2">
@@ -626,6 +638,53 @@ export function QuoteDocument({
                                 </div>
                               )
                             })}
+
+                            {/* Explicit "decline all" choice so the client can
+                                positively confirm they want no optional extras. */}
+                            {(() => {
+                              const noneSelected = optionalLines.every((l) => !isOptionSelected(l))
+                              const declineBody = (
+                                <>
+                                  <span
+                                    aria-hidden
+                                    className={`mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                                      noneSelected
+                                        ? 'border-primary bg-primary text-primary-foreground'
+                                        : 'border-muted-foreground/40'
+                                    }`}
+                                  >
+                                    {noneSelected ? <Check className="h-3 w-3" /> : null}
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <span className="font-medium">No optional extras</span>
+                                    <div className="mt-0.5 text-xs text-muted-foreground">
+                                      Proceed with the core quotation only.
+                                    </div>
+                                  </div>
+                                </>
+                              )
+                              return interactive ? (
+                                <button
+                                  type="button"
+                                  onClick={() => onDeclineSystemOptions?.(system.id)}
+                                  className={`flex w-full cursor-pointer items-start gap-3 rounded-md border p-3 text-left transition-colors ${
+                                    noneSelected
+                                      ? 'border-primary/60 bg-primary/5'
+                                      : 'border-border bg-card hover:bg-muted/40'
+                                  }`}
+                                >
+                                  {declineBody}
+                                </button>
+                              ) : (
+                                <div
+                                  className={`flex items-start gap-3 rounded-md border p-3 ${
+                                    noneSelected ? 'border-primary/60 bg-primary/5' : 'border-border bg-card'
+                                  }`}
+                                >
+                                  {declineBody}
+                                </div>
+                              )
+                            })()}
                           </div>
                         </div>
                       )}
@@ -794,6 +853,53 @@ export function QuoteDocument({
             preparerName={quote.preparer?.full_name ?? null}
             branch={quote.branch ?? null}
           />
+        )}
+
+        {/* Client acceptance / signature — once signed, the document reads as an
+            executed contract (shown on the public page, the PDF and in review). */}
+        {(quote.signature_name || quote.signature_image_url || quote.signed_at) && (
+          <div className="mt-10 break-inside-avoid rounded-lg border-2 border-primary/30 bg-primary/5 p-5">
+            <FieldLabel>Client acceptance</FieldLabel>
+            <p className="mb-4 text-xs text-muted-foreground text-pretty">
+              This quotation has been accepted and electronically signed by the client, and forms a
+              binding contract for the works and services described above.
+            </p>
+            <div className="flex flex-wrap items-end justify-between gap-6">
+              <div className="min-w-[12rem]">
+                {quote.signature_image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={quote.signature_image_url || '/placeholder.svg'}
+                    alt={`Signature of ${quote.signature_name ?? 'client'}`}
+                    className="h-20 w-auto max-w-full object-contain"
+                    crossOrigin="anonymous"
+                  />
+                ) : (
+                  <div className="flex h-20 items-end">
+                    <span className="font-serif text-2xl italic text-foreground">
+                      {quote.signature_name}
+                    </span>
+                  </div>
+                )}
+                <div className="mt-1 border-t pt-1 text-sm font-medium">
+                  {quote.signature_name ?? 'Client'}
+                </div>
+                <div className="text-xs text-muted-foreground">Signed for and on behalf of the client</div>
+              </div>
+              <div className="text-sm">
+                <div className="text-xs text-muted-foreground">Date accepted</div>
+                <div className="font-medium">
+                  {formatDateUK(quote.signed_at ?? quote.decided_at ?? quote.updated_at)}
+                </div>
+                {quote.po_number && (
+                  <div className="mt-2">
+                    <div className="text-xs text-muted-foreground">PO number</div>
+                    <div className="font-medium">{quote.po_number}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Footer */}

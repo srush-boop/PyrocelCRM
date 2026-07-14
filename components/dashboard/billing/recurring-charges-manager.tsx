@@ -102,7 +102,6 @@ const EMPTY_FORM: FormState = {
   siteId: '',
 }
 
-const NO_RENEWAL = '__none__'
 const NO_SERVICE = '__standalone__'
 
 function poundsToPence(pounds: string): number {
@@ -222,7 +221,7 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
       nominal_code_id: form.nominalCodeId,
       timing: form.timing,
       frequency: form.frequency,
-      renewal_month: form.renewalMonth ? Number(form.renewalMonth) : null,
+      renewal_month: Number(form.renewalMonth),
       group_key: form.groupKey || null,
       is_subcontracted: form.isSubcontracted,
       subcontract_price_pence: form.isSubcontracted ? poundsToPence(form.poundsSubcontract) : null,
@@ -232,6 +231,10 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
   async function handleSave() {
     if (!form.description.trim()) {
       toast.error('Enter a description')
+      return
+    }
+    if (!form.renewalMonth) {
+      toast.error('Select a renewal month — the system relies on it to generate this charge')
       return
     }
     setSaving(true)
@@ -586,16 +589,17 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
                   </Select>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="rc-renewal">Renewal month</Label>
+                  <Label htmlFor="rc-renewal">
+                    Renewal month <span className="text-destructive">*</span>
+                  </Label>
                   <Select
-                    value={form.renewalMonth || NO_RENEWAL}
-                    onValueChange={(v) => set('renewalMonth', v === NO_RENEWAL ? '' : v)}
+                    value={form.renewalMonth}
+                    onValueChange={(v) => set('renewalMonth', v)}
                   >
                     <SelectTrigger id="rc-renewal">
-                      <SelectValue />
+                      <SelectValue placeholder="Select month" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={NO_RENEWAL}>None</SelectItem>
                       {MONTH_LABELS.map((label, i) => (
                         <SelectItem key={label} value={String(i + 1)}>
                           {label}
@@ -603,6 +607,9 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Required — the month this charge renews and is invoiced.
+                  </p>
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="rc-group">

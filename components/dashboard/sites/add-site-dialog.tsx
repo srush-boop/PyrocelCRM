@@ -66,8 +66,7 @@ interface AddSiteDialogProps {
   chargeTemplates?: ChargeTemplate[]
 }
 
-const NO_TEMPLATE = '__custom__'
-const NO_RENEWAL = '__none__'
+  const NO_TEMPLATE = '__custom__'
 const FREQUENCIES = Object.keys(RECURRING_FREQUENCY_LABELS) as RecurringFrequency[]
 const TIMINGS = Object.keys(RECURRING_TIMING_LABELS) as RecurringTiming[]
 
@@ -124,7 +123,7 @@ export function AddSiteDialog({
   )
   const [chargeFrequency, setChargeFrequency] = useState<RecurringFrequency>('annual')
   const [chargeTiming, setChargeTiming] = useState<RecurringTiming>('advance')
-  const [chargeRenewalMonth, setChargeRenewalMonth] = useState<string>(NO_RENEWAL)
+  const [chargeRenewalMonth, setChargeRenewalMonth] = useState<string>('')
 
   const setServiceValue = (serviceTypeId: string, v: string) =>
     setServiceValues((prev) => ({ ...prev, [serviceTypeId]: v }))
@@ -192,6 +191,16 @@ export function AddSiteDialog({
 
     if (formData.status === 'live' && !formData.client_id) {
       setError('A client is required for a site when its status is Live.')
+      return
+    }
+
+    // If any service charge value is entered, a renewal month is required — the
+    // system relies on it to generate the recurring charge.
+    const hasChargeValues = Object.values(serviceValues).some(
+      (v) => (Number.parseFloat(v ?? '') || 0) > 0,
+    )
+    if (hasChargeValues && !chargeRenewalMonth) {
+      setError('Select a renewal month for the service charges — the system relies on it to generate them.')
       return
     }
 
@@ -278,8 +287,7 @@ export function AddSiteDialog({
           priceBasis: 'annual',
           frequency: chargeFrequency,
           timing: chargeTiming,
-          renewalMonth:
-            chargeRenewalMonth === NO_RENEWAL ? null : Number.parseInt(chargeRenewalMonth, 10),
+          renewalMonth: chargeRenewalMonth ? Number.parseInt(chargeRenewalMonth, 10) : null,
           services: chargeServices,
         })
         if (res.error) console.log('[v0] createSetupCharges error:', res.error)
@@ -296,7 +304,7 @@ export function AddSiteDialog({
       setChargeTemplateId(annualMaintenanceTemplateId ?? NO_TEMPLATE)
       setChargeFrequency('annual')
       setChargeTiming('advance')
-      setChargeRenewalMonth(NO_RENEWAL)
+      setChargeRenewalMonth('')
       setFormData({
         name: '',
         address: '',
@@ -563,14 +571,13 @@ export function AddSiteDialog({
                     </div>
                     <div className="grid gap-1.5">
                       <Label htmlFor="setup-renewal" className="text-xs">
-                        Renewal month
+                        Renewal month <span className="text-destructive">*</span>
                       </Label>
                       <Select value={chargeRenewalMonth} onValueChange={setChargeRenewalMonth}>
                         <SelectTrigger id="setup-renewal">
-                          <SelectValue />
+                          <SelectValue placeholder="Select month" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value={NO_RENEWAL}>None</SelectItem>
                           {MONTH_LABELS.map((m, i) => (
                             <SelectItem key={m} value={String(i + 1)}>
                               {m}

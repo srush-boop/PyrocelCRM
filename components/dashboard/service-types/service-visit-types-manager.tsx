@@ -1,12 +1,21 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { ArrowDown, ArrowUp, Loader2, Plus, Trash2 } from 'lucide-react'
-import type { ServiceVisitType } from '@/lib/types/database'
+import {
+  ArrowDown,
+  ArrowUp,
+  ClipboardList,
+  ExternalLink,
+  Loader2,
+  Plus,
+  Trash2,
+} from 'lucide-react'
+import type { ChecklistTemplate, ServiceVisitType } from '@/lib/types/database'
 
 interface ServiceVisitTypesManagerProps {
   serviceTypeId: string
@@ -31,9 +40,31 @@ export function ServiceVisitTypesManager({
 }: ServiceVisitTypesManagerProps) {
   const supabase = createClient()
   const [visits, setVisits] = useState<ServiceVisitType[]>([])
+  // Checklist template (if any) keyed by visit_type_id, so each visit shows its
+  // own checklist name + item count and an "Edit items" link.
+  const [checklistsByVisit, setChecklistsByVisit] = useState<
+    Record<string, { id: string; name: string; itemCount: number }>
+  >({})
   const [loading, setLoading] = useState(true)
   const [newName, setNewName] = useState('')
   const [busy, setBusy] = useState(false)
+
+  const loadChecklists = useCallback(async () => {
+    const { data } = await supabase
+      .from('checklist_templates')
+      .select('id, name, items, visit_type_id')
+      .eq('service_type_id', serviceTypeId)
+      .not('visit_type_id', 'is', null)
+    const map: Record<string, { id: string; name: string; itemCount: number }> = {}
+    for (const row of (data || []) as (ChecklistTemplate & { visit_type_id: string })[]) {
+      map[row.visit_type_id] = {
+        id: row.id,
+        name: row.name,
+        itemCount: Array.isArray(row.items) ? row.items.length : 0,
+      }
+    }
+    setChecklistsByVisit(map)
+  }, [supabase, serviceTypeId])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -43,12 +74,55 @@ export function ServiceVisitTypesManager({
       .eq('service_type_id', serviceTypeId)
       .order('sort_order', { ascending: true })
     setVisits((data || []) as ServiceVisitType[])
+    await loadChecklists()
     setLoading(false)
-  }, [supabase, serviceTypeId])
+  }, [supabase, serviceTypeId, loadChecklists])
 
   useEffect(() => {
     load()
   }, [load])
+
+  // Refresh checklist counts when the user returns from editing items in
+  // another tab (the editor opens in a new tab to preserve this dialog).
+  useEffect(() => {
+    const onFocus = () => loadChecklists()
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [loadChecklists])
+
+  const createChecklist = async (visit: ServiceVisitType) => {
+    setBusy(true)
+    const { data } = await supabase
+      .from('checklist_templates')
+      .insert({
+        service_type_id: serviceTypeId,
+        visit_type_id: visit.id,
+        name: `${visit.name} Checklist`,
+        items: [],
+      })
+      .select('id, name, items')
+      .single()
+    if (data) {
+      setChecklistsByVisit((prev) => ({
+        ...prev,
+        [visit.id]: { id: data.id, name: data.name, itemCount: 0 },
+      }))
+      // Open the full checklist editor in a new tab so this dialog stays open.
+      window.open(`/dashboard/checklists/${data.id}`, '_blank')
+    }
+    setBusy(false)
+  }
+
+  const removeChecklist = async (visitId: string, checklistId: string) => {
+    setBusy(true)
+    await supabase.from('checklist_templates').delete().eq('id', checklistId)
+    setChecklistsByVisit((prev) => {
+      const next = { ...prev }
+      delete next[visitId]
+      return next
+    })
+    setBusy(false)
+  }
 
   const addVisit = async () => {
     const name = newName.trim()
@@ -78,6 +152,16 @@ export function ServiceVisitTypesManager({
 
   const removeVisit = async (id: string) => {
     setBusy(true)
+    // Remove the visit's own checklist first so it isn't left orphaned.
+    const checklist = checklistsByVisit[id]
+    if (checklist) {
+      await supabase.from('checklist_templates').delete().eq('id', checklist.id)
+      setChecklistsByVisit((prev) => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
+    }
     await supabase.from('service_visit_types').delete().eq('id', id)
     // Re-pack sort_order so it stays contiguous.
     const remaining = visits.filter((v) => v.id !== id)
@@ -114,8 +198,8 @@ export function ServiceVisitTypesManager({
       <div>
         <Label className="text-sm font-medium">Visits per cycle</Label>
         <p className="text-xs text-muted-foreground">
-          Add the distinct visits in one service cycle (e.g. Annual, then Periodic). Visits are
-          spread evenly across the frequency above
+          Add the distinct visits in one service cycle (e.g. Annual, then Periodic), each with its
+          own checklist. Visits are spread evenly across the frequency above
           {visits.length > 1
             ? ` — ${describeSpacing(frequencyValue, frequencyUnit, visits.length)}.`
             : '. With one visit (or none) this behaves as a single recurring service.'}
@@ -128,54 +212,103 @@ export function ServiceVisitTypesManager({
         </div>
       ) : (
         <div className="grid gap-2">
-          {visits.map((visit, index) => (
-            <div key={visit.id} className="flex items-center gap-2">
-              <span className="w-5 shrink-0 text-center text-xs text-muted-foreground">
-                {index + 1}
-              </span>
-              <Input
-                value={visit.name}
-                onChange={(e) => renameVisit(visit.id, e.target.value)}
-                onBlur={(e) => persistName(visit.id, e.target.value)}
-                className="h-9"
-              />
-              <div className="flex shrink-0 items-center">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9"
-                  disabled={busy || index === 0}
-                  onClick={() => move(index, -1)}
-                  aria-label="Move visit up"
-                >
-                  <ArrowUp className="h-4 w-4" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9"
-                  disabled={busy || index === visits.length - 1}
-                  onClick={() => move(index, 1)}
-                  aria-label="Move visit down"
-                >
-                  <ArrowDown className="h-4 w-4" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 text-destructive hover:text-destructive"
-                  disabled={busy}
-                  onClick={() => removeVisit(visit.id)}
-                  aria-label="Delete visit"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+          {visits.map((visit, index) => {
+            const checklist = checklistsByVisit[visit.id]
+            return (
+              <div key={visit.id} className="grid gap-2 rounded-lg border bg-muted/30 p-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-5 shrink-0 text-center text-xs text-muted-foreground">
+                    {index + 1}
+                  </span>
+                  <Input
+                    value={visit.name}
+                    onChange={(e) => renameVisit(visit.id, e.target.value)}
+                    onBlur={(e) => persistName(visit.id, e.target.value)}
+                    className="h-9 bg-background"
+                  />
+                  <div className="flex shrink-0 items-center">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9"
+                      disabled={busy || index === 0}
+                      onClick={() => move(index, -1)}
+                      aria-label="Move visit up"
+                    >
+                      <ArrowUp className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9"
+                      disabled={busy || index === visits.length - 1}
+                      onClick={() => move(index, 1)}
+                      aria-label="Move visit down"
+                    >
+                      <ArrowDown className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 text-destructive hover:text-destructive"
+                      disabled={busy}
+                      onClick={() => removeVisit(visit.id)}
+                      aria-label="Delete visit"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Per-visit checklist: each visit type owns its own checklist. */}
+                <div className="flex items-center gap-2 pl-7">
+                  <ClipboardList className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  {checklist ? (
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="truncate text-xs font-medium">{checklist.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {checklist.itemCount} item{checklist.itemCount === 1 ? '' : 's'}
+                      </span>
+                      <Link
+                        href={`/dashboard/checklists/${checklist.id}`}
+                        target="_blank"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                      >
+                        Edit items
+                        <ExternalLink className="h-3 w-3" />
+                      </Link>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => removeChecklist(visit.id, checklist.id)}
+                        className="text-xs text-muted-foreground hover:text-destructive"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-1 items-center gap-2">
+                      <span className="text-xs text-muted-foreground">No checklist yet</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 bg-transparent text-xs"
+                        disabled={busy}
+                        onClick={() => createChecklist(visit)}
+                      >
+                        <Plus className="mr-1 h-3 w-3" />
+                        Add checklist
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
 
           <div className="flex items-center gap-2">
             <Input

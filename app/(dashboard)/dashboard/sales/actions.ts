@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { computeQuoteTotals, QUOTE_TYPES, WORK_TYPES, sellFromCost, resolveLineMargin } from '@/lib/sales'
 import { sendEmail } from '@/lib/email/send-email'
@@ -9,7 +10,8 @@ import { renderQuotePdfBuffer } from '@/lib/pdf/quote-pdf'
 import { loadQuoteCatalogue } from '@/lib/sales/equipment-spec'
 import { createRemedialCallsForQuote } from '@/lib/remedial'
 import { createJobForAcceptedQuote } from '@/lib/jobs/convert'
-import { buildContractReviewDraft } from '@/lib/contracts/build-draft'
+  import { buildContractReviewDraft } from '@/lib/contracts/build-draft'
+  import { classifyAcceptedQuote } from '@/lib/contracts/classify'
 import type { CalculatorSnapshot } from '@/lib/calculator-snapshot'
 import type {
   QuoteStatus,
@@ -120,6 +122,11 @@ export interface QuoteInput {
   prospect_email?: string | null
   prospect_phone?: string | null
   prospect_address?: string | null
+  prospect_site_name?: string | null
+  prospect_site_contact?: string | null
+  prospect_site_email?: string | null
+  prospect_site_phone?: string | null
+  prospect_site_address?: string | null
   summary?: string | null
   notes?: string | null
   terms?: string | null
@@ -127,6 +134,7 @@ export interface QuoteInput {
   discount_pence: number
   show_line_items?: boolean
   show_equipment_spec?: boolean
+  show_optional_extras?: boolean
   show_design_overview?: boolean
   // Append the modernised maintenance service agreement to the quote document.
   show_maintenance_agreement?: boolean
@@ -347,6 +355,10 @@ export async function saveQuote(
   if (!input.client_id && !input.prospect_name?.trim()) {
     return { ok: false, error: 'Select a client or enter a prospect name.' }
   }
+  // A new-site prospect (no existing site id) needs at least a site name.
+  if (!input.site_id && (input.prospect_site_address?.trim() || input.prospect_site_contact?.trim()) && !input.prospect_site_name?.trim()) {
+    return { ok: false, error: 'Enter a site name for the new site.' }
+  }
 
   // Flatten lines, deriving each line's authoritative sell price from its unit
   // cost + effective margin (per-line override, else the system margin).
@@ -380,6 +392,11 @@ export async function saveQuote(
     prospect_email: input.prospect_email?.trim() || null,
     prospect_phone: input.prospect_phone?.trim() || null,
     prospect_address: input.prospect_address?.trim() || null,
+    prospect_site_name: input.prospect_site_name?.trim() || null,
+    prospect_site_contact: input.prospect_site_contact?.trim() || null,
+    prospect_site_email: input.prospect_site_email?.trim() || null,
+    prospect_site_phone: input.prospect_site_phone?.trim() || null,
+    prospect_site_address: input.prospect_site_address?.trim() || null,
     summary: input.summary?.trim() || null,
     notes: input.notes?.trim() || null,
     terms: input.terms?.trim() || null,
@@ -390,6 +407,7 @@ export async function saveQuote(
     total_pence: totals.totalPence,
     show_line_items: input.show_line_items ?? true,
     show_equipment_spec: input.show_equipment_spec ?? false,
+    show_optional_extras: input.show_optional_extras ?? false,
     show_design_overview: input.show_design_overview ?? true,
     show_maintenance_agreement: input.show_maintenance_agreement ?? false,
     valid_until: input.valid_until || null,
@@ -880,29 +898,92 @@ export async function setQuoteStatus(
   // Non-remedial quotes instead spawn a delivery Job (idempotent; skips remedial
   // internally). Neither path is allowed to block the status change.
   if (status === 'accepted') {
-    await createRemedialCallsForQuote(supabase, id)
-    // Routine Maintenance quotes go through Contract Review (draft client/site/
-    // system/service/charge records awaiting approval) instead of a delivery Job.
-    const { data: acceptedQuote } = await supabase
-      .from('quotes')
-      .select('quote_type')
-      .eq('id', id)
-      .single()
-    if (acceptedQuote?.quote_type === 'service_contract') {
-      await buildContractReviewDraft(supabase, id)
-      revalidatePath('/dashboard/sales/contract-reviews')
-      revalidatePath('/dashboard/service')
-    } else {
-      await createJobForAcceptedQuote(supabase, id)
-      revalidatePath('/dashboard/jobs')
-    }
-    revalidatePath('/dashboard/schedule')
-    revalidatePath('/dashboard/defects')
+    await applyQuoteAcceptedEffects(supabase, id)
   }
 
   revalidatePath('/dashboard/sales')
   revalidatePath('/dashboard/sales/quotes')
   revalidatePath(`/dashboard/sales/${id}`)
+  return { ok: true }
+}
+
+/**
+ * Side-effects to run once a quote becomes accepted, regardless of whether it
+ * was accepted via the dashboard, a manual/printed mark, or the public link.
+ * Raises remedial calls, then routes Routine Maintenance (service_contract)
+ * quotes through Contract Review (draft records awaiting approval) and all other
+ * quotes to a delivery Job. Idempotent and never throws so acceptance is never
+ * blocked.
+ */
+async function applyQuoteAcceptedEffects(supabase: SupabaseClient, id: string) {
+  await createRemedialCallsForQuote(supabase, id)
+  // Route on the quote's actual systems (ignoring empty ones), not the stored
+  // quote_type which can be stale. This also self-heals quote_type.
+  const route = await classifyAcceptedQuote(supabase, id)
+  if (route === 'contract_review') {
+    await buildContractReviewDraft(supabase, id)
+    revalidatePath('/dashboard/sales/contract-reviews')
+    revalidatePath('/dashboard/service')
+  } else {
+    await createJobForAcceptedQuote(supabase, id)
+    revalidatePath('/dashboard/jobs')
+  }
+  revalidatePath('/dashboard/schedule')
+  revalidatePath('/dashboard/defects')
+}
+
+/**
+ * Mark a quote accepted without emailing it — for quotes that were printed and
+ * signed on paper (or agreed verbally). Optionally imports the signer's name and
+ * a drawn/scanned signature image so the document reads as an executed contract.
+ * Runs the same accepted-side effects as any other acceptance path.
+ */
+export async function markQuoteAcceptedManually(args: {
+  id: string
+  signatureName?: string
+  // Data-URL (image/png) of the signature, drawn or captured from the paper copy.
+  signatureDataUrl?: string
+  poNumber?: string
+  note?: string
+}): Promise<{ ok: boolean; error?: string }> {
+  const { supabase, user, error } = await requireStaff()
+  if (error || !user) return { ok: false, error: error ?? 'Not authorised.' }
+
+  const now = new Date().toISOString()
+  const patch: Record<string, unknown> = {
+    status: 'accepted',
+    decided_at: now,
+    decision_note: args.note?.trim() || null,
+    po_number: args.poNumber?.trim() || null,
+  }
+  if (args.signatureName?.trim()) {
+    patch.signature_name = args.signatureName.trim()
+    patch.signed_at = now
+  }
+  // Store the signature inline as a data URL (a few KB) so it renders everywhere
+  // without Blob/signed-URL handling, mirroring the public acceptance flow.
+  if (args.signatureDataUrl?.startsWith('data:image/')) {
+    patch.signature_image_url = args.signatureDataUrl
+  }
+
+  const { data: updated, error: upErr } = await supabase
+    .from('quotes')
+    .update(patch)
+    .eq('id', args.id)
+    .select('id')
+  if (upErr) {
+    console.log('[v0] markQuoteAcceptedManually update error:', upErr.message)
+    return { ok: false, error: 'Could not accept the quote.' }
+  }
+  if (!updated || updated.length === 0) {
+    return { ok: false, error: 'Quote not found or you do not have permission to update it.' }
+  }
+
+  await applyQuoteAcceptedEffects(supabase, args.id)
+
+  revalidatePath('/dashboard/sales')
+  revalidatePath('/dashboard/sales/quotes')
+  revalidatePath(`/dashboard/sales/${args.id}`)
   return { ok: true }
 }
 
@@ -1068,6 +1149,111 @@ export async function sendQuote(args: {
         e instanceof Error
           ? `The quote could not be sent: ${e.message}`
           : 'The quote could not be sent due to an unexpected error.',
+    }
+  }
+}
+
+/**
+ * Email a copy of the approved contract (the signed quote PDF) to the client
+ * after Pyrocel has committed the contract review. Stamps
+ * contract_reviews.contract_sent_at so the UI reflects that the copy has gone
+ * out. Reuses the same PDF renderer and email transport as sendQuote.
+ */
+export async function sendContractCopy(args: {
+  reviewId: string
+  to: string
+  cc?: string[]
+  subject: string
+  message: string
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const { supabase, user, error } = await requireStaff()
+    if (error || !user) return { ok: false, error: error ?? 'Not authorised.' }
+
+    const to = args.to.trim()
+    if (!/.+@.+\..+/.test(to)) {
+      return { ok: false, error: 'Please enter a valid recipient email address.' }
+    }
+    if (!args.subject.trim()) return { ok: false, error: 'Please enter a subject.' }
+
+    const { data: review } = await supabase
+      .from('contract_reviews')
+      .select('id, quote_id, status')
+      .eq('id', args.reviewId)
+      .single()
+    if (!review) return { ok: false, error: 'Contract review not found.' }
+    if (review.status !== 'committed') {
+      return { ok: false, error: 'Approve (commit) the contract before sending the copy.' }
+    }
+
+    const { data: quote } = await supabase
+      .from('quotes')
+      .select('*, client:clients(*), site:sites(*), preparer:profiles!quotes_created_by_fkey(id, full_name)')
+      .eq('id', review.quote_id)
+      .single()
+    if (!quote) return { ok: false, error: 'Contract quote not found.' }
+
+    const [{ data: systems }, { data: lines }, { data: company }] = await Promise.all([
+      supabase.from('quote_systems').select('*').eq('quote_id', review.quote_id).order('position'),
+      supabase.from('quote_line_items').select('*').eq('quote_id', review.quote_id).order('position'),
+      supabase.from('company_info').select('*').limit(1).maybeSingle(),
+    ])
+
+    const typedQuote = quote as Quote
+    const companyName = (company as CompanyInfo | null)?.name || 'Pyrocel Ltd'
+    const typedLines = (lines ?? []) as QuoteLineItem[]
+    const catalogue = typedQuote.show_equipment_spec
+      ? await loadQuoteCatalogue(supabase, typedLines)
+      : []
+
+    let pdf: Buffer
+    try {
+      pdf = await renderQuotePdfBuffer({
+        quote: typedQuote,
+        systems: (systems ?? []) as QuoteSystem[],
+        lines: typedLines,
+        company: (company ?? null) as CompanyInfo | null,
+        catalogue,
+      })
+    } catch (e) {
+      console.error('[v0] Contract PDF generation failed:', e)
+      return { ok: false, error: 'Could not generate the contract PDF.' }
+    }
+
+    const html = buildQuoteEmailHtml({ message: args.message, companyName })
+    const fileName = `Contract-${(typedQuote.reference ?? typedQuote.quote_number ?? typedQuote.id).toString().replace(/[^a-zA-Z0-9-_]/g, '')}.pdf`
+
+    const result = await sendEmail(to, args.subject.trim(), html, {
+      cc: args.cc,
+      attachments: [{ filename: fileName, content: pdf }],
+    })
+    if (!result.success) {
+      if (result.error === 'Email service not configured') {
+        return {
+          ok: false,
+          error:
+            'Email isn’t configured in this environment, so the contract couldn’t be sent. Add a RESEND_API_KEY to enable sending. You can still use "View signed document" to download and share it manually.',
+        }
+      }
+      return { ok: false, error: result.error || 'The email could not be sent.' }
+    }
+
+    await supabase
+      .from('contract_reviews')
+      .update({ contract_sent_at: new Date().toISOString() })
+      .eq('id', args.reviewId)
+
+    revalidatePath('/dashboard/sales/contract-reviews')
+    revalidatePath(`/dashboard/sales/contract-reviews/${args.reviewId}`)
+    return { ok: true }
+  } catch (e) {
+    console.error('[v0] sendContractCopy unexpected failure:', e)
+    return {
+      ok: false,
+      error:
+        e instanceof Error
+          ? `The contract could not be sent: ${e.message}`
+          : 'The contract could not be sent due to an unexpected error.',
     }
   }
 }

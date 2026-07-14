@@ -4,6 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { loadQuoteCatalogue } from '@/lib/sales/equipment-spec'
   import { createRemedialCallsForQuote } from '@/lib/remedial'
   import { createJobForAcceptedQuote } from '@/lib/jobs/convert'
+  import { buildContractReviewDraft } from '@/lib/contracts/build-draft'
+  import { classifyAcceptedQuote } from '@/lib/contracts/classify'
 import { computeQuoteTotals } from '@/lib/sales'
 import type { QuoteLineItem, QuoteMessage } from '@/lib/types/database'
 
@@ -153,11 +155,20 @@ export async function respondToPublicQuote(args: {
   }
 
   // When a quote is approved by the client, raise remedial call(s) for remedial
-  // quotes, or spawn a delivery Job for everything else (both idempotent and
-  // non-blocking). Uses the admin client so RLS never gets in the way.
+  // quotes. Routine Maintenance (service_contract) quotes then go through Contract
+  // Review — the signed quote becomes a contract awaiting Pyrocel approval — while
+  // everything else spawns a delivery Job. All steps are idempotent and
+  // non-blocking. Uses the admin client so RLS never gets in the way.
   if (args.decision === 'accepted') {
     await createRemedialCallsForQuote(supabase, quote.id)
-    await createJobForAcceptedQuote(supabase, quote.id)
+    // Route on the quote's actual systems (ignoring empty ones), not the stored
+    // quote_type which can be stale. This also self-heals quote_type.
+    const route = await classifyAcceptedQuote(supabase, quote.id)
+    if (route === 'contract_review') {
+      await buildContractReviewDraft(supabase, quote.id)
+    } else {
+      await createJobForAcceptedQuote(supabase, quote.id)
+    }
   }
 
   return { ok: true }

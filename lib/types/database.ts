@@ -1812,6 +1812,13 @@ export interface Quote {
   prospect_email: string | null
   prospect_phone: string | null
   prospect_address: string | null
+  // New-prospect SITE details, independent of the client above (a quote can pair
+  // an existing client with a new site, or a new client with a new site).
+  prospect_site_name: string | null
+  prospect_site_address: string | null
+  prospect_site_contact: string | null
+  prospect_site_email: string | null
+  prospect_site_phone: string | null
   summary: string | null
   notes: string | null
   terms: string | null
@@ -1836,6 +1843,9 @@ export interface Quote {
   // When true (default), the quote document/PDF shows each system's design
   // overview + design/survey details. Hidden when false.
   show_design_overview: boolean
+  // When true, optional extra line items are shown to the client on the public
+  // quote/PDF. Defaults off so extras are hidden unless staff opt in.
+  show_optional_extras: boolean
   valid_until: string | null
   sent_at: string | null
   decided_at: string | null
@@ -2232,6 +2242,8 @@ export interface ContractReview {
   created_by: string | null
   committed_by: string | null
   committed_at: string | null
+  // Set when the approved (committed) contract copy has been emailed to the client.
+  contract_sent_at: string | null
   created_at: string
   updated_at: string
   // Optional joins

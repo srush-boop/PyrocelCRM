@@ -64,6 +64,12 @@ export interface RecurringChargeInput {
   end_date?: string | null
 }
 
+// The renewal month drives charge generation, so every recurring charge must
+// carry a valid 1–12 value. Enforced server-side across all create/update paths.
+function isValidRenewalMonth(month: number | null | undefined): month is number {
+  return typeof month === 'number' && Number.isInteger(month) && month >= 1 && month <= 12
+}
+
 function sanitize(input: RecurringChargeInput) {
   const subcontracted = !!input.is_subcontracted
   return {
@@ -286,6 +292,11 @@ export async function createSetupCharges(opts: {
 
   const priced = opts.services.filter((s) => s.valuePence > 0)
   if (priced.length === 0) return { created: 0 }
+  // Renewal month drives charge generation, so it's required whenever charges
+  // are actually created here.
+  if (!isValidRenewalMonth(opts.renewalMonth)) {
+    return { error: 'A renewal month is required to set up service charges.', created: 0 }
+  }
 
   // Resolve the inherited billing account for this site (site override → client
   // default). Without one we cannot bill, so skip silently.
@@ -394,6 +405,9 @@ export async function createRecurringCharge(input: RecurringChargeInput) {
   const { supabase, userId } = auth
 
   if (!input.description?.trim()) return { error: 'Description is required' }
+  if (!isValidRenewalMonth(input.renewal_month)) {
+    return { error: 'A renewal month is required — the system relies on it to generate this charge.' }
+  }
 
   const values = sanitize(input)
   const { data, error } = await supabase
@@ -426,6 +440,9 @@ export async function updateRecurringCharge(id: string, input: RecurringChargeIn
   const { supabase, userId } = auth
 
   if (!input.description?.trim()) return { error: 'Description is required' }
+  if (!isValidRenewalMonth(input.renewal_month)) {
+    return { error: 'A renewal month is required — the system relies on it to generate this charge.' }
+  }
 
   // Read the current price so we only log history on an actual change.
   const { data: existing } = await supabase

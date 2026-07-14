@@ -10,7 +10,7 @@ import { QuoteQueriesPanel } from '@/components/dashboard/sales/quote-queries-pa
 import { CreateDocumentButton } from '@/components/documents/create-document-dialog'
 import { AddRequestButton } from '@/components/dashboard/requests/add-request-button'
 import { EntityRequestsCard } from '@/components/dashboard/requests/entity-requests-card'
-import { resolveDefaultMargin } from '@/lib/sales'
+import { resolveDefaultMargin, isRoutineMaintenanceOnly } from '@/lib/sales'
 import { isRequirementStatus } from '@/lib/sales-requirements'
 import type {
   Client,
@@ -70,6 +70,35 @@ export default async function QuoteDetailPage({
     .select('id, job_number')
     .eq('quote_id', id)
     .maybeSingle()
+
+  // A Contract Review may exist for accepted Routine-Maintenance quotes.
+  const { data: linkedReview } = await supabase
+    .from('contract_reviews')
+    .select('id')
+    .eq('quote_id', id)
+    .maybeSingle()
+
+  // Classify from the quote's meaningful (non-empty) systems so the status
+  // panel can offer the Contract Review actions for maintenance-only quotes.
+  const { data: quoteSystemsForRoute } = await supabase
+    .from('quote_systems')
+    .select('id, work_type')
+    .eq('quote_id', id)
+  const { data: quoteLinesForRoute } = await supabase
+    .from('quote_line_items')
+    .select('system_id')
+    .eq('quote_id', id)
+  const systemsWithContent = new Set(
+    ((quoteLinesForRoute ?? []) as { system_id: string | null }[])
+      .map((l) => l.system_id)
+      .filter((v): v is string => Boolean(v)),
+  )
+  const isMaintenanceOnly = isRoutineMaintenanceOnly(
+    ((quoteSystemsForRoute ?? []) as { id: string; work_type: string | null }[]).map((s) => ({
+      work_type: s.work_type,
+      hasContent: systemsWithContent.has(s.id),
+    })),
+  )
 
   const [
     { data: systems },
@@ -246,7 +275,11 @@ export default async function QuoteDetailPage({
         </p>
       </div>
 
-      <QuoteStatusPanel quote={typedQuote} />
+      <QuoteStatusPanel
+        quote={typedQuote}
+        contractReviewId={(linkedReview as { id: string } | null)?.id ?? null}
+        isMaintenanceOnly={isMaintenanceOnly}
+      />
 
       <EntityRequestsCard entityType="quote" entityId={typedQuote.id} />
 

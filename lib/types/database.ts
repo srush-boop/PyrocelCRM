@@ -165,8 +165,10 @@ export type RecurringFrequency =
   | 'quarterly'
   | 'biannual'
   | 'annual'
-/** When a recurring charge becomes due for invoicing relative to its period. */
-export type RecurringTiming = 'advance' | 'arrears' | 'on_completion'
+/** When a recurring charge becomes due for invoicing relative to its period.
+ *  `per_visit` splits the full annual value across the service's visits and bills
+ *  a share as each visit completes (see lib/billing/recurring.ts). */
+export type RecurringTiming = 'advance' | 'arrears' | 'on_completion' | 'per_visit'
 /** How a recurring charge value was entered: a per-period price, or an annual
  *  total that gets divided across the periods in a year. */
 export type RecurringPriceBasis = 'per_period' | 'annual'
@@ -280,6 +282,9 @@ export interface RecurringCharge {
   nominal_code_id: string | null
   timing: RecurringTiming
   frequency: RecurringFrequency
+  /** For `per_visit` timing: how many visits the full annual value is split across
+   *  in one cycle. When null, derived from the linked service's visit frequency. */
+  visits_per_cycle: number | null
   /** 1-12: the month the annual price is reviewed for renewal. */
   renewal_month: number | null
   /** Optional label to force a separate invoice within an account. */
@@ -297,6 +302,25 @@ export interface RecurringCharge {
   updated_at: string
   billing_account?: BillingAccount | null
   site_service?: SiteService | null
+}
+
+// One row per (recurring charge × completed visit) billed under `per_visit`
+// timing. Acts as both an audit trail and the idempotency guard: the UNIQUE
+// (recurring_charge_id, task_id) constraint means a given visit can only ever be
+// billed once for a given charge, whether raised automatically on completion or
+// manually from the due queue.
+export interface RecurringVisitBilling {
+  id: string
+  recurring_charge_id: string
+  task_id: string
+  invoice_id: string | null
+  invoice_line_item_id: string | null
+  /** 0-based position of this visit within its cycle (drives the split share). */
+  cycle_index: number
+  /** How many visits the cycle's full value was split across. */
+  visits_in_cycle: number
+  amount_pence: number
+  created_at: string
 }
 
 // Managed master list of Sage-style nominal (accounting) codes. INTERNAL only —

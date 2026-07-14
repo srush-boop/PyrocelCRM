@@ -748,6 +748,18 @@ export function TaskExecution({
       console.error('[v0] Report email request error:', err)
     }
 
+    // Per-visit "invoice on completion" billing. Best-effort and idempotent
+    // server-side — the recurring due queue is the backstop if this misses.
+    try {
+      await fetch('/api/tasks/complete-billing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId: task.id }),
+      })
+    } catch (err) {
+      console.error('[v0] Visit billing request error:', err)
+    }
+
     setShowSubmitDialog(false)
 
     // Before leaving, check for overdue / due-soon calls at other nearby sites so

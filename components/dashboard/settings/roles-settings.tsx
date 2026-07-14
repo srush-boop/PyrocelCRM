@@ -49,6 +49,8 @@ interface FormState {
   active: boolean
   timesheet_required: boolean
   lone_worker_enabled: boolean
+  // Entered in pounds; converted to integer pence on save.
+  cost_per_hour_pounds: string
 }
 
 function emptyForm(): FormState {
@@ -58,7 +60,21 @@ function emptyForm(): FormState {
     active: true,
     timesheet_required: true,
     lone_worker_enabled: false,
+    cost_per_hour_pounds: '',
   }
+}
+
+/** Pence → pounds string for editing (empty when unset). */
+function penceToPounds(pence: number | null | undefined): string {
+  if (pence == null) return ''
+  return (pence / 100).toFixed(2)
+}
+
+/** Pounds string → integer pence, or null when blank/invalid. */
+function poundsToPence(pounds: string): number | null {
+  const n = Number.parseFloat(pounds)
+  if (!Number.isFinite(n) || n < 0) return null
+  return Math.round(n * 100)
 }
 
 export function RolesSettings({ roles }: RolesSettingsProps) {
@@ -84,6 +100,7 @@ export function RolesSettings({ roles }: RolesSettingsProps) {
       active: role.active,
       timesheet_required: role.timesheet_required,
       lone_worker_enabled: role.lone_worker_enabled ?? false,
+      cost_per_hour_pounds: penceToPounds(role.cost_per_hour_pence),
     })
     setMessage(null)
     setDialogOpen(true)
@@ -101,6 +118,7 @@ export function RolesSettings({ roles }: RolesSettingsProps) {
         active: form.active,
         timesheet_required: form.timesheet_required,
         lone_worker_enabled: form.lone_worker_enabled,
+        cost_per_hour_pence: poundsToPence(form.cost_per_hour_pounds),
         updated_at: new Date().toISOString(),
       }
       const { error } = form.id
@@ -162,6 +180,7 @@ export function RolesSettings({ roles }: RolesSettingsProps) {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Description</TableHead>
+                <TableHead>Cost / hr</TableHead>
                 <TableHead>Timesheet</TableHead>
                 <TableHead>Lone worker</TableHead>
                 <TableHead>Status</TableHead>
@@ -171,7 +190,7 @@ export function RolesSettings({ roles }: RolesSettingsProps) {
             <TableBody>
               {roles.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
                     No roles yet. Add one to assign it to your team members.
                   </TableCell>
                 </TableRow>
@@ -181,6 +200,11 @@ export function RolesSettings({ roles }: RolesSettingsProps) {
                     <TableCell className="font-medium">{role.name}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {role.description || '—'}
+                    </TableCell>
+                    <TableCell className="tabular-nums">
+                      {role.cost_per_hour_pence != null
+                        ? `£${(role.cost_per_hour_pence / 100).toFixed(2)}`
+                        : '—'}
                     </TableCell>
                     <TableCell>
                       <Badge variant={role.timesheet_required ? 'default' : 'outline'}>
@@ -252,6 +276,23 @@ export function RolesSettings({ roles }: RolesSettingsProps) {
                 placeholder="Optional summary of this role"
                 rows={3}
               />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="r-cost">Cost / hour (£)</Label>
+              <Input
+                id="r-cost"
+                type="number"
+                min={0}
+                step="0.01"
+                value={form.cost_per_hour_pounds}
+                onChange={(e) => setForm({ ...form, cost_per_hour_pounds: e.target.value })}
+                placeholder="e.g. 28.50"
+                className="sm:max-w-[10rem]"
+              />
+              <p className="text-xs text-muted-foreground">
+                Default labour cost for people with this role, used to cost calls. A per-user
+                override takes precedence when set.
+              </p>
             </div>
             <label className="flex items-center gap-2 text-sm">
               <input

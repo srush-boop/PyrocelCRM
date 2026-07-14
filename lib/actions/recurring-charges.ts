@@ -13,7 +13,7 @@ import type {
   RecurringTiming,
 } from '@/lib/types/database'
 import { resolveBillingAccount } from '@/lib/billing/resolve-billing-account'
-import { perPeriodFromAnnual } from '@/lib/billing/recurring'
+import { perPeriodFromAnnual, visitsPerYearFromMonths } from '@/lib/billing/recurring'
 
 // Server actions for recurring charges (Phase A). Office/admin only; RLS
 // (is_billing_manager) also enforces this at the database level. Every price
@@ -195,6 +195,10 @@ export interface ServiceChargeContext {
   nominalCodes: NominalCode[]
   /** This service type's nominal code — the auto-select fallback for charges. */
   serviceTypeNominalCodeId: string | null
+  /** The service's visit interval in months (drives per_visit split options). */
+  serviceFrequencyMonths: number | null
+  /** Visits this service generates per year — the max/divisor base for per_visit. */
+  serviceVisitsPerYear: number
 }
 
 /**
@@ -213,7 +217,7 @@ export async function getServiceChargeContext(
   const { data: svc } = await supabase
     .from('site_services')
     .select(
-      'id, site_id, billing_account_id, service_type:service_types(name, nominal_code_id), site:sites(id, client_id, billing_account_id)',
+      'id, site_id, billing_account_id, frequency_months, service_type:service_types(name, nominal_code_id), site:sites(id, client_id, billing_account_id)',
     )
     .eq('id', siteServiceId)
     .single()
@@ -269,6 +273,8 @@ export async function getServiceChargeContext(
     existingCharges: (existingRows ?? []) as RecurringCharge[],
     nominalCodes: (nominalRows ?? []) as NominalCode[],
     serviceTypeNominalCodeId: serviceType?.nominal_code_id ?? null,
+    serviceFrequencyMonths: (svc as any).frequency_months ?? null,
+    serviceVisitsPerYear: visitsPerYearFromMonths((svc as any).frequency_months ?? null),
   }
 }
 

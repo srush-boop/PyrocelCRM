@@ -155,6 +155,12 @@ interface EngineersTableProps {
   roles?: Role[]
   /** Current-year annual leave balances, keyed by user id. */
   leaveBalances?: Record<string, LeaveBalance>
+  /**
+   * Whether the current viewer may grant the labour-cost view permission
+   * (only the owner, steve.rush@pyrocel.co.uk). Controls the visibility of the
+   * "Can view labour costs" toggle in the edit dialog.
+   */
+  canGrantLabourCosts?: boolean
 }
 
 const roleColors: Record<UserRole, string> = {
@@ -170,6 +176,7 @@ export function EngineersTable({
   branches = [],
   roles = [],
   leaveBalances = {},
+  canGrantLabourCosts = false,
 }: EngineersTableProps) {
   const departmentName = (id: string | null) =>
     id ? departments.find((d) => d.id === id)?.name ?? null : null
@@ -205,6 +212,11 @@ export function EngineersTable({
     home_postcode: '',
     phone: '',
     secondary_phone: '',
+    // Entered in pounds; converted to integer pence on save. Empty = clear the
+    // override (fall back to the role default).
+    cost_per_hour_pounds: '',
+    // Labour-cost view permission (only editable by the owner).
+    can_view_labour_costs: false,
   })
   const [editError, setEditError] = useState<string | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
@@ -348,6 +360,9 @@ export function EngineersTable({
       home_postcode: user.home_postcode ?? '',
       phone: user.phone ?? '',
       secondary_phone: user.secondary_phone ?? '',
+      cost_per_hour_pounds:
+        user.cost_per_hour_pence != null ? (user.cost_per_hour_pence / 100).toFixed(2) : '',
+      can_view_labour_costs: user.can_view_labour_costs === true,
     })
     setEditError(null)
   }
@@ -371,6 +386,12 @@ export function EngineersTable({
     }
     if (hours !== '' && (Number.isNaN(Number(hours)) || Number(hours) < 0)) {
       setEditError('Holiday entitlement (hours) must be a positive number.')
+      return
+    }
+    // Cost/hour is optional; when provided it must be a non-negative number.
+    const costPounds = editForm.cost_per_hour_pounds.trim()
+    if (costPounds !== '' && (Number.isNaN(Number(costPounds)) || Number(costPounds) < 0)) {
+      setEditError('Cost / hour must be a positive number.')
       return
     }
     setEditError(null)
@@ -398,6 +419,11 @@ export function EngineersTable({
           home_postcode: editForm.home_postcode.trim() || null,
           phone: editForm.phone.trim() || null,
           secondary_phone: editForm.secondary_phone.trim() || null,
+          cost_per_hour_pence: costPounds === '' ? null : Math.round(Number(costPounds) * 100),
+          // Only the owner may change this; the API enforces it too.
+          ...(canGrantLabourCosts
+            ? { can_view_labour_costs: editForm.can_view_labour_costs }
+            : {}),
         }),
       })
       const data = await res.json()
@@ -934,6 +960,49 @@ export function EngineersTable({
                   Shown only in the on-call rota and out-of-hours view.
                 </p>
               </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-cost-per-hour">Cost / hour override (£)</Label>
+                <Input
+                  id="edit-cost-per-hour"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  inputMode="decimal"
+                  value={editForm.cost_per_hour_pounds}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, cost_per_hour_pounds: e.target.value })
+                  }
+                  placeholder="Leave blank to use role default"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Overrides the assigned role&apos;s cost/hour when costing this person&apos;s
+                  calls. Leave blank to inherit the role default.
+                </p>
+              </div>
+              {canGrantLabourCosts && (
+                <div className="space-y-1.5">
+                  <Label>Labour cost visibility</Label>
+                  <label className="flex items-start gap-2 rounded-md border px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={editForm.can_view_labour_costs}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, can_view_labour_costs: e.target.checked })
+                      }
+                      className="mt-0.5 h-4 w-4 rounded border-input"
+                    />
+                    <span>
+                      Can view labour costs &amp; profitability
+                      <span className="block text-xs text-muted-foreground">
+                        Grants access to per-call cost/profit/margin figures and the labour-cost
+                        dashboard.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">

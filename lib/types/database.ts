@@ -18,9 +18,12 @@ export interface Role {
   // Whether people with this role are lone-worker eligible (can start a safety
   // check-in shift). Defaults to false; enabled per role in Settings → Roles.
   lone_worker_enabled: boolean
+  // Default labour cost per hour (integer pence) for people with this role. Used
+  // to cost calls; a per-user `cost_per_hour_pence` override wins when set.
+  cost_per_hour_pence: number | null
   created_at: string
   updated_at: string
-}
+  }
 
 // Resolve whether a user must submit timesheets: an explicit per-user override
 // wins; otherwise fall back to the assigned role's default; otherwise false.
@@ -474,6 +477,12 @@ export interface Profile {
   // Optional secondary contact number, shown ONLY in the on-call rota and the
   // out-of-hours call-handling view.
   secondary_phone: string | null
+  // Labour costing. `cost_per_hour_pence` is the per-user override that wins over
+  // the assigned role's default when set (resolve with `resolveCostPerHourPence`).
+  // `can_view_labour_costs` gates visibility of cost/profit/margin figures and is
+  // only grantable by the owner (steve.rush@pyrocel.co.uk).
+  cost_per_hour_pence: number | null
+  can_view_labour_costs: boolean
   created_at: string
   updated_at: string
   department?: Department | null

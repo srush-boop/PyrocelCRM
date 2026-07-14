@@ -74,7 +74,11 @@ import {
   ExternalLink,
   UserPlus,
   Wrench,
-  ChevronDown
+  ChevronDown,
+  Camera,
+  ImageIcon,
+  X,
+  CornerDownRight,
 } from 'lucide-react'
 import type { 
   Profile, 
@@ -82,6 +86,7 @@ import type {
   ChecklistTemplate, 
   ChecklistItem,
   ChecklistResult,
+  ChecklistCondition,
   TaskResult,
   TaskResultStatus,
   ClientLink,
@@ -115,12 +120,13 @@ function buildInitialResults(
   panels: SystemPanel[],
   panelChecklists: Record<string, { template: ChecklistTemplate; level: string }> = {},
 ): ChecklistResult[] {
-  const makeRow = (
+  const baseRow = (
     item: ChecklistItem,
+    itemId: string,
     panel: SystemPanel | null,
-    level: string | null = null,
+    level: string | null,
   ): ChecklistResult => ({
-    item_id: panel ? `${panel.id}::${item.id}` : item.id,
+    item_id: itemId,
     label: item.label,
     type: item.type,
     value: item.type === 'pass_fail' ? true : item.type === 'checkbox' ? false : '',
@@ -130,15 +136,95 @@ function buildInitialResults(
     panel_name: panel?.name ?? null,
     panel_level: level,
   })
-  if (panels.length === 0) return items.map((item) => makeRow(item, null))
+
+  // A template item expands to its own (parent) row plus, for each conditional
+  // rule, one hidden follow-up row per follow-up question. Follow-up rows are
+  // tagged with parent_item_id + condition_id so the UI can reveal them only
+  // while the owning rule is active, and reports can filter unanswered ones out.
+  const makeRows = (
+    item: ChecklistItem,
+    panel: SystemPanel | null,
+    level: string | null = null,
+  ): ChecklistResult[] => {
+    const parentId = panel ? `${panel.id}::${item.id}` : item.id
+    const parent = baseRow(item, parentId, panel, level)
+    const conditions = item.conditions || []
+    if (conditions.length > 0) parent.conditions = conditions
+    const childRows: ChecklistResult[] = []
+    for (const cond of conditions) {
+      for (const child of cond.items || []) {
+        const childRow = baseRow(child, `${parentId}::${cond.id}::${child.id}`, panel, level)
+        childRow.parent_item_id = parentId
+        childRow.condition_id = cond.id
+        childRow.required = child.required
+        childRows.push(childRow)
+      }
+    }
+    return [parent, ...childRows]
+  }
+
+  if (panels.length === 0) return items.flatMap((item) => makeRows(item, null))
   return panels.flatMap((panel) => {
     // Panel rotation: this panel may use its own template + level on this visit.
     const rotated = panelChecklists[panel.id]
     if (rotated) {
-      return rotated.template.items.map((item) => makeRow(item, panel, rotated.level))
+      return rotated.template.items.flatMap((item) => makeRows(item, panel, rotated.level))
     }
-    return items.map((item) => makeRow(item, panel))
+    return items.flatMap((item) => makeRows(item, panel))
   })
+}
+
+// Evaluates whether a conditional rule is currently "active" given the parent
+// row's answer. Active rules reveal their requirements (photo/note/follow-ups)
+// and are enforced at submit; inactive rules stay hidden and are ignored.
+function isConditionActive(row: ChecklistResult, cond: ChecklistCondition): boolean {
+  switch (cond.when) {
+    case 'fail':
+      return row.passed === false && !row.advisory
+    case 'advisory':
+      return row.advisory === true
+    case 'pass':
+      return row.passed === true && !row.advisory
+    case 'checked':
+      return row.value === true
+    case 'unchecked':
+      return row.value === false
+    case 'number': {
+      const v = typeof row.value === 'number' ? row.value : parseFloat(String(row.value))
+      if (!Number.isFinite(v) || cond.threshold == null) return false
+      switch (cond.comparator) {
+        case 'gt':
+          return v > cond.threshold
+        case 'lt':
+          return v < cond.threshold
+        case 'gte':
+          return v >= cond.threshold
+        case 'lte':
+          return v <= cond.threshold
+        case 'eq':
+          return v === cond.threshold
+        default:
+          return false
+      }
+    }
+    default:
+      return false
+  }
+}
+
+// Whether a follow-up row still needs an answer (only meaningful when required).
+function isChildUnanswered(row: ChecklistResult): boolean {
+  switch (row.type) {
+    case 'text':
+      return !String(row.value ?? '').trim()
+    case 'number':
+      return row.value === '' || row.value == null || Number.isNaN(Number(row.value))
+    case 'checkbox':
+      return row.value !== true
+    default:
+      // pass_fail always carries a definite answer (defaults to Pass).
+      return false
+  }
 }
 
 // A card whose body collapses behind its header. Used to tuck away
@@ -318,7 +404,11 @@ export function TaskExecution({
     
     // Advisory items are observations, not pass/fail outcomes, so they never
     // affect the overall result (a report of all passes + advisories is a pass).
-    const passFailItems = checklistResults.filter((r) => r.type === 'pass_fail' && !r.advisory)
+    // Conditional follow-up rows (parent_item_id set) are supplementary detail and
+    // never drive the overall pass/fail either.
+    const passFailItems = checklistResults.filter(
+      (r) => r.type === 'pass_fail' && !r.advisory && !r.parent_item_id,
+    )
     if (passFailItems.length === 0) return 'pass'
     
     const allPassed = passFailItems.every((r) => r.passed === true)
@@ -415,6 +505,82 @@ export function TaskExecution({
     )
   }
 
+  // Per-item photo capture for conditional "require photo" requirements. Reuses
+  // the task attachments upload + private-blob serve route, so no new storage is
+  // introduced. Tracked by the row's item_id so multiple rows upload independently.
+  const [photoUploadingId, setPhotoUploadingId] = useState<string | null>(null)
+  const uploadItemPhoto = async (row: ChecklistResult, file: File) => {
+    setPhotoUploadingId(row.item_id)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('task_id', task.id)
+      const res = await fetch('/api/tasks/attachments/upload', {
+        method: 'POST',
+        body: formData,
+      })
+      if (!res.ok) throw new Error('upload failed')
+      const { attachment } = await res.json()
+      const photo = {
+        id: attachment.id as string,
+        name: attachment.name as string,
+        url: `/api/tasks/attachments/file?id=${attachment.id}`,
+      }
+      updateChecklistResult(row.item_id, { photos: [...(row.photos || []), photo] })
+    } catch {
+      // Non-fatal: the required-photo submit guard keeps the engineer honest.
+    } finally {
+      setPhotoUploadingId(null)
+    }
+  }
+  const removeItemPhoto = (row: ChecklistResult, photoId: string) => {
+    updateChecklistResult(row.item_id, {
+      photos: (row.photos || []).filter((p) => p.id !== photoId),
+    })
+  }
+
+  // Collects human-readable descriptions of any active conditional requirement
+  // that has not been satisfied. Empty array = safe to submit.
+  const collectSubmitBlockers = (): string[] => {
+    const blockers: string[] = []
+    for (const row of checklistResults) {
+      if (row.parent_item_id) continue // only parent rows own conditions
+      const where = row.panel_name ? `${row.panel_name} — ${row.label}` : row.label
+      for (const cond of row.conditions || []) {
+        if (!isConditionActive(row, cond)) continue
+        if (cond.requireNote && !(row.notes && row.notes.trim())) {
+          blockers.push(`${where}: add a note`)
+        }
+        if (cond.requirePhoto && !(row.photos && row.photos.length > 0)) {
+          blockers.push(`${where}: attach a photo`)
+        }
+        const children = checklistResults.filter(
+          (r) => r.parent_item_id === row.item_id && r.condition_id === cond.id,
+        )
+        for (const child of children) {
+          if (child.required && isChildUnanswered(child)) {
+            blockers.push(`${where}: answer "${child.label}"`)
+          }
+        }
+      }
+    }
+    return blockers
+  }
+
+  const [submitBlockers, setSubmitBlockers] = useState<string[]>([])
+  // Gate the submit dialog behind conditional-requirement validation.
+  const handleAttemptSubmit = () => {
+    const blockers = collectSubmitBlockers()
+    if (blockers.length > 0) {
+      setSubmitBlockers(blockers)
+      checklistCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
+    setSubmitBlockers([])
+    setShowSubmitDialog(true)
+  }
+  const checklistCardRef = useRef<HTMLDivElement>(null)
+
   const handleSave = async () => {
     setSaving(true)
 
@@ -445,6 +611,16 @@ export function TaskExecution({
   }
 
   const handleSubmit = async () => {
+    // Safety net: never run the completion cascade with unmet conditional
+    // requirements, even if the dialog was somehow opened.
+    const blockers = collectSubmitBlockers()
+    if (blockers.length > 0) {
+      setSubmitBlockers(blockers)
+      setShowSubmitDialog(false)
+      checklistCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
+
     setSubmitting(true)
 
     const overallStatus = calculateOverallStatus()

@@ -1,8 +1,9 @@
 'use client'
 
-import { useCallback, useMemo, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { CreateTaskDialog } from '@/components/dashboard/schedule/create-task-dialog'
 import { LoneWorkerHeaderCounters } from '@/components/dashboard/lone-worker/lone-worker-header-counters'
@@ -85,6 +86,9 @@ interface CallsMapProps {
   bookingSites?: Site[]
   bookingEngineers?: Profile[]
   clients?: { id: string; name: string }[]
+  // When navigating in from "Book & go to map", the task to auto-focus + open
+  // the dispatch panel for.
+  autoDispatchTaskId?: string | null
 }
 
 // Dispatch search radius bounds (miles).
@@ -118,7 +122,9 @@ export function CallsMap({
   bookingSites = [],
   bookingEngineers = [],
   clients = [],
+  autoDispatchTaskId = null,
 }: CallsMapProps) {
+  const router = useRouter()
   const { calls, engineers, sites } = initialData
   const [showCalls, setShowCalls] = useState(true)
   const [overdueOnly, setOverdueOnly] = useState(false)
@@ -240,6 +246,28 @@ export function CallsMap({
     setRadiusMiles(DEFAULT_DISPATCH_RADIUS_MILES)
     runDispatchSearch(call, DEFAULT_DISPATCH_RADIUS_MILES)
   }, [runDispatchSearch])
+
+  // Arrived from "Book & go to map": focus the freshly booked call's site and
+  // open the dispatch panel for it, then strip the ?dispatch param so a refresh
+  // does not re-trigger. Runs once.
+  const autoDispatchDone = useRef(false)
+  useEffect(() => {
+    if (autoDispatchDone.current || !autoDispatchTaskId) return
+    autoDispatchDone.current = true
+    router.replace('/dashboard/schedule/map')
+
+    const call = calls.find((c) => c.taskId === autoDispatchTaskId)
+    if (!call) {
+      // The call exists but may still be geocoding, so it is not plottable yet.
+      toast.message('Call booked', {
+        description: 'It may still be locating on the map — find it to dispatch.',
+      })
+      return
+    }
+    setShowCalls(true)
+    if (sites.some((s) => s.id === call.siteId)) setSelectedSiteId(call.siteId)
+    startDispatchForCall(call)
+  }, [autoDispatchTaskId, calls, sites, router, startDispatchForCall])
 
   // Re-run the search when the user drags the radius slider (debounced by
   // committing on release via onValueCommit).

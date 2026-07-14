@@ -274,15 +274,17 @@ export function CreateTaskDialog({
     setMode(lockReactive ? 'reactive' : reactiveEnabled ? defaultMode : 'recurring')
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  // Validate the form and book the call. Returns the booking result on success,
+  // or null when validation failed (an error/time message has been set). Shared
+  // by the normal submit and the "book, then go to map" emergency shortcut.
+  const runBooking = async () => {
     if (
       formData.booked_start_time &&
       formData.booked_end_time &&
       formData.booked_end_time <= formData.booked_start_time
     ) {
       setTimeError('End time must be after the start time')
-      return
+      return null
     }
     setTimeError(null)
 
@@ -290,7 +292,7 @@ export function CreateTaskDialog({
     // what they are attending.
     if (mode === 'reactive' && !description.trim()) {
       setError('Add a call description so the engineer knows what to attend.')
-      return
+      return null
     }
 
     // When a call type is scoped to specific systems and has no general
@@ -302,7 +304,7 @@ export function CreateTaskDialog({
       (reactiveSystemTypeId === NO_SYSTEM || !reactiveSystemTypeId)
     ) {
       setError('Select a system for this call type.')
-      return
+      return null
     }
 
     setError(null)
@@ -337,15 +339,37 @@ export function CreateTaskDialog({
 
     setLoading(false)
 
-    if (result.ok) {
-      const bookedSiteId = siteId
-      setOpen(false)
-      resetForm()
-      router.refresh()
-      if (bookedSiteId) onBooked?.({ siteId: bookedSiteId, mode })
-    } else {
+    if (!result.ok) {
       setError(result.error ?? 'Something went wrong.')
+      return null
     }
+    return result
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const result = await runBooking()
+    if (!result) return
+
+    const bookedSiteId = siteId
+    setOpen(false)
+    resetForm()
+    router.refresh()
+    if (bookedSiteId) onBooked?.({ siteId: bookedSiteId, mode })
+  }
+
+  // Emergency shortcut: book the call first, then hand off to the live map with
+  // the new call pre-selected for dispatch (?dispatch=<taskId>).
+  const handleBookThenMap = async () => {
+    const result = await runBooking()
+    if (!result) return
+    setOpen(false)
+    resetForm()
+    router.push(
+      result.taskId
+        ? `/dashboard/schedule/map?dispatch=${result.taskId}`
+        : '/dashboard/schedule/map',
+    )
   }
 
   const canSubmit =
@@ -499,20 +523,18 @@ export function CreateTaskDialog({
                     <div className="flex items-center justify-between gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
                       <p className="flex items-center gap-1.5 text-xs text-destructive">
                         <Siren className="h-3.5 w-3.5 shrink-0" />
-                        Emergency call — set the &ldquo;attend within&rdquo; target below, or dispatch it live from the map.
+                        Emergency call — set the &ldquo;attend within&rdquo; target below, or book &amp; dispatch it live from the map.
                       </p>
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
+                        disabled={loading || !canSubmit}
                         className="h-7 shrink-0 gap-1 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => {
-                          setOpen(false)
-                          router.push('/dashboard/schedule/map')
-                        }}
+                        onClick={handleBookThenMap}
                       >
                         <MapPin className="h-3.5 w-3.5" />
-                        Go to map
+                        Book &amp; go to map
                       </Button>
                     </div>
                   )}

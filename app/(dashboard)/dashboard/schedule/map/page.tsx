@@ -23,7 +23,7 @@ export const metadata = {
 export default async function CallsMapPage({
   searchParams,
 }: {
-  searchParams: Promise<{ branch?: string }>
+  searchParams: Promise<{ branch?: string; dispatch?: string }>
 }) {
   const supabase = await createClient()
   const {
@@ -36,7 +36,7 @@ export default async function CallsMapPage({
     redirect('/dashboard')
   }
 
-  const { branch } = await searchParams
+  const { branch, dispatch } = await searchParams
   const scope = await getBranchScope(profile as Profile, branch)
   const res = await getCallsMapData({ branchId: scope.activeBranchId })
 
@@ -81,6 +81,7 @@ export default async function CallsMapPage({
       bookingSites={bookingSites}
       bookingEngineers={engineers}
       clients={clients}
+      autoDispatchTaskId={dispatch ?? null}
     />
   )
 }

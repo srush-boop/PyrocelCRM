@@ -867,9 +867,12 @@ export function TaskExecution({
     results: ChecklistResult[]
   }
   const checklistGroups = (() => {
-    const groups: ChecklistGroup[] = []
-    const byKey = new Map<string, ChecklistGroup>()
-    for (const result of checklistResults) {
+  const groups: ChecklistGroup[] = []
+  const byKey = new Map<string, ChecklistGroup>()
+  for (const result of checklistResults) {
+      // Conditional follow-up rows are rendered inline beneath their parent, not
+      // as standalone checklist entries.
+      if (result.parent_item_id) continue
       const key = result.panel_id ?? '__none__'
       let group = byKey.get(key)
       if (!group) {
@@ -1206,7 +1209,7 @@ export function TaskExecution({
             </CardContent>
           </Card>
 
-          <Card>
+          <Card ref={checklistCardRef}>
             <CardHeader>
               <CardTitle>Inspection Checklist</CardTitle>
               <CardDescription>
@@ -1215,6 +1218,19 @@ export function TaskExecution({
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+            {submitBlockers.length > 0 && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+                <p className="flex items-center gap-2 font-medium text-destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  Complete these before submitting:
+                </p>
+                <ul className="mt-2 list-disc space-y-0.5 pl-6 text-destructive">
+                  {submitBlockers.map((b, i) => (
+                    <li key={i}>{b}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {checklistResults.length === 0 ? (
               <p className="text-muted-foreground text-center py-4">
                 No checklist items configured for this service type
@@ -1361,6 +1377,204 @@ export function TaskExecution({
                             />
                           </div>
                         )}
+
+                        {/* Conditional follow-ups: revealed only while a rule on
+                            this item is active, requiring extra info before submit. */}
+                        {(result.conditions || [])
+                          .filter((cond) => isConditionActive(result, cond))
+                          .map((cond) => {
+                            const children = group.results.length
+                              ? checklistResults.filter(
+                                  (r) =>
+                                    r.parent_item_id === result.item_id &&
+                                    r.condition_id === cond.id,
+                                )
+                              : []
+                            const needNote =
+                              cond.requireNote && result.type !== 'pass_fail'
+                            const needNoteMissing =
+                              cond.requireNote && !(result.notes && result.notes.trim())
+                            const needPhotoMissing =
+                              cond.requirePhoto && !(result.photos && result.photos.length > 0)
+                            return (
+                              <div
+                                key={cond.id}
+                                className="mt-3 space-y-3 rounded-md border-l-2 border-amber-400 bg-amber-50 p-3 dark:bg-amber-950/20"
+                              >
+                                <p className="flex items-center gap-1.5 text-xs font-medium text-amber-800 dark:text-amber-300">
+                                  <CornerDownRight className="h-3.5 w-3.5" />
+                                  Follow-up required
+                                </p>
+
+                                {/* Extra note field only when the parent isn't a
+                                    pass/fail (which already shows its own note box). */}
+                                {needNote && (
+                                  <div className="space-y-1">
+                                    <span className="text-xs font-medium text-muted-foreground">
+                                      Note {needNoteMissing && <span className="text-destructive">*</span>}
+                                    </span>
+                                    <Textarea
+                                      value={result.notes || ''}
+                                      onChange={(e) =>
+                                        updateChecklistResult(result.item_id, {
+                                          notes: e.target.value,
+                                        })
+                                      }
+                                      placeholder="Add the required note..."
+                                      disabled={!canEdit}
+                                    />
+                                  </div>
+                                )}
+
+                                {/* Required-photo capture. */}
+                                {cond.requirePhoto && (
+                                  <div className="space-y-2">
+                                    <span className="text-xs font-medium text-muted-foreground">
+                                      Photo {needPhotoMissing && <span className="text-destructive">*</span>}
+                                    </span>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      {(result.photos || []).map((p) => (
+                                        <div
+                                          key={p.id}
+                                          className="relative h-16 w-16 overflow-hidden rounded-md border bg-muted"
+                                        >
+                                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                                          <img
+                                            src={p.url || '/placeholder.svg'}
+                                            alt={p.name}
+                                            className="h-full w-full object-cover"
+                                          />
+                                          {canEdit && (
+                                            <button
+                                              type="button"
+                                              onClick={() => removeItemPhoto(result, p.id)}
+                                              className="absolute right-0 top-0 rounded-bl bg-black/60 p-0.5 text-white"
+                                              aria-label={`Remove ${p.name}`}
+                                            >
+                                              <X className="h-3 w-3" />
+                                            </button>
+                                          )}
+                                        </div>
+                                      ))}
+                                      {canEdit && (
+                                        <label className="flex h-16 w-16 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed text-muted-foreground hover:border-primary hover:text-primary">
+                                          {photoUploadingId === result.item_id ? (
+                                            <Loader2 className="h-5 w-5 animate-spin" />
+                                          ) : (
+                                            <Camera className="h-5 w-5" />
+                                          )}
+                                          <span className="text-[10px]">Add</span>
+                                          <input
+                                            type="file"
+                                            accept="image/*"
+                                            capture="environment"
+                                            className="hidden"
+                                            disabled={photoUploadingId === result.item_id}
+                                            onChange={(e) => {
+                                              const file = e.target.files?.[0]
+                                              if (file) uploadItemPhoto(result, file)
+                                              e.target.value = ''
+                                            }}
+                                          />
+                                        </label>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Follow-up questions. */}
+                                {children.map((child) => (
+                                  <div key={child.item_id} className="space-y-1.5">
+                                    <Label className="text-sm">
+                                      {child.label}
+                                      {child.required && (
+                                        <span className="ml-1 text-destructive">*</span>
+                                      )}
+                                    </Label>
+                                    {child.type === 'pass_fail' && (
+                                      <div className="grid grid-cols-2 gap-2">
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant={child.passed === true ? 'default' : 'outline'}
+                                          onClick={() =>
+                                            updateChecklistResult(child.item_id, {
+                                              value: true,
+                                              passed: true,
+                                            })
+                                          }
+                                          disabled={!canEdit}
+                                          className={cn(
+                                            child.passed === true &&
+                                              'bg-green-600 hover:bg-green-700 border-green-600',
+                                          )}
+                                        >
+                                          Pass
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant={child.passed === false ? 'default' : 'outline'}
+                                          onClick={() =>
+                                            updateChecklistResult(child.item_id, {
+                                              value: false,
+                                              passed: false,
+                                            })
+                                          }
+                                          disabled={!canEdit}
+                                          className={cn(
+                                            child.passed === false &&
+                                              'bg-destructive hover:bg-destructive/90 border-destructive',
+                                          )}
+                                        >
+                                          Fail
+                                        </Button>
+                                      </div>
+                                    )}
+                                    {child.type === 'checkbox' && (
+                                      <div className="flex items-center gap-2">
+                                        <Checkbox
+                                          checked={child.value as boolean}
+                                          onCheckedChange={(checked) =>
+                                            updateChecklistResult(child.item_id, {
+                                              value: checked as boolean,
+                                            })
+                                          }
+                                          disabled={!canEdit}
+                                        />
+                                        <span className="text-sm">Completed</span>
+                                      </div>
+                                    )}
+                                    {child.type === 'text' && (
+                                      <Input
+                                        value={child.value as string}
+                                        onChange={(e) =>
+                                          updateChecklistResult(child.item_id, {
+                                            value: e.target.value,
+                                          })
+                                        }
+                                        placeholder="Enter value..."
+                                        disabled={!canEdit}
+                                      />
+                                    )}
+                                    {child.type === 'number' && (
+                                      <Input
+                                        type="number"
+                                        value={child.value as number}
+                                        onChange={(e) =>
+                                          updateChecklistResult(child.item_id, {
+                                            value: parseFloat(e.target.value) || 0,
+                                          })
+                                        }
+                                        placeholder="Enter value..."
+                                        disabled={!canEdit}
+                                      />
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )
+                          })}
                       </div>
                     </div>
                   ))}
@@ -1474,7 +1688,7 @@ export function TaskExecution({
                 </>
               )}
             </Button>
-            <Button onClick={() => setShowSubmitDialog(true)} className="h-12 flex-1">
+            <Button onClick={handleAttemptSubmit} className="h-12 flex-1">
               <Send className="mr-2 h-4 w-4" />
               Complete & Submit
             </Button>

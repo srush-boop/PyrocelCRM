@@ -2715,29 +2715,14 @@ function SystemCard({
     0,
   )
 
-  // Conditional fields that apply to the selected system type AND work type.
-  const conditionalFields = useMemo(
-    () =>
-      workTypeFields
-        .filter(
-          (f) =>
-            f.active &&
-            f.work_type === system.work_type &&
-            f.system_type_id === system.system_type_id,
-        )
-        .sort((a, b) => a.position - b.position),
-    [workTypeFields, system.work_type, system.system_type_id],
-  )
-
-  // Which optional sections apply to this work type (admin toggles). Questions
-  // default to on; design and PPM default to off when no setting row exists.
+  // Which optional sections apply to this work type (admin toggles). Design and
+  // PPM default to off when no setting row exists.
   const workTypeSetting = useMemo(
     () => workTypeSettings.find((s) => s.work_type === system.work_type),
     [workTypeSettings, system.work_type],
   )
   const requiresDesign = workTypeSetting?.requires_design ?? false
   const requiresPpm = workTypeSetting?.requires_ppm ?? false
-  const requiresQuestions = workTypeSetting?.requires_questions ?? true
 
   // Spec template matching this system type + work type.
   const matchingTemplate = useMemo(
@@ -3008,70 +2993,6 @@ function SystemCard({
           </div>
         ) : (
           <>
-        {/* ---- Step 2 · Questions (conditional "IF" fields for the work type) ---- */}
-        {requiresQuestions && conditionalFields.length > 0 && (
-          <div className="grid gap-3 rounded-md border bg-muted/20 p-3 sm:grid-cols-2">
-            <p className="sm:col-span-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Step 2 · Questions for {WORK_TYPES.find((w) => w.code === system.work_type)?.label}
-            </p>
-            {conditionalFields.map((f) => {
-              const val = system.conditional_values[f.field_key]
-              if (f.field_type === 'boolean') {
-                return (
-                  <div key={f.id} className="flex items-center justify-between gap-2 rounded-md border bg-background px-3 py-2">
-                    <Label htmlFor={`cf-${f.id}`} className="text-sm">{f.label}</Label>
-                    <Switch
-                      id={`cf-${f.id}`}
-                      checked={!!val}
-                      onCheckedChange={(c) => setConditional(f.field_key, c)}
-                      disabled={disabled}
-                    />
-                  </div>
-                )
-              }
-              if (f.field_type === 'select') {
-                return (
-                  <div key={f.id} className="grid gap-1.5">
-                    <Label>{f.label}</Label>
-                    <Select
-                      value={String(val ?? '')}
-                      onValueChange={(v) => setConditional(f.field_key, v)}
-                      disabled={disabled}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {f.options.map((opt) => (
-                          <SelectItem key={opt} value={opt}>
-                            {opt}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )
-              }
-              return (
-                <div key={f.id} className="grid gap-1.5">
-                  <Label>{f.label}</Label>
-                  <Input
-                    inputMode={f.field_type === 'number' ? 'decimal' : 'text'}
-                    value={String(val ?? '')}
-                    onChange={(e) =>
-                      setConditional(
-                        f.field_key,
-                        f.field_type === 'number' ? e.target.value : e.target.value,
-                      )
-                    }
-                    disabled={disabled}
-                  />
-                </div>
-              )
-            })}
-          </div>
-        )}
-
         {/* ---- AI specification builder ----
              Asks the relevant questions (grounded in the discipline's uploaded
              sample spec, or the built-in BAFE SP203 KB for fire alarm) with

@@ -1,8 +1,8 @@
 'use client'
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition, type ComponentType, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AddressFinder } from '@/components/dashboard/shared/address-finder'
@@ -38,7 +38,7 @@ import {
 } from '@/components/ui/command'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
-import { Plus, Trash2, BookOpen, Save, TrendingUp, Calculator, Wrench, Check, ChevronsUpDown, ChevronDown, Sparkles, Building2, HardHat, Send, Eye, AlertTriangle, RotateCcw } from 'lucide-react'
+import { Plus, Trash2, BookOpen, Save, TrendingUp, Calculator, Wrench, Check, ChevronsUpDown, ChevronDown, Sparkles, Building2, HardHat, Send, Eye, AlertTriangle, RotateCcw, FileText, Boxes, Receipt, Mail } from 'lucide-react'
 import { toast } from 'sonner'
 import { SendQuoteDialog } from '@/components/dashboard/sales/send-quote-dialog'
 import { PpmCalculatorDialog, type PpmDraft } from '@/components/dashboard/sales/ppm-calculator-dialog'
@@ -113,6 +113,38 @@ import { linkDefectToQuote } from '@/app/(dashboard)/dashboard/defects/actions'
 
 // Default terms shown on a brand-new quote (editable per quote).
 const DEFAULT_QUOTE_TERMS = 'Standard terms and conditions apply which are available on request.'
+
+// Consistent, modern section header used across the quote builder: a bold title
+// paired with an accent icon chip, an optional description, and an optional
+// right-aligned action. Keeps every section visually aligned and scannable.
+function SectionHeading({
+  icon: Icon,
+  title,
+  description,
+  action,
+}: {
+  icon: ComponentType<{ className?: string }>
+  title: string
+  description?: string
+  action?: ReactNode
+}) {
+  return (
+    <div className="flex flex-row items-start justify-between gap-4">
+      <div className="flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Icon className="h-5 w-5" />
+        </span>
+        <div className="grid gap-1">
+          <h2 className="text-lg font-bold leading-tight tracking-tight text-balance">{title}</h2>
+          {description && (
+            <p className="text-sm text-muted-foreground text-pretty">{description}</p>
+          )}
+        </div>
+      </div>
+      {action && <div className="shrink-0">{action}</div>}
+    </div>
+  )
+}
 
 // --- Local editable shapes (money kept as pounds strings for inputs) ---
 interface EditLine {
@@ -1526,7 +1558,7 @@ export function QuoteBuilder({
   const disabled = readOnly || isPending
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Unsaved-draft notice: we recovered the in-progress quote from a previous
           session so nothing was lost when the user navigated away. */}
       {draftRestored && (
@@ -1552,7 +1584,11 @@ export function QuoteBuilder({
       {/* ---------- Quote details ---------- */}
       <Card>
         <CardHeader>
-          <CardTitle>Quote details</CardTitle>
+          <SectionHeading
+            icon={FileText}
+            title="Quote details"
+            description="Who this quote is for — the client, site, and a clear title."
+          />
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Issuing branch */}
@@ -1837,10 +1873,11 @@ export function QuoteBuilder({
       {!readOnly && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Wrench className="h-4 w-4 text-muted-foreground" />
-              Maintenance quote only
-            </CardTitle>
+            <SectionHeading
+              icon={Wrench}
+              title="Maintenance quote only"
+              description="Focus this quote on the routine-maintenance pricing calculator."
+            />
           </CardHeader>
           <CardContent>
             <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
@@ -1881,35 +1918,35 @@ export function QuoteBuilder({
         that auto-creates the Routine Maintenance system. */}
       {maintenanceOnly && (
       <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Calculator className="h-4 w-4 text-muted-foreground" />
-              Routine maintenance pricing
-            </CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground text-pretty">
-              {maintenanceSummary
+        <CardHeader>
+          <SectionHeading
+            icon={Calculator}
+            title="Routine maintenance pricing"
+            description={
+              maintenanceSummary
                 ? 'Recalculate to update the annual maintenance lines on this quote.'
-                : 'Add a maintenance service to this quote. Enter the on-site asset counts and the calculator prices each discipline and adds itemised annual lines automatically.'}
-            </p>
-          </div>
-          {!readOnly && (
-            <Button
-              type="button"
-              variant={maintenanceSummary ? 'outline' : 'default'}
-              onClick={() => {
-                setMaintAddTarget(null)
-                setMaintInitialFire(null)
-                setMaintViewTarget(null)
-                setMaintViewSnapshot(null)
-                setMaintCalcOpen(true)
-              }}
-              disabled={isPending}
-            >
-              <Calculator className="mr-2 h-4 w-4" />
-              {maintenanceSummary ? 'Recalculate' : 'Add maintenance pricing'}
-            </Button>
-          )}
+                : 'Add a maintenance service to this quote. Enter the on-site asset counts and the calculator prices each discipline and adds itemised annual lines automatically.'
+            }
+            action={
+              !readOnly && (
+                <Button
+                  type="button"
+                  variant={maintenanceSummary ? 'outline' : 'default'}
+                  onClick={() => {
+                    setMaintAddTarget(null)
+                    setMaintInitialFire(null)
+                    setMaintViewTarget(null)
+                    setMaintViewSnapshot(null)
+                    setMaintCalcOpen(true)
+                  }}
+                  disabled={isPending}
+                >
+                  <Calculator className="mr-2 h-4 w-4" />
+                  {maintenanceSummary ? 'Recalculate' : 'Add maintenance pricing'}
+                </Button>
+              )
+            }
+          />
         </CardHeader>
         {isMaintenanceQuote && (
           <CardContent className="space-y-3">
@@ -1992,17 +2029,17 @@ export function QuoteBuilder({
       {/* ---------- Client request / requirements matrix ---------- */}
       {!readOnly && !maintenanceOnly && (
         <Card>
-          <CardHeader className="flex flex-row items-start justify-between gap-4">
-            <div>
-              <CardTitle>Client request</CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground text-pretty">
-                Import a client email or specification. AI summarises it, extracts each
-                requirement, and drafts our response — you review before it&apos;s saved.
-              </p>
-            </div>
-            <QuoteRequestImporter
-              systemTypes={systemTypes}
-              onApply={applyImportedProposal}
+          <CardHeader>
+            <SectionHeading
+              icon={Mail}
+              title="Client request"
+              description="Import a client email or specification. AI summarises it, extracts each requirement, and drafts our response — you review before it's saved."
+              action={
+                <QuoteRequestImporter
+                  systemTypes={systemTypes}
+                  onApply={applyImportedProposal}
+                />
+              }
             />
           </CardHeader>
           {(requirements.length > 0 || requirementSource) && (
@@ -2029,16 +2066,13 @@ export function QuoteBuilder({
       {defectId && systems.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-muted-foreground" />
-              Description of works required
-            </CardTitle>
+            <SectionHeading
+              icon={Sparkles}
+              title="Description of works required"
+              description="AI-drafted from the failed items on the originating report. Review and edit before sending."
+            />
           </CardHeader>
           <CardContent className="space-y-2">
-            <p className="text-sm text-muted-foreground">
-              AI-drafted from the failed items on the originating report. Review
-              and edit before sending.
-            </p>
             <Textarea
               value={systems[0].specification}
               onChange={(e) =>
@@ -2055,6 +2089,13 @@ export function QuoteBuilder({
       {/* ---------- Systems ----------
         In maintenance-only mode only the Routine Maintenance (service_contract)
         systems are shown; otherwise the full multi-system builder is rendered. */}
+      {!readOnly && !maintenanceOnly && (
+        <SectionHeading
+          icon={Boxes}
+          title="Systems"
+          description="Add each system this quote covers, then build up its specification and priced line items."
+        />
+      )}
       {systems
         .filter((system) =>
           maintenanceOnly
@@ -2142,7 +2183,11 @@ export function QuoteBuilder({
       {/* ---------- Totals + terms ---------- */}
       <Card>
         <CardHeader>
-          <CardTitle>Pricing &amp; terms</CardTitle>
+          <SectionHeading
+            icon={Receipt}
+            title="Pricing & terms"
+            description="VAT, discount, validity and the terms shown on the quote document."
+          />
         </CardHeader>
         <CardContent className="grid gap-6 lg:grid-cols-2">
           <div className="space-y-4">

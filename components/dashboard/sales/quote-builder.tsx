@@ -751,7 +751,9 @@ export function QuoteBuilder({
         },
       ]
     }
-    return [base]
+    // A brand-new blank quote starts with no systems — the user adds the first
+    // one via the "Add system" button (or the Installation calculator).
+    return []
   })
 
   // Existing-site options: scoped to the selected client when one is chosen,
@@ -1843,20 +1845,31 @@ export function QuoteBuilder({
           <CardContent>
             <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
               <div className="grid gap-0.5">
-                <Label htmlFor="q-maint-only" className="cursor-pointer">
-                  Enable maintenance-only mode
-                </Label>
+                <span className="text-sm font-medium">Enable maintenance-only mode</span>
                 <span className="text-xs text-muted-foreground text-pretty">
                   Hides the client request and systems sections and focuses this quote on the
                   routine-maintenance pricing calculator.
                 </span>
               </div>
-              <Switch
-                id="q-maint-only"
-                checked={maintenanceOnly}
-                onCheckedChange={setMaintenanceOnly}
+              <Button
+                type="button"
+                variant={maintenanceOnly ? 'default' : 'outline'}
+                onClick={() => setMaintenanceOnly((prev) => !prev)}
                 disabled={disabled}
-              />
+                className="shrink-0"
+              >
+                {maintenanceOnly ? (
+                  <>
+                    <Check className="mr-2 h-4 w-4" />
+                    Maintenance-only on
+                  </>
+                ) : (
+                  <>
+                    <Wrench className="mr-2 h-4 w-4" />
+                    Enable
+                  </>
+                )}
+              </Button>
             </div>
           </CardContent>
         </Card>

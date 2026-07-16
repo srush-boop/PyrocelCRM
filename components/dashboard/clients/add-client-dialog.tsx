@@ -33,6 +33,7 @@ const EMPTY_FORM = {
   contact_email: '',
   contact_phone: '',
   address: '',
+  postcode: '',
   notes: '',
   requires_po: false,
 }
@@ -69,7 +70,7 @@ export function AddClientDialog({ open, onOpenChange }: AddClientDialogProps) {
       const address = hasIt
         ? prev.address
         : [prev.address.trim(), line].filter(Boolean).join(', ')
-      return { ...prev, address }
+      return { ...prev, address, postcode: r.postcode || prev.postcode }
     })
   }
 
@@ -79,6 +80,7 @@ export function AddClientDialog({ open, onOpenChange }: AddClientDialogProps) {
       ...prev,
       name: prev.name || p.name,
       address: p.address || prev.address,
+      postcode: p.postcode || prev.postcode,
       contact_phone: p.phone || prev.contact_phone,
     }))
   }
@@ -154,7 +156,7 @@ export function AddClientDialog({ open, onOpenChange }: AddClientDialogProps) {
           client_id: insertedClient.id,
           name: siteName || formData.name,
           address: siteAddress || formData.address,
-          postcode: sameAddress ? '' : siteData.postcode || '',
+          postcode: sameAddress ? formData.postcode || '' : siteData.postcode || '',
           contact_name: sameAddress ? formData.contact_name || null : siteData.contact_name || null,
           contact_phone: sameAddress
             ? formData.contact_phone || null

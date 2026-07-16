@@ -44,6 +44,13 @@ import {
   MOCK_MANUFACTURERS,
   MOCK_PARTS,
   MOCK_OPTIONS,
+  MOCK_DOC_CONTROL,
+  MOCK_SPEC_SECTIONS,
+  MOCK_SPEC_ZONES,
+  MOCK_BATTERY_CALC,
+  MOCK_CE_OUTPUTS,
+  MOCK_CE_MATRIX,
+  MOCK_SPEC_EQUIPMENT,
 } from '@/lib/sales/quote-studio-mock'
 
 const STEPS = [
@@ -559,16 +566,30 @@ function DocumentStep({
   onRestart: () => void
 }) {
   const d = MOCK_DETECTED
+  const dc = MOCK_DOC_CONTROL
   const shown = MOCK_OPTIONS.filter((o) => included[o.id])
   const options = shown.length > 0 ? shown : MOCK_OPTIONS.filter((o) => o.tier === 'Recommended')
+  const totalDevices = MOCK_SPEC_ZONES.reduce((s, z) => s + z.devices, 0)
 
   return (
     <div className="flex flex-col gap-4">
       <StepHeading
         icon={ScrollText}
-        title="Audit-ready quote document"
-        description="Consistent house style, standards referenced, and robust to NSI/BAFE scrutiny — generated, not hand-assembled."
+        title="Audit-ready design specification"
+        description="A BS 5839-1:2025 / BAFE SP203-1 structured specification — generated, not hand-assembled. This is a first-cut clause structure for your designers to correct."
       />
+
+      {/* Draft-structure notice */}
+      <Card className="border-amber-500/30 bg-amber-500/5">
+        <CardContent className="flex items-start gap-3 py-3">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <p className="text-xs text-muted-foreground text-pretty">
+            <span className="font-semibold text-foreground">Prototype structure to review.</span> The clause set below
+            is my proposed BS 5839-1 / SP203-1 layout. Tell me what your NSI/BAFE auditors expect added, removed or
+            reworded and I&apos;ll refine it before we build the real generator.
+          </p>
+        </CardContent>
+      </Card>
 
       {/* The "paper" */}
       <Card className="overflow-hidden">
@@ -578,14 +599,14 @@ function DocumentStep({
             <p className="text-xs text-white/70">Fire &amp; Security Systems</p>
           </div>
           <div className="text-right text-xs text-white/80">
-            <p className="text-sm font-semibold text-white">Quotation</p>
-            <p>Ref: Q-2026-0481</p>
-            <p>16 July 2026</p>
+            <p className="text-sm font-semibold text-white">Fire Alarm Design Specification</p>
+            <p>Ref: {dc.ref} · Rev {dc.revision}</p>
+            <p>{dc.date}</p>
           </div>
         </div>
 
         <CardContent className="flex flex-col gap-6 p-6">
-          {/* Parties */}
+          {/* Document control */}
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Prepared for</p>
@@ -593,33 +614,94 @@ function DocumentStep({
               <p className="text-sm text-muted-foreground">{d.siteName}</p>
               <p className="text-sm text-muted-foreground">{d.siteAddress}</p>
             </div>
-            <div className="sm:text-right">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Scope</p>
-              <p className="mt-1 text-sm">{d.workType}</p>
-              <div className="mt-2 flex flex-wrap gap-1.5 sm:justify-end">
-                <Badge variant="outline">{d.standard}</Badge>
-                <Badge variant="outline">{d.category}</Badge>
-              </div>
+            <div className="rounded-lg border bg-muted/20 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Document control</p>
+              <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+                <dt className="text-muted-foreground">Status</dt>
+                <dd className="font-medium">{dc.status}</dd>
+                <dt className="text-muted-foreground">Designed by</dt>
+                <dd className="font-medium">{dc.preparedBy}</dd>
+                <dt className="text-muted-foreground">Competency</dt>
+                <dd>{dc.preparedCompetency}</dd>
+                <dt className="text-muted-foreground">Checked by</dt>
+                <dd className="font-medium">{dc.checkedBy}</dd>
+                <dt className="text-muted-foreground">Approvals</dt>
+                <dd>{dc.approvalRef}</dd>
+              </dl>
             </div>
+          </div>
+
+          {/* Category banner */}
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
+            <ShieldCheck className="h-5 w-5 text-primary" />
+            <span className="text-sm font-semibold">{d.category}</span>
+            <Badge variant="outline" className="border-primary/40 text-primary">{d.standard}</Badge>
+            <Badge variant="secondary">{totalDevices} devices · 6 zones</Badge>
           </div>
 
           <Separator />
 
-          {/* Narrative */}
+          {/* Numbered specification clauses */}
+          {MOCK_SPEC_SECTIONS.map((s) => (
+            <div key={s.id}>
+              <h3 className="text-sm font-bold uppercase tracking-wide">
+                {s.number}. {s.title}
+              </h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground text-pretty">{s.body}</p>
+              {s.bullets && (
+                <ul className="mt-2 flex flex-col gap-1.5">
+                  {s.bullets.map((b) => (
+                    <li key={b} className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/60" />
+                      <span className="text-pretty">{b}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {/* Inline tables anchored to their relevant clause */}
+              {s.id === 's5' && (
+                <DocTable
+                  className="mt-3"
+                  head={['Zone', 'Area', 'Detection', 'Devices']}
+                  rows={MOCK_SPEC_ZONES.map((z) => [z.zone, z.area, z.detection, String(z.devices)])}
+                  alignLast
+                />
+              )}
+              {s.id === 's9' && <CauseEffectTable />}
+              {s.id === 's10' && (
+                <DocTable
+                  className="mt-3"
+                  head={['Battery calculation (BS 5839-1 §25)', '']}
+                  rows={MOCK_BATTERY_CALC.map((r) => [r.label, r.value])}
+                  alignLast
+                />
+              )}
+            </div>
+          ))}
+
+          <Separator />
+
+          {/* Equipment schedule */}
           <div>
-            <h3 className="text-sm font-bold uppercase tracking-wide">1. Scope of works</h3>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground text-pretty">
-              Pyrocel proposes the design, supply, installation and commissioning of a Category L1 automatic fire
-              detection and alarm system in accordance with {d.standard}, providing life-protection coverage
-              throughout the existing three-storey premises and the new single-storey wing. All works will be
-              certificated under our BAFE SP203-1 and NSI Gold approvals, with full cause-and-effect documentation and
-              commissioning certificates issued on completion.
+            <h3 className="text-sm font-bold uppercase tracking-wide">16. Equipment schedule</h3>
+            <p className="mt-2 text-sm text-muted-foreground text-pretty">
+              All equipment is third-party approved to the relevant part of the BS EN 54 series. Final quantities
+              confirmed against the approved layout drawing at design freeze.
             </p>
+            <DocTable
+              className="mt-3"
+              head={['Ref', 'Description', 'Standard', 'Qty']}
+              rows={MOCK_SPEC_EQUIPMENT.map((e) => [e.ref, e.description, e.standard, String(e.qty)])}
+              alignLast
+            />
           </div>
 
-          {/* Options table */}
+          <Separator />
+
+          {/* Commercial options */}
           <div>
-            <h3 className="text-sm font-bold uppercase tracking-wide">2. Options</h3>
+            <h3 className="text-sm font-bold uppercase tracking-wide">17. Options &amp; investment</h3>
             <div className="mt-3 flex flex-col gap-3">
               {options.map((o) => (
                 <div key={o.id} className="rounded-lg border p-4">
@@ -672,7 +754,20 @@ function DocumentStep({
             </div>
             <div className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-primary" />
-              <span className="text-xs font-medium">Commissioning &amp; C&amp;E certificates included</span>
+              <span className="text-xs font-medium">Design, Installation &amp; Commissioning certificates issued</span>
+            </div>
+          </div>
+
+          {/* Design sign-off */}
+          <div className="grid gap-4 rounded-lg border p-4 sm:grid-cols-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Design certificate (BS 5839-1 §41)</p>
+              <p className="mt-2 text-sm">I certify that this design complies with the recommendations of BS 5839-1:2025 except for any variations recorded in clause 15.</p>
+            </div>
+            <div className="flex flex-col justify-end gap-1 text-sm">
+              <div className="h-8 border-b border-dashed" />
+              <p className="font-medium">{dc.preparedBy}</p>
+              <p className="text-xs text-muted-foreground">{dc.preparedCompetency}</p>
             </div>
           </div>
 
@@ -698,6 +793,89 @@ function DocumentStep({
           </Button>
         </div>
       </div>
+    </div>
+  )
+}
+
+/* --------------------------------------------------- document sub-tables */
+
+function DocTable({
+  head,
+  rows,
+  alignLast,
+  className,
+}: {
+  head: string[]
+  rows: string[][]
+  alignLast?: boolean
+  className?: string
+}) {
+  return (
+    <div className={cn('overflow-x-auto', className)}>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+            {head.map((h, i) => (
+              <th key={i} className={cn('pb-2 font-medium', alignLast && i === head.length - 1 && 'text-right')}>
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, ri) => (
+            <tr key={ri} className="border-b last:border-0">
+              {r.map((c, ci) => (
+                <td
+                  key={ci}
+                  className={cn(
+                    'py-2 align-top',
+                    ci === 0 && 'font-medium',
+                    alignLast && ci === r.length - 1 && 'text-right tabular-nums',
+                  )}
+                >
+                  {c}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function CauseEffectTable() {
+  return (
+    <div className="mt-3 overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <th className="pb-2 font-medium">Input</th>
+            {MOCK_CE_OUTPUTS.map((o) => (
+              <th key={o} className="pb-2 text-center font-medium">
+                {o}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {MOCK_CE_MATRIX.map((row) => (
+            <tr key={row.input} className="border-b last:border-0">
+              <td className="py-2 font-medium">{row.input}</td>
+              {row.effects.map((on, i) => (
+                <td key={i} className="py-2 text-center">
+                  {on ? (
+                    <Check className="mx-auto h-4 w-4 text-primary" />
+                  ) : (
+                    <span className="text-muted-foreground/40">—</span>
+                  )}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

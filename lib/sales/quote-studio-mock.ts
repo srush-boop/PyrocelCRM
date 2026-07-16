@@ -60,6 +60,216 @@ export type StudioOption = {
   includedByDefault: boolean
 }
 
+/* ------------------------------------------------------------------------
+ * BAFE SP203-1 / BS 5839-1 design specification content.
+ *
+ * This models the clause structure an NSI/BAFE auditor expects to see in a
+ * fire detection & alarm design specification. It is a FIRST-CUT structure for
+ * the team to correct — all values are representative mock data for the
+ * Meadowview care-home job, not a real design.
+ * --------------------------------------------------------------------- */
+
+/** Document-control metadata (revision block auditors look for). */
+export const MOCK_DOC_CONTROL = {
+  ref: 'PYR-DS-2026-0481',
+  revision: 'A',
+  status: 'For client approval',
+  date: '16 July 2026',
+  preparedBy: 'M. Ainsworth — Fire Systems Designer',
+  preparedCompetency: 'BAFE SP203-1 registered designer · FIA Unit 1–4',
+  checkedBy: 'S. Rushworth — Technical Manager',
+  approvalRef: 'BAFE SP203-1 Cert. No. 0123 · NSI Gold NSI/1234',
+}
+
+/** A prose clause of the specification. */
+export type SpecSection = {
+  id: string
+  number: string
+  title: string
+  body: string
+  bullets?: string[]
+}
+
+/** Ordered narrative clauses of the BS 5839-1 design specification. */
+export const MOCK_SPEC_SECTIONS: SpecSection[] = [
+  {
+    id: 's1',
+    number: '1',
+    title: 'Purpose & scope of the installation',
+    body: 'Pyrocel proposes the design, supply, installation, commissioning and certification of an automatic fire detection and fire alarm system (AFD) for Meadowview Care Home, comprising a full takeover and upgrade of the existing three-storey premises and an extension to cover the new single-storey wing. The system is designed to protect life in a premises with a sleeping risk.',
+  },
+  {
+    id: 's2',
+    number: '2',
+    title: 'System category & design rationale',
+    body: 'The system is designed to Category L1 in accordance with BS 5839-1:2025 — automatic detection installed throughout all areas of the building to offer the earliest possible warning and the maximum time for evacuation. Category L1 is selected because the premises is a residential care setting with occupants who are asleep and cannot be assumed capable of self-evacuation without assistance.',
+    bullets: [
+      'Occupancy: sleeping risk, dependent occupants requiring staff-assisted (progressive horizontal) evacuation.',
+      'A phased/progressive horizontal evacuation strategy is supported by the detection and alarm zoning.',
+      'Category confirmed with the Responsible Person; no reduction from L1 has been agreed.',
+    ],
+  },
+  {
+    id: 's3',
+    number: '3',
+    title: 'Design responsibility & competency',
+    body: 'The design has been prepared by a competent person under Pyrocel’s BAFE SP203-1 registration and NSI Gold third-party certification. Design, installation, commissioning and verification responsibilities rest with Pyrocel unless otherwise agreed in writing with the Responsible Person.',
+    bullets: [
+      'Designer: M. Ainsworth — BAFE SP203-1 registered, FIA Unit 1–4 qualified.',
+      'A Design Certificate will be issued on completion in accordance with BS 5839-1 §41.',
+      'Any variations from this specification will be recorded and agreed before implementation.',
+    ],
+  },
+  {
+    id: 's4',
+    number: '4',
+    title: 'Applicable standards & documents',
+    body: 'The installation will comply with the following, current at the date of design:',
+    bullets: [
+      'BS 5839-1:2025 — Fire detection and fire alarm systems for buildings: Code of practice for design, installation, commissioning and maintenance.',
+      'BS 7671:2018+A2:2022 — Requirements for Electrical Installations (IET Wiring Regulations).',
+      'BS EN 54 series — Fire detection and fire alarm systems (component standards).',
+      'Regulatory Reform (Fire Safety) Order 2005 — duties of the Responsible Person.',
+      'BAFE SP203-1 scheme requirements and NSI Gold quality schedule.',
+    ],
+  },
+  {
+    id: 's5',
+    number: '5',
+    title: 'Area coverage & detector selection',
+    body: 'Automatic detection is provided throughout, with detector type selected per area to balance the earliest reliable detection against false-alarm resistance (BS 5839-1 §21 and §35). Detector siting and spacing will comply with BS 5839-1 §22.',
+    bullets: [
+      'Bedrooms, lounges, offices, escape routes: point multi-sensor detectors (optical + heat).',
+      'Kitchen, laundry, plant and boiler rooms: point heat detectors (rate-of-rise / fixed temperature).',
+      'Roof void / concealed spaces exceeding 800 mm: detection provided where required by §22.',
+      'Detection extended throughout the new single-storey wing (8 bedrooms + day room).',
+    ],
+  },
+  {
+    id: 's6',
+    number: '6',
+    title: 'Manual call points',
+    body: 'Addressable manual call points (MCPs) to BS EN 54-11 will be sited on escape routes at all storey exits and final exits, at a height of 1.4 m, such that no person need travel more than 45 m to reach one (BS 5839-1 §20). MCPs will be fitted with protective covers to reduce malicious operation in the care environment.',
+  },
+  {
+    id: 's7',
+    number: '7',
+    title: 'Audibility & visual alarm devices',
+    body: 'The alarm warning will achieve a minimum sound pressure level of 65 dB(A) throughout, and 75 dB(A) at bedheads to rouse sleeping occupants (BS 5839-1 §16 and §18). Given hearing-impaired occupants, visual alarm devices (VADs) to BS EN 54-23 are provided in bedrooms, sanitary accommodation and communal areas. Staff alerting supports the progressive horizontal evacuation strategy.',
+  },
+  {
+    id: 's8',
+    number: '8',
+    title: 'Zoning & staged evacuation',
+    body: 'The premises is divided into detection and alarm zones aligned to the compartmentation and the phased evacuation strategy. Each zone does not exceed 2,000 m² and is confined to a single storey (BS 5839-1 §13). An addressable system provides device-level location to speed staff response.',
+  },
+  {
+    id: 's9',
+    number: '9',
+    title: 'Cause & effect',
+    body: 'A documented cause-and-effect matrix defines system outputs on activation, to be agreed with the Responsible Person prior to commissioning and recorded on an as-fitted C&E chart (see matrix below). Interfaces include magnetic door hold-open release, AOV/ventilation, lift homing, plant shutdown and transmission to the Alarm Receiving Centre.',
+  },
+  {
+    id: 's10',
+    number: '10',
+    title: 'Control equipment & power supplies',
+    body: 'A 2-loop addressable control and indicating panel to BS EN 54-2, with an integral power supply to BS EN 54-4, will be located at the main staff/reception point (a manned position forming the building’s normal point of entry for the fire service). Standby power is sized for 24 hours’ quiescent operation followed by 30 minutes in alarm (see battery calculation below), in accordance with BS 5839-1 §25.',
+  },
+  {
+    id: 's11',
+    number: '11',
+    title: 'Cabling, containment & survivability',
+    body: 'All fire alarm cabling will be enhanced fire-resistant cable (FP200 Gold or equivalent to BS EN 50200 PH120), installed and supported with fire-resistant fixings. Cabling will be segregated from other services and mechanically protected where at risk (BS 5839-1 §26). Standard/enhanced grade selection reflects the phased evacuation strategy and single-stage alarm arrangement.',
+  },
+  {
+    id: 's12',
+    number: '12',
+    title: 'False alarm management',
+    body: 'The design targets a low rate of unwanted fire signals in line with BS 5839-1 §35. Measures include multi-sensor detection in areas prone to nuisance (near kitchenettes and bathrooms), appropriate detector siting away from steam and cooking, MCP covers, and a documented false-alarm management plan handed over to the Responsible Person. A target of no more than one unwanted signal per 100 detectors per annum is adopted.',
+  },
+  {
+    id: 's13',
+    number: '13',
+    title: 'Installation, commissioning & handover',
+    body: 'Installation will be carried out to BS 5839-1 §38 and BS 7671. On completion Pyrocel will commission the system to §39, verify the design to §44, and hand over the following:',
+    bullets: [
+      'Design, Installation, Commissioning and (where applicable) Acceptance/Verification Certificates.',
+      'As-fitted drawings and the agreed cause-and-effect chart.',
+      'Operation & maintenance manual and a completed system log book.',
+      'User training for nominated staff and the Responsible Person.',
+    ],
+  },
+  {
+    id: 's14',
+    number: '14',
+    title: 'Recommended maintenance',
+    body: 'To maintain compliance and the third-party certification, periodic inspection and servicing to BS 5839-1 §45 is recommended — a minimum of two service visits per annum — together with the user’s weekly test and routine attention. A maintenance proposal is available separately.',
+  },
+  {
+    id: 's15',
+    number: '15',
+    title: 'Variations & limitations',
+    body: 'No variations from the recommendations of BS 5839-1:2025 are proposed. This specification covers the fire detection and alarm system only; it excludes fire-fighting equipment, emergency lighting, fire doors and passive fire protection unless separately quoted. Final device counts will be confirmed against the approved layout drawing at design freeze.',
+  },
+]
+
+/** Detection/alarm zone schedule. */
+export type SpecZone = {
+  zone: string
+  area: string
+  detection: string
+  devices: number
+}
+
+export const MOCK_SPEC_ZONES: SpecZone[] = [
+  { zone: 'Z1', area: 'Ground floor — communal, dining, reception', detection: 'Multi-sensor + heat (kitchen)', devices: 22 },
+  { zone: 'Z2', area: 'Ground floor — bedroom wing A', detection: 'Multi-sensor', devices: 18 },
+  { zone: 'Z3', area: 'First floor — bedrooms & escape routes', detection: 'Multi-sensor', devices: 24 },
+  { zone: 'Z4', area: 'Second floor — bedrooms & escape routes', detection: 'Multi-sensor', devices: 22 },
+  { zone: 'Z5', area: 'New single-storey wing (8 beds + day room)', detection: 'Multi-sensor + heat', devices: 16 },
+  { zone: 'Z6', area: 'Plant, boiler & roof voids', detection: 'Heat / void detection', devices: 6 },
+]
+
+/** Standby battery calculation (BS 5839-1 §25). */
+export type BatteryRow = { label: string; value: string }
+export const MOCK_BATTERY_CALC: BatteryRow[] = [
+  { label: 'Quiescent current (Iq)', value: '0.42 A' },
+  { label: 'Standby period required', value: '24 h' },
+  { label: 'Quiescent capacity (Iq × 24 h)', value: '10.08 Ah' },
+  { label: 'Alarm current (Ia)', value: '3.60 A' },
+  { label: 'Alarm period required', value: '0.5 h' },
+  { label: 'Alarm capacity (Ia × 0.5 h)', value: '1.80 Ah' },
+  { label: 'Sub-total', value: '11.88 Ah' },
+  { label: 'De-rating factor', value: '× 1.25' },
+  { label: 'Minimum battery capacity', value: '14.85 Ah' },
+  { label: 'Specified batteries', value: '2 × 17 Ah VRLA (24 V) — compliant with headroom' },
+]
+
+/** Cause & effect matrix — inputs (rows) vs outputs (columns). */
+export const MOCK_CE_OUTPUTS = ['Sounders / VADs', 'ARC signal', 'Door holders release', 'Lift homing', 'AHU / plant shutdown'] as const
+export type CauseEffectRow = { input: string; effects: boolean[] }
+export const MOCK_CE_MATRIX: CauseEffectRow[] = [
+  { input: 'Any automatic detector', effects: [true, true, true, true, true] },
+  { input: 'Any manual call point', effects: [true, true, true, true, true] },
+  { input: 'Panel fault / PSU fail', effects: [false, true, false, false, false] },
+]
+
+/** Equipment schedule with EN 54 approval references. */
+export type SpecEquipment = {
+  ref: string
+  description: string
+  standard: string
+  qty: number
+}
+export const MOCK_SPEC_EQUIPMENT: SpecEquipment[] = [
+  { ref: 'DET-MS', description: 'Addressable multi-sensor detector (optical + heat)', standard: 'BS EN 54-7 / 54-5', qty: 58 },
+  { ref: 'DET-HT', description: 'Addressable heat detector (kitchen / plant)', standard: 'BS EN 54-5', qty: 6 },
+  { ref: 'MCP', description: 'Addressable manual call point + cover', standard: 'BS EN 54-11', qty: 14 },
+  { ref: 'SND-VAD', description: 'Sounder / VAD beacon base', standard: 'BS EN 54-3 / 54-23', qty: 46 },
+  { ref: 'PANEL', description: '2-loop addressable control panel + PSU', standard: 'BS EN 54-2 / 54-4', qty: 1 },
+  { ref: 'CABLE', description: 'Enhanced fire-resistant cable (FP200 Gold)', standard: 'BS EN 50200 PH120', qty: 1250 },
+]
+
 /** The realistic client email that seeds the whole flow. */
 export const MOCK_BRIEF = `From: j.hartley@meadowviewcare.co.uk
 Subject: Fire alarm - takeover + new wing

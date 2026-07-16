@@ -623,44 +623,71 @@ export function CreateTaskDialog({
               </>
             )}
 
-            <div className="grid gap-2">
-              <Label>Client</Label>
-              <SearchSelect
-                value={clientId || NO_CLIENT}
-                onChange={(value) => setClientId(value === NO_CLIENT ? '' : value)}
-                placeholder="Select a client"
-                searchPlaceholder="Search clients…"
-                emptyText="No matching client."
-                options={[
-                  { value: NO_CLIENT, label: 'No client' },
-                  ...clients.map((client) => ({ value: client.id, label: client.name })),
-                ]}
-              />
-              {(selectedRecurringSite || selectedReactiveSite) && (
+            {lockReactive ? (
+              <div className="grid gap-2">
+                <Label>Client</Label>
+                <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                  {clients.find((c) => c.id === clientId)?.name ??
+                    (siteId ? "The site's client" : 'Select a site first')}
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  Defaults to the site&apos;s client. Change it to bill this call to a different client.
+                  Automatically billed to the site&apos;s client.
                 </p>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                <Label>Client</Label>
+                <SearchSelect
+                  value={clientId || NO_CLIENT}
+                  onChange={(value) => setClientId(value === NO_CLIENT ? '' : value)}
+                  placeholder="Select a client"
+                  searchPlaceholder="Search clients…"
+                  emptyText="No matching client."
+                  options={[
+                    { value: NO_CLIENT, label: 'No client' },
+                    ...clients.map((client) => ({ value: client.id, label: client.name })),
+                  ]}
+                />
+                {(selectedRecurringSite || selectedReactiveSite) && (
+                  <p className="text-xs text-muted-foreground">
+                    Defaults to the site&apos;s client. Change it to bill this call to a different client.
+                  </p>
+                )}
+              </div>
+            )}
 
-            <div className="grid gap-2">
-              <Label>Assign Engineer</Label>
-              <Select
-                value={formData.assigned_engineer_id}
-                onValueChange={(value) => setFormData({ ...formData, assigned_engineer_id: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select an engineer (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {engineers.map((engineer) => (
-                    <SelectItem key={engineer.id} value={engineer.id}>
-                      {engineer.full_name || engineer.email}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {lockReactive ? (
+              <div className="grid gap-2">
+                <Label>Assigned engineer</Label>
+                <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                  {engineers.find((e) => e.id === formData.assigned_engineer_id)?.full_name ||
+                    engineers.find((e) => e.id === formData.assigned_engineer_id)?.email ||
+                    'You'}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  On-call call-outs are logged against you.
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                <Label>Assign Engineer</Label>
+                <Select
+                  value={formData.assigned_engineer_id}
+                  onValueChange={(value) => setFormData({ ...formData, assigned_engineer_id: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select an engineer (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {engineers.map((engineer) => (
+                      <SelectItem key={engineer.id} value={engineer.id}>
+                        {engineer.full_name || engineer.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="grid gap-2">
               <Label>Scheduled Date *</Label>

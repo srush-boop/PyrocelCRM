@@ -170,12 +170,27 @@ function makeLine(
  * Device lines come first (in takeoff order), then kit/labour lines (in rule
  * order). Zero-quantity lines are dropped.
  */
+export function aggregateTakeoffItems(items: AssemblyTakeoffItem[]): AssemblyTakeoffItem[] {
+  const map = new Map<string, AssemblyTakeoffItem>()
+  for (const it of items) {
+    if (!it.quantity || it.quantity <= 0) continue
+    const existing = map.get(it.device_key)
+    if (existing) existing.quantity += it.quantity
+    else map.set(it.device_key, { ...it })
+  }
+  return [...map.values()]
+}
+
 export function buildAssembly(ctx: AssemblyContext): AssemblyResult {
   const lines: AssemblyLine[] = []
   const unmappedKeys: string[] = []
 
+  // Aggregate rows sharing a device type (e.g. detectors split across zones) so
+  // each device produces a single, correctly-totalled line.
+  const items = aggregateTakeoffItems(ctx.items)
+
   // 1) Device lines — one per counted device type with qty > 0.
-  for (const item of ctx.items) {
+  for (const item of items) {
     if (!item.quantity || item.quantity <= 0) continue
     const cat = item.catalogue_item_id ? ctx.catalogue[item.catalogue_item_id] : undefined
     if (!cat) unmappedKeys.push(item.device_key)

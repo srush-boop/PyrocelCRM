@@ -1869,47 +1869,29 @@ export function QuoteBuilder({
         </CardContent>
       </Card>
 
-      {/* ---------- Maintenance quote only (own section) ---------- */}
+      {/* ---------- Quote actions toolbar ----------
+          Compact action buttons rather than full card sections: toggle
+          maintenance-only mode, and import a client request (AI). */}
       {!readOnly && (
-        <Card>
-          <CardHeader>
-            <SectionHeading
-              icon={Wrench}
-              title="Maintenance quote only"
-              description="Focus this quote on the routine-maintenance pricing calculator."
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant={maintenanceOnly ? 'default' : 'outline'}
+            onClick={() => setMaintenanceOnly((prev) => !prev)}
+            disabled={disabled}
+            className="gap-2"
+          >
+            {maintenanceOnly ? <Check className="h-4 w-4" /> : <Wrench className="h-4 w-4" />}
+            {maintenanceOnly ? 'Maintenance quote only · on' : 'Maintenance quote only'}
+          </Button>
+          {!maintenanceOnly && (
+            <QuoteRequestImporter
+              systemTypes={systemTypes}
+              onApply={applyImportedProposal}
+              disabled={disabled}
             />
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
-              <div className="grid gap-0.5">
-                <span className="text-sm font-medium">Enable maintenance-only mode</span>
-                <span className="text-xs text-muted-foreground text-pretty">
-                  Hides the client request and systems sections and focuses this quote on the
-                  routine-maintenance pricing calculator.
-                </span>
-              </div>
-              <Button
-                type="button"
-                variant={maintenanceOnly ? 'default' : 'outline'}
-                onClick={() => setMaintenanceOnly((prev) => !prev)}
-                disabled={disabled}
-                className="shrink-0"
-              >
-                {maintenanceOnly ? (
-                  <>
-                    <Check className="mr-2 h-4 w-4" />
-                    Maintenance-only on
-                  </>
-                ) : (
-                  <>
-                    <Wrench className="mr-2 h-4 w-4" />
-                    Enable
-                  </>
-                )}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+          )}
+        </div>
       )}
 
       {/* ---------- Routine maintenance pricing (maintenance-only mode) ----------
@@ -2026,33 +2008,27 @@ export function QuoteBuilder({
         onApply={applyInstallation}
       />
 
-      {/* ---------- Client request / requirements matrix ---------- */}
-      {!readOnly && !maintenanceOnly && (
+      {/* ---------- Client request / requirements matrix ----------
+          Only rendered once a client request has been imported (the import
+          button now lives in the actions toolbar above). */}
+      {!readOnly && !maintenanceOnly && (requirements.length > 0 || requirementSource) && (
         <Card>
           <CardHeader>
             <SectionHeading
               icon={Mail}
               title="Client request"
-              description="Import a client email or specification. AI summarises it, extracts each requirement, and drafts our response — you review before it's saved."
-              action={
-                <QuoteRequestImporter
-                  systemTypes={systemTypes}
-                  onApply={applyImportedProposal}
-                />
-              }
+              description="AI-extracted requirements and our drafted response — review before saving."
             />
           </CardHeader>
-          {(requirements.length > 0 || requirementSource) && (
-            <CardContent>
-              <QuoteRequirementsEditor
-                requirements={requirements}
-                onChange={setRequirements}
-                source={requirementSource}
-                showMatrix={showRequirementsMatrix}
-                onShowMatrixChange={setShowRequirementsMatrix}
-              />
-            </CardContent>
-          )}
+          <CardContent>
+            <QuoteRequirementsEditor
+              requirements={requirements}
+              onChange={setRequirements}
+              source={requirementSource}
+              showMatrix={showRequirementsMatrix}
+              onShowMatrixChange={setShowRequirementsMatrix}
+            />
+          </CardContent>
         </Card>
       )}
 

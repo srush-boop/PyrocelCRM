@@ -18,6 +18,7 @@ import {
   Radio,
   Settings,
   ChevronDown,
+  Sparkles,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -40,6 +41,7 @@ const topLevelLinks: SalesNavLink[] = [
   { title: 'Quotes', href: '/dashboard/sales/quotes', icon: ReceiptText },
   { title: 'Quote Bank', href: '/dashboard/sales/quote-bank', icon: Landmark },
   { title: 'Contract Reviews', href: '/dashboard/sales/contract-reviews', icon: ClipboardCheck },
+  { title: 'Quote Studio', href: '/dashboard/sales/quote-studio-preview', icon: Sparkles },
 ]
 
 // Setup areas grouped under the "Sales Configuration" dropdown.

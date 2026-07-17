@@ -62,7 +62,7 @@ export function PrintButton({
     const win = window.open('', '_blank', 'width=1100,height=800')
     if (!win) return
 
-    const printedAt = new Date().toLocaleString('en-GB')
+    const printedAt = new Date().toLocaleString('en-GB', { timeZone: 'Europe/London' })
     win.document.write(
       `<!doctype html><html><head><meta charset="utf-8" /><title>${escapeHtml(
         title,

@@ -10,7 +10,11 @@ export type LoneWorkerAckVia = 'self' | 'office'
 export function formatShiftTime(value: string): string {
   const d = new Date(value)
   if (Number.isNaN(d.getTime())) return value
-  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  return d.toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Europe/London',
+  })
 }
 
 export interface LoneWorkerTimings {

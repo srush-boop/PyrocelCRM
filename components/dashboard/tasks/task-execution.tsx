@@ -43,7 +43,7 @@ import { useOfflineSync } from '@/lib/offline/use-offline-sync'
 import { persistTaskResult, isOnline } from '@/lib/offline/sync'
 import { cacheCallSnapshot } from '@/lib/offline/snapshots'
 import { isNonRecurringCall } from '@/lib/follow-up'
-import { formatDateUK, cn } from '@/lib/utils'
+import { formatDateUK, formatTimeUK, cn } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import {
   AlertDialog,
@@ -1743,8 +1743,8 @@ export function TaskExecution({
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Completed on {new Date(task.completed_at!).toLocaleDateString()} at{' '}
-              {new Date(task.completed_at!).toLocaleTimeString()}
+              Completed on {formatDateUK(task.completed_at)} at{' '}
+              {formatTimeUK(task.completed_at)}
             </p>
             <CompletedReportActions
               taskId={task.id}

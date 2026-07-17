@@ -56,6 +56,22 @@ function extractPostcode(
   return pc?.longText ?? ''
 }
 
+// The ISO country code (shortText, e.g. "GB") from Places address components.
+function extractCountryCode(
+  components: { types?: string[]; shortText?: string }[] | undefined,
+): string {
+  if (!components) return ''
+  const country = components.find((c) => c.types?.includes('country'))
+  return country?.shortText ?? ''
+}
+
+// UK bounding box (mainland GB, Northern Ireland, and the isles) used to hard
+// restrict Text Search results rather than merely bias them.
+const UK_BOUNDS = {
+  low: { latitude: 49.8, longitude: -8.7 },
+  high: { latitude: 60.9, longitude: 1.9 },
+}
+
 export async function GET(request: Request) {
   const apiKey = resolveApiKey()
   if (!apiKey) {
@@ -94,6 +110,10 @@ export async function GET(request: Request) {
         textQuery: query,
         // Bias results to the UK; this is a UK fire & security business.
         regionCode: 'GB',
+        // Hard-restrict to a UK bounding box so results outside the UK are not
+        // returned (regionCode alone only biases). Belt-and-braces with the
+        // per-result country filter below.
+        locationRestriction: { rectangle: UK_BOUNDS },
         languageCode: 'en',
         maxResultCount: 8,
       }),
@@ -116,20 +136,27 @@ export async function GET(request: Request) {
         nationalPhoneNumber?: string
         websiteUri?: string
         location?: { latitude?: number; longitude?: number }
-        addressComponents?: { types?: string[]; longText?: string }[]
+        addressComponents?: { types?: string[]; longText?: string; shortText?: string }[]
       }[]
     }
 
-    const results: PlaceResult[] = (data.places ?? []).map((p) => ({
-      placeId: p.id,
-      name: p.displayName?.text ?? '',
-      address: p.formattedAddress ?? '',
-      postcode: extractPostcode(p.addressComponents),
-      phone: p.nationalPhoneNumber ?? p.internationalPhoneNumber ?? '',
-      website: p.websiteUri ?? '',
-      lat: p.location?.latitude ?? null,
-      lng: p.location?.longitude ?? null,
-    }))
+    const results: PlaceResult[] = (data.places ?? [])
+      // Only keep UK results. The country component is the authoritative signal;
+      // if it's missing we keep the result (the bounding box already restricted it).
+      .filter((p) => {
+        const cc = extractCountryCode(p.addressComponents)
+        return cc === '' || cc === 'GB'
+      })
+      .map((p) => ({
+        placeId: p.id,
+        name: p.displayName?.text ?? '',
+        address: p.formattedAddress ?? '',
+        postcode: extractPostcode(p.addressComponents),
+        phone: p.nationalPhoneNumber ?? p.internationalPhoneNumber ?? '',
+        website: p.websiteUri ?? '',
+        lat: p.location?.latitude ?? null,
+        lng: p.location?.longitude ?? null,
+      }))
 
     return NextResponse.json({ results })
   } catch (err) {

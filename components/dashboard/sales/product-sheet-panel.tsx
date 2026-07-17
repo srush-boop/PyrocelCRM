@@ -9,6 +9,7 @@ import { FileSpreadsheet, Upload, Loader2, Download, RefreshCw } from 'lucide-re
 import { toast } from 'sonner'
 import { importProductSheet } from '@/app/(dashboard)/dashboard/sales/product-sheet-actions'
 import type { ProductSheet } from '@/lib/types/database'
+import { UK_TIME_ZONE } from '@/lib/utils'
 
 function formatBytes(bytes: number | null): string {
   if (!bytes) return ''
@@ -25,6 +26,7 @@ function formatDate(value: string | null): string {
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: UK_TIME_ZONE,
   })
 }
 

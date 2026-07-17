@@ -189,7 +189,14 @@ export async function markReviewedAndClose(
 /**
  * Close a CHARGEABLE review and submit it for invoicing. Requires the
  * missed-deadline reason AND the PO (where the client requires one) to be
- * resolved. Marks reviewed + invoiced in one gated step.
+ * resolved.
+ *
+ * IMPORTANT: this only marks the call `reviewed`. It must NOT stamp
+ * `charge_invoiced_at` — that field means "placed on an actual invoice" and is
+ * used by the Raise-an-invoice grid (`getReadyToInvoiceGroups`) to EXCLUDE
+ * calls. Stamping it here made submitted calls vanish from the invoicing grid
+ * (never appearing to be invoiced). `charge_invoiced_at` is set only when the
+ * call is genuinely added to an invoice in `createInvoiceFromTasks`.
  */
 export async function submitForInvoicing(
   taskId: string,
@@ -217,13 +224,12 @@ export async function submitForInvoicing(
       charge_review_status: 'reviewed',
       charge_reviewed_at: now,
       charge_reviewed_by: userId,
-      charge_invoiced_at: now,
-      charge_invoiced_by: userId,
     })
     .eq('id', taskId)
   if (error) return { error: error.message }
 
   revalidatePath('/dashboard/chargeable')
+  revalidatePath('/dashboard/invoices/new')
   revalidatePath(`/dashboard/tasks/${taskId}`)
   return { error: null }
 }

@@ -129,6 +129,45 @@ export async function PUT(
     if (role && !validRoles.includes(role)) {
       return NextResponse.json({ error: 'Invalid role.' }, { status: 400 })
     }
+
+    // Safeguard: prevent an admin from being silently demoted. This guards
+    // against an accidental role change (e.g. a stray edit or bulk update)
+    // locking everyone out of admin. Only runs when the role is actually
+    // being changed away from 'admin'.
+    if (role !== undefined && role !== 'admin') {
+      const guardClient = createAdminClient()
+      const { data: targetProfile } = await guardClient
+        .from('profiles')
+        .select('role, email')
+        .eq('id', id)
+        .single()
+
+      if (targetProfile?.role === 'admin') {
+        // The owner account may never be demoted through this route.
+        if ((targetProfile.email ?? '').trim().toLowerCase() === LABOUR_COST_OWNER_EMAIL) {
+          return NextResponse.json(
+            { error: 'The owner account cannot be demoted from admin.' },
+            { status: 400 },
+          )
+        }
+
+        // Never allow the last remaining admin to be demoted.
+        const { count: adminCount } = await guardClient
+          .from('profiles')
+          .select('id', { count: 'exact', head: true })
+          .eq('role', 'admin')
+
+        if ((adminCount ?? 0) <= 1) {
+          return NextResponse.json(
+            {
+              error:
+                'You cannot remove the last admin. Promote another user to admin first.',
+            },
+            { status: 400 },
+          )
+        }
+      }
+    }
     if (status && !['active', 'inactive'].includes(status)) {
       return NextResponse.json({ error: 'Invalid status.' }, { status: 400 })
     }

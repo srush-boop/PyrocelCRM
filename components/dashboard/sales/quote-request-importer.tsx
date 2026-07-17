@@ -19,7 +19,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Sparkles, Upload, FileText, Loader2, ClipboardPaste } from 'lucide-react'
 import { toast } from 'sonner'
-import { analyzeClientRequest, type ClientRequestProposal } from '@/lib/ai/analyze-client-request'
+import type { AnalyzeResult, ClientRequestProposal } from '@/lib/ai/analyze-client-request'
 import {
   REQUIREMENT_STATUS_META,
   type DraftRequirement,
@@ -89,9 +89,15 @@ export function QuoteRequestImporter({ systemTypes, disabled, onApply }: Props) 
     if (instructions.trim()) fd.set('instructions', instructions.trim())
 
     startTransition(async () => {
-      const res = await analyzeClientRequest(fd)
-      if (!res.ok || !res.proposal || !res.source) {
-        toast.error(res.error ?? 'Could not analyse the document.')
+      const res: AnalyzeResult | null = await fetch('/api/quote-requests/analyze', {
+        method: 'POST',
+        body: fd,
+      })
+        .then((r) => r.json() as Promise<AnalyzeResult>)
+        .catch(() => null)
+
+      if (!res || !res.ok || !res.proposal || !res.source) {
+        toast.error(res?.error ?? 'Could not analyse the document.')
         return
       }
       setReview({

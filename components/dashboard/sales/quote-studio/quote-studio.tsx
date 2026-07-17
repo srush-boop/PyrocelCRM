@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, type ComponentType } from 'react'
+import { useMemo, useRef, useState, type ComponentType } from 'react'
 import { toast } from 'sonner'
 import {
   Sparkles,
@@ -18,6 +18,7 @@ import {
   FileText,
   Info,
   Loader2,
+  Upload,
   Building2,
   MapPin,
   Gauge,
@@ -131,6 +132,7 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
   const [margin, setMargin] = useState(40)
 
   // Async flags
+  const [extracting, setExtracting] = useState(false)
   const [drafting, setDrafting] = useState(false)
   const [buildingSpec, setBuildingSpec] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -177,6 +179,33 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
     setRows([])
     setSpec(null)
     setSavedId(null)
+  }
+
+  async function handleExtractDocument(file: File) {
+    setExtracting(true)
+    try {
+      const fd = new FormData()
+      fd.set('file', file)
+      const res: { ok: boolean; text?: string; error?: string } | null = await fetch(
+        '/api/quote-requests/extract-text',
+        { method: 'POST', body: fd },
+      )
+        .then((r) => r.json())
+        .catch(() => null)
+
+      if (!res || !res.ok || !res.text) {
+        toast.error(res?.error ?? 'Could not read that document.')
+        return
+      }
+      // Append to whatever is already in the brief so a document can top up
+      // notes the designer has already typed.
+      setBrief((prev) => (prev.trim() ? `${prev.trim()}\n\n${res.text}` : (res.text ?? '')))
+      toast.success(`Loaded "${file.name}" into the brief`)
+    } catch {
+      toast.error('Could not read that document. Please try again.')
+    } finally {
+      setExtracting(false)
+    }
   }
 
   async function handleDraft() {
@@ -354,6 +383,8 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
           onWorkType={setWorkType}
           drafting={drafting}
           onDraft={handleDraft}
+          extracting={extracting}
+          onUploadDocument={handleExtractDocument}
         />
       )}
 
@@ -473,6 +504,8 @@ function BriefStep({
   onWorkType,
   drafting,
   onDraft,
+  extracting,
+  onUploadDocument,
 }: {
   brief: string
   onBrief: (v: string) => void
@@ -488,7 +521,10 @@ function BriefStep({
   onWorkType: (v: string) => void
   drafting: boolean
   onDraft: () => void
+  extracting: boolean
+  onUploadDocument: (file: File) => void
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
   return (
     <div className="flex flex-col gap-4">
       <StepHeading
@@ -505,6 +541,35 @@ function BriefStep({
             placeholder="e.g. We've taken on the maintenance of a 3-storey care home in Leeds and need to replace the ageing fire alarm. There's also a new single-storey wing with 8 bedrooms and a day room that needs covering. Sleeping risk, staff-assisted evacuation…"
             className="resize-y"
           />
+
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.docx,.txt,.md,.csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+              className="sr-only"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) onUploadDocument(f)
+                e.target.value = ''
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              disabled={extracting}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {extracting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              {extracting ? 'Reading document…' : 'Upload a document'}
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              Add a tender pack, enquiry email or spec (PDF, Word or text) and we&apos;ll read it into the
+              brief.
+            </span>
+          </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">

@@ -24,6 +24,10 @@ import {
   Gauge,
   PoundSterling,
   CircleCheck,
+  Layers,
+  HelpCircle,
+  TriangleAlert,
+  Lightbulb,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
@@ -50,7 +54,11 @@ import {
   type StudioTakeoffItemInput,
   type StudioSpecPayload,
 } from '@/app/(dashboard)/dashboard/sales/quote-studio/actions'
-import type { StudioUnderstanding, StudioRequirement } from '@/lib/ai/studio-draft'
+import type {
+  StudioUnderstanding,
+  StudioRequirement,
+  StudioDesignReasoning,
+} from '@/lib/ai/studio-draft'
 
 // ---------------------------------------------------------------- types
 
@@ -75,11 +83,12 @@ interface TakeoffRow {
   rationale?: string
 }
 
-type Phase = 'brief' | 'review' | 'takeoff' | 'document' | 'saved'
+type Phase = 'brief' | 'review' | 'design' | 'takeoff' | 'document' | 'saved'
 
 const PHASES: { id: Phase; label: string; icon: ComponentType<{ className?: string }> }[] = [
   { id: 'brief', label: 'Brief', icon: Wand2 },
   { id: 'review', label: 'AI draft', icon: ListChecks },
+  { id: 'design', label: 'Design rationale', icon: Layers },
   { id: 'takeoff', label: 'Devices & price', icon: ClipboardList },
   { id: 'document', label: 'Specification', icon: ScrollText },
 ]
@@ -127,6 +136,7 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
   // Draft results (editable)
   const [understanding, setUnderstanding] = useState<StudioUnderstanding | null>(null)
   const [requirements, setRequirements] = useState<StudioRequirement[]>([])
+  const [designReasoning, setDesignReasoning] = useState<StudioDesignReasoning | null>(null)
   const [designCategory, setDesignCategory] = useState('L1')
   const [rows, setRows] = useState<TakeoffRow[]>([])
   const [margin, setMargin] = useState(40)
@@ -175,6 +185,7 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
     setWorkType('DSIC')
     setUnderstanding(null)
     setRequirements([])
+    setDesignReasoning(null)
     setDesignCategory('L1')
     setRows([])
     setSpec(null)
@@ -223,6 +234,7 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
       const d = res.draft
       setUnderstanding(d.understanding)
       setRequirements(d.requirements)
+      setDesignReasoning(d.design ?? null)
       setDesignCategory(parseCategory(d.understanding.category))
       if (!prospectName && !clientId && d.understanding.clientName) {
         setProspectName(d.understanding.clientName)
@@ -317,6 +329,7 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
         prospect_name: clientId ? null : prospectName.trim(),
         understanding,
         requirements,
+        designReasoning,
         items,
         spec,
         specificationText: specToText(understanding, designCategory, spec),
@@ -397,6 +410,14 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
           designCategory={designCategory}
           onCategory={setDesignCategory}
           onBack={() => setPhase('brief')}
+          onNext={() => setPhase(designReasoning ? 'design' : 'takeoff')}
+        />
+      )}
+
+      {phase === 'design' && (
+        <DesignStep
+          design={designReasoning}
+          onBack={() => setPhase('review')}
           onNext={() => setPhase('takeoff')}
         />
       )}
@@ -412,7 +433,7 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
           onRemoveRow={removeRow}
           onAddRow={addRow}
           buildingSpec={buildingSpec}
-          onBack={() => setPhase('review')}
+          onBack={() => setPhase(designReasoning ? 'design' : 'review')}
           onNext={handleBuildSpec}
         />
       )}
@@ -757,6 +778,188 @@ function ReviewStep({
       </Card>
 
       <StepNav onBack={onBack} backLabel="Brief" onNext={onNext} nextLabel="Devices & price" />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- design rationale
+
+function DesignStep({
+  design,
+  onBack,
+  onNext,
+}: {
+  design: StudioDesignReasoning | null
+  onBack: () => void
+  onNext: () => void
+}) {
+  const areas = design?.areas ?? []
+  const assumptions = design?.assumptions ?? []
+  const openQuestions = design?.openQuestions ?? []
+  const otherDisciplines = design?.otherDisciplines ?? []
+  const totalDevices = areas.reduce(
+    (sum, a) => sum + a.devices.reduce((s, d) => s + (d.quantity || 0), 0),
+    0,
+  )
+
+  return (
+    <div className="flex flex-col gap-4">
+      <StepHeading
+        icon={Layers}
+        title="How the AI designed this"
+        description="Confirm the reasoning behind every quantity before it reaches the quote. Each line shows how the number was reached, the governing clause, and the assumption made."
+      />
+
+      {areas.length === 0 ? (
+        <Card>
+          <CardContent className="py-6 text-center text-sm text-muted-foreground">
+            No design breakdown was returned for this brief. You can still confirm the schedule on the next step.
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary" className="gap-1">
+              <Layers className="h-3 w-3" />
+              {areas.length} area{areas.length === 1 ? '' : 's'}
+            </Badge>
+            <Badge variant="secondary" className="gap-1">
+              <ClipboardList className="h-3 w-3" />
+              {totalDevices} device{totalDevices === 1 ? '' : 's'} reasoned
+            </Badge>
+          </div>
+
+          {areas.map((area, i) => (
+            <Card key={i}>
+              <CardContent className="flex flex-col gap-3 p-4">
+                <div>
+                  <h3 className="text-sm font-bold text-balance">{area.name}</h3>
+                  {area.description && (
+                    <p className="text-xs text-muted-foreground text-pretty">{area.description}</p>
+                  )}
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+                        <th className="pb-2 font-medium">Device</th>
+                        <th className="w-16 pb-2 text-right font-medium">Qty</th>
+                        <th className="pb-2 pl-3 font-medium">How it was reached</th>
+                        <th className="w-28 pb-2 pl-3 font-medium">Clause</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {area.devices.map((d, j) => (
+                        <tr key={j} className="border-b align-top last:border-0">
+                          <td className="py-2 pr-2 font-medium">{d.label}</td>
+                          <td className="py-2 text-right tabular-nums">{d.quantity}</td>
+                          <td className="py-2 pl-3 text-muted-foreground">
+                            <span className="text-pretty">{d.basis}</span>
+                            {d.assumption && (
+                              <span className="mt-1 flex items-start gap-1 text-xs text-amber-600">
+                                <Info className="mt-0.5 h-3 w-3 shrink-0" />
+                                <span className="text-pretty">Assumes: {d.assumption}</span>
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 pl-3">
+                            {d.clause ? (
+                              <Badge variant="outline" className="whitespace-nowrap text-xs">
+                                {d.clause}
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </>
+      )}
+
+      {assumptions.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-col gap-2 p-4">
+            <div className="flex items-center gap-2">
+              <Lightbulb className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-bold uppercase tracking-wide">Assumptions the AI made</h3>
+            </div>
+            <ul className="flex flex-col gap-1.5">
+              {assumptions.map((a, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/50" />
+                  <span className="text-pretty">{a}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {openQuestions.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-col gap-2 p-4">
+            <div className="flex items-center gap-2">
+              <HelpCircle className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-bold uppercase tracking-wide">Open questions for the designer</h3>
+            </div>
+            <ul className="flex flex-col gap-1.5">
+              {openQuestions.map((q, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/50" />
+                  <span className="text-pretty">{q}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {otherDisciplines.length > 0 && (
+        <Card className="border-amber-500/40 bg-amber-500/5">
+          <CardContent className="flex flex-col gap-3 p-4">
+            <div className="flex items-center gap-2">
+              <TriangleAlert className="h-4 w-4 text-amber-600" />
+              <h3 className="text-sm font-bold uppercase tracking-wide text-amber-700">
+                Also detected — quote separately
+              </h3>
+            </div>
+            <p className="text-xs text-muted-foreground text-pretty">
+              This quote covers fire detection &amp; alarm only. The brief also implies the following — raise
+              separate quotes so nothing is missed.
+            </p>
+            <div className="flex flex-col gap-2">
+              {otherDisciplines.map((o, i) => (
+                <div
+                  key={i}
+                  className="flex items-start justify-between gap-3 rounded-md border border-amber-500/30 bg-background/60 p-2.5"
+                >
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold">{o.system}</span>
+                    <span className="text-xs text-muted-foreground text-pretty">{o.evidence}</span>
+                  </div>
+                  <Badge variant="secondary" className="shrink-0 gap-1">
+                    <Gauge className="h-3 w-3" />
+                    {o.confidence}%
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <StepNav
+        onBack={onBack}
+        backLabel="AI draft"
+        onNext={onNext}
+        nextLabel="Looks right — build schedule"
+      />
     </div>
   )
 }

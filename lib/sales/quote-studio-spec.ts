@@ -17,6 +17,10 @@ export interface SpecTakeoffItem {
   label: string
   zone?: string | null
   quantity: number
+  /** Manufacturer-specific current draws (mA) from the resolved part, if known.
+   * When present these override the representative DEVICE_CURRENTS constants. */
+  quiescentMa?: number | null
+  alarmMa?: number | null
 }
 
 // --- Device current reference (representative, per device) -------------
@@ -77,10 +81,14 @@ export function computeBatteryCalc(items: SpecTakeoffItem[]): BatteryCalc {
   let iaMa = PANEL_ALARM_MA
   for (const item of items) {
     const c = DEVICE_CURRENTS[item.device_key]
-    if (!c) continue
     const qty = item.quantity || 0
-    iqMa += qty * c.quiescentMa
-    iaMa += qty * c.alarmMa
+    // Prefer the manufacturer part's real current draw; fall back to the
+    // representative constant for the device type.
+    const quiescent = item.quiescentMa ?? c?.quiescentMa
+    const alarm = item.alarmMa ?? c?.alarmMa
+    if (quiescent == null && alarm == null) continue
+    iqMa += qty * (quiescent ?? 0)
+    iaMa += qty * (alarm ?? 0)
   }
   const iq = round(iqMa / 1000, 3) // amps
   const ia = round(iaMa / 1000, 3)

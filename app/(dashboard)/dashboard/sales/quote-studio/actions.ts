@@ -21,6 +21,7 @@ import {
   generateSpecSections,
   type StudioUnderstanding,
   type StudioRequirement,
+  type StudioDesignReasoning,
 } from '@/lib/ai/studio-draft'
 
 const FA_CODE = 'FA'
@@ -288,6 +289,7 @@ export interface SaveStudioQuoteInput {
   prospect_name?: string | null
   understanding: StudioUnderstanding
   requirements: StudioRequirement[]
+  designReasoning?: StudioDesignReasoning | null
   items: StudioTakeoffItemInput[]
   spec: StudioSpecPayload
   specificationText: string
@@ -385,6 +387,7 @@ export async function saveStudioQuote(
       drawing_blob_url: input.drawingBlobUrl ?? null,
       design_category: input.designCategory,
       loops: input.loops ?? null,
+      design_reasoning: input.designReasoning ?? null,
       status: 'confirmed',
       confirmed_by: user.id,
       confirmed_at: new Date().toISOString(),

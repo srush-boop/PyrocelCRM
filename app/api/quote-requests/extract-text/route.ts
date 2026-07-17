@@ -6,7 +6,9 @@ import { extractDocumentText } from '@/lib/ai/parse-document'
 // it can seed an AI brief. A route handler (not a Server Action) is used so
 // large tender documents aren't blocked by the 1 MB Server Action body limit.
 export const runtime = 'nodejs'
-export const maxDuration = 60
+// Native text extraction is sub-second; this headroom is only for the
+// multimodal fallback used on scanned/image-only PDFs.
+export const maxDuration = 120
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient()

@@ -1,6 +1,7 @@
 import 'server-only'
 import mammoth from 'mammoth'
 import { generateText } from 'ai'
+import { extractText, getDocumentProxy } from 'unpdf'
 
 // The maximum raw text we pass to the model. Specs are usually well under this;
 // this guards against pathological inputs blowing up token usage.
@@ -77,6 +78,30 @@ function clamp(text: string): string {
   return text.length > MAX_TEXT_CHARS ? text.slice(0, MAX_TEXT_CHARS) : text
 }
 
+// Below this many characters we treat native PDF extraction as "not real text"
+// (e.g. a scanned/image-only PDF) and fall back to multimodal transcription.
+const MIN_NATIVE_PDF_CHARS = 200
+
+/**
+ * Fast, local PDF text extraction via unpdf (a serverless build of pdf.js — no
+ * native deps, no LLM). Returns '' if the PDF has no embedded text layer
+ * (scanned images), so the caller can fall back to a multimodal transcription.
+ */
+async function extractPdfTextNatively(data: Uint8Array): Promise<string> {
+  try {
+    const pdf = await getDocumentProxy(data)
+    const { text } = await extractText(pdf, { mergePages: true })
+    // Collapse the runs of whitespace pdf.js emits into tidy, readable text.
+    return (Array.isArray(text) ? text.join('\n') : text)
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  } catch (err) {
+    console.error('[v0] native PDF text extraction failed (will fall back):', err)
+    return ''
+  }
+}
+
 // Model used to transcribe PDFs into plain text for AI grounding. Reads PDFs
 // directly as a file part (handles tables, scans, multi-column layouts).
 const EXTRACT_MODEL = 'openai/gpt-5.4-mini'
@@ -105,7 +130,17 @@ export async function extractDocumentText(file: File): Promise<ExtractResult> {
     return { ok: true, text: parsed.doc.text }
   }
 
-  // PDF: transcribe via multimodal model.
+  // PDF: try fast native text extraction first. Text-based PDFs (the vast
+  // majority of tender packs and specs) extract in well under a second, which
+  // avoids the multi-minute multimodal transcription that was timing the route
+  // out on large documents.
+  const nativeText = await extractPdfTextNatively(parsed.doc.data)
+  if (nativeText.length >= MIN_NATIVE_PDF_CHARS) {
+    return { ok: true, text: clamp(nativeText) }
+  }
+
+  // Little/no embedded text (likely a scanned/image PDF): fall back to a
+  // multimodal transcription.
   try {
     const { text } = await generateText({
       model: EXTRACT_MODEL,

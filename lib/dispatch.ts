@@ -1,7 +1,8 @@
 import 'server-only'
 import { notifyUsers } from '@/lib/notifications'
+import { UK_TIME_ZONE } from '@/lib/utils'
 
-/** Format a KPI deadline as a short local time, e.g. "14:30". */
+/** Format a KPI deadline as a short local (UK) time, e.g. "Mon, 14:30". */
 export function formatRespondBy(respondBy: string | null | undefined): string | null {
   if (!respondBy) return null
   const d = new Date(respondBy)
@@ -10,6 +11,7 @@ export function formatRespondBy(respondBy: string | null | undefined): string | 
     weekday: 'short',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: UK_TIME_ZONE,
   })
 }
 

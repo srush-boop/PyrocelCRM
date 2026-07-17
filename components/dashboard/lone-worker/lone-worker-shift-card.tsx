@@ -223,6 +223,7 @@ export function LoneWorkerShiftCard() {
                   {new Date(session.lastCheckinAt).toLocaleTimeString('en-GB', {
                     hour: '2-digit',
                     minute: '2-digit',
+                    timeZone: 'Europe/London',
                   })}
                 </p>
               </div>

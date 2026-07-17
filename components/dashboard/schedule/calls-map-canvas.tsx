@@ -185,7 +185,7 @@ const CallMarkers = memo(function CallMarkers({
               </p>
               {c.respondBy && (
                 <p style={{ color: URGENCY_COLOR.overdue }}>
-                  Attend by {formatDateUK(c.respondBy)} {new Date(c.respondBy).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                  Attend by {formatDateUK(c.respondBy)} {new Date(c.respondBy).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' })}
                 </p>
               )}
               <p>

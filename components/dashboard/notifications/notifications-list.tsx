@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Check, Bell } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, UK_TIME_ZONE } from '@/lib/utils'
 import { markNotificationsRead } from '@/app/(dashboard)/dashboard/notifications/actions'
 
 interface NotificationRow {
@@ -24,6 +24,7 @@ function formatWhen(iso: string): string {
     month: 'short',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: UK_TIME_ZONE,
   })
 }
 

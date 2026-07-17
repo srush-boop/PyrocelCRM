@@ -13,7 +13,7 @@ export const UK_LOCALE = 'en-GB'
 // Without this, dates near a day boundary format differently server vs client,
 // causing React hydration mismatches that visibly re-render/"reload" the page
 // (notably on the public quote view).
-const UK_TIME_ZONE = 'Europe/London'
+export const UK_TIME_ZONE = 'Europe/London'
 
 export const dateFormatOptions: Intl.DateTimeFormatOptions = {
   year: 'numeric',

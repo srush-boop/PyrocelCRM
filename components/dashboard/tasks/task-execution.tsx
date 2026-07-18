@@ -611,7 +611,9 @@ export function TaskExecution({
   }
 
   const [submitBlockers, setSubmitBlockers] = useState<string[]>([])
-  // Gate the submit dialog behind conditional-requirement validation.
+  // Complete the call. Validates conditional requirements first; there is no
+  // confirmation dialog — completing returns the engineer straight to Calls
+  // (or the nearby-calls prompt). handleSubmit is hoisted below.
   const handleAttemptSubmit = () => {
     const blockers = collectSubmitBlockers()
     if (blockers.length > 0) {
@@ -620,7 +622,7 @@ export function TaskExecution({
       return
     }
     setSubmitBlockers([])
-    setShowSubmitDialog(true)
+    void handleSubmit()
   }
   const checklistCardRef = useRef<HTMLDivElement>(null)
 
@@ -808,7 +810,7 @@ export function TaskExecution({
     // Before leaving, check for overdue / due-soon calls at other nearby sites so
     // the engineer can take them on while they're in the area (avoids sending a
     // second engineer out later). Best-effort — never block completion on it.
-    if (profile.role === 'engineer') {
+    if (profile.role === 'engineer' || profile.role === 'subcontractor') {
       try {
         const res = await findNearbyOverdueCalls({ fromTaskId: task.id })
         if (res.ok && res.calls && res.calls.length > 0) {
@@ -834,7 +836,8 @@ export function TaskExecution({
     router.refresh()
   }
 
-  const isEngineer = profile.role === 'engineer'
+  // Sub-contractors execute their allocated tasks exactly like engineers.
+  const isEngineer = profile.role === 'engineer' || profile.role === 'subcontractor'
   // Paused inspections are read-only until resumed (see PauseResumeControls).
   const canEdit = isEngineer && status !== 'completed' && status !== 'cancelled' && status !== 'paused'
 
@@ -1795,9 +1798,18 @@ export function TaskExecution({
                 </>
               )}
             </Button>
-            <Button onClick={handleAttemptSubmit} className="h-12 flex-1">
-              <Send className="mr-2 h-4 w-4" />
-              Complete & Submit
+            <Button onClick={handleAttemptSubmit} disabled={submitting} className="h-12 flex-1">
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <Send className="mr-2 h-4 w-4" />
+                  Complete &amp; Submit
+                </>
+              )}
             </Button>
           </div>
           {/* Non-recurring calls (reactive / emergency / planned) can be flagged as
@@ -1855,33 +1867,6 @@ export function TaskExecution({
       {/* Submit Confirmation Dialog */}
       {/* Lone-worker shift gate — blocks starting a call until on shift. */}
       {shiftGateDialog}
-
-      <AlertDialog open={showSubmitDialog} onOpenChange={setShowSubmitDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Complete Inspection</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to submit this inspection? This will mark the task as completed
-              {calculateOverallStatus() === 'fail' || calculateOverallStatus() === 'partial'
-                ? ' and notify the office of any issues found.'
-                : ' and send a confirmation to the client.'}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSubmit} disabled={submitting}>
-              {submitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Submitting...
-                </>
-              ) : (
-                'Complete Inspection'
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Post-completion: offer nearby overdue / due-soon calls to take on */}
       <NearbyCallsPrompt

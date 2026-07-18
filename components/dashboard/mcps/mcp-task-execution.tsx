@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useShiftGate } from '@/components/dashboard/tasks/use-shift-gate'
+import { useCompletionExit } from '@/components/dashboard/tasks/use-completion-exit'
 import { useRouter } from 'next/navigation'
 import { TaskHeader } from '@/components/dashboard/tasks/task-header'
 import { PauseResumeControls } from '@/components/dashboard/tasks/pause-resume-controls'
@@ -113,7 +114,6 @@ export function McpTaskExecution({
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [showSubmit, setShowSubmit] = useState(false)
   const [showPassAll, setShowPassAll] = useState(false)
   // Quick weekly close-out: mark the call point due this week as all-OK and finish.
   const [showAllOk, setShowAllOk] = useState(false)
@@ -123,6 +123,7 @@ export function McpTaskExecution({
   const router = useRouter()
   const supabase = createClient()
   const { ensureOnShift, checking: checkingShift, shiftGateDialog } = useShiftGate()
+  const { runExit, nearbyPrompt } = useCompletionExit(profile.role)
 
   // Engineers can register new call points during the test, so keep a local
   // copy of the register that we can append to without losing in-progress state.
@@ -378,8 +379,8 @@ export function McpTaskExecution({
       console.log('[v0] Visit billing request error:', err)
     }
 
-    router.push('/dashboard/schedule')
-    router.refresh()
+    // No success screen / confirm — return to Calls (via nearby-calls prompt).
+    await runExit(task.id)
   }
 
   const handleSubmit = async () => {
@@ -403,7 +404,6 @@ export function McpTaskExecution({
     })
 
     setSubmitting(false)
-    setShowSubmit(false)
   }
 
   // Weekly one-tap close-out: only the call point due this week needs testing.
@@ -718,12 +718,16 @@ export function McpTaskExecution({
           {mcpList.length > 0 && (
             <div className="flex flex-1 flex-col items-stretch gap-1">
               <Button
-                onClick={() => setShowSubmit(true)}
-                disabled={!dueDone}
+                onClick={handleSubmit}
+                disabled={!dueDone || submitting}
                 className="w-full"
               >
-                <Send className="mr-2 h-4 w-4" />
-                Complete &amp; Submit
+                {submitting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="mr-2 h-4 w-4" />
+                )}
+                {submitting ? 'Submitting…' : 'Complete & Submit'}
               </Button>
               {!dueDone && (
                 <p className="text-center text-xs text-muted-foreground">

@@ -168,6 +168,7 @@ const roleColors: Record<UserRole, string> = {
   engineer: 'bg-accent text-accent-foreground',
   office: 'bg-secondary text-secondary-foreground',
   client: 'bg-muted text-muted-foreground',
+  subcontractor: 'bg-muted text-muted-foreground',
 }
 
 export function EngineersTable({

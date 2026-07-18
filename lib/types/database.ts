@@ -740,6 +740,85 @@ export interface ClientLink {
   updated_at: string
 }
 
+// ============================================================================
+// Internal Tasks / Quality module
+// Recurring internal quality/management tasks (toolbox talks, vehicle checks,
+// annual nominations) built like forms with conditional questions + photos.
+// ============================================================================
+
+export type InternalTaskFrequency =
+  | 'weekly'
+  | 'monthly'
+  | 'quarterly'
+  | 'annual'
+  | 'one_off'
+
+export type InternalTaskStatus = 'pending' | 'completed' | 'overdue'
+
+// A recurring internal task definition. `questions` reuses the conditional
+// checklist item schema (ChecklistItem[] incl. ChecklistCondition follow-ups).
+export interface InternalTaskTemplate {
+  id: string
+  name: string
+  description: string | null
+  category: string | null
+  active: boolean
+  sort_order: number
+  // Recurrence
+  frequency: InternalTaskFrequency
+  week_ending_dow: number // 0=Sun..6=Sat, weekly period end
+  anchor_month: number | null // annual/quarterly window shift (1-12)
+  anchor_day: number | null // annual/quarterly window shift (1-31)
+  one_off_due_date: string | null
+  grace_days: number // days after period_end the task is due
+  due_time: string // 'HH:MM[:SS]' deadline time on the due day
+  reminder_days_before: number[]
+  warn_overdue: boolean
+  // Content
+  questions: ChecklistItem[]
+  requires_reference: boolean
+  reference_label: string | null
+  // Targeting (union / combine-all)
+  applies_to_all: boolean
+  role_names: string[]
+  department_ids: string[]
+  user_ids: string[]
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+// One occurrence of a template for one user, for one period.
+export interface InternalTaskInstance {
+  id: string
+  template_id: string
+  user_id: string
+  period_start: string
+  period_end: string
+  due_at: string
+  status: InternalTaskStatus
+  completed_at: string | null
+  reference_number: string | null
+  answers: ChecklistResult[]
+  created_at: string
+  updated_at: string
+  // Optional embeds
+  template?: InternalTaskTemplate
+  user?: Profile
+}
+
+export interface InternalTaskAttachment {
+  id: string
+  instance_id: string | null
+  uploaded_by: string | null
+  name: string
+  blob_pathname: string
+  blob_url: string
+  content_type: string | null
+  size_bytes: number | null
+  created_at: string
+}
+
 // Engineer-initiated request to take over a nearby open call.
 export interface TaskTransferRequest {
   id: string

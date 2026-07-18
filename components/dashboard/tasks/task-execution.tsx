@@ -419,6 +419,10 @@ export function TaskExecution({
   const systemType = serviceType?.system_type
   const clientName = task.client?.name ?? site?.client?.name ?? null
   const isAdminOrOffice = profile.role === 'admin' || profile.role === 'office'
+  // Sub-contractors are external: they execute the checklist, add photos/notes,
+  // book/rebook and submit, but never see internal-only surfaces (parts pickers,
+  // costs/labour, transfers, further-works escalation, internal report actions).
+  const canSeeInternal = profile.role !== 'subcontractor'
 
   // Quick-assign (or reassign) this call to an engineer straight from the summary.
   const assignEngineer = async (value: string) => {
@@ -810,7 +814,8 @@ export function TaskExecution({
     // Before leaving, check for overdue / due-soon calls at other nearby sites so
     // the engineer can take them on while they're in the area (avoids sending a
     // second engineer out later). Best-effort — never block completion on it.
-    if (profile.role === 'engineer' || profile.role === 'subcontractor') {
+    // Internal engineers only — sub-contractors go straight back to Calls.
+    if (profile.role === 'engineer') {
       try {
         const res = await findNearbyOverdueCalls({ fromTaskId: task.id })
         if (res.ok && res.calls && res.calls.length > 0) {
@@ -1693,13 +1698,15 @@ export function TaskExecution({
           </CardContent>
         </Card>
 
-        {/* Suggested parts (internal) — shown when a defect/failure is present */}
-        {checklistResults.some((r) => r.type === 'pass_fail' && r.passed === false) && (
-          <SuggestedPartsPicker taskId={task.id} canEdit={canEdit} />
-        )}
+        {/* Suggested parts (internal) — shown when a defect/failure is present.
+            Hidden from external sub-contractors. */}
+        {canSeeInternal &&
+          checklistResults.some((r) => r.type === 'pass_fail' && r.passed === false) && (
+            <SuggestedPartsPicker taskId={task.id} canEdit={canEdit} />
+          )}
 
-        {/* Parts used on this call (internal) — always available */}
-        <CallPartsPicker taskId={task.id} canEdit={canManageParts} />
+        {/* Parts used on this call (internal) — hidden from sub-contractors */}
+        {canSeeInternal && <CallPartsPicker taskId={task.id} canEdit={canManageParts} />}
         </>
       )}
 
@@ -1813,8 +1820,9 @@ export function TaskExecution({
             </Button>
           </div>
           {/* Non-recurring calls (reactive / emergency / planned) can be flagged as
-              needing further works, which raises a follow-up for review. */}
-          {isNonRecurringCall(task) && (
+              needing further works, which raises a follow-up for review. Internal
+              escalation — hidden from external sub-contractors. */}
+          {canSeeInternal && isNonRecurringCall(task) && (
             <div className="flex">
               <FurtherWorksSheet
                 taskId={task.id}
@@ -1846,17 +1854,21 @@ export function TaskExecution({
               Completed on {formatDateUK(task.completed_at)} at{' '}
               {formatTimeUK(task.completed_at)}
             </p>
-            <CompletedReportActions
-              taskId={task.id}
-              serviceName={serviceType?.name}
-              emailSentAt={existingResult.email_sent_at}
-              chargeable={task.chargeable}
-              chargeReviewStatus={task.charge_review_status}
-              chargeReason={task.charge_reason}
-              clientRef={(task as any).client_ref ?? null}
-              chargeInvoicedAt={(task as any).charge_invoiced_at ?? null}
-              canReview={profile.role === 'admin' || profile.role === 'office'}
-            />
+            {/* Internal report management + chargeable review — hidden from
+                external sub-contractors. */}
+            {canSeeInternal && (
+              <CompletedReportActions
+                taskId={task.id}
+                serviceName={serviceType?.name}
+                emailSentAt={existingResult.email_sent_at}
+                chargeable={task.chargeable}
+                chargeReviewStatus={task.charge_review_status}
+                chargeReason={task.charge_reason}
+                clientRef={(task as any).client_ref ?? null}
+                chargeInvoicedAt={(task as any).charge_invoiced_at ?? null}
+                canReview={profile.role === 'admin' || profile.role === 'office'}
+              />
+            )}
           </CardContent>
         </Card>
       )}

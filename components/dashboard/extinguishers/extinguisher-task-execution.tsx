@@ -335,17 +335,29 @@ export function ExtinguisherTaskExecution({
     const rows = await persistInspections(true)
     const today = new Date().toISOString().split('T')[0]
 
-    // Update each extinguisher's latest result snapshot
+    // Update each extinguisher's latest result snapshot. Group by result value
+    // and issue one batched update per distinct result (typically just
+    // pass/remedial/fail) instead of one round-trip per extinguisher.
+    const nowIso = new Date().toISOString()
+    const idsByResult = new Map<ExtinguisherResult, string[]>()
     for (const row of rows) {
-      await supabase
-        .from('extinguishers')
-        .update({
-          latest_result: row.overall_result as ExtinguisherResult,
-          last_inspected_date: today,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', row.extinguisher_id)
+      const result = row.overall_result as ExtinguisherResult
+      const ids = idsByResult.get(result)
+      if (ids) ids.push(row.extinguisher_id)
+      else idsByResult.set(result, [row.extinguisher_id])
     }
+    await Promise.all(
+      Array.from(idsByResult.entries()).map(([result, ids]) =>
+        supabase
+          .from('extinguishers')
+          .update({
+            latest_result: result,
+            last_inspected_date: today,
+            updated_at: nowIso,
+          })
+          .in('id', ids),
+      ),
+    )
 
     // Write a task_result summary so existing reports/dashboards work
     const overall = overallTaskStatus()

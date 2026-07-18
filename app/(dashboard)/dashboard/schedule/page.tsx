@@ -66,10 +66,17 @@ export default async function SchedulePage({
     `)
     .order('scheduled_date', { ascending: true })
 
-  // Engineers and sub-contractors only see tasks allocated to them.
+  // Engineers and sub-contractors only see tasks allocated to them. To keep the
+  // field payload bounded as history grows, they also skip completed/cancelled
+  // calls scheduled more than 90 days ago (recent history + all open work stay).
   const role = (profile as Profile).role
   if (role === 'engineer' || role === 'subcontractor') {
-    tasksQuery = tasksQuery.eq('assigned_engineer_id', user.id)
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - 90)
+    const cutoffStr = cutoff.toISOString().slice(0, 10)
+    tasksQuery = tasksQuery
+      .eq('assigned_engineer_id', user.id)
+      .or(`status.not.in.(completed,cancelled),scheduled_date.gte.${cutoffStr}`)
   }
 
   const { data: tasksData } = await tasksQuery

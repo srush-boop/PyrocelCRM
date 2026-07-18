@@ -315,17 +315,29 @@ export function DamperTaskExecution({
     const rows = await persistInspections(true)
     const today = new Date().toISOString().split('T')[0]
 
-    // Update each damper's latest result snapshot
+    // Update each damper's latest result snapshot. Rather than one round-trip
+    // per damper (slow on large sites), group by result value and issue a single
+    // batched update per distinct result — typically just pass/remedial/fail.
+    const nowIso = new Date().toISOString()
+    const idsByResult = new Map<DamperResult, string[]>()
     for (const row of rows) {
-      await supabase
-        .from('dampers')
-        .update({
-          latest_result: row.overall_result as DamperResult,
-          last_inspected_date: today,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', row.damper_id)
+      const result = row.overall_result as DamperResult
+      const ids = idsByResult.get(result)
+      if (ids) ids.push(row.damper_id)
+      else idsByResult.set(result, [row.damper_id])
     }
+    await Promise.all(
+      Array.from(idsByResult.entries()).map(([result, ids]) =>
+        supabase
+          .from('dampers')
+          .update({
+            latest_result: result,
+            last_inspected_date: today,
+            updated_at: nowIso,
+          })
+          .in('id', ids),
+      ),
+    )
 
     // Write a task_result summary so existing reports/dashboards work
     const overall = overallTaskStatus()

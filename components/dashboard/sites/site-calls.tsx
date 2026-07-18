@@ -44,7 +44,8 @@ import { formatDateUK, cn } from '@/lib/utils'
 import { SystemIcon, getSystemColors } from '@/lib/system-types'
 import { isDamperService } from '@/lib/dampers'
 import { isExtinguisherService } from '@/lib/extinguishers'
-import type { Task, SiteService, ServiceType, Profile, SystemType, TaskResult } from '@/lib/types/database'
+import type { Task, SiteService, ServiceType, Profile, SystemType, TaskResult, ToleranceUnit } from '@/lib/types/database'
+import { isCallOverdue } from '@/lib/kpi'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -53,6 +54,12 @@ import type { Task, SiteService, ServiceType, Profile, SystemType, TaskResult } 
 type CallSystemType = Pick<SystemType, 'id' | 'name' | 'code' | 'color'>
 type CallServiceType = Pick<ServiceType, 'id' | 'name'> & {
   system_type?: CallSystemType | null
+  // Optional: only the full `site_service.service_type` embed carries these; the
+  // lightweight direct embed (id/name only) leaves them undefined. Used to
+  // resolve when a call reports as overdue against its client KPI.
+  is_recurring?: boolean | null
+  regulatory_tolerance_value?: number | null
+  regulatory_tolerance_unit?: ToleranceUnit | null
 }
 
 export type SiteCall = Omit<Task, 'service_type' | 'system_type' | 'assigned_engineer' | 'site_service'> & {
@@ -120,8 +127,22 @@ function calcValue(call: SiteCall): number | null {
 function CallCard({ call, onSendReport }: { call: SiteCall; onSendReport?: (c: SiteCall) => void }) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  const scheduled = call.scheduled_date ? new Date(call.scheduled_date) : null
-  const isOverdue = !!(scheduled && scheduled < today && call.status === 'pending')
+  // Overdue only once the client KPI target date has expired (weekly/monthly
+  // recurring PPM stays tied to the due week/month).
+  const isOverdue = isCallOverdue(
+    {
+      scheduledDate: call.scheduled_date,
+      status: call.status,
+      isRecurring: call.site_service?.service_type?.is_recurring,
+      frequencyValue: call.site_service?.frequency_value,
+      frequencyUnit: call.site_service?.frequency_unit,
+      clientToleranceValue: call.site_service?.client_tolerance_value,
+      clientToleranceUnit: call.site_service?.client_tolerance_unit,
+      regulatoryToleranceValue: call.site_service?.service_type?.regulatory_tolerance_value,
+      regulatoryToleranceUnit: call.site_service?.service_type?.regulatory_tolerance_unit,
+    },
+    today,
+  )
   const serviceName = getServiceName(call)
   const system = getSystem(call)
   const systemName = system?.name ?? null

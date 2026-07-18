@@ -34,7 +34,7 @@ import {
   type CompletionsPoint,
 } from '@/components/dashboard/overview/completions-chart'
 import { fetchKpiData } from '@/lib/kpi-data'
-import { buildKpiReport } from '@/lib/kpi'
+import { buildKpiReport, isCallOverdue } from '@/lib/kpi'
 import {
   startOfMonth,
   startOfWeek,
@@ -76,7 +76,6 @@ export default async function ServiceDashboardPage() {
     pendingCount,
     inProgressCount,
     completedMonthCount,
-    overdueCount,
     openDefectsCount,
     emergencyCount,
   ] = await Promise.all([
@@ -95,11 +94,6 @@ export default async function ServiceDashboardPage() {
       .select('id', { count: 'exact', head: true })
       .eq('status', 'completed')
       .gte('completed_at', monthStart.toISOString()),
-    supabase
-      .from('tasks')
-      .select('id', { count: 'exact', head: true })
-      .in('status', ['pending', 'in_progress'])
-      .lt('scheduled_date', todayStr),
     supabase
       .from('defects')
       .select('id', { count: 'exact', head: true })
@@ -139,14 +133,17 @@ export default async function ServiceDashboardPage() {
       .gte('scheduled_date', todayStr)
       .order('scheduled_date', { ascending: true })
       .limit(6),
-    // Needs attention = overdue, most overdue first.
+    // Candidates for "needs attention": every past-due open call. The true
+    // overdue set (client KPI target date expired; weekly/monthly tied to the
+    // due week/month) is derived from these below. All genuinely-overdue calls
+    // are necessarily past their due date, so this pre-filter never drops one.
     supabase
       .from('tasks')
       .select(taskSelect)
       .in('status', ['pending', 'in_progress'])
       .lt('scheduled_date', todayStr)
       .order('scheduled_date', { ascending: true })
-      .limit(5),
+      .limit(1000),
     // Open emergency calls, soonest first.
     supabase
       .from('tasks')

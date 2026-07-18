@@ -819,6 +819,43 @@ export interface InternalTaskAttachment {
   created_at: string
 }
 
+// ============================================================================
+// Timesheets module
+// ============================================================================
+
+export type TimesheetStatus = 'draft' | 'submitted' | 'approved' | 'rejected'
+
+export interface Timesheet {
+  id: string
+  user_id: string
+  week_ending: string // Sunday "YYYY-MM-DD"
+  status: TimesheetStatus
+  submitted_at: string | null
+  approved_by: string | null
+  approved_at: string | null
+  rejection_reason: string | null
+  manual_note: string | null
+  late: boolean
+  // Frozen computed TimesheetSummary snapshot (see lib/timesheets/compute.ts).
+  summary: unknown | null
+  confirmed_task_instance_ids: string[]
+  toolbox_reference: string | null
+  created_at: string
+  updated_at: string
+  // Optional embeds
+  user?: Profile
+}
+
+export interface TimesheetManualEntry {
+  id: string
+  timesheet_id: string
+  entry_date: string
+  start_at: string
+  end_at: string
+  description: string | null
+  created_at: string
+}
+
 // Engineer-initiated request to take over a nearby open call.
 export interface TaskTransferRequest {
   id: string

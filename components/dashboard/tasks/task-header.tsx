@@ -16,6 +16,7 @@ import {
 import type { TaskWithDetails, TaskStatus } from '@/lib/types/database'
 import { CreateDocumentButton } from '@/components/documents/create-document-dialog'
 import { RespondByCountdown } from '@/components/dashboard/tasks/respond-by-countdown'
+import { getCallTargetDate } from '@/lib/kpi'
 
 // Visual treatment for each task status so the banner is scannable at a glance.
 const STATUS_STYLES: Record<TaskStatus, { label: string; className: string }> = {
@@ -26,11 +27,11 @@ const STATUS_STYLES: Record<TaskStatus, { label: string; className: string }> = 
   cancelled: { label: 'Cancelled', className: 'border-transparent bg-destructive text-white' },
 }
 
-// Days between today and a YYYY-MM-DD date string (positive = in the future).
-function daysUntil(dateStr: string, now: Date): number {
-  const target = new Date(`${dateStr}T00:00:00`)
+// Whole days between today and a target date (positive = in the future).
+function daysUntilDate(target: Date, now: Date): number {
+  const t = new Date(target.getFullYear(), target.getMonth(), target.getDate())
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  return Math.round((target.getTime() - start.getTime()) / 86_400_000)
+  return Math.round((t.getTime() - start.getTime()) / 86_400_000)
 }
 
 /**
@@ -63,7 +64,26 @@ export function TaskHeader({
   useEffect(() => setNow(new Date()), [])
 
   const isClosed = status === 'completed' || status === 'cancelled'
-  const diff = now ? daysUntil(task.scheduled_date, now) : null
+
+  // "Complete by" is the client KPI target date (visit date + tolerance, or the
+  // due week/month for weekly/monthly recurring PPM) — not the raw visit date.
+  const targetDate = getCallTargetDate({
+    scheduledDate: task.scheduled_date,
+    status,
+    isRecurring: serviceType?.is_recurring,
+    frequencyValue: task.site_service?.frequency_value,
+    frequencyUnit: task.site_service?.frequency_unit,
+    clientToleranceValue: task.site_service?.client_tolerance_value,
+    clientToleranceUnit: task.site_service?.client_tolerance_unit,
+    regulatoryToleranceValue: serviceType?.regulatory_tolerance_value,
+    regulatoryToleranceUnit: serviceType?.regulatory_tolerance_unit,
+  })
+  const completeBy = targetDate ?? new Date(`${task.scheduled_date}T00:00:00`)
+  // Show the visit date alongside when it differs from the complete-by date.
+  const showVisitDate =
+    formatDateUK(completeBy) !== formatDateUK(task.scheduled_date)
+
+  const diff = now ? daysUntilDate(completeBy, now) : null
 
   let dueClass = 'text-muted-foreground'
   let dueHint: string | null = null
@@ -167,9 +187,15 @@ export function TaskHeader({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-sm">
         <span className={cn('inline-flex items-center gap-1.5', dueClass)}>
           <CalendarClock className="h-4 w-4 shrink-0" />
-          Complete by {formatDateUK(task.scheduled_date)}
+          Complete by {formatDateUK(completeBy)}
           {dueHint && <span className="font-normal opacity-90">({dueHint})</span>}
         </span>
+        {showVisitDate && (
+          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+            <CalendarClock className="h-3.5 w-3.5 shrink-0" />
+            Visit {formatDateUK(task.scheduled_date)}
+          </span>
+        )}
         {task.started_at && (
           <span className="inline-flex items-center gap-1.5 text-muted-foreground">
             <Clock className="h-3.5 w-3.5 shrink-0" />

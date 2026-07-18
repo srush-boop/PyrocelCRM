@@ -175,7 +175,9 @@ export async function submitInternalTask(input: {
 
   const { data: instance } = await supabase
     .from('internal_task_instances')
-    .select('id, user_id, template:internal_task_templates(requires_reference)')
+    .select(
+      'id, user_id, template:internal_task_templates(id, name, requires_reference, notify_on_issue_user_ids, notify_on_issue_email)',
+    )
     .eq('id', input.instanceId)
     .single()
 
@@ -183,9 +185,17 @@ export async function submitInternalTask(input: {
     return { ok: false, error: 'Task not found.' }
   }
 
-  const template = Array.isArray(instance.template) ? instance.template[0] : instance.template
-  const requiresRef = (template as { requires_reference?: boolean } | null)?.requires_reference
-  if (requiresRef && !input.referenceNumber?.trim()) {
+  const template = (
+    Array.isArray(instance.template) ? instance.template[0] : instance.template
+  ) as {
+    id?: string
+    name?: string
+    requires_reference?: boolean
+    notify_on_issue_user_ids?: string[] | null
+    notify_on_issue_email?: string | null
+  } | null
+
+  if (template?.requires_reference && !input.referenceNumber?.trim()) {
     return { ok: false, error: 'A reference number is required to complete this task.' }
   }
 
@@ -202,8 +212,107 @@ export async function submitInternalTask(input: {
     .eq('user_id', userId)
 
   if (error) return { ok: false, error: error.message }
+
+  // Escalation: if any answer is a failure or advisory, alert the nominated
+  // user(s) in-app and email the nominated address. Best-effort — never blocks
+  // the user's completion.
+  const issues = (input.answers ?? []).filter((a) => a.passed === false || a.advisory === true)
+  const hasNotifyTargets =
+    (template?.notify_on_issue_user_ids?.length ?? 0) > 0 ||
+    !!template?.notify_on_issue_email?.trim()
+  if (issues.length > 0 && hasNotifyTargets) {
+    try {
+      await dispatchIssueAlerts({
+        supabase,
+        submitterId: userId,
+        templateName: template?.name ?? 'Internal task',
+        notifyUserIds: template?.notify_on_issue_user_ids ?? [],
+        notifyEmail: template?.notify_on_issue_email ?? null,
+        referenceNumber: input.referenceNumber?.trim() || null,
+        issues,
+      })
+    } catch (err) {
+      console.log('[v0] internal-task issue alert failed:', (err as Error).message)
+    }
+  }
+
   revalidatePath(MY_TASKS_PATH)
   return { ok: true }
+}
+
+/**
+ * Notifies nominated users (in-app) and emails a nominated address when a
+ * completed internal task contains failed/advisory answers.
+ */
+async function dispatchIssueAlerts(args: {
+  supabase: Awaited<ReturnType<typeof createClient>>
+  submitterId: string
+  templateName: string
+  notifyUserIds: string[]
+  notifyEmail: string | null
+  referenceNumber: string | null
+  issues: ChecklistResult[]
+}): Promise<void> {
+  const { supabase, submitterId, templateName, notifyUserIds, notifyEmail, issues } = args
+
+  // Who completed it (for the alert body).
+  const { data: submitter } = await supabase
+    .from('profiles')
+    .select('full_name')
+    .eq('id', submitterId)
+    .single()
+  const submitterName = (submitter as { full_name?: string } | null)?.full_name ?? 'A team member'
+
+  const issueLines = issues.map((i) => {
+    const state = i.passed === false ? 'FAIL' : 'Advisory'
+    const note = i.notes?.trim() ? ` — ${i.notes.trim()}` : ''
+    return `${state}: ${i.label}${note}`
+  })
+  const summary = `${issues.length} issue${issues.length === 1 ? '' : 's'} flagged`
+
+  // 1) In-app notifications to nominated users.
+  if (notifyUserIds.length > 0) {
+    const { notifyUsers } = await import('@/lib/notifications')
+    await notifyUsers({
+      userIds: notifyUserIds,
+      title: `Issue on "${templateName}"`,
+      body: `${submitterName} flagged ${summary} completing "${templateName}".`,
+      url: MY_TASKS_PATH,
+      category: 'internal_task_issue',
+      createdBy: submitterId,
+      data: { template_name: templateName },
+    })
+  }
+
+  // 2) Email the nominated address.
+  if (notifyEmail?.trim()) {
+    const { sendEmail } = await import('@/lib/email/send-email')
+    const ref = args.referenceNumber ? ` (ref ${args.referenceNumber})` : ''
+    const html = `
+      <div style="font-family:Arial,Helvetica,sans-serif;color:#111;line-height:1.5">
+        <h2 style="margin:0 0 8px">Issue reported on an internal task</h2>
+        <p style="margin:0 0 12px">
+          <strong>${escapeHtml(submitterName)}</strong> flagged ${summary} while
+          completing <strong>${escapeHtml(templateName)}</strong>${escapeHtml(ref)}.
+        </p>
+        <ul style="margin:0 0 12px;padding-left:18px">
+          ${issueLines.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}
+        </ul>
+        <p style="margin:0;color:#666;font-size:12px">
+          Sent automatically by PyrocelCRM Internal Tasks.
+        </p>
+      </div>`
+    await sendEmail(notifyEmail.trim(), `Issue: ${templateName} — ${summary}`, html)
+  }
+}
+
+// Minimal HTML escaper for user-provided strings in the alert email.
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 }
 
 // --- Template management (quality managers) ---------------------------------
@@ -241,6 +350,8 @@ export async function saveInternalTaskTemplate(
     role_names: input.role_names ?? [],
     department_ids: input.department_ids ?? [],
     user_ids: input.user_ids ?? [],
+    notify_on_issue_user_ids: input.notify_on_issue_user_ids ?? [],
+    notify_on_issue_email: input.notify_on_issue_email?.trim() || null,
   }
 
   if (input.id) {

@@ -783,6 +783,10 @@ export interface InternalTaskTemplate {
   role_names: string[]
   department_ids: string[]
   user_ids: string[]
+  // Escalation: who to alert when a completed instance has a failure/advisory.
+  // In-app notification to these profile ids, plus an optional email address.
+  notify_on_issue_user_ids: string[]
+  notify_on_issue_email: string | null
   created_by: string | null
   created_at: string
   updated_at: string

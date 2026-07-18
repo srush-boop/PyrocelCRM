@@ -50,12 +50,30 @@ export interface StudioDeviceType {
   catalogue: AssemblyCatalogueRef | null
 }
 
+export interface StudioManufacturer {
+  id: string
+  name: string
+  code: string
+}
+
+export interface StudioRange {
+  id: string
+  manufacturerId: string
+  name: string
+  code: string
+  isDefault: boolean
+  /** device_key -> catalogue_item_id for this range (overrides device default). */
+  parts: Record<string, string | null>
+}
+
 export interface StudioConfig {
   systemTypeId: string
   systemTypeName: string
   deviceTypes: StudioDeviceType[]
   kitRules: AssemblyKitRule[]
   catalogue: Record<string, AssemblyCatalogueRef>
+  manufacturers: StudioManufacturer[]
+  ranges: StudioRange[]
 }
 
 type CatalogueRow = {
@@ -65,6 +83,8 @@ type CatalogueRow = {
   default_unit: string | null
   unit_cost_pence: number
   margin_percent: number
+  quiescent_ma: number | null
+  alarm_ma: number | null
 }
 
 function toCatRef(r: CatalogueRow): AssemblyCatalogueRef {
@@ -75,6 +95,8 @@ function toCatRef(r: CatalogueRow): AssemblyCatalogueRef {
     unit: r.default_unit,
     unit_cost_pence: r.unit_cost_pence,
     margin_percent: r.margin_percent,
+    quiescent_ma: r.quiescent_ma,
+    alarm_ma: r.alarm_ma,
   }
 }
 
@@ -90,20 +112,32 @@ async function loadConfig(
   const systemTypeId = (st as { id: string }).id
   const systemTypeName = (st as { name: string }).name
 
-  const [{ data: devices }, { data: rules }] = await Promise.all([
-    supabase
-      .from('quote_device_types')
-      .select('device_key, label, default_catalogue_item_id, contributes_to_device_count, position')
-      .eq('system_type_id', systemTypeId)
-      .eq('active', true)
-      .order('position'),
-    supabase
-      .from('quote_kit_rules')
-      .select('id, label, rule_type, factor, applies_to_device_key, is_service, catalogue_item_id, notes, position')
-      .eq('system_type_id', systemTypeId)
-      .eq('active', true)
-      .order('position'),
-  ])
+  const [{ data: devices }, { data: rules }, { data: manufacturerRows }, { data: rangeRows }] =
+    await Promise.all([
+      supabase
+        .from('quote_device_types')
+        .select('device_key, label, default_catalogue_item_id, contributes_to_device_count, position')
+        .eq('system_type_id', systemTypeId)
+        .eq('active', true)
+        .order('position'),
+      supabase
+        .from('quote_kit_rules')
+        .select('id, label, rule_type, factor, applies_to_device_key, is_service, catalogue_item_id, notes, range_id, position')
+        .eq('system_type_id', systemTypeId)
+        .eq('active', true)
+        .order('position'),
+      supabase
+        .from('quote_manufacturers')
+        .select('id, name, code, position')
+        .eq('active', true)
+        .order('position'),
+      supabase
+        .from('quote_system_ranges')
+        .select('id, manufacturer_id, name, code, is_default, position, parts:quote_range_parts(device_key, catalogue_item_id)')
+        .eq('system_type_id', systemTypeId)
+        .eq('active', true)
+        .order('position'),
+    ])
 
   const deviceRows = (devices ?? []) as Array<{
     device_key: string
@@ -120,13 +154,28 @@ async function loadConfig(
     is_service: boolean
     catalogue_item_id: string
     notes: string | null
+    range_id: string | null
   }>
 
-  // Load every catalogue item referenced by a device default or a kit rule.
+  const rangeRowsTyped = (rangeRows ?? []) as Array<{
+    id: string
+    manufacturer_id: string
+    name: string
+    code: string
+    is_default: boolean
+    parts: { device_key: string; catalogue_item_id: string | null }[] | null
+  }>
+
+  // Load every catalogue item referenced by a device default, a kit rule, or a
+  // range part (range parts swap the catalogue item used per device per range).
+  const rangePartIds = rangeRowsTyped.flatMap((r) =>
+    (r.parts ?? []).map((p) => p.catalogue_item_id).filter(Boolean),
+  ) as string[]
   const ids = Array.from(
     new Set([
       ...deviceRows.map((d) => d.default_catalogue_item_id).filter(Boolean),
       ...ruleRows.map((r) => r.catalogue_item_id).filter(Boolean),
+      ...rangePartIds,
     ]),
   ) as string[]
 
@@ -134,7 +183,7 @@ async function loadConfig(
   if (ids.length) {
     const { data: items } = await supabase
       .from('quote_catalogue_items')
-      .select('id, product_code, name, default_unit, unit_cost_pence, margin_percent')
+      .select('id, product_code, name, default_unit, unit_cost_pence, margin_percent, quiescent_ma, alarm_ma')
       .in('id', ids)
     for (const row of (items ?? []) as CatalogueRow[]) {
       catalogue[row.id] = toCatRef(row)
@@ -158,9 +207,27 @@ async function loadConfig(
     is_service: r.is_service,
     catalogue_item_id: r.catalogue_item_id,
     notes: r.notes,
+    range_id: r.range_id,
   }))
 
-  return { config: { systemTypeId, systemTypeName, deviceTypes, kitRules, catalogue } }
+  const manufacturers: StudioManufacturer[] = ((manufacturerRows ?? []) as Array<{
+    id: string
+    name: string
+    code: string
+  }>).map((m) => ({ id: m.id, name: m.name, code: m.code }))
+
+  const ranges: StudioRange[] = rangeRowsTyped.map((r) => ({
+    id: r.id,
+    manufacturerId: r.manufacturer_id,
+    name: r.name,
+    code: r.code,
+    isDefault: r.is_default,
+    parts: Object.fromEntries((r.parts ?? []).map((p) => [p.device_key, p.catalogue_item_id])),
+  }))
+
+  return {
+    config: { systemTypeId, systemTypeName, deviceTypes, kitRules, catalogue, manufacturers, ranges },
+  }
 }
 
 export async function getStudioConfig(): Promise<{ ok: boolean; config?: StudioConfig; error?: string }> {
@@ -234,15 +301,26 @@ export async function buildStudioSpec(input: {
   designCategory: string
   items: StudioTakeoffItemInput[]
 }): Promise<{ ok: boolean; spec?: StudioSpecPayload; error?: string }> {
-  const { user, error } = await requireStaff()
+  const { supabase, user, error } = await requireStaff()
   if (error || !user) return { ok: false, error: error ?? 'Not authorised.' }
 
-  const specItems: SpecTakeoffItem[] = input.items.map((i) => ({
-    device_key: i.device_key,
-    label: i.label,
-    zone: i.zone,
-    quantity: i.quantity,
-  }))
+  // Resolve the real manufacturer-specific current draws for the chosen parts so
+  // the battery calc reflects the selected range (falls back to representative
+  // constants inside computeBatteryCalc when a part has no current data yet).
+  const { config } = await loadConfig(supabase)
+  const catalogue = config?.catalogue ?? {}
+
+  const specItems: SpecTakeoffItem[] = input.items.map((i) => {
+    const cat = i.catalogue_item_id ? catalogue[i.catalogue_item_id] : undefined
+    return {
+      device_key: i.device_key,
+      label: i.label,
+      zone: i.zone,
+      quantity: i.quantity,
+      quiescentMa: cat?.quiescent_ma ?? null,
+      alarmMa: cat?.alarm_ma ?? null,
+    }
+  })
 
   const zones = deriveZones(specItems)
   const battery = computeBatteryCalc(specItems).rows
@@ -283,6 +361,7 @@ export interface SaveStudioQuoteInput {
   source: 'manual' | 'drawing'
   drawingBlobUrl?: string | null
   loops?: number | null
+  rangeId?: string | null
   margin: number
   client_id?: string | null
   site_id?: string | null
@@ -320,13 +399,18 @@ export async function saveStudioQuote(
   const { config, error: cfgErr } = await loadConfig(supabase)
   if (!config) return { ok: false, error: cfgErr ?? 'Could not load configuration.' }
 
+  // Resolve parts against the selected manufacturer range: range part →
+  // client-supplied item → device default. Keeps pricing authoritative.
+  const range = input.rangeId ? config.ranges.find((r) => r.id === input.rangeId) : undefined
   const assemblyItems: AssemblyTakeoffItem[] = confirmedItems.map((i) => {
     const dt = config.deviceTypes.find((d) => d.device_key === i.device_key)
+    const rangePart = range ? range.parts[i.device_key] : undefined
     return {
       device_key: i.device_key,
       label: i.label,
       quantity: i.quantity,
-      catalogue_item_id: i.catalogue_item_id ?? dt?.default_catalogue_item_id ?? null,
+      catalogue_item_id:
+        rangePart ?? i.catalogue_item_id ?? dt?.default_catalogue_item_id ?? null,
       contributes_to_device_count: dt?.contributes_to_device_count ?? true,
     }
   })
@@ -336,6 +420,7 @@ export async function saveStudioQuote(
     kitRules: config.kitRules,
     catalogue: config.catalogue,
     loops: input.loops ?? null,
+    rangeId: input.rangeId ?? null,
     systemMargin: input.margin,
   })
 
@@ -387,6 +472,7 @@ export async function saveStudioQuote(
       drawing_blob_url: input.drawingBlobUrl ?? null,
       design_category: input.designCategory,
       loops: input.loops ?? null,
+      range_id: input.rangeId ?? null,
       design_reasoning: input.designReasoning ?? null,
       status: 'confirmed',
       confirmed_by: user.id,

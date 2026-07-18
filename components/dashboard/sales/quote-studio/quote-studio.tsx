@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState, type ComponentType } from 'react'
+import { useCallback, useMemo, useRef, useState, type ComponentType } from 'react'
 import { toast } from 'sonner'
 import {
   Sparkles,
@@ -28,6 +28,7 @@ import {
   HelpCircle,
   TriangleAlert,
   Lightbulb,
+  Factory,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
@@ -140,6 +141,8 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
   const [designCategory, setDesignCategory] = useState('L1')
   const [rows, setRows] = useState<TakeoffRow[]>([])
   const [margin, setMargin] = useState(40)
+  const [manufacturerId, setManufacturerId] = useState<string>('')
+  const [rangeId, setRangeId] = useState<string>('')
 
   // Async flags
   const [extracting, setExtracting] = useState(false)
@@ -151,6 +154,19 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
 
   const selectedClient = clients.find((c) => c.id === clientId)
 
+  const selectedRange = config.ranges.find((r) => r.id === rangeId)
+
+  // Resolve the catalogue part for a device key: range-specific part (when a
+  // range is selected) → device default.
+  const resolvePartId = useCallback(
+    (deviceKey: string): string | null => {
+      const dt = config.deviceTypes.find((d) => d.device_key === deviceKey)
+      const rangePart = selectedRange ? selectedRange.parts[deviceKey] : undefined
+      return rangePart ?? dt?.default_catalogue_item_id ?? null
+    },
+    [config.deviceTypes, selectedRange],
+  )
+
   // Live pricing preview (pure, recomputed from the editable schedule).
   const assembly = useMemo(() => {
     const items = rows
@@ -161,7 +177,7 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
           device_key: r.device_key,
           label: r.label,
           quantity: r.quantity,
-          catalogue_item_id: dt?.default_catalogue_item_id ?? null,
+          catalogue_item_id: resolvePartId(r.device_key),
           contributes_to_device_count: dt?.contributes_to_device_count ?? true,
         }
       })
@@ -172,9 +188,10 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
       catalogue: config.catalogue,
       zones: zoneCount,
       loops: null,
+      rangeId: rangeId || null,
       systemMargin: margin,
     })
-  }, [rows, config, margin])
+  }, [rows, config, margin, rangeId, resolvePartId])
 
   function resetAll() {
     setPhase('brief')
@@ -188,6 +205,8 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
     setDesignReasoning(null)
     setDesignCategory('L1')
     setRows([])
+    setManufacturerId('')
+    setRangeId('')
     setSpec(null)
     setSavedId(null)
   }
@@ -280,7 +299,7 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
           label: r.label,
           zone: r.zone || null,
           quantity: r.quantity,
-          catalogue_item_id: null,
+          catalogue_item_id: resolvePartId(r.device_key),
           confidence: r.confidence,
           evidence: r.evidence,
         }))
@@ -313,7 +332,7 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
           label: r.label,
           zone: r.zone || null,
           quantity: r.quantity,
-          catalogue_item_id: null,
+          catalogue_item_id: resolvePartId(r.device_key),
           confidence: r.confidence,
           evidence: r.evidence,
         }))
@@ -324,6 +343,7 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
         designCategory,
         source: 'manual',
         margin,
+        rangeId: rangeId || null,
         client_id: clientId || null,
         site_id: siteId || null,
         prospect_name: clientId ? null : prospectName.trim(),
@@ -429,6 +449,16 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
           assembly={assembly}
           margin={margin}
           onMargin={setMargin}
+          manufacturerId={manufacturerId}
+          rangeId={rangeId}
+          onManufacturer={(id) => {
+            setManufacturerId(id)
+            // Reset range to the manufacturer's default (or clear) so parts stay coherent.
+            const ranges = config.ranges.filter((r) => r.manufacturerId === id)
+            const def = ranges.find((r) => r.isDefault) ?? ranges[0]
+            setRangeId(def?.id ?? '')
+          }}
+          onRange={setRangeId}
           onUpdateRow={updateRow}
           onRemoveRow={removeRow}
           onAddRow={addRow}
@@ -972,6 +1002,10 @@ function TakeoffStep({
   assembly,
   margin,
   onMargin,
+  manufacturerId,
+  rangeId,
+  onManufacturer,
+  onRange,
   onUpdateRow,
   onRemoveRow,
   onAddRow,
@@ -984,6 +1018,10 @@ function TakeoffStep({
   assembly: ReturnType<typeof buildAssembly>
   margin: number
   onMargin: (v: number) => void
+  manufacturerId: string
+  rangeId: string
+  onManufacturer: (id: string) => void
+  onRange: (id: string) => void
   onUpdateRow: (uid: string, patch: Partial<TakeoffRow>) => void
   onRemoveRow: (uid: string) => void
   onAddRow: (deviceKey: string) => void
@@ -992,6 +1030,7 @@ function TakeoffStep({
   onNext: () => void
 }) {
   const [addKey, setAddKey] = useState('')
+  const rangesForManufacturer = config.ranges.filter((r) => r.manufacturerId === manufacturerId)
   return (
     <div className="flex flex-col gap-4">
       <StepHeading
@@ -1010,6 +1049,66 @@ function TakeoffStep({
           </p>
         </CardContent>
       </Card>
+
+      {config.manufacturers.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-col gap-3 p-4">
+            <div className="flex items-center gap-2">
+              <Factory className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-bold uppercase tracking-wide">Equipment manufacturer</h3>
+            </div>
+            <p className="text-xs text-muted-foreground text-pretty">
+              Choose the manufacturer range for this design. The schedule is priced with that range&apos;s parts and its
+              real current draws feed the battery calculation. Leave blank to use the generic default parts.
+            </p>
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-muted-foreground">Manufacturer</label>
+                <Select value={manufacturerId} onValueChange={onManufacturer}>
+                  <SelectTrigger className="w-52">
+                    <SelectValue placeholder="Generic / unspecified" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {config.manufacturers.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-muted-foreground">Range</label>
+                <Select value={rangeId} onValueChange={onRange} disabled={!manufacturerId}>
+                  <SelectTrigger className="w-52">
+                    <SelectValue placeholder={manufacturerId ? 'Select a range…' : 'Choose a manufacturer first'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {rangesForManufacturer.map((r) => (
+                      <SelectItem key={r.id} value={r.id}>
+                        {r.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {manufacturerId && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground"
+                  onClick={() => {
+                    onManufacturer('')
+                    onRange('')
+                  }}
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="flex flex-col gap-3 p-4">

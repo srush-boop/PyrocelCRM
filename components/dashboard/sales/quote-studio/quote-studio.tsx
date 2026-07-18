@@ -51,9 +51,12 @@ import {
   draftBrief,
   buildStudioSpec,
   saveStudioQuote,
+  draftDisciplineSection,
   type StudioConfig,
   type StudioTakeoffItemInput,
   type StudioSpecPayload,
+  type StudioDiscipline,
+  type StudioAdditionalSystemInput,
 } from '@/app/(dashboard)/dashboard/sales/quote-studio/actions'
 import type {
   StudioUnderstanding,
@@ -82,6 +85,16 @@ interface TakeoffRow {
   confidence: 'high' | 'medium' | 'low' | 'manual'
   evidence: string | null
   rationale?: string
+}
+
+/** An additional (non-fire) discipline quoted as its own priced section. */
+interface AdditionalSection {
+  uid: string
+  code: string
+  name: string
+  config: StudioConfig
+  rows: TakeoffRow[]
+  notes: string[]
 }
 
 type Phase = 'brief' | 'review' | 'design' | 'takeoff' | 'document' | 'saved'
@@ -124,7 +137,15 @@ function specToText(understanding: StudioUnderstanding, category: string, spec: 
 
 // ---------------------------------------------------------------- root
 
-export function QuoteStudio({ config, clients }: { config: StudioConfig; clients: StudioClient[] }) {
+export function QuoteStudio({
+  config,
+  clients,
+  disciplines = [],
+}: {
+  config: StudioConfig
+  clients: StudioClient[]
+  disciplines?: StudioDiscipline[]
+}) {
   const [phase, setPhase] = useState<Phase>('brief')
 
   // Brief + attachment
@@ -143,6 +164,9 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
   const [margin, setMargin] = useState(40)
   const [manufacturerId, setManufacturerId] = useState<string>('')
   const [rangeId, setRangeId] = useState<string>('')
+  // Additional discipline sections (access control, intruder, CCTV, EL).
+  const [sections, setSections] = useState<AdditionalSection[]>([])
+  const [addingCode, setAddingCode] = useState<string | null>(null)
 
   // Async flags
   const [extracting, setExtracting] = useState(false)
@@ -207,6 +231,7 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
     setRows([])
     setManufacturerId('')
     setRangeId('')
+    setSections([])
     setSpec(null)
     setSavedId(null)
   }
@@ -353,6 +378,27 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
         items,
         spec,
         specificationText: specToText(understanding, designCategory, spec),
+        additionalSystems: sections
+          .filter((s) => s.rows.some((r) => r.quantity > 0))
+          .map<StudioAdditionalSystemInput>((s) => ({
+            systemTypeCode: s.code,
+            margin,
+            rangeId: null,
+            summary: null,
+            specificationText: null,
+            items: s.rows
+              .filter((r) => r.quantity > 0)
+              .map((r) => ({
+                device_key: r.device_key,
+                label: r.label,
+                zone: r.zone || null,
+                quantity: r.quantity,
+                // Server re-resolves to the device default part.
+                catalogue_item_id: null,
+                confidence: r.confidence,
+                evidence: r.evidence,
+              })),
+          })),
       })
       if (!res.ok || !res.id) {
         toast.error(res.error ?? 'Could not save the quote.')
@@ -390,6 +436,77 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
         evidence: null,
       },
     ])
+  }
+
+  // Additional discipline section helpers -----------------------------
+  async function addSection(code: string) {
+    if (sections.some((s) => s.code === code)) return
+    setAddingCode(code)
+    try {
+      const res = await draftDisciplineSection(code, brief)
+      if (!res.ok || !res.config) {
+        toast.error(res.error ?? 'Could not add that system.')
+        return
+      }
+      const cfg = res.config
+      const secRows: TakeoffRow[] = (res.draft?.devices ?? [])
+        .filter((d) => d.quantity > 0)
+        .map((d) => {
+          const dt = cfg.deviceTypes.find((t) => t.device_key === d.device_key)
+          return {
+            uid: nextUid(),
+            device_key: d.device_key,
+            label: dt?.label ?? d.device_key,
+            zone: d.zone || 'Z1',
+            quantity: d.quantity,
+            confidence: 'low' as const,
+            evidence: null,
+            rationale: d.rationale,
+          }
+        })
+      setSections((prev) => [
+        ...prev,
+        { uid: nextUid(), code, name: cfg.systemTypeName, config: cfg, rows: secRows, notes: res.draft?.notes ?? [] },
+      ])
+      toast.success(`${cfg.systemTypeName} added as a separate section.`)
+    } catch {
+      toast.error('Could not add that system. Please try again.')
+    } finally {
+      setAddingCode(null)
+    }
+  }
+  function removeSection(uid: string) {
+    setSections((prev) => prev.filter((s) => s.uid !== uid))
+  }
+  function updateSectionRow(sectionUid: string, rowUid: string, patch: Partial<TakeoffRow>) {
+    setSections((prev) =>
+      prev.map((s) =>
+        s.uid === sectionUid
+          ? { ...s, rows: s.rows.map((r) => (r.uid === rowUid ? { ...r, ...patch } : r)) }
+          : s,
+      ),
+    )
+  }
+  function removeSectionRow(sectionUid: string, rowUid: string) {
+    setSections((prev) =>
+      prev.map((s) => (s.uid === sectionUid ? { ...s, rows: s.rows.filter((r) => r.uid !== rowUid) } : s)),
+    )
+  }
+  function addSectionRow(sectionUid: string, deviceKey: string) {
+    setSections((prev) =>
+      prev.map((s) => {
+        if (s.uid !== sectionUid) return s
+        const dt = s.config.deviceTypes.find((d) => d.device_key === deviceKey)
+        if (!dt) return s
+        return {
+          ...s,
+          rows: [
+            ...s.rows,
+            { uid: nextUid(), device_key: deviceKey, label: dt.label, zone: 'Z1', quantity: 1, confidence: 'manual', evidence: null },
+          ],
+        }
+      }),
+    )
   }
 
   return (

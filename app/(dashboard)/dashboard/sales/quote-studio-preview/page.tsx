@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import type { Profile } from '@/lib/types/database'
 import { QuoteStudio, type StudioClient } from '@/components/dashboard/sales/quote-studio/quote-studio'
-import { getStudioConfig } from '@/app/(dashboard)/dashboard/sales/quote-studio/actions'
+import { getStudioConfig, listStudioDisciplines } from '@/app/(dashboard)/dashboard/sales/quote-studio/actions'
 
 export const metadata = { title: 'Quote Studio | Pyrocel' }
 
@@ -21,12 +21,13 @@ export default async function QuoteStudioPage() {
     redirect('/dashboard')
   }
 
-  const [{ ok, config, error }, { data: clientRows }] = await Promise.all([
+  const [{ ok, config, error }, { data: clientRows }, disciplinesRes] = await Promise.all([
     getStudioConfig(),
     supabase
       .from('clients')
       .select('id, name, sites:sites(id, name)')
       .order('name'),
+    listStudioDisciplines(),
   ])
 
   if (!ok || !config) {
@@ -50,5 +51,5 @@ export default async function QuoteStudioPage() {
     }),
   )
 
-  return <QuoteStudio config={config} clients={clients} />
+  return <QuoteStudio config={config} clients={clients} disciplines={disciplinesRes.disciplines ?? []} />
 }

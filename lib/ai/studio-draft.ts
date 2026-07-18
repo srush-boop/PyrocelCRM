@@ -234,6 +234,86 @@ export async function draftFromBrief(
   }
 }
 
+// ---- Secondary discipline device draft (Phase 3 multi-discipline) -----
+
+const disciplineSchema = z.object({
+  devices: z
+    .array(
+      z.object({
+        device_key: z.string().describe('One of the ALLOWED DEVICE KEYS provided. Use the key exactly.'),
+        zone: z.string().describe('A short area/zone label, e.g. "Main entrance" or "Z1". Use "Z1" if unclear.'),
+        quantity: z.number().int().min(0).describe('Best-estimate quantity — a conservative starting point.'),
+        rationale: z.string().describe('One short line explaining the estimate; flag clearly when it is a rough guess.'),
+      }),
+    )
+    .describe('A FIRST-PASS device schedule for this discipline. Only use the allowed device keys.'),
+  notes: z.array(z.string()).describe('Key assumptions / open questions the designer must confirm for this discipline.'),
+})
+
+export interface StudioDisciplineDraft {
+  devices: StudioDeviceSuggestion[]
+  notes: string[]
+}
+
+export type StudioDisciplineDraftResult =
+  | { ok: true; draft: StudioDisciplineDraft }
+  | { ok: false; error: string }
+
+/**
+ * Draft a first-pass device schedule for a NON-fire discipline (access control,
+ * intruder, CCTV, emergency lighting) from the same brief. Deliberately lighter
+ * than the fire-alarm draft — the designer confirms quantities before pricing.
+ */
+export async function draftDisciplineDevices(
+  brief: string,
+  disciplineName: string,
+  allowedDeviceKeys: { key: string; label: string }[],
+): Promise<StudioDisciplineDraftResult> {
+  const text = clamp(brief)
+  if (!text) return { ok: false, error: 'The brief is empty.' }
+  if (allowedDeviceKeys.length === 0) {
+    return { ok: false, error: `No device catalogue is set up for ${disciplineName} yet.` }
+  }
+
+  const keyList = allowedDeviceKeys.map((d) => `- ${d.key} (${d.label})`).join('\n')
+  const system = [
+    `You are a UK security & life-safety estimator at Pyrocel preparing the ${disciplineName} portion of a multi-discipline quotation from a client brief.`,
+    `Focus ONLY on ${disciplineName}. Ignore fire detection & alarm scope (it is quoted separately).`,
+    'You MUST only use the ALLOWED DEVICE KEYS given. Quantities are rough starting estimates for a designer to confirm — be conservative and flag uncertainty.',
+    'If the brief lacks detail to size a device, return a small conservative number (or 0) and say so. Do not invent certainty you do not have.',
+    'Write in British English.',
+  ].join(' ')
+  const prompt = [
+    `ALLOWED DEVICE KEYS for ${disciplineName} (use the key exactly, left of the bracket):`,
+    keyList,
+    '',
+    'CLIENT BRIEF:',
+    text,
+    '',
+    `Produce a conservative first-pass ${disciplineName} device schedule and your key notes now.`,
+  ].join('\n')
+
+  try {
+    const { object } = await generateObject({
+      model: DRAFT_MODEL,
+      schema: disciplineSchema,
+      system,
+      prompt,
+    })
+    const allowed = new Set(allowedDeviceKeys.map((d) => d.key))
+    return {
+      ok: true,
+      draft: {
+        devices: object.devices.filter((d) => allowed.has(d.device_key)),
+        notes: object.notes,
+      },
+    }
+  } catch (err) {
+    console.error('[v0] draftDisciplineDevices failed:', err)
+    return { ok: false, error: `Could not draft the ${disciplineName} schedule. Please try again.` }
+  }
+}
+
 // ---- Compile the narrative specification ------------------------------
 
 export interface StudioSpecSection {

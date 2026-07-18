@@ -34,6 +34,7 @@ import {
   ShieldCheck,
   GraduationCap,
   ClipboardCheck,
+  Clock,
   CalendarCheck,
   CalendarClock,
   TrendingUp,
@@ -85,6 +86,28 @@ const sitesNavItem: NavItem = {
   title: 'Sites',
   href: '/dashboard/sites',
   icon: Building2,
+}
+
+// "Your Tasks" — recurring internal quality/management tasks (toolbox talks,
+// vehicle checks, nominations). Available to every user, including external
+// sub-contractors, so it is locked (can never be permission-toggled off).
+const myTasksNavItem: NavItem = {
+  key: 'my-tasks',
+  title: 'Your Tasks',
+  href: '/dashboard/my-tasks',
+  icon: ClipboardCheck,
+  locked: true,
+}
+
+// "Timesheet" — weekly (Sun week-ending) timesheet. Only meaningful for users
+// with timesheet_required (resolved per-user/role); the page hard-gates access,
+// so the link is safe to show to internal field + office/admin roles.
+const timesheetNavItem: NavItem = {
+  key: 'timesheet',
+  title: 'Timesheet',
+  href: '/dashboard/timesheet',
+  icon: Clock,
+  locked: true,
 }
 
 // Service is a clickable group: clicking it opens the Service Dashboard and
@@ -292,6 +315,7 @@ const adminPeopleNavItem: NavItem = {
   icon: Users,
   children: [
     { title: 'Approvals', href: '/dashboard/approvals', icon: ClipboardCheck },
+    { title: 'Timesheets', href: '/dashboard/timesheet/review', icon: Clock },
     { title: 'Training', href: '/dashboard/training', icon: GraduationCap },
     { title: 'My Leave', href: '/dashboard/my-leave', icon: CalendarClock },
     { title: 'Leave Summary', href: '/dashboard/leave-summary', icon: CalendarCheck },
@@ -305,6 +329,7 @@ const officePeopleNavItem: NavItem = {
   icon: Users,
   children: [
     { title: 'Approvals', href: '/dashboard/approvals', icon: ClipboardCheck },
+    { title: 'Timesheets', href: '/dashboard/timesheet/review', icon: Clock },
     { title: 'Training', href: '/dashboard/training', icon: GraduationCap },
     { title: 'My Leave', href: '/dashboard/my-leave', icon: CalendarClock },
     { title: 'Leave Summary', href: '/dashboard/leave-summary', icon: CalendarCheck },
@@ -401,6 +426,8 @@ const adminNavItems: NavItem[] = [
   sitesNavItem,
   adminCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
+  myTasksNavItem,
+  timesheetNavItem,
   chatNavItem,
   salesNavItem,
   jobsNavItem,
@@ -421,6 +448,8 @@ const officeNavItems: NavItem[] = [
   sitesNavItem,
   officeCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
+  myTasksNavItem,
+  timesheetNavItem,
   chatNavItem,
   salesNavItem,
   jobsNavItem,
@@ -437,6 +466,8 @@ const engineerNavItems: NavItem[] = [
   { key: 'home', title: 'Home', href: '/dashboard', icon: LayoutDashboard, locked: true },
   engineerCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
+  myTasksNavItem,
+  timesheetNavItem,
   chatNavItem,
   engineerPeopleNavItem,
   engineerStockNavItem,
@@ -463,6 +494,7 @@ const subcontractorCallsNavItem: NavItem = {
 const subcontractorNavItems: NavItem[] = [
   { key: 'home', title: 'Home', href: '/dashboard', icon: LayoutDashboard, locked: true },
   subcontractorCallsNavItem,
+  myTasksNavItem,
 ]
 
 // Returns the full default top-level menu for a role (before applying any

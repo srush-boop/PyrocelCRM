@@ -31,6 +31,7 @@ import { TileColorPicker } from '@/components/dashboard/home/tile-color-picker'
 import { tileIconStyle, tileAccentStyle } from '@/lib/dashboard-tile-colors'
 import { getVisibleLeaveRequests } from '@/lib/leave-approvals'
 import { EngineerHome } from '@/components/dashboard/home/engineer-home'
+import { YourTasksTile } from '@/components/dashboard/internal-tasks/your-tasks-tile'
 import { DashboardDateFilter } from '@/components/dashboard/home/dashboard-date-filter'
 import { Suspense } from 'react'
 import { format, startOfMonth, endOfMonth, subDays, startOfDay, endOfDay } from 'date-fns'
@@ -360,6 +361,11 @@ export default async function DashboardPage({
       {/* Leave approvals waiting on this user (managers/accounts/admins only) */}
       <Suspense fallback={null}>
         <ApprovalsWidget />
+      </Suspense>
+
+      {/* Outstanding internal quality/management tasks for this manager. */}
+      <Suspense fallback={null}>
+        <YourTasksTile />
       </Suspense>
 
       {/* Live lone-worker safety status (0 when healthy; pulses on emergency) */}

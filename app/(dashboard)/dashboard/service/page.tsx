@@ -23,7 +23,26 @@ import {
   Siren,
   Wrench,
 } from 'lucide-react'
-import type { Profile } from '@/lib/types/database'
+import type { Profile, ToleranceUnit } from '@/lib/types/database'
+
+// Minimal shape needed to decide overdue status from the fetched `taskSelect`
+// embed (the query pulls the full site_service + service_type, so these fields
+// are present at runtime).
+type OverdueCandidate = {
+  scheduled_date: string | null
+  status: string
+  site_service?: {
+    frequency_value?: number | null
+    frequency_unit?: 'weeks' | 'months' | null
+    client_tolerance_value?: number | null
+    client_tolerance_unit?: ToleranceUnit | null
+    service_type?: {
+      is_recurring?: boolean | null
+      regulatory_tolerance_value?: number | null
+      regulatory_tolerance_unit?: ToleranceUnit | null
+    } | null
+  } | null
+}
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -198,6 +217,26 @@ export default async function ServiceDashboardPage() {
   const reg = kpi.overall.regulatory
   const totalOpen = (pendingCount.count || 0) + (inProgressCount.count || 0)
 
+  // A past-due call only *reports* as overdue once its client KPI target date
+  // has expired (weekly/monthly recurring PPM stays tied to the due
+  // week/month). Derive the genuinely-overdue set from the past-due candidates.
+  const overdueDerived = (overdueTasks ?? []).filter((task) => {
+    const t = task as unknown as OverdueCandidate
+    return isCallOverdue({
+      scheduledDate: t.scheduled_date,
+      status: t.status,
+      isRecurring: t.site_service?.service_type?.is_recurring,
+      frequencyValue: t.site_service?.frequency_value,
+      frequencyUnit: t.site_service?.frequency_unit,
+      clientToleranceValue: t.site_service?.client_tolerance_value,
+      clientToleranceUnit: t.site_service?.client_tolerance_unit,
+      regulatoryToleranceValue: t.site_service?.service_type?.regulatory_tolerance_value,
+      regulatoryToleranceUnit: t.site_service?.service_type?.regulatory_tolerance_unit,
+    })
+  })
+  const overdueCount = overdueDerived.length
+  const overdueList = overdueDerived.slice(0, 5)
+
   const stats = [
     {
       label: 'Total Sites',
@@ -230,11 +269,11 @@ export default async function ServiceDashboardPage() {
     },
     {
       label: 'Overdue',
-      value: overdueCount.count || 0,
-      hint: 'Past due date',
+      value: overdueCount,
+      hint: 'KPI target date passed',
       icon: AlertTriangle,
       href: '/dashboard/schedule',
-      alert: (overdueCount.count || 0) > 0,
+      alert: overdueCount > 0,
     },
     {
       label: 'Open Defects',
@@ -536,7 +575,7 @@ export default async function ServiceDashboardPage() {
 
       {/* Attention + upcoming */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card className={(overdueTasks?.length ?? 0) > 0 ? 'border-destructive/30' : ''}>
+        <Card className={overdueList.length > 0 ? 'border-destructive/30' : ''}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-destructive" />
@@ -545,9 +584,9 @@ export default async function ServiceDashboardPage() {
             <CardDescription>Overdue tasks, oldest first</CardDescription>
           </CardHeader>
           <CardContent>
-            {overdueTasks && overdueTasks.length > 0 ? (
+            {overdueList.length > 0 ? (
               <div className="space-y-3">
-                {overdueTasks.map((task) => (
+                {overdueList.map((task) => (
                   <Link
                     key={task.id}
                     href={`/dashboard/tasks/${task.id}?from=/dashboard/service`}

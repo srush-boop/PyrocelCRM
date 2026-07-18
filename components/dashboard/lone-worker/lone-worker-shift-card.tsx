@@ -182,7 +182,7 @@ export function LoneWorkerShiftCard() {
                   type="time"
                   value={seededStart}
                   onChange={(e) => setStart(e.target.value)}
-                  className="h-11 text-base tabular-nums"
+                  className="h-11 appearance-none text-base tabular-nums [&::-webkit-date-and-time-value]:text-left [&::-webkit-datetime-edit]:p-0"
                 />
               </div>
               <div className="space-y-1.5">
@@ -194,7 +194,7 @@ export function LoneWorkerShiftCard() {
                   type="time"
                   value={seededEnd}
                   onChange={(e) => setEnd(e.target.value)}
-                  className="h-11 text-base tabular-nums"
+                  className="h-11 appearance-none text-base tabular-nums [&::-webkit-date-and-time-value]:text-left [&::-webkit-datetime-edit]:p-0"
                 />
               </div>
             </div>

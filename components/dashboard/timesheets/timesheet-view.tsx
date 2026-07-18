@@ -40,6 +40,7 @@ import {
   addManualEntry,
   deleteManualEntry,
   submitTimesheet,
+  setNightShiftDates,
 } from '@/lib/actions/timesheets'
 
 interface Props {
@@ -120,6 +121,25 @@ export function TimesheetView({ initial, outstandingTasks }: Props) {
     const iso = `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}-${String(base.getDate()).padStart(2, '0')}`
     startTransition(() => {
       void reload(iso)
+    })
+  }
+
+  // Toggle a single day's night-shift confirmation. Builds the explicit set of
+  // ticked dates from the current summary (so the first tick also "locks in" the
+  // rest as not-night, ending any auto-suggestion), flips the target day, saves,
+  // then reloads so the summary + night count recompute.
+  function toggleNightShift(date: string, checked: boolean) {
+    const current = summary.days.filter((d) => d.isNightShift).map((d) => d.date)
+    const next = checked
+      ? Array.from(new Set([...current, date]))
+      : current.filter((d) => d !== date)
+    startTransition(async () => {
+      const res = await setNightShiftDates({ timesheetId: timesheet.id, dates: next })
+      if (!res.ok) {
+        setError(res.error ?? 'Could not update night shift.')
+        return
+      }
+      await reload(summary.weekEnding)
     })
   }
 
@@ -264,13 +284,28 @@ export function TimesheetView({ initial, outstandingTasks }: Props) {
             return (
               <div key={day.date} className="rounded-lg border p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{day.dayName}</span>
                     <span className="text-sm text-muted-foreground">{dateLabel(day.date)}</span>
-                    {day.isNightShift && (
-                      <Badge variant="outline" className="gap-1 text-chart-3">
-                        <Moon className="h-3 w-3" /> Night
-                      </Badge>
+                    {canEdit ? (
+                      <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Checkbox
+                          checked={day.isNightShift}
+                          onCheckedChange={(v) => toggleNightShift(day.date, v === true)}
+                          disabled={pending}
+                          aria-label={`Confirm ${day.dayName} as night shift`}
+                        />
+                        <Moon className="h-3 w-3" /> Night shift
+                        {!day.isNightShift && day.nightAutoSuggested && (
+                          <span className="text-chart-3">(suggested)</span>
+                        )}
+                      </label>
+                    ) : (
+                      day.isNightShift && (
+                        <Badge variant="outline" className="gap-1 text-chart-3">
+                          <Moon className="h-3 w-3" /> Night
+                        </Badge>
+                      )
                     )}
                   </div>
                   <div className="flex items-center gap-3 text-sm">

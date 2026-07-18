@@ -36,10 +36,13 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Loader2, Plus, Pencil, Trash2 } from 'lucide-react'
-import type { Role } from '@/lib/types/database'
+import type { Profile, Role } from '@/lib/types/database'
+
+type PickUser = Pick<Profile, 'id' | 'full_name' | 'role'>
 
 interface RolesSettingsProps {
   roles: Role[]
+  users: PickUser[]
 }
 
 interface FormState {
@@ -51,6 +54,9 @@ interface FormState {
   lone_worker_enabled: boolean
   // Entered in pounds; converted to integer pence on save.
   cost_per_hour_pounds: string
+  // Default timesheet approver(s)/processor(s) for this role.
+  timesheet_approver_ids: string[]
+  timesheet_processor_ids: string[]
 }
 
 function emptyForm(): FormState {
@@ -61,7 +67,13 @@ function emptyForm(): FormState {
     timesheet_required: true,
     lone_worker_enabled: false,
     cost_per_hour_pounds: '',
+    timesheet_approver_ids: [],
+    timesheet_processor_ids: [],
   }
+}
+
+function toggleId(list: string[], id: string): string[] {
+  return list.includes(id) ? list.filter((x) => x !== id) : [...list, id]
 }
 
 /** Pence → pounds string for editing (empty when unset). */
@@ -77,7 +89,7 @@ function poundsToPence(pounds: string): number | null {
   return Math.round(n * 100)
 }
 
-export function RolesSettings({ roles }: RolesSettingsProps) {
+export function RolesSettings({ roles, users }: RolesSettingsProps) {
   const router = useRouter()
   const supabase = createClient()
   const [isPending, startTransition] = useTransition()
@@ -101,6 +113,8 @@ export function RolesSettings({ roles }: RolesSettingsProps) {
       timesheet_required: role.timesheet_required,
       lone_worker_enabled: role.lone_worker_enabled ?? false,
       cost_per_hour_pounds: penceToPounds(role.cost_per_hour_pence),
+      timesheet_approver_ids: role.timesheet_approver_ids ?? [],
+      timesheet_processor_ids: role.timesheet_processor_ids ?? [],
     })
     setMessage(null)
     setDialogOpen(true)
@@ -119,6 +133,8 @@ export function RolesSettings({ roles }: RolesSettingsProps) {
         timesheet_required: form.timesheet_required,
         lone_worker_enabled: form.lone_worker_enabled,
         cost_per_hour_pence: poundsToPence(form.cost_per_hour_pounds),
+        timesheet_approver_ids: form.timesheet_approver_ids,
+        timesheet_processor_ids: form.timesheet_processor_ids,
         updated_at: new Date().toISOString(),
       }
       const { error } = form.id
@@ -331,6 +347,76 @@ export function RolesSettings({ roles }: RolesSettingsProps) {
                 </span>
               </span>
             </label>
+
+            {form.timesheet_required && (
+              <div className="grid gap-4 rounded-lg border p-3 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <p className="text-sm font-medium">Timesheet workflow</p>
+                  <p className="text-xs text-muted-foreground">
+                    Default approver(s) and processor(s) for this role. A per-user
+                    override wins when set; otherwise these apply. If both are empty,
+                    approval falls back to the person&apos;s manager and processing to
+                    office/admin.
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-xs">Approver(s)</Label>
+                  <div className="mt-1 max-h-40 space-y-1 overflow-y-auto rounded-md border p-2">
+                    {users.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No users.</p>
+                    ) : (
+                      users.map((u) => (
+                        <label key={u.id} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-input"
+                            checked={form.timesheet_approver_ids.includes(u.id)}
+                            onChange={() =>
+                              setForm({
+                                ...form,
+                                timesheet_approver_ids: toggleId(
+                                  form.timesheet_approver_ids,
+                                  u.id,
+                                ),
+                              })
+                            }
+                          />
+                          {u.full_name ?? 'Unnamed'}
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs">Processor(s)</Label>
+                  <div className="mt-1 max-h-40 space-y-1 overflow-y-auto rounded-md border p-2">
+                    {users.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No users.</p>
+                    ) : (
+                      users.map((u) => (
+                        <label key={u.id} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-input"
+                            checked={form.timesheet_processor_ids.includes(u.id)}
+                            onChange={() =>
+                              setForm({
+                                ...form,
+                                timesheet_processor_ids: toggleId(
+                                  form.timesheet_processor_ids,
+                                  u.id,
+                                ),
+                              })
+                            }
+                          />
+                          {u.full_name ?? 'Unnamed'}
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={isPending}>

@@ -120,6 +120,11 @@ export interface TimesheetInputs {
   calendar: RawCalendarEntry[]
   manual: RawManualEntry[]
   config?: TimesheetConfig
+  // User-confirmed night-shift dates. `null`/`undefined` = the user hasn't set
+  // them, so the auto-suggestion (worked span overlaps the night window) is used
+  // as the effective value. A (possibly empty) array = the explicit set the user
+  // ticked; only those dates count as night shift.
+  nightShiftDates?: string[] | null
 }
 
 // ---------------------------------------------------------------------------
@@ -150,7 +155,12 @@ export interface TimesheetDay {
   lateOtMinutes: number
   weekdayOtMinutes: number // rounded, Mon–Fri only
   weekendOtMinutes: number // rounded, Sat/Sun only
+  // Effective night-shift flag: the user's manual tick when set, otherwise the
+  // auto-suggestion. This is what feeds the weekly night-shift count.
   isNightShift: boolean
+  // Whether the worked span *overlaps* the night window (the auto-suggestion),
+  // regardless of the user's manual choice. Drives the pre-tick hint in the UI.
+  nightAutoSuggested: boolean
   oncallBand: string | null
 }
 
@@ -446,8 +456,16 @@ export function computeTimesheet(inputs: TimesheetInputs): TimesheetSummary {
     }
 
     // --- Night shift ---
-    const isNightShift =
+    // Auto-suggestion: does the worked span overlap the configured night window?
+    const nightAutoSuggested =
       !!shiftStart && !!shiftEnd && overlapsNight(date, epochMin(shiftStart), epochMin(shiftEnd), cfg)
+    // Effective value: the user's explicit tick when they've set the list at all,
+    // otherwise fall back to the auto-suggestion. Note a shift is no longer
+    // required for the manual tick — the user may confirm a night shift even if
+    // no lone-worker session was recorded.
+    const manualNights = inputs.nightShiftDates
+    const isNightShift =
+      manualNights != null ? manualNights.includes(date) : nightAutoSuggested
 
     // --- On-call band for this date ---
     const oncallForDay = inputs.oncall.find((o) => o.shift_date === date)
@@ -472,6 +490,7 @@ export function computeTimesheet(inputs: TimesheetInputs): TimesheetSummary {
       weekdayOtMinutes: weekdayOt,
       weekendOtMinutes: weekendOt,
       isNightShift,
+      nightAutoSuggested,
       oncallBand: oncallForDay?.band ?? null,
     }
   })

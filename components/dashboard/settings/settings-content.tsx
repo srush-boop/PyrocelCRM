@@ -413,7 +413,7 @@ export function SettingsContent({ user, profile, company, branches, departments,
 
       {isAdmin && (
         <TabsContent value="roles" className="space-y-4">
-          <RolesSettings roles={roles} />
+          <RolesSettings roles={roles} users={internalTaskUsers} />
         </TabsContent>
       )}
 

@@ -594,6 +594,8 @@ export function McpTaskExecution({
       )}
 
       {shiftGateDialog}
+      {/* Post-completion: offer nearby overdue / due-soon calls, then Calls. */}
+      {nearbyPrompt}
 
       {(status === 'in_progress' || status === 'completed') && (
         <>
@@ -816,26 +818,6 @@ export function McpTaskExecution({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <AlertDialog open={showSubmit} onOpenChange={setShowSubmit}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Complete Fire Alarm Test</AlertDialogTitle>
-            <AlertDialogDescription>
-              You have tested {summary.tested} of {summary.total} call points ({summary.passed} pass,{' '}
-              {summary.remedial} remedial, {summary.failed} fail). Submitting marks the task complete and
-              emails the report.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSubmit} disabled={submitting}>
-              {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Complete Test
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <Dialog open={showNoAccess} onOpenChange={setShowNoAccess}>
         <DialogContent className="sm:max-w-md">

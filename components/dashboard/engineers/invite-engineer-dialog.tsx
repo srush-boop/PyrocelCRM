@@ -256,6 +256,7 @@ export function InviteEngineerDialog({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="engineer">Engineer</SelectItem>
+                    <SelectItem value="subcontractor">Sub-contractor</SelectItem>
                     <SelectItem value="office">Office Staff</SelectItem>
                     <SelectItem value="admin">Admin</SelectItem>
                   </SelectContent>

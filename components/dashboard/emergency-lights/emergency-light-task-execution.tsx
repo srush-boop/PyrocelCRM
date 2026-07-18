@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useShiftGate } from '@/components/dashboard/tasks/use-shift-gate'
+import { useCompletionExit } from '@/components/dashboard/tasks/use-completion-exit'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,16 +13,6 @@ import { TaskHeader } from '@/components/dashboard/tasks/task-header'
 import { PauseResumeControls } from '@/components/dashboard/tasks/pause-resume-controls'
 import { CompletedReportActions } from '@/components/dashboard/reports/completed-report-actions'
 import { Progress } from '@/components/ui/progress'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import {
   Dialog,
   DialogContent,
@@ -37,7 +28,6 @@ import {
   Loader2,
   Search,
   Lightbulb,
-  FileText,
   CheckCircle2,
   Plus,
 } from 'lucide-react'
@@ -101,11 +91,10 @@ export function EmergencyLightTaskExecution({
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [showSubmit, setShowSubmit] = useState(false)
-  const [showDone, setShowDone] = useState(false)
   const router = useRouter()
   const supabase = createClient()
   const { ensureOnShift, checking: checkingShift, shiftGateDialog } = useShiftGate()
+  const { runExit, nearbyPrompt } = useCompletionExit(profile.role)
 
   // Engineers can register new fittings during the inspection, so keep a local
   // copy of the register that we can append to without losing in-progress state.
@@ -371,11 +360,10 @@ export function EmergencyLightTaskExecution({
       console.log('[v0] Visit billing request error:', err)
     }
 
-    setSubmitting(false)
-    setShowSubmit(false)
     setStatus('completed')
-    setShowDone(true)
-    router.refresh()
+    setSubmitting(false)
+    // No success screen / confirm — return to Calls (via nearby-calls prompt).
+    await runExit(task.id)
   }
 
   return (
@@ -512,12 +500,16 @@ export function EmergencyLightTaskExecution({
           </Button>
           <div className="flex flex-1 flex-col items-stretch gap-1">
             <Button
-              onClick={() => setShowSubmit(true)}
-              disabled={summary.tested < summary.total}
+              onClick={handleSubmit}
+              disabled={summary.tested < summary.total || submitting}
               className="w-full"
             >
-              <Send className="mr-2 h-4 w-4" />
-              Complete &amp; Submit
+              {submitting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="mr-2 h-4 w-4" />
+              )}
+              {submitting ? 'Submitting…' : 'Complete & Submit'}
             </Button>
             {summary.tested < summary.total && (
               <p className="text-center text-xs text-muted-foreground">
@@ -531,26 +523,6 @@ export function EmergencyLightTaskExecution({
 
       {/* Attachments */}
       <TaskAttachments taskId={task.id} profile={profile} />
-
-      <AlertDialog open={showSubmit} onOpenChange={setShowSubmit}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Complete Emergency Lighting Inspection</AlertDialogTitle>
-            <AlertDialogDescription>
-              You have tested {summary.tested} of {summary.total} fittings ({summary.passed} pass,{' '}
-              {summary.remedial} remedial, {summary.failed} fail). Submitting marks the task complete and
-              emails the report.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSubmit} disabled={submitting}>
-              {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Complete Inspection
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Add fitting — lets engineers register a fitting found on site */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
@@ -627,39 +599,8 @@ export function EmergencyLightTaskExecution({
         </DialogContent>
       </Dialog>
 
-      {/* Inspection complete — let the engineer choose what to do next */}
-      <Dialog open={showDone} onOpenChange={setShowDone}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-              <CheckCircle2 className="h-6 w-6 text-primary" />
-            </div>
-            <DialogTitle className="text-center">Inspection complete</DialogTitle>
-            <DialogDescription className="text-center">
-              The report has been generated and emailed to the site contacts. What would you like to
-              do next?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex-col gap-2 sm:flex-col">
-            {(profile.role === 'admin' || profile.role === 'office') && (
-              <Button className="w-full" onClick={() => router.push(`/dashboard/reports/${task.id}`)}>
-                <FileText className="mr-2 h-4 w-4" />
-                View report
-              </Button>
-            )}
-            <Button
-              variant={profile.role === 'admin' || profile.role === 'office' ? 'outline' : 'default'}
-              className="w-full"
-              onClick={() => {
-                setShowDone(false)
-                router.push('/dashboard/schedule')
-              }}
-            >
-              Return to calls
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Post-completion: offer nearby overdue / due-soon calls, then Calls. */}
+      {nearbyPrompt}
     </div>
   )
 }

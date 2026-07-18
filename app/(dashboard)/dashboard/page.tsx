@@ -61,8 +61,10 @@ export default async function DashboardPage({
   const role = (profile as Profile).role
 
   // Engineers get a tailored home (welcome, daily fact, their day ahead).
-  if (role === 'engineer') {
-    return <EngineerHome profile={profile as Profile} />
+  // Sub-contractors reuse the same field home but with internal-only cards
+  // (lone-worker, standings, location sharing) hidden.
+  if (role === 'engineer' || role === 'subcontractor') {
+    return <EngineerHome profile={profile as Profile} isSubcontractor={role === 'subcontractor'} />
   }
 
   const today = new Date()

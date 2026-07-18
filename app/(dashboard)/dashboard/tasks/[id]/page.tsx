@@ -108,8 +108,11 @@ export default async function TaskPage({ params }: PageProps) {
     notFound()
   }
 
-  // Check if engineer can access this task
-  if ((profile as Profile).role === 'engineer' && task.assigned_engineer_id !== user.id) {
+  // Check if engineer / sub-contractor can access this task. Both are field
+  // workers restricted to the calls allocated to them.
+  const fieldRole =
+    (profile as Profile).role === 'engineer' || (profile as Profile).role === 'subcontractor'
+  if (fieldRole && task.assigned_engineer_id !== user.id) {
     redirect('/dashboard')
   }
 

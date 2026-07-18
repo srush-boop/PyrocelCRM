@@ -58,7 +58,16 @@ type EngineerTask = {
   } | null
 }
 
-export async function EngineerHome({ profile }: { profile: Profile }) {
+export async function EngineerHome({
+  profile,
+  isSubcontractor = false,
+}: {
+  profile: Profile
+  // Sub-contractors are external workers: they see their day/schedule but not
+  // the internal-only cards (lone-worker shift, department standings, location
+  // sharing / H&S tracking).
+  isSubcontractor?: boolean
+}) {
   const supabase = await createClient()
 
   const now = new Date()
@@ -105,7 +114,10 @@ export async function EngineerHome({ profile }: { profile: Profile }) {
 
   // Encouragement: the engineer's own standing within their department. Null when
   // the feature is switched off, or they have no department / not enough data.
-  const engagementStats = await getEngineerEngagementStats(supabase, profile)
+  // Sub-contractors are external and excluded from internal standings.
+  const engagementStats = isSubcontractor
+    ? null
+    : await getEngineerEngagementStats(supabase, profile)
 
   return (
     <div className="space-y-6">
@@ -125,8 +137,9 @@ export async function EngineerHome({ profile }: { profile: Profile }) {
         </p>
       </div>
 
-      {/* Lone worker safety — start/finish shift and check-in frequency */}
-      <LoneWorkerShiftCard />
+      {/* Lone worker safety — start/finish shift and check-in frequency.
+          Internal staff only; not shown to external sub-contractors. */}
+      {!isSubcontractor && <LoneWorkerShiftCard />}
 
       {/* Today's schedule */}
       <Card>
@@ -253,24 +266,27 @@ export async function EngineerHome({ profile }: { profile: Profile }) {
       {/* Encouragement: your standing in the department */}
       {engagementStats && <EngineerStandingCard stats={engagementStats} />}
 
-      {/* Location sharing — engineers only. Kept on for health & safety. */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Signal className="h-4 w-4" />
-            Location sharing
-          </CardTitle>
-          <CardDescription>
-            Kept on for health &amp; safety reasons, so we can reach you quickly and
-            send help to your location if something goes wrong on the road.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <LocationSharingToggle
-            initialEnabled={profile.location_sharing_enabled ?? false}
-          />
-        </CardContent>
-      </Card>
+      {/* Location sharing — internal engineers only. Kept on for health &
+          safety. Not shown to external sub-contractors. */}
+      {!isSubcontractor && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Signal className="h-4 w-4" />
+              Location sharing
+            </CardTitle>
+            <CardDescription>
+              Kept on for health &amp; safety reasons, so we can reach you quickly and
+              send help to your location if something goes wrong on the road.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <LocationSharingToggle
+              initialEnabled={profile.location_sharing_enabled ?? false}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Daily fact */}
       <Card className="border-primary/30 bg-primary/5">

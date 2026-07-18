@@ -26,10 +26,10 @@ async function requireAdmin() {
   return { error: null }
 }
 
-const STAFF_ROLES = ['admin', 'office', 'engineer']
+const STAFF_ROLES = ['admin', 'office', 'engineer', 'subcontractor']
 
 /**
- * Create a staff member (admin/office/engineer) directly.
+ * Create a staff member (admin/office/engineer/subcontractor) directly.
  * The admin sets the password; no email invitation is sent and the
  * account is active immediately so the credentials can be shared manually.
  */

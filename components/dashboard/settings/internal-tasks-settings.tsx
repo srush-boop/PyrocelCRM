@@ -39,6 +39,7 @@ import {
   ClipboardCheck,
   CornerDownRight,
   GripVertical,
+  BellRing,
 } from 'lucide-react'
 import type {
   Department,
@@ -110,6 +111,8 @@ function blankTemplate(): InternalTaskTemplate {
     role_names: [],
     department_ids: [],
     user_ids: [],
+    notify_on_issue_user_ids: [],
+    notify_on_issue_email: null,
     created_by: null,
     created_at: '',
     updated_at: '',
@@ -912,6 +915,58 @@ function TemplateEditorDialog({
                 </div>
               </div>
             ) : null}
+          </div>
+
+          {/* Notify on issue */}
+          <div className="rounded-lg border p-4">
+            <h3 className="mb-1 flex items-center gap-2 text-sm font-medium">
+              <BellRing className="size-4" />
+              Notify if failure/issue
+            </h3>
+            <p className="mb-3 text-xs text-muted-foreground">
+              When a completed task has any Fail or Advisory answer, alert the
+              nominated user(s) in-app and email a nominated address.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <p className="mb-2 text-xs font-medium text-muted-foreground">
+                  Notify users
+                </p>
+                <div className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-md border p-2">
+                  {users.map((u) => (
+                    <label key={u.id} className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={draft.notify_on_issue_user_ids.includes(u.id)}
+                        onCheckedChange={() =>
+                          patch({
+                            notify_on_issue_user_ids: toggleArray(
+                              draft.notify_on_issue_user_ids,
+                              u.id,
+                            ),
+                          })
+                        }
+                      />
+                      {u.full_name ?? 'Unnamed'}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="it-notify-email">Notify email address</Label>
+                <Input
+                  id="it-notify-email"
+                  type="email"
+                  value={draft.notify_on_issue_email ?? ''}
+                  onChange={(e) =>
+                    patch({ notify_on_issue_email: e.target.value || null })
+                  }
+                  placeholder="quality@pyrocel.co.uk"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Optional. Leave blank to only notify users in-app.
+                </p>
+              </div>
+            </div>
           </div>
 
           {error ? <p className="text-sm text-destructive">{error}</p> : null}

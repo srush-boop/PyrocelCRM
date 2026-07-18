@@ -579,6 +579,14 @@ export function QuoteStudio({
           onUpdateRow={updateRow}
           onRemoveRow={removeRow}
           onAddRow={addRow}
+          disciplines={disciplines}
+          sections={sections}
+          addingCode={addingCode}
+          onAddSection={addSection}
+          onRemoveSection={removeSection}
+          onUpdateSectionRow={updateSectionRow}
+          onRemoveSectionRow={removeSectionRow}
+          onAddSectionRow={addSectionRow}
           buildingSpec={buildingSpec}
           onBack={() => setPhase(designReasoning ? 'design' : 'review')}
           onNext={handleBuildSpec}
@@ -1126,6 +1134,14 @@ function TakeoffStep({
   onUpdateRow,
   onRemoveRow,
   onAddRow,
+  disciplines,
+  sections,
+  addingCode,
+  onAddSection,
+  onRemoveSection,
+  onUpdateSectionRow,
+  onRemoveSectionRow,
+  onAddSectionRow,
   buildingSpec,
   onBack,
   onNext,
@@ -1142,12 +1158,21 @@ function TakeoffStep({
   onUpdateRow: (uid: string, patch: Partial<TakeoffRow>) => void
   onRemoveRow: (uid: string) => void
   onAddRow: (deviceKey: string) => void
+  disciplines: StudioDiscipline[]
+  sections: AdditionalSection[]
+  addingCode: string | null
+  onAddSection: (code: string) => void
+  onRemoveSection: (uid: string) => void
+  onUpdateSectionRow: (sectionUid: string, rowUid: string, patch: Partial<TakeoffRow>) => void
+  onRemoveSectionRow: (sectionUid: string, rowUid: string) => void
+  onAddSectionRow: (sectionUid: string, deviceKey: string) => void
   buildingSpec: boolean
   onBack: () => void
   onNext: () => void
 }) {
   const [addKey, setAddKey] = useState('')
   const rangesForManufacturer = config.ranges.filter((r) => r.manufacturerId === manufacturerId)
+  const availableDisciplines = disciplines.filter((d) => !sections.some((s) => s.code === d.code))
   return (
     <div className="flex flex-col gap-4">
       <StepHeading
@@ -1395,6 +1420,56 @@ function TakeoffStep({
         </CardContent>
       </Card>
 
+      {/* Additional disciplines — quoted as their own priced sections. */}
+      {(disciplines.length > 0 || sections.length > 0) && (
+        <Card>
+          <CardContent className="flex flex-col gap-3 p-4">
+            <div className="flex items-center gap-2">
+              <Layers className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-bold uppercase tracking-wide">Additional systems</h3>
+            </div>
+            <p className="text-xs text-muted-foreground text-pretty">
+              Quote other disciplines (access control, intruder, CCTV, emergency lighting) alongside the fire alarm.
+              Each is priced as its own section on the same quote and can be confirmed independently.
+            </p>
+
+            {sections.map((s) => (
+              <SectionCard
+                key={s.uid}
+                section={s}
+                margin={margin}
+                onRemove={() => onRemoveSection(s.uid)}
+                onUpdateRow={(rowUid, patch) => onUpdateSectionRow(s.uid, rowUid, patch)}
+                onRemoveRow={(rowUid) => onRemoveSectionRow(s.uid, rowUid)}
+                onAddRow={(deviceKey) => onAddSectionRow(s.uid, deviceKey)}
+              />
+            ))}
+
+            {availableDisciplines.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                {availableDisciplines.map((d) => (
+                  <Button
+                    key={d.code}
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    disabled={addingCode !== null}
+                    onClick={() => onAddSection(d.code)}
+                  >
+                    {addingCode === d.code ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Plus className="h-4 w-4" />
+                    )}
+                    {d.name}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <div className="flex items-center justify-between gap-3 pt-2">
         <Button variant="ghost" onClick={onBack} className="gap-2">
           <ArrowLeft className="h-4 w-4" />
@@ -1405,6 +1480,166 @@ function TakeoffStep({
           {buildingSpec ? 'Building specification…' : 'Build specification'}
         </Button>
       </div>
+    </div>
+  )
+}
+
+function SectionCard({
+  section,
+  margin,
+  onRemove,
+  onUpdateRow,
+  onRemoveRow,
+  onAddRow,
+}: {
+  section: AdditionalSection
+  margin: number
+  onRemove: () => void
+  onUpdateRow: (rowUid: string, patch: Partial<TakeoffRow>) => void
+  onRemoveRow: (rowUid: string) => void
+  onAddRow: (deviceKey: string) => void
+}) {
+  const [addKey, setAddKey] = useState('')
+  // Live price preview for this discipline (device default parts).
+  const sectionAssembly = useMemo(() => {
+    const items = section.rows
+      .filter((r) => r.quantity > 0)
+      .map((r) => {
+        const dt = section.config.deviceTypes.find((d) => d.device_key === r.device_key)
+        return {
+          device_key: r.device_key,
+          label: r.label,
+          quantity: r.quantity,
+          catalogue_item_id: dt?.default_catalogue_item_id ?? null,
+          contributes_to_device_count: dt?.contributes_to_device_count ?? true,
+        }
+      })
+    return buildAssembly({
+      items,
+      kitRules: section.config.kitRules,
+      catalogue: section.config.catalogue,
+      loops: null,
+      systemMargin: margin,
+    })
+  }, [section, margin])
+
+  return (
+    <div className="rounded-lg border bg-muted/30 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary">{section.name}</Badge>
+          {section.notes.length > 0 && (
+            <span className="text-xs text-muted-foreground">{section.notes[0]}</span>
+          )}
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-1.5 text-muted-foreground hover:text-destructive"
+          onClick={onRemove}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Remove
+        </Button>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <th className="pb-1.5 font-medium">Device</th>
+              <th className="pb-1.5 font-medium">Zone</th>
+              <th className="w-20 pb-1.5 text-right font-medium">Qty</th>
+              <th className="w-10 pb-1.5" />
+            </tr>
+          </thead>
+          <tbody>
+            {section.rows.length === 0 && (
+              <tr>
+                <td colSpan={4} className="py-4 text-center text-xs text-muted-foreground">
+                  No devices yet — add one below.
+                </td>
+              </tr>
+            )}
+            {section.rows.map((r) => (
+              <tr key={r.uid} className="border-b last:border-0">
+                <td className="py-1.5 pr-2 font-medium">{r.label}</td>
+                <td className="py-1.5 pr-2">
+                  <Input
+                    value={r.zone}
+                    onChange={(e) => onUpdateRow(r.uid, { zone: e.target.value })}
+                    className="h-8 w-28"
+                  />
+                </td>
+                <td className="py-1.5 text-right">
+                  <Input
+                    type="number"
+                    min={0}
+                    value={r.quantity}
+                    onChange={(e) =>
+                      onUpdateRow(r.uid, {
+                        quantity: Math.max(0, Number.parseInt(e.target.value || '0', 10)),
+                        confidence: 'manual',
+                      })
+                    }
+                    className="h-8 w-20 text-right tabular-nums"
+                  />
+                </td>
+                <td className="py-1.5 text-right">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-muted-foreground hover:text-destructive"
+                    onClick={() => onRemoveRow(r.uid)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Select value={addKey} onValueChange={setAddKey}>
+            <SelectTrigger className="h-8 w-52">
+              <SelectValue placeholder="Add a device…" />
+            </SelectTrigger>
+            <SelectContent>
+              {section.config.deviceTypes.map((d) => (
+                <SelectItem key={d.device_key} value={d.device_key}>
+                  {d.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            disabled={!addKey}
+            onClick={() => {
+              if (addKey) {
+                onAddRow(addKey)
+                setAddKey('')
+              }
+            }}
+          >
+            <Plus className="h-4 w-4" />
+            Add
+          </Button>
+        </div>
+        <span className="text-sm font-bold">
+          Sell <span className="tabular-nums">{gbp(sectionAssembly.totalSellPence)}</span>
+        </span>
+      </div>
+      {sectionAssembly.unmappedKeys.length > 0 && (
+        <p className="mt-1.5 text-xs text-destructive">
+          {sectionAssembly.unmappedKeys.length} item(s) have no catalogue cost yet — add prices via Settings → Data.
+        </p>
+      )}
     </div>
   )
 }

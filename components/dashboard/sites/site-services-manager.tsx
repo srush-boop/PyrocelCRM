@@ -205,6 +205,9 @@ export function SiteServicesManager({
 
     const insertData = selectedServiceTypes.map(serviceTypeId => {
       const serviceType = availableServiceTypes.find(st => st.id === serviceTypeId)
+      // Non-recurring / reactive services (e.g. Remote Monitoring) are booked on
+      // demand — no scheduled date and no seeded task below.
+      const isRecurring = serviceType?.is_recurring !== false
       return {
         site_id: siteId,
         service_type_id: serviceTypeId,
@@ -212,7 +215,7 @@ export function SiteServicesManager({
         frequency_unit: serviceType?.default_frequency_unit ?? 'months',
         worker_type: serviceType?.default_worker_type ?? 'cdo',
         // Live sites get their first visit scheduled on the chosen date
-        next_service_date: isDead ? null : visitDateStr,
+        next_service_date: isDead || !isRecurring ? null : visitDateStr,
       }
     })
 
@@ -226,12 +229,16 @@ export function SiteServicesManager({
     // seed the WHOLE first cycle up front: one task per visit type, evenly split
     // across the service frequency. Single/zero-visit services seed one task.
     if (!isDead && inserted && inserted.length > 0) {
-      const rows = inserted as {
+      const rows = (inserted as {
         id: string
         service_type_id: string
         frequency_value: number
         frequency_unit: 'weeks' | 'months'
-      }[]
+      }[]).map((r) => ({
+        ...r,
+        is_recurring:
+          availableServiceTypes.find((s) => s.id === r.service_type_id)?.is_recurring !== false,
+      }))
 
       const visitsByServiceType = await fetchVisitsByServiceType(
         supabase,

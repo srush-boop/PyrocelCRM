@@ -392,14 +392,16 @@ export function SiteSystemsManager({
 
     const insertData = serviceSelection.map((serviceTypeId) => {
       const st = availableServiceTypes.find((s) => s.id === serviceTypeId)
+      // Non-recurring / reactive services (e.g. Remote Monitoring) are booked on
+      // demand — no scheduled date and no seeded task below.
+      const isRecurring = st?.is_recurring !== false
       return {
         site_id: siteId,
         service_type_id: serviceTypeId,
-        site_system_id: serviceSystemId,
         frequency_value: st?.default_frequency_value ?? 12,
         frequency_unit: st?.default_frequency_unit ?? 'months',
         worker_type: st?.default_worker_type ?? 'cdo',
-        next_service_date: isDead ? null : visitDateStr,
+        next_service_date: isDead || !isRecurring ? null : visitDateStr,
       }
     })
 
@@ -417,12 +419,16 @@ export function SiteSystemsManager({
     // Live sites get scheduled tasks for each new service. Multi-visit services
     // (e.g. Fire Alarm = Annual + Periodic) seed the whole first cycle up front.
     if (!isDead && inserted && inserted.length > 0) {
-      const rows = inserted as {
+      const rows = (inserted as {
         id: string
         service_type_id: string
         frequency_value: number
         frequency_unit: 'weeks' | 'months'
-      }[]
+      }[]).map((r) => ({
+        ...r,
+        is_recurring:
+          availableServiceTypes.find((s) => s.id === r.service_type_id)?.is_recurring !== false,
+      }))
       const visitsByServiceType = await fetchVisitsByServiceType(
         supabase,
         rows.map((r) => r.service_type_id),

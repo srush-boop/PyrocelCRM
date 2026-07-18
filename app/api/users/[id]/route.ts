@@ -10,9 +10,9 @@ export async function PATCH(
     const { id } = await params
     const { password } = await req.json()
 
-    if (!password || typeof password !== 'string' || password.length < 6) {
+    if (!password || typeof password !== 'string' || password.length < 12) {
       return NextResponse.json(
-        { error: 'Password must be at least 6 characters.' },
+        { error: 'Password must be at least 12 characters.' },
         { status: 400 },
       )
     }

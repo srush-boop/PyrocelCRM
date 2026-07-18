@@ -23,6 +23,11 @@ export default async function PortalLayout({
 
   if (!profile) redirect('/auth/login')
 
+  // Only activated accounts may use the app.
+  if ((profile as Profile).status !== 'active') {
+    redirect('/auth/login?error=account-inactive')
+  }
+
   // Only client logins use the portal; staff belong in the dashboard.
   if ((profile as Profile).role !== 'client') {
     redirect('/dashboard')

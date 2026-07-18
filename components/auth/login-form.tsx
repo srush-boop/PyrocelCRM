@@ -21,6 +21,8 @@ interface LoginFormProps {
   subtitle?: string
   /** Optional positive tagline shown beneath the card header. */
   tagline?: string
+  /** Optional notice (e.g. an inactive-account message) shown above the form. */
+  notice?: string
 }
 
 export function LoginForm({
@@ -29,6 +31,7 @@ export function LoginForm({
   title = 'PYROCEL LTD',
   subtitle = 'Service & Compliance Management',
   tagline,
+  notice,
 }: LoginFormProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -77,6 +80,11 @@ export function LoginForm({
       </CardHeader>
       <CardContent>
         <form onSubmit={handleLogin} className="space-y-4">
+          {notice && !error && (
+            <Alert>
+              <AlertDescription>{notice}</AlertDescription>
+            </Alert>
+          )}
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>

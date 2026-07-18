@@ -39,9 +39,9 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       )
     }
-    if (typeof password !== 'string' || password.length < 8) {
+    if (typeof password !== 'string' || password.length < 12) {
       return NextResponse.json(
-        { error: 'Password must be at least 8 characters.' },
+        { error: 'Password must be at least 12 characters.' },
         { status: 400 },
       )
     }
@@ -78,6 +78,9 @@ export async function POST(req: NextRequest) {
       full_name: fullName || null,
       role: 'client',
       client_id: clientId,
+      // Admin-provisioned, so activate immediately. Explicit because the
+      // signup trigger now creates base rows as 'inactive'.
+      status: 'active',
       accepted_at: new Date().toISOString(),
     })
 

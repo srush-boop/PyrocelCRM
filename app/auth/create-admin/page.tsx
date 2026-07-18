@@ -35,8 +35,8 @@ export default function CreateAdminPage() {
       setError('Passwords do not match.')
       return
     }
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters.')
+    if (password.length < 12) {
+      setError('Password must be at least 12 characters.')
       return
     }
 
@@ -134,10 +134,10 @@ export default function CreateAdminPage() {
                 <Input
                   id="password"
                   type="password"
-                  placeholder="Min 8 characters"
+                  placeholder="Min 12 characters"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  minLength={8}
+                  minLength={12}
                   required
                   autoComplete="new-password"
                 />
@@ -151,7 +151,7 @@ export default function CreateAdminPage() {
                   placeholder="Re-enter password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  minLength={8}
+                  minLength={12}
                   required
                   autoComplete="new-password"
                 />

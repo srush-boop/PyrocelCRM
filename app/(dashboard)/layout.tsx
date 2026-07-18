@@ -31,6 +31,12 @@ export default async function DashboardLayout({
     redirect('/auth/login')
   }
 
+  // Only activated accounts may use the app. Self-registered/trigger-created
+  // rows start 'inactive' until an admin activates them.
+  if ((profile as Profile).status !== 'active') {
+    redirect('/auth/login?error=account-inactive')
+  }
+
   // Client logins are read-only and belong in the portal, not the staff dashboard.
   if ((profile as Profile).role === 'client') {
     redirect('/portal')

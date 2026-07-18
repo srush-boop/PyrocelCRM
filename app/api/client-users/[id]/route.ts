@@ -40,9 +40,9 @@ export async function PATCH(
 
     // Optional password reset
     if (password !== undefined && password !== null && password !== '') {
-      if (typeof password !== 'string' || password.length < 8) {
+      if (typeof password !== 'string' || password.length < 12) {
         return NextResponse.json(
-          { error: 'Password must be at least 8 characters.' },
+          { error: 'Password must be at least 12 characters.' },
           { status: 400 },
         )
       }

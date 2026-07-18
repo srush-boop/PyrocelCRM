@@ -527,7 +527,15 @@ export async function approveTimesheet(id: string): Promise<{ ok: boolean; error
   if ('error' in auth) return { ok: false, error: auth.error as string }
   const { error } = await auth.supabase
     .from('timesheets')
-    .update({ status: 'approved', approved_by: auth.userId, approved_at: new Date().toISOString() })
+    .update({
+      status: 'approved',
+      approved_by: auth.userId,
+      approved_at: new Date().toISOString(),
+      // Entering the processing stage fresh: clear any prior processed flag.
+      processed: false,
+      processed_by: null,
+      processed_at: null,
+    })
     .eq('id', id)
   if (error) return { ok: false, error: error.message }
   await notifyUsers({
@@ -538,8 +546,21 @@ export async function approveTimesheet(id: string): Promise<{ ok: boolean; error
     category: 'timesheet',
     createdBy: auth.userId,
   })
+  // Hand off to the nominated processor(s) for payroll processing.
+  const { processorIds } = await resolveTimesheetActors(auth.supabase, (ts as Timesheet).user_id)
+  if (processorIds.length > 0) {
+    await notifyUsers({
+      userIds: processorIds,
+      title: 'Timesheet ready to process',
+      body: 'An approved timesheet is ready for processing.',
+      url: APPROVALS_PATH,
+      category: 'timesheet',
+      createdBy: auth.userId,
+    })
+  }
   revalidatePath(REVIEW_PATH)
   revalidatePath(TIMESHEET_PATH)
+  revalidatePath(APPROVALS_PATH)
   return { ok: true }
 }
 
@@ -571,7 +592,11 @@ export async function rejectTimesheet(
   return { ok: true }
 }
 
-/** Timesheets awaiting review for the signed-in reviewer (manager/admin/office). */
+/**
+ * Timesheets awaiting approval for the signed-in approver. Office/admin see all
+ * submitted sheets; everyone else sees only sheets whose owner resolves to them
+ * as a nominated approver (per-user list, role list, or fallback manager).
+ */
 export async function getReviewQueue(): Promise<
   Array<Timesheet & { user_name: string | null }>
 > {
@@ -582,15 +607,91 @@ export async function getReviewQueue(): Promise<
   const role = (me as { role?: string } | null)?.role
   const isOfficeAdmin = role === 'admin' || role === 'office'
 
-  let query = supabase
+  const { data } = await supabase
     .from('timesheets')
-    .select('*, profiles!timesheets_user_id_fkey ( full_name, manager_id )')
-    .in('status', ['submitted', 'rejected'])
+    .select('*, profiles!timesheets_user_id_fkey ( full_name )')
+    .in('status', ['submitted'])
     .order('week_ending', { ascending: false })
 
-  const { data } = await query
-  const rows = ((data as any[]) ?? [])
-    .filter((t) => isOfficeAdmin || t.profiles?.manager_id === userId)
-    .map((t) => ({ ...(t as Timesheet), user_name: t.profiles?.full_name ?? null }))
-  return rows
+  const raw = (data as any[]) ?? []
+  let rows = raw
+  if (!isOfficeAdmin) {
+    const flags = await Promise.all(
+      raw.map(async (t) => {
+        const { approverIds } = await resolveTimesheetActors(supabase, t.user_id)
+        return approverIds.includes(userId)
+      }),
+    )
+    rows = raw.filter((_, i) => flags[i])
+  }
+  return rows.map((t) => ({ ...(t as Timesheet), user_name: t.profiles?.full_name ?? null }))
+}
+
+/**
+ * Approved timesheets awaiting (or completed) payroll processing for the
+ * signed-in processor. Office/admin see all approved sheets; everyone else sees
+ * only sheets whose owner resolves to them as a nominated processor.
+ */
+export async function getProcessingQueue(): Promise<
+  Array<Timesheet & { user_name: string | null }>
+> {
+  const auth = await getAuth()
+  if ('error' in auth) return []
+  const { supabase, userId } = auth
+  const { data: me } = await supabase.from('profiles').select('role').eq('id', userId).single()
+  const role = (me as { role?: string } | null)?.role
+  const isOfficeAdmin = role === 'admin' || role === 'office'
+
+  const { data } = await supabase
+    .from('timesheets')
+    .select('*, profiles!timesheets_user_id_fkey ( full_name )')
+    .eq('status', 'approved')
+    .order('processed', { ascending: true })
+    .order('week_ending', { ascending: false })
+
+  const raw = (data as any[]) ?? []
+  let rows = raw
+  if (!isOfficeAdmin) {
+    const flags = await Promise.all(
+      raw.map(async (t) => {
+        const { processorIds } = await resolveTimesheetActors(supabase, t.user_id)
+        return processorIds.includes(userId)
+      }),
+    )
+    rows = raw.filter((_, i) => flags[i])
+  }
+  return rows.map((t) => ({ ...(t as Timesheet), user_name: t.profiles?.full_name ?? null }))
+}
+
+/** Toggle the 'processed' flag on an approved timesheet (processor only). */
+export async function setProcessed(
+  id: string,
+  processed: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const base = await getAuth()
+  if ('error' in base) return { ok: false, error: base.error }
+  const { data: ts } = await base.supabase
+    .from('timesheets')
+    .select('user_id, status')
+    .eq('id', id)
+    .maybeSingle()
+  if (!ts) return { ok: false, error: 'Not found' }
+  if ((ts as Timesheet).status !== 'approved') {
+    return { ok: false, error: 'Only approved timesheets can be processed.' }
+  }
+  const auth = await requireProcessor((ts as Timesheet).user_id)
+  if ('error' in auth) return { ok: false, error: auth.error as string }
+  const { error } = await auth.supabase
+    .from('timesheets')
+    .update({
+      processed,
+      processed_by: processed ? auth.userId : null,
+      processed_at: processed ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(APPROVALS_PATH)
+  revalidatePath(REVIEW_PATH)
+  return { ok: true }
 }

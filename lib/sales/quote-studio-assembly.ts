@@ -29,6 +29,9 @@ export interface AssemblyCatalogueRef {
   unit: string | null
   unit_cost_pence: number
   margin_percent: number
+  /** Manufacturer-specific current draws (mA) for the battery calc, if known. */
+  quiescent_ma?: number | null
+  alarm_ma?: number | null
 }
 
 /** A confirmed row of the counted device schedule. */
@@ -54,6 +57,8 @@ export interface AssemblyKitRule {
   is_service: boolean
   catalogue_item_id: string
   notes: string | null
+  /** Restrict this rule to one manufacturer range (null = applies to any range). */
+  range_id?: string | null
 }
 
 export interface AssemblyContext {
@@ -65,6 +70,8 @@ export interface AssemblyContext {
   loops?: number | null
   /** Number of zones (for per_zone rules). */
   zones?: number | null
+  /** Selected manufacturer range; filters range-scoped kit rules. */
+  rangeId?: string | null
   /** Default gross margin % for lines whose catalogue margin is unavailable. */
   systemMargin: number
 }
@@ -201,8 +208,10 @@ export function buildAssembly(ctx: AssemblyContext): AssemblyResult {
     )
   }
 
-  // 2) Kit / labour lines from the rules.
+  // 2) Kit / labour lines from the rules. A rule scoped to a specific range only
+  // applies when that range is selected; unscoped rules (range_id null) always apply.
   for (const rule of ctx.kitRules) {
+    if (rule.range_id && rule.range_id !== (ctx.rangeId ?? null)) continue
     const qty = kitRuleQuantity(rule, ctx)
     if (!qty || qty <= 0) continue
     const cat = ctx.catalogue[rule.catalogue_item_id]

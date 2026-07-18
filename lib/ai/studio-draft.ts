@@ -46,10 +46,41 @@ export interface StudioDeviceSuggestion {
   rationale: string
 }
 
+// ---- Design reasoning (the "show your working" audit trail) -----------
+
+export interface StudioDesignDevice {
+  deviceKey: string
+  label: string
+  quantity: number
+  basis: string
+  clause: string
+  assumption: string
+}
+
+export interface StudioDesignArea {
+  name: string
+  description: string
+  devices: StudioDesignDevice[]
+}
+
+export interface StudioOtherDiscipline {
+  system: string
+  evidence: string
+  confidence: number
+}
+
+export interface StudioDesignReasoning {
+  areas: StudioDesignArea[]
+  assumptions: string[]
+  openQuestions: string[]
+  otherDisciplines: StudioOtherDiscipline[]
+}
+
 export interface StudioDraft {
   understanding: StudioUnderstanding
   requirements: StudioRequirement[]
   devices: StudioDeviceSuggestion[]
+  design: StudioDesignReasoning
 }
 
 export interface StudioDraftResult {
@@ -89,6 +120,53 @@ const draftSchema = z.object({
       }),
     )
     .describe('A FIRST-PASS device schedule. Only use the allowed device keys. Be conservative and flag uncertainty.'),
+  design: z
+    .object({
+      areas: z
+        .array(
+          z.object({
+            name: z.string().describe('The building area/zone name, e.g. "Ground floor — bedroom wing".'),
+            description: z.string().describe('One line on what this area contains and its fire risk.'),
+            devices: z
+              .array(
+                z.object({
+                  deviceKey: z.string().describe('One of the ALLOWED DEVICE KEYS. Use the key exactly.'),
+                  label: z.string().describe('The human label for the device type.'),
+                  quantity: z.number().int().min(0).describe('Quantity for THIS area only.'),
+                  basis: z
+                    .string()
+                    .describe('HOW this quantity was derived, e.g. "8 bedrooms + day room, one detector each" or "point spacing at 7.5m radius over ~120m²".'),
+                  clause: z
+                    .string()
+                    .describe('The governing BS 5839-1 clause/table this is based on, e.g. "Table 1 / Cl. 22". Empty string if none applies.'),
+                  assumption: z
+                    .string()
+                    .describe('The key assumption made (ceiling height, room count, coverage). Empty string if none.'),
+                }),
+              )
+              .describe('The device types placed in this area, with the reasoning for each quantity.'),
+          }),
+        )
+        .describe('The device design broken down by building area, so a designer can confirm HOW each quantity was reached. The per-area quantities should reconcile with the overall device schedule.'),
+      assumptions: z
+        .array(z.string())
+        .describe('Global sizing assumptions applied across the design (coverage radii, ceiling heights, category basis, spacing rules).'),
+      openQuestions: z
+        .array(z.string())
+        .describe('Specific things you could NOT determine from the brief that the designer must confirm (drives follow-up).'),
+      otherDisciplines: z
+        .array(
+          z.object({
+            system: z
+              .string()
+              .describe('A non-fire-alarm discipline the brief implies, e.g. "Access Control", "Intruder Alarm", "CCTV", "Emergency Lighting".'),
+            evidence: z.string().describe('The wording in the brief that indicates this discipline is needed.'),
+            confidence: z.number().min(0).max(100).describe('Confidence this discipline is genuinely in scope, 0–100.'),
+          }),
+        )
+        .describe('Other security/life-safety disciplines detected in the brief that are OUTSIDE this fire-alarm quote. Advisory only — flag them so nothing is missed.'),
+    })
+    .describe('The design reasoning: how the schedule was built, the assumptions, open questions, and other disciplines detected.'),
 })
 
 const DRAFT_SYSTEM = [
@@ -97,6 +175,8 @@ const DRAFT_SYSTEM = [
   'Ground everything in the provided KNOWLEDGE BASE (BAFE SP203-1 / BS 5839-1:2025). Write in British English.',
   'For the device schedule you MUST only use the ALLOWED DEVICE KEYS given. Device counts are rough starting estimates for a designer to confirm against an approved layout drawing — never present them as final. Be conservative and state your assumptions in each rationale.',
   'If the brief lacks the detail to size a device type, return a small conservative number (or 0) and say so in the rationale. Do not invent site-specific certainty you do not have.',
+  'CRITICAL — also return a DESIGN breakdown that shows your working: group the devices by building area, and for EACH device line give the basis (how you reached the quantity), the governing BS 5839-1 clause/table, and the key assumption. The per-area quantities should reconcile with the overall device schedule. List the global assumptions and the open questions a designer must resolve.',
+  'CRITICAL — scan the brief for OTHER disciplines outside fire detection & alarm (access control, intruder alarm, CCTV, emergency lighting). If the brief implies any, list them under otherDisciplines with the evidence and your confidence. This quote remains fire-alarm only, but never silently ignore other scope — flag it so it can be quoted separately.',
 ].join(' ')
 
 export async function draftFromBrief(
@@ -135,11 +215,102 @@ export async function draftFromBrief(
         requirements: object.requirements,
         // Drop any device the model invented outside the allowed catalogue.
         devices: object.devices.filter((d) => allowed.has(d.device_key)),
+        design: {
+          // Keep only allowed device keys inside the area breakdown too.
+          areas: object.design.areas.map((a) => ({
+            name: a.name,
+            description: a.description,
+            devices: a.devices.filter((d) => allowed.has(d.deviceKey)),
+          })),
+          assumptions: object.design.assumptions,
+          openQuestions: object.design.openQuestions,
+          otherDisciplines: object.design.otherDisciplines,
+        },
       },
     }
   } catch (err) {
     console.error('[v0] draftFromBrief failed:', err)
     return { ok: false, error: 'Could not draft from the brief. Please try again.' }
+  }
+}
+
+// ---- Secondary discipline device draft (Phase 3 multi-discipline) -----
+
+const disciplineSchema = z.object({
+  devices: z
+    .array(
+      z.object({
+        device_key: z.string().describe('One of the ALLOWED DEVICE KEYS provided. Use the key exactly.'),
+        zone: z.string().describe('A short area/zone label, e.g. "Main entrance" or "Z1". Use "Z1" if unclear.'),
+        quantity: z.number().int().min(0).describe('Best-estimate quantity — a conservative starting point.'),
+        rationale: z.string().describe('One short line explaining the estimate; flag clearly when it is a rough guess.'),
+      }),
+    )
+    .describe('A FIRST-PASS device schedule for this discipline. Only use the allowed device keys.'),
+  notes: z.array(z.string()).describe('Key assumptions / open questions the designer must confirm for this discipline.'),
+})
+
+export interface StudioDisciplineDraft {
+  devices: StudioDeviceSuggestion[]
+  notes: string[]
+}
+
+export type StudioDisciplineDraftResult =
+  | { ok: true; draft: StudioDisciplineDraft }
+  | { ok: false; error: string }
+
+/**
+ * Draft a first-pass device schedule for a NON-fire discipline (access control,
+ * intruder, CCTV, emergency lighting) from the same brief. Deliberately lighter
+ * than the fire-alarm draft — the designer confirms quantities before pricing.
+ */
+export async function draftDisciplineDevices(
+  brief: string,
+  disciplineName: string,
+  allowedDeviceKeys: { key: string; label: string }[],
+): Promise<StudioDisciplineDraftResult> {
+  const text = clamp(brief)
+  if (!text) return { ok: false, error: 'The brief is empty.' }
+  if (allowedDeviceKeys.length === 0) {
+    return { ok: false, error: `No device catalogue is set up for ${disciplineName} yet.` }
+  }
+
+  const keyList = allowedDeviceKeys.map((d) => `- ${d.key} (${d.label})`).join('\n')
+  const system = [
+    `You are a UK security & life-safety estimator at Pyrocel preparing the ${disciplineName} portion of a multi-discipline quotation from a client brief.`,
+    `Focus ONLY on ${disciplineName}. Ignore fire detection & alarm scope (it is quoted separately).`,
+    'You MUST only use the ALLOWED DEVICE KEYS given. Quantities are rough starting estimates for a designer to confirm — be conservative and flag uncertainty.',
+    'If the brief lacks detail to size a device, return a small conservative number (or 0) and say so. Do not invent certainty you do not have.',
+    'Write in British English.',
+  ].join(' ')
+  const prompt = [
+    `ALLOWED DEVICE KEYS for ${disciplineName} (use the key exactly, left of the bracket):`,
+    keyList,
+    '',
+    'CLIENT BRIEF:',
+    text,
+    '',
+    `Produce a conservative first-pass ${disciplineName} device schedule and your key notes now.`,
+  ].join('\n')
+
+  try {
+    const { object } = await generateObject({
+      model: DRAFT_MODEL,
+      schema: disciplineSchema,
+      system,
+      prompt,
+    })
+    const allowed = new Set(allowedDeviceKeys.map((d) => d.key))
+    return {
+      ok: true,
+      draft: {
+        devices: object.devices.filter((d) => allowed.has(d.device_key)),
+        notes: object.notes,
+      },
+    }
+  } catch (err) {
+    console.error('[v0] draftDisciplineDevices failed:', err)
+    return { ok: false, error: `Could not draft the ${disciplineName} schedule. Please try again.` }
   }
 }
 

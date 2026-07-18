@@ -129,6 +129,13 @@ interface SeedServiceInput {
   service_type_id: string
   frequency_value: number
   frequency_unit: 'weeks' | 'months'
+  /**
+   * Whether the service type recurs on a cadence. Non-recurring / reactive
+   * services (e.g. Remote Monitoring) are booked on demand and must NEVER be
+   * auto-seeded with PPM tasks. Defaults to recurring when undefined so older
+   * callers keep their existing behaviour.
+   */
+  is_recurring?: boolean
 }
 
 /**
@@ -165,6 +172,9 @@ export function buildSeedTaskRows(
   }
 
   for (const svc of services) {
+    // Non-recurring / reactive services are never auto-seeded — they are booked
+    // on demand, so seeding a PPM task here would be wrong (e.g. Remote Monitoring).
+    if (svc.is_recurring === false) continue
     const visits = visitsByServiceType.get(svc.service_type_id) ?? []
     if (visits.length > 1) {
       const dates = computeEvenlySplitVisitDates(

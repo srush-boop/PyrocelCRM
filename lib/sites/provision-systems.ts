@@ -11,7 +11,7 @@ export interface ProvisionSystemSelection {
 
 type ServiceTypeDefaults = Pick<
   ServiceType,
-  'id' | 'default_frequency_value' | 'default_frequency_unit' | 'default_worker_type'
+  'id' | 'default_frequency_value' | 'default_frequency_unit' | 'default_worker_type' | 'is_recurring'
 >
 
 /**
@@ -71,14 +71,16 @@ export async function provisionSiteSystems(
     if (!system) return []
     return sel.serviceTypeIds.map((serviceTypeId) => {
       const st = serviceTypes.find((s) => s.id === serviceTypeId)
+      // Non-recurring / reactive services aren't on a cadence, so they get no
+      // scheduled next-service date (and no seeded task below).
+      const isRecurring = st?.is_recurring !== false
       return {
         site_id: siteId,
         service_type_id: serviceTypeId,
-        site_system_id: system.id,
         frequency_value: st?.default_frequency_value ?? 12,
         frequency_unit: st?.default_frequency_unit ?? 'months',
         worker_type: st?.default_worker_type ?? 'cdo',
-        next_service_date: isDead ? null : startDate,
+        next_service_date: isDead || !isRecurring ? null : startDate,
       }
     })
   })
@@ -94,12 +96,16 @@ export async function provisionSiteSystems(
   // 3. Live sites get seeded tasks for the setup month (multi-visit services
   //    spread across the cycle, handled by buildSeedTaskRows).
   if (!isDead && insertedServices && insertedServices.length > 0) {
-    const rows = insertedServices as {
+    const rows = (insertedServices as {
       id: string
       service_type_id: string
       frequency_value: number
       frequency_unit: 'weeks' | 'months'
-    }[]
+    }[]).map((r) => ({
+      ...r,
+      // buildSeedTaskRows skips non-recurring services so REM-MON etc. never seed.
+      is_recurring: serviceTypes.find((s) => s.id === r.service_type_id)?.is_recurring !== false,
+    }))
     const visitsByServiceType = await fetchVisitsByServiceType(
       supabase,
       rows.map((r) => r.service_type_id),

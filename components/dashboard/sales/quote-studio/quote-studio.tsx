@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState, type ComponentType } from 'react'
+import { useCallback, useMemo, useRef, useState, type ComponentType } from 'react'
 import { toast } from 'sonner'
 import {
   Sparkles,
@@ -24,6 +24,11 @@ import {
   Gauge,
   PoundSterling,
   CircleCheck,
+  Layers,
+  HelpCircle,
+  TriangleAlert,
+  Lightbulb,
+  Factory,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
@@ -46,11 +51,18 @@ import {
   draftBrief,
   buildStudioSpec,
   saveStudioQuote,
+  draftDisciplineSection,
   type StudioConfig,
   type StudioTakeoffItemInput,
   type StudioSpecPayload,
+  type StudioDiscipline,
+  type StudioAdditionalSystemInput,
 } from '@/app/(dashboard)/dashboard/sales/quote-studio/actions'
-import type { StudioUnderstanding, StudioRequirement } from '@/lib/ai/studio-draft'
+import type {
+  StudioUnderstanding,
+  StudioRequirement,
+  StudioDesignReasoning,
+} from '@/lib/ai/studio-draft'
 
 // ---------------------------------------------------------------- types
 
@@ -75,11 +87,22 @@ interface TakeoffRow {
   rationale?: string
 }
 
-type Phase = 'brief' | 'review' | 'takeoff' | 'document' | 'saved'
+/** An additional (non-fire) discipline quoted as its own priced section. */
+interface AdditionalSection {
+  uid: string
+  code: string
+  name: string
+  config: StudioConfig
+  rows: TakeoffRow[]
+  notes: string[]
+}
+
+type Phase = 'brief' | 'review' | 'design' | 'takeoff' | 'document' | 'saved'
 
 const PHASES: { id: Phase; label: string; icon: ComponentType<{ className?: string }> }[] = [
   { id: 'brief', label: 'Brief', icon: Wand2 },
   { id: 'review', label: 'AI draft', icon: ListChecks },
+  { id: 'design', label: 'Design rationale', icon: Layers },
   { id: 'takeoff', label: 'Devices & price', icon: ClipboardList },
   { id: 'document', label: 'Specification', icon: ScrollText },
 ]
@@ -114,7 +137,15 @@ function specToText(understanding: StudioUnderstanding, category: string, spec: 
 
 // ---------------------------------------------------------------- root
 
-export function QuoteStudio({ config, clients }: { config: StudioConfig; clients: StudioClient[] }) {
+export function QuoteStudio({
+  config,
+  clients,
+  disciplines = [],
+}: {
+  config: StudioConfig
+  clients: StudioClient[]
+  disciplines?: StudioDiscipline[]
+}) {
   const [phase, setPhase] = useState<Phase>('brief')
 
   // Brief + attachment
@@ -127,9 +158,15 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
   // Draft results (editable)
   const [understanding, setUnderstanding] = useState<StudioUnderstanding | null>(null)
   const [requirements, setRequirements] = useState<StudioRequirement[]>([])
+  const [designReasoning, setDesignReasoning] = useState<StudioDesignReasoning | null>(null)
   const [designCategory, setDesignCategory] = useState('L1')
   const [rows, setRows] = useState<TakeoffRow[]>([])
   const [margin, setMargin] = useState(40)
+  const [manufacturerId, setManufacturerId] = useState<string>('')
+  const [rangeId, setRangeId] = useState<string>('')
+  // Additional discipline sections (access control, intruder, CCTV, EL).
+  const [sections, setSections] = useState<AdditionalSection[]>([])
+  const [addingCode, setAddingCode] = useState<string | null>(null)
 
   // Async flags
   const [extracting, setExtracting] = useState(false)
@@ -141,6 +178,19 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
 
   const selectedClient = clients.find((c) => c.id === clientId)
 
+  const selectedRange = config.ranges.find((r) => r.id === rangeId)
+
+  // Resolve the catalogue part for a device key: range-specific part (when a
+  // range is selected) → device default.
+  const resolvePartId = useCallback(
+    (deviceKey: string): string | null => {
+      const dt = config.deviceTypes.find((d) => d.device_key === deviceKey)
+      const rangePart = selectedRange ? selectedRange.parts[deviceKey] : undefined
+      return rangePart ?? dt?.default_catalogue_item_id ?? null
+    },
+    [config.deviceTypes, selectedRange],
+  )
+
   // Live pricing preview (pure, recomputed from the editable schedule).
   const assembly = useMemo(() => {
     const items = rows
@@ -151,7 +201,7 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
           device_key: r.device_key,
           label: r.label,
           quantity: r.quantity,
-          catalogue_item_id: dt?.default_catalogue_item_id ?? null,
+          catalogue_item_id: resolvePartId(r.device_key),
           contributes_to_device_count: dt?.contributes_to_device_count ?? true,
         }
       })
@@ -162,9 +212,10 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
       catalogue: config.catalogue,
       zones: zoneCount,
       loops: null,
+      rangeId: rangeId || null,
       systemMargin: margin,
     })
-  }, [rows, config, margin])
+  }, [rows, config, margin, rangeId, resolvePartId])
 
   function resetAll() {
     setPhase('brief')
@@ -175,8 +226,12 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
     setWorkType('DSIC')
     setUnderstanding(null)
     setRequirements([])
+    setDesignReasoning(null)
     setDesignCategory('L1')
     setRows([])
+    setManufacturerId('')
+    setRangeId('')
+    setSections([])
     setSpec(null)
     setSavedId(null)
   }
@@ -223,6 +278,7 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
       const d = res.draft
       setUnderstanding(d.understanding)
       setRequirements(d.requirements)
+      setDesignReasoning(d.design ?? null)
       setDesignCategory(parseCategory(d.understanding.category))
       if (!prospectName && !clientId && d.understanding.clientName) {
         setProspectName(d.understanding.clientName)
@@ -268,7 +324,7 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
           label: r.label,
           zone: r.zone || null,
           quantity: r.quantity,
-          catalogue_item_id: null,
+          catalogue_item_id: resolvePartId(r.device_key),
           confidence: r.confidence,
           evidence: r.evidence,
         }))
@@ -301,7 +357,7 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
           label: r.label,
           zone: r.zone || null,
           quantity: r.quantity,
-          catalogue_item_id: null,
+          catalogue_item_id: resolvePartId(r.device_key),
           confidence: r.confidence,
           evidence: r.evidence,
         }))
@@ -312,14 +368,37 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
         designCategory,
         source: 'manual',
         margin,
+        rangeId: rangeId || null,
         client_id: clientId || null,
         site_id: siteId || null,
         prospect_name: clientId ? null : prospectName.trim(),
         understanding,
         requirements,
+        designReasoning,
         items,
         spec,
         specificationText: specToText(understanding, designCategory, spec),
+        additionalSystems: sections
+          .filter((s) => s.rows.some((r) => r.quantity > 0))
+          .map<StudioAdditionalSystemInput>((s) => ({
+            systemTypeCode: s.code,
+            margin,
+            rangeId: null,
+            summary: null,
+            specificationText: null,
+            items: s.rows
+              .filter((r) => r.quantity > 0)
+              .map((r) => ({
+                device_key: r.device_key,
+                label: r.label,
+                zone: r.zone || null,
+                quantity: r.quantity,
+                // Server re-resolves to the device default part.
+                catalogue_item_id: null,
+                confidence: r.confidence,
+                evidence: r.evidence,
+              })),
+          })),
       })
       if (!res.ok || !res.id) {
         toast.error(res.error ?? 'Could not save the quote.')
@@ -357,6 +436,77 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
         evidence: null,
       },
     ])
+  }
+
+  // Additional discipline section helpers -----------------------------
+  async function addSection(code: string) {
+    if (sections.some((s) => s.code === code)) return
+    setAddingCode(code)
+    try {
+      const res = await draftDisciplineSection(code, brief)
+      if (!res.ok || !res.config) {
+        toast.error(res.error ?? 'Could not add that system.')
+        return
+      }
+      const cfg = res.config
+      const secRows: TakeoffRow[] = (res.draft?.devices ?? [])
+        .filter((d) => d.quantity > 0)
+        .map((d) => {
+          const dt = cfg.deviceTypes.find((t) => t.device_key === d.device_key)
+          return {
+            uid: nextUid(),
+            device_key: d.device_key,
+            label: dt?.label ?? d.device_key,
+            zone: d.zone || 'Z1',
+            quantity: d.quantity,
+            confidence: 'low' as const,
+            evidence: null,
+            rationale: d.rationale,
+          }
+        })
+      setSections((prev) => [
+        ...prev,
+        { uid: nextUid(), code, name: cfg.systemTypeName, config: cfg, rows: secRows, notes: res.draft?.notes ?? [] },
+      ])
+      toast.success(`${cfg.systemTypeName} added as a separate section.`)
+    } catch {
+      toast.error('Could not add that system. Please try again.')
+    } finally {
+      setAddingCode(null)
+    }
+  }
+  function removeSection(uid: string) {
+    setSections((prev) => prev.filter((s) => s.uid !== uid))
+  }
+  function updateSectionRow(sectionUid: string, rowUid: string, patch: Partial<TakeoffRow>) {
+    setSections((prev) =>
+      prev.map((s) =>
+        s.uid === sectionUid
+          ? { ...s, rows: s.rows.map((r) => (r.uid === rowUid ? { ...r, ...patch } : r)) }
+          : s,
+      ),
+    )
+  }
+  function removeSectionRow(sectionUid: string, rowUid: string) {
+    setSections((prev) =>
+      prev.map((s) => (s.uid === sectionUid ? { ...s, rows: s.rows.filter((r) => r.uid !== rowUid) } : s)),
+    )
+  }
+  function addSectionRow(sectionUid: string, deviceKey: string) {
+    setSections((prev) =>
+      prev.map((s) => {
+        if (s.uid !== sectionUid) return s
+        const dt = s.config.deviceTypes.find((d) => d.device_key === deviceKey)
+        if (!dt) return s
+        return {
+          ...s,
+          rows: [
+            ...s.rows,
+            { uid: nextUid(), device_key: deviceKey, label: dt.label, zone: 'Z1', quantity: 1, confidence: 'manual', evidence: null },
+          ],
+        }
+      }),
+    )
   }
 
   return (
@@ -397,6 +547,14 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
           designCategory={designCategory}
           onCategory={setDesignCategory}
           onBack={() => setPhase('brief')}
+          onNext={() => setPhase(designReasoning ? 'design' : 'takeoff')}
+        />
+      )}
+
+      {phase === 'design' && (
+        <DesignStep
+          design={designReasoning}
+          onBack={() => setPhase('review')}
           onNext={() => setPhase('takeoff')}
         />
       )}
@@ -408,11 +566,29 @@ export function QuoteStudio({ config, clients }: { config: StudioConfig; clients
           assembly={assembly}
           margin={margin}
           onMargin={setMargin}
+          manufacturerId={manufacturerId}
+          rangeId={rangeId}
+          onManufacturer={(id) => {
+            setManufacturerId(id)
+            // Reset range to the manufacturer's default (or clear) so parts stay coherent.
+            const ranges = config.ranges.filter((r) => r.manufacturerId === id)
+            const def = ranges.find((r) => r.isDefault) ?? ranges[0]
+            setRangeId(def?.id ?? '')
+          }}
+          onRange={setRangeId}
           onUpdateRow={updateRow}
           onRemoveRow={removeRow}
           onAddRow={addRow}
+          disciplines={disciplines}
+          sections={sections}
+          addingCode={addingCode}
+          onAddSection={addSection}
+          onRemoveSection={removeSection}
+          onUpdateSectionRow={updateSectionRow}
+          onRemoveSectionRow={removeSectionRow}
+          onAddSectionRow={addSectionRow}
           buildingSpec={buildingSpec}
-          onBack={() => setPhase('review')}
+          onBack={() => setPhase(designReasoning ? 'design' : 'review')}
           onNext={handleBuildSpec}
         />
       )}
@@ -761,6 +937,188 @@ function ReviewStep({
   )
 }
 
+// ---------------------------------------------------------------- design rationale
+
+function DesignStep({
+  design,
+  onBack,
+  onNext,
+}: {
+  design: StudioDesignReasoning | null
+  onBack: () => void
+  onNext: () => void
+}) {
+  const areas = design?.areas ?? []
+  const assumptions = design?.assumptions ?? []
+  const openQuestions = design?.openQuestions ?? []
+  const otherDisciplines = design?.otherDisciplines ?? []
+  const totalDevices = areas.reduce(
+    (sum, a) => sum + a.devices.reduce((s, d) => s + (d.quantity || 0), 0),
+    0,
+  )
+
+  return (
+    <div className="flex flex-col gap-4">
+      <StepHeading
+        icon={Layers}
+        title="How the AI designed this"
+        description="Confirm the reasoning behind every quantity before it reaches the quote. Each line shows how the number was reached, the governing clause, and the assumption made."
+      />
+
+      {areas.length === 0 ? (
+        <Card>
+          <CardContent className="py-6 text-center text-sm text-muted-foreground">
+            No design breakdown was returned for this brief. You can still confirm the schedule on the next step.
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary" className="gap-1">
+              <Layers className="h-3 w-3" />
+              {areas.length} area{areas.length === 1 ? '' : 's'}
+            </Badge>
+            <Badge variant="secondary" className="gap-1">
+              <ClipboardList className="h-3 w-3" />
+              {totalDevices} device{totalDevices === 1 ? '' : 's'} reasoned
+            </Badge>
+          </div>
+
+          {areas.map((area, i) => (
+            <Card key={i}>
+              <CardContent className="flex flex-col gap-3 p-4">
+                <div>
+                  <h3 className="text-sm font-bold text-balance">{area.name}</h3>
+                  {area.description && (
+                    <p className="text-xs text-muted-foreground text-pretty">{area.description}</p>
+                  )}
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+                        <th className="pb-2 font-medium">Device</th>
+                        <th className="w-16 pb-2 text-right font-medium">Qty</th>
+                        <th className="pb-2 pl-3 font-medium">How it was reached</th>
+                        <th className="w-28 pb-2 pl-3 font-medium">Clause</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {area.devices.map((d, j) => (
+                        <tr key={j} className="border-b align-top last:border-0">
+                          <td className="py-2 pr-2 font-medium">{d.label}</td>
+                          <td className="py-2 text-right tabular-nums">{d.quantity}</td>
+                          <td className="py-2 pl-3 text-muted-foreground">
+                            <span className="text-pretty">{d.basis}</span>
+                            {d.assumption && (
+                              <span className="mt-1 flex items-start gap-1 text-xs text-amber-600">
+                                <Info className="mt-0.5 h-3 w-3 shrink-0" />
+                                <span className="text-pretty">Assumes: {d.assumption}</span>
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 pl-3">
+                            {d.clause ? (
+                              <Badge variant="outline" className="whitespace-nowrap text-xs">
+                                {d.clause}
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </>
+      )}
+
+      {assumptions.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-col gap-2 p-4">
+            <div className="flex items-center gap-2">
+              <Lightbulb className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-bold uppercase tracking-wide">Assumptions the AI made</h3>
+            </div>
+            <ul className="flex flex-col gap-1.5">
+              {assumptions.map((a, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/50" />
+                  <span className="text-pretty">{a}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {openQuestions.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-col gap-2 p-4">
+            <div className="flex items-center gap-2">
+              <HelpCircle className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-bold uppercase tracking-wide">Open questions for the designer</h3>
+            </div>
+            <ul className="flex flex-col gap-1.5">
+              {openQuestions.map((q, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/50" />
+                  <span className="text-pretty">{q}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {otherDisciplines.length > 0 && (
+        <Card className="border-amber-500/40 bg-amber-500/5">
+          <CardContent className="flex flex-col gap-3 p-4">
+            <div className="flex items-center gap-2">
+              <TriangleAlert className="h-4 w-4 text-amber-600" />
+              <h3 className="text-sm font-bold uppercase tracking-wide text-amber-700">
+                Also detected — quote separately
+              </h3>
+            </div>
+            <p className="text-xs text-muted-foreground text-pretty">
+              This quote covers fire detection &amp; alarm only. The brief also implies the following — raise
+              separate quotes so nothing is missed.
+            </p>
+            <div className="flex flex-col gap-2">
+              {otherDisciplines.map((o, i) => (
+                <div
+                  key={i}
+                  className="flex items-start justify-between gap-3 rounded-md border border-amber-500/30 bg-background/60 p-2.5"
+                >
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold">{o.system}</span>
+                    <span className="text-xs text-muted-foreground text-pretty">{o.evidence}</span>
+                  </div>
+                  <Badge variant="secondary" className="shrink-0 gap-1">
+                    <Gauge className="h-3 w-3" />
+                    {o.confidence}%
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <StepNav
+        onBack={onBack}
+        backLabel="AI draft"
+        onNext={onNext}
+        nextLabel="Looks right — build schedule"
+      />
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------- takeoff
 
 function TakeoffStep({
@@ -769,9 +1127,21 @@ function TakeoffStep({
   assembly,
   margin,
   onMargin,
+  manufacturerId,
+  rangeId,
+  onManufacturer,
+  onRange,
   onUpdateRow,
   onRemoveRow,
   onAddRow,
+  disciplines,
+  sections,
+  addingCode,
+  onAddSection,
+  onRemoveSection,
+  onUpdateSectionRow,
+  onRemoveSectionRow,
+  onAddSectionRow,
   buildingSpec,
   onBack,
   onNext,
@@ -781,14 +1151,28 @@ function TakeoffStep({
   assembly: ReturnType<typeof buildAssembly>
   margin: number
   onMargin: (v: number) => void
+  manufacturerId: string
+  rangeId: string
+  onManufacturer: (id: string) => void
+  onRange: (id: string) => void
   onUpdateRow: (uid: string, patch: Partial<TakeoffRow>) => void
   onRemoveRow: (uid: string) => void
   onAddRow: (deviceKey: string) => void
+  disciplines: StudioDiscipline[]
+  sections: AdditionalSection[]
+  addingCode: string | null
+  onAddSection: (code: string) => void
+  onRemoveSection: (uid: string) => void
+  onUpdateSectionRow: (sectionUid: string, rowUid: string, patch: Partial<TakeoffRow>) => void
+  onRemoveSectionRow: (sectionUid: string, rowUid: string) => void
+  onAddSectionRow: (sectionUid: string, deviceKey: string) => void
   buildingSpec: boolean
   onBack: () => void
   onNext: () => void
 }) {
   const [addKey, setAddKey] = useState('')
+  const rangesForManufacturer = config.ranges.filter((r) => r.manufacturerId === manufacturerId)
+  const availableDisciplines = disciplines.filter((d) => !sections.some((s) => s.code === d.code))
   return (
     <div className="flex flex-col gap-4">
       <StepHeading
@@ -807,6 +1191,66 @@ function TakeoffStep({
           </p>
         </CardContent>
       </Card>
+
+      {config.manufacturers.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-col gap-3 p-4">
+            <div className="flex items-center gap-2">
+              <Factory className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-bold uppercase tracking-wide">Equipment manufacturer</h3>
+            </div>
+            <p className="text-xs text-muted-foreground text-pretty">
+              Choose the manufacturer range for this design. The schedule is priced with that range&apos;s parts and its
+              real current draws feed the battery calculation. Leave blank to use the generic default parts.
+            </p>
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-muted-foreground">Manufacturer</label>
+                <Select value={manufacturerId} onValueChange={onManufacturer}>
+                  <SelectTrigger className="w-52">
+                    <SelectValue placeholder="Generic / unspecified" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {config.manufacturers.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-muted-foreground">Range</label>
+                <Select value={rangeId} onValueChange={onRange} disabled={!manufacturerId}>
+                  <SelectTrigger className="w-52">
+                    <SelectValue placeholder={manufacturerId ? 'Select a range…' : 'Choose a manufacturer first'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {rangesForManufacturer.map((r) => (
+                      <SelectItem key={r.id} value={r.id}>
+                        {r.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {manufacturerId && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground"
+                  onClick={() => {
+                    onManufacturer('')
+                    onRange('')
+                  }}
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="flex flex-col gap-3 p-4">
@@ -976,6 +1420,56 @@ function TakeoffStep({
         </CardContent>
       </Card>
 
+      {/* Additional disciplines — quoted as their own priced sections. */}
+      {(disciplines.length > 0 || sections.length > 0) && (
+        <Card>
+          <CardContent className="flex flex-col gap-3 p-4">
+            <div className="flex items-center gap-2">
+              <Layers className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-bold uppercase tracking-wide">Additional systems</h3>
+            </div>
+            <p className="text-xs text-muted-foreground text-pretty">
+              Quote other disciplines (access control, intruder, CCTV, emergency lighting) alongside the fire alarm.
+              Each is priced as its own section on the same quote and can be confirmed independently.
+            </p>
+
+            {sections.map((s) => (
+              <SectionCard
+                key={s.uid}
+                section={s}
+                margin={margin}
+                onRemove={() => onRemoveSection(s.uid)}
+                onUpdateRow={(rowUid, patch) => onUpdateSectionRow(s.uid, rowUid, patch)}
+                onRemoveRow={(rowUid) => onRemoveSectionRow(s.uid, rowUid)}
+                onAddRow={(deviceKey) => onAddSectionRow(s.uid, deviceKey)}
+              />
+            ))}
+
+            {availableDisciplines.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                {availableDisciplines.map((d) => (
+                  <Button
+                    key={d.code}
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    disabled={addingCode !== null}
+                    onClick={() => onAddSection(d.code)}
+                  >
+                    {addingCode === d.code ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Plus className="h-4 w-4" />
+                    )}
+                    {d.name}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <div className="flex items-center justify-between gap-3 pt-2">
         <Button variant="ghost" onClick={onBack} className="gap-2">
           <ArrowLeft className="h-4 w-4" />
@@ -986,6 +1480,166 @@ function TakeoffStep({
           {buildingSpec ? 'Building specification…' : 'Build specification'}
         </Button>
       </div>
+    </div>
+  )
+}
+
+function SectionCard({
+  section,
+  margin,
+  onRemove,
+  onUpdateRow,
+  onRemoveRow,
+  onAddRow,
+}: {
+  section: AdditionalSection
+  margin: number
+  onRemove: () => void
+  onUpdateRow: (rowUid: string, patch: Partial<TakeoffRow>) => void
+  onRemoveRow: (rowUid: string) => void
+  onAddRow: (deviceKey: string) => void
+}) {
+  const [addKey, setAddKey] = useState('')
+  // Live price preview for this discipline (device default parts).
+  const sectionAssembly = useMemo(() => {
+    const items = section.rows
+      .filter((r) => r.quantity > 0)
+      .map((r) => {
+        const dt = section.config.deviceTypes.find((d) => d.device_key === r.device_key)
+        return {
+          device_key: r.device_key,
+          label: r.label,
+          quantity: r.quantity,
+          catalogue_item_id: dt?.default_catalogue_item_id ?? null,
+          contributes_to_device_count: dt?.contributes_to_device_count ?? true,
+        }
+      })
+    return buildAssembly({
+      items,
+      kitRules: section.config.kitRules,
+      catalogue: section.config.catalogue,
+      loops: null,
+      systemMargin: margin,
+    })
+  }, [section, margin])
+
+  return (
+    <div className="rounded-lg border bg-muted/30 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary">{section.name}</Badge>
+          {section.notes.length > 0 && (
+            <span className="text-xs text-muted-foreground">{section.notes[0]}</span>
+          )}
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-1.5 text-muted-foreground hover:text-destructive"
+          onClick={onRemove}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Remove
+        </Button>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <th className="pb-1.5 font-medium">Device</th>
+              <th className="pb-1.5 font-medium">Zone</th>
+              <th className="w-20 pb-1.5 text-right font-medium">Qty</th>
+              <th className="w-10 pb-1.5" />
+            </tr>
+          </thead>
+          <tbody>
+            {section.rows.length === 0 && (
+              <tr>
+                <td colSpan={4} className="py-4 text-center text-xs text-muted-foreground">
+                  No devices yet — add one below.
+                </td>
+              </tr>
+            )}
+            {section.rows.map((r) => (
+              <tr key={r.uid} className="border-b last:border-0">
+                <td className="py-1.5 pr-2 font-medium">{r.label}</td>
+                <td className="py-1.5 pr-2">
+                  <Input
+                    value={r.zone}
+                    onChange={(e) => onUpdateRow(r.uid, { zone: e.target.value })}
+                    className="h-8 w-28"
+                  />
+                </td>
+                <td className="py-1.5 text-right">
+                  <Input
+                    type="number"
+                    min={0}
+                    value={r.quantity}
+                    onChange={(e) =>
+                      onUpdateRow(r.uid, {
+                        quantity: Math.max(0, Number.parseInt(e.target.value || '0', 10)),
+                        confidence: 'manual',
+                      })
+                    }
+                    className="h-8 w-20 text-right tabular-nums"
+                  />
+                </td>
+                <td className="py-1.5 text-right">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-muted-foreground hover:text-destructive"
+                    onClick={() => onRemoveRow(r.uid)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Select value={addKey} onValueChange={setAddKey}>
+            <SelectTrigger className="h-8 w-52">
+              <SelectValue placeholder="Add a device…" />
+            </SelectTrigger>
+            <SelectContent>
+              {section.config.deviceTypes.map((d) => (
+                <SelectItem key={d.device_key} value={d.device_key}>
+                  {d.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            disabled={!addKey}
+            onClick={() => {
+              if (addKey) {
+                onAddRow(addKey)
+                setAddKey('')
+              }
+            }}
+          >
+            <Plus className="h-4 w-4" />
+            Add
+          </Button>
+        </div>
+        <span className="text-sm font-bold">
+          Sell <span className="tabular-nums">{gbp(sectionAssembly.totalSellPence)}</span>
+        </span>
+      </div>
+      {sectionAssembly.unmappedKeys.length > 0 && (
+        <p className="mt-1.5 text-xs text-destructive">
+          {sectionAssembly.unmappedKeys.length} item(s) have no catalogue cost yet — add prices via Settings → Data.
+        </p>
+      )}
     </div>
   )
 }

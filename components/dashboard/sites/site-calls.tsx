@@ -45,7 +45,7 @@ import { SystemIcon, getSystemColors } from '@/lib/system-types'
 import { isDamperService } from '@/lib/dampers'
 import { isExtinguisherService } from '@/lib/extinguishers'
 import type { Task, SiteService, ServiceType, Profile, SystemType, TaskResult, ToleranceUnit } from '@/lib/types/database'
-import { isCallOverdue } from '@/lib/kpi'
+import { isCallOverdue, getCallTargetDate } from '@/lib/kpi'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -127,22 +127,22 @@ function calcValue(call: SiteCall): number | null {
 function CallCard({ call, onSendReport }: { call: SiteCall; onSendReport?: (c: SiteCall) => void }) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  // Overdue only once the client KPI target date has expired (weekly/monthly
-  // recurring PPM stays tied to the due week/month).
-  const isOverdue = isCallOverdue(
-    {
-      scheduledDate: call.scheduled_date,
-      status: call.status,
-      isRecurring: call.site_service?.service_type?.is_recurring,
-      frequencyValue: call.site_service?.frequency_value,
-      frequencyUnit: call.site_service?.frequency_unit,
-      clientToleranceValue: call.site_service?.client_tolerance_value,
-      clientToleranceUnit: call.site_service?.client_tolerance_unit,
-      regulatoryToleranceValue: call.site_service?.service_type?.regulatory_tolerance_value,
-      regulatoryToleranceUnit: call.site_service?.service_type?.regulatory_tolerance_unit,
-    },
-    today,
-  )
+  // The client KPI "complete by" target date drives both the overdue state and
+  // the date shown in the tile (weekly/monthly recurring PPM stays tied to the
+  // due week/month).
+  const overdueInput = {
+    scheduledDate: call.scheduled_date,
+    status: call.status,
+    isRecurring: call.site_service?.service_type?.is_recurring,
+    frequencyValue: call.site_service?.frequency_value,
+    frequencyUnit: call.site_service?.frequency_unit,
+    clientToleranceValue: call.site_service?.client_tolerance_value,
+    clientToleranceUnit: call.site_service?.client_tolerance_unit,
+    regulatoryToleranceValue: call.site_service?.service_type?.regulatory_tolerance_value,
+    regulatoryToleranceUnit: call.site_service?.service_type?.regulatory_tolerance_unit,
+  }
+  const isOverdue = isCallOverdue(overdueInput, today)
+  const completeByDate = getCallTargetDate(overdueInput)
   const serviceName = getServiceName(call)
   const system = getSystem(call)
   const systemName = system?.name ?? null
@@ -174,6 +174,7 @@ function CallCard({ call, onSendReport }: { call: SiteCall; onSendReport?: (c: S
       result={call.task_result?.overall_status ?? null}
       reference={call.task_result?.reference_number ?? null}
       scheduledDate={call.scheduled_date}
+      completeByDate={completeByDate}
       completedDate={call.completed_at}
       isOverdue={isOverdue}
       engineerName={call.assigned_engineer?.full_name ?? ''}

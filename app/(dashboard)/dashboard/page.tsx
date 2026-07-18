@@ -28,7 +28,7 @@ import { AddRequestDialog } from '@/components/dashboard/requests/add-request-di
 import { ApprovalsWidget } from '@/components/dashboard/approvals/approvals-widget'
 import { LoneWorkerDashboardTiles } from '@/components/dashboard/lone-worker/lone-worker-dashboard-tiles'
 import { TileColorPicker } from '@/components/dashboard/home/tile-color-picker'
-import { tileIconStyle, tileAccentStyle } from '@/lib/dashboard-tile-colors'
+import { tileIconStyle, tileAccentStyle, tileCardStyle } from '@/lib/dashboard-tile-colors'
 import { getVisibleLeaveRequests } from '@/lib/leave-approvals'
 import { EngineerHome } from '@/components/dashboard/home/engineer-home'
 import { YourTasksTile } from '@/components/dashboard/internal-tasks/your-tasks-tile'
@@ -380,6 +380,7 @@ export default async function DashboardPage({
             <Card
               key={m.title}
               className="group relative h-full overflow-hidden transition-colors hover:border-primary/50 hover:bg-accent/40"
+              style={tileCardStyle(color)}
             >
               {/* Colour accent bar for personalised tiles. */}
               {iconStyle && (

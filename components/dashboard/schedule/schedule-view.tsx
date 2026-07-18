@@ -11,7 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { formatDateUK, formatBookedSlot } from '@/lib/utils'
-import { isCallOverdue } from '@/lib/kpi'
+import { isCallOverdue, getCallTargetDate } from '@/lib/kpi'
 import { bookExistingCall } from '@/app/(dashboard)/dashboard/schedule/book-call-actions'
 import {
   Select,
@@ -233,24 +233,22 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
-  // A call only reports as overdue once its client KPI target date has expired
-  // (weekly/monthly recurring PPM stays tied to the due week/month). Centralised
-  // in lib/kpi so the grid, tiles and portal all agree.
-  const taskOverdue = (task: TaskWithDetails) =>
-    isCallOverdue(
-      {
-        scheduledDate: task.scheduled_date,
-        status: task.status,
-        isRecurring: task.site_service?.service_type?.is_recurring,
-        frequencyValue: task.site_service?.frequency_value,
-        frequencyUnit: task.site_service?.frequency_unit,
-        clientToleranceValue: task.site_service?.client_tolerance_value,
-        clientToleranceUnit: task.site_service?.client_tolerance_unit,
-        regulatoryToleranceValue: task.site_service?.service_type?.regulatory_tolerance_value,
-        regulatoryToleranceUnit: task.site_service?.service_type?.regulatory_tolerance_unit,
-      },
-      today,
-    )
+  // The client KPI "complete by" target date drives both the overdue state and
+  // the date shown in the grid (weekly/monthly recurring PPM stays tied to the
+  // due week/month). Centralised in lib/kpi so grid, tiles and portal all agree.
+  const overdueInput = (task: TaskWithDetails) => ({
+    scheduledDate: task.scheduled_date,
+    status: task.status,
+    isRecurring: task.site_service?.service_type?.is_recurring,
+    frequencyValue: task.site_service?.frequency_value,
+    frequencyUnit: task.site_service?.frequency_unit,
+    clientToleranceValue: task.site_service?.client_tolerance_value,
+    clientToleranceUnit: task.site_service?.client_tolerance_unit,
+    regulatoryToleranceValue: task.site_service?.service_type?.regulatory_tolerance_value,
+    regulatoryToleranceUnit: task.site_service?.service_type?.regulatory_tolerance_unit,
+  })
+  const taskOverdue = (task: TaskWithDetails) => isCallOverdue(overdueInput(task), today)
+  const taskTargetDate = (task: TaskWithDetails) => getCallTargetDate(overdueInput(task))
 
   const isEngineer = profile.role === 'engineer'
   const isAdminOrOffice = profile.role === 'admin' || profile.role === 'office'
@@ -586,6 +584,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
         }
         status={task.status}
         scheduledDate={task.scheduled_date}
+        completeByDate={taskTargetDate(task)}
         isOverdue={isOverdue}
         engineerName={
           !isEngineer
@@ -716,7 +715,11 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
               </Badge>
             )}
             <span className="hidden text-xs text-muted-foreground md:inline">
-              {formatDateUK(task.scheduled_date)}
+              {formatDateUK(
+                task.status === 'completed'
+                  ? task.scheduled_date
+                  : (taskTargetDate(task) ?? task.scheduled_date),
+              )}
               {bookedSlot ? ` · ${bookedSlot}` : ''}
             </span>
             <Badge variant={config.variant} className="hidden text-[10px] sm:inline-flex">

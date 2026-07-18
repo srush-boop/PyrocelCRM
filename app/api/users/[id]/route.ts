@@ -72,6 +72,8 @@ export async function PUT(
       role_id,
       job_title,
       timesheet_required,
+      timesheet_approver_ids,
+      timesheet_processor_ids,
       home_postcode,
       phone,
       secondary_phone,
@@ -92,6 +94,8 @@ export async function PUT(
       role_id?: string | null
       job_title?: string | null
       timesheet_required?: boolean | null
+      timesheet_approver_ids?: string[]
+      timesheet_processor_ids?: string[]
       home_postcode?: string | null
       phone?: string | null
       secondary_phone?: string | null
@@ -225,6 +229,16 @@ export async function PUT(
     if (timesheet_required !== undefined) {
       profilePatch.timesheet_required =
         timesheet_required === null ? null : Boolean(timesheet_required)
+    }
+    // Per-user timesheet approver/processor overrides. Sanitise to a string[]
+    // of ids (empty = inherit the role default at resolution time).
+    const cleanIds = (v: unknown): string[] =>
+      Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+    if (timesheet_approver_ids !== undefined) {
+      profilePatch.timesheet_approver_ids = cleanIds(timesheet_approver_ids)
+    }
+    if (timesheet_processor_ids !== undefined) {
+      profilePatch.timesheet_processor_ids = cleanIds(timesheet_processor_ids)
     }
     // Holiday entitlement: accept a non-negative number or null to clear.
     const parseEntitlement = (v: unknown): number | null => {

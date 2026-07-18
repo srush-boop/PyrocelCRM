@@ -24,6 +24,12 @@ export interface Role {
   // Default labour cost per hour (integer pence) for people with this role. Used
   // to cost calls; a per-user `cost_per_hour_pence` override wins when set.
   cost_per_hour_pence: number | null
+  // Default timesheet approver(s) + processor(s) for this role. A per-user
+  // override (Profile.timesheet_approver_ids / _processor_ids) wins when set;
+  // otherwise these apply; otherwise approvers fall back to the person's
+  // manager and processors to office/admin. See resolveTimesheetApprovers().
+  timesheet_approver_ids: string[]
+  timesheet_processor_ids: string[]
   created_at: string
   updated_at: string
   }
@@ -37,6 +43,19 @@ export function isTimesheetRequired(
     return profile.timesheet_required
   }
   return profile.role_ref?.timesheet_required ?? false
+}
+
+// Resolve the *explicit* nominated approver (or processor) ids for a user:
+// a non-empty per-user list wins; otherwise the assigned role's list; otherwise
+// an empty array (the caller then applies the fallback — manager for approvers,
+// office/admin for processors).
+export function resolveExplicitTimesheetActors(
+  userList: string[] | null | undefined,
+  roleList: string[] | null | undefined,
+): string[] {
+  if (userList && userList.length > 0) return userList
+  if (roleList && roleList.length > 0) return roleList
+  return []
 }
 
 // Who performs a service. Independent of how the work is routed/assigned.
@@ -450,6 +469,11 @@ export interface Profile {
   // role; an explicit true/false overrides the role default. Resolve with
   // `isTimesheetRequired()`.
   timesheet_required: boolean | null
+  // Per-user timesheet approver(s) + processor(s). When non-empty these override
+  // the role defaults. Empty = inherit from role, then fall back (approvers ->
+  // manager; processors -> office/admin). See resolveTimesheetApprovers().
+  timesheet_approver_ids: string[]
+  timesheet_processor_ids: string[]
   // Engineer home location — the start/finish anchor for the calls-map route
   // preview and closeness hints. `home_postcode` is user-entered; the lat/lng
   // are geocoded from it (postcodes.io) on save, and re-tried on read if null.
@@ -844,6 +868,14 @@ export interface Timesheet {
   summary: unknown | null
   confirmed_task_instance_ids: string[]
   toolbox_reference: string | null
+  // Processing stage: once approved, a nominated processor confirms it as
+  // processed (toggleable). approved_by/approved_at hold the approver identity.
+  processed: boolean
+  processed_by: string | null
+  processed_at: string | null
+  // Dates the user confirmed as night-shift working. null = unset (UI falls back
+  // to the auto-suggested nights); an array (possibly empty) = explicit set.
+  night_shift_dates: string[] | null
   created_at: string
   updated_at: string
   // Optional embeds

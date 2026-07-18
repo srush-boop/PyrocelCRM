@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   CircleCheck,
   CircleAlert,
@@ -23,13 +24,19 @@ import {
   Clock,
   Loader2,
   ChevronDown,
+  ClipboardCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { TimesheetSummary } from '@/lib/timesheets/compute'
 import type { Timesheet } from '@/lib/types/database'
-import { approveTimesheet, rejectTimesheet } from '@/lib/actions/timesheets'
+import {
+  approveTimesheet,
+  rejectTimesheet,
+  setProcessed,
+} from '@/lib/actions/timesheets'
 
 type ReviewRow = Timesheet & { user_name: string | null }
+type CardMode = 'approve' | 'process'
 
 function hm(mins: number): string {
   const h = Math.floor(mins / 60)
@@ -48,31 +55,64 @@ function dateLabel(d: string): string {
   })
 }
 
-export function TimesheetReview({ initialQueue }: { initialQueue: ReviewRow[] }) {
-  const [queue] = useState(initialQueue)
+export function TimesheetReview({
+  approveQueue,
+  processQueue,
+}: {
+  approveQueue: ReviewRow[]
+  processQueue: ReviewRow[]
+}) {
+  const bothEmpty = approveQueue.length === 0 && processQueue.length === 0
 
-  if (queue.length === 0) {
+  if (bothEmpty) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center justify-center gap-2 py-16 text-center">
           <CircleCheck className="h-10 w-10 text-chart-2" />
           <p className="text-lg font-medium">All caught up</p>
-          <p className="text-muted-foreground">No timesheets are waiting for review.</p>
+          <p className="text-muted-foreground">
+            No timesheets are waiting to approve or process.
+          </p>
         </CardContent>
       </Card>
     )
   }
 
   return (
-    <div className="space-y-4">
-      {queue.map((row) => (
-        <ReviewCard key={row.id} row={row} />
-      ))}
+    <div className="space-y-8">
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-medium">To approve</h2>
+          <Badge variant="secondary">{approveQueue.length}</Badge>
+        </div>
+        {approveQueue.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nothing awaiting approval.</p>
+        ) : (
+          approveQueue.map((row) => <ReviewCard key={row.id} row={row} mode="approve" />)
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-medium">To process</h2>
+          <Badge variant="secondary">
+            {processQueue.filter((r) => !r.processed).length}
+          </Badge>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Approved timesheets ready for payroll processing. Tick when processed.
+        </p>
+        {processQueue.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nothing awaiting processing.</p>
+        ) : (
+          processQueue.map((row) => <ReviewCard key={row.id} row={row} mode="process" />)
+        )}
+      </section>
     </div>
   )
 }
 
-function ReviewCard({ row }: { row: ReviewRow }) {
+function ReviewCard({ row, mode }: { row: ReviewRow; mode: CardMode }) {
   const router = useRouter()
   const [expanded, setExpanded] = useState(false)
   const [rejectOpen, setRejectOpen] = useState(false)
@@ -103,7 +143,13 @@ function ReviewCard({ row }: { row: ReviewRow }) {
                 <CircleAlert className="h-3 w-3" /> Late
               </Badge>
             )}
-            <Badge className="capitalize">{row.status}</Badge>
+            {mode === 'process' && row.processed ? (
+              <Badge className="gap-1 bg-chart-2/15 text-chart-2">
+                <ClipboardCheck className="h-3 w-3" /> Processed
+              </Badge>
+            ) : (
+              <Badge className="capitalize">{row.status}</Badge>
+            )}
           </div>
         </div>
       </CardHeader>
@@ -179,31 +225,56 @@ function ReviewCard({ row }: { row: ReviewRow }) {
         )}
 
         {/* Actions */}
-        <div className="flex justify-end gap-2 border-t pt-3">
-          <Button
-            variant="outline"
-            onClick={() => setRejectOpen(true)}
-            disabled={pending}
-          >
-            Return for changes
-          </Button>
-          <Button
-            onClick={() =>
-              startTransition(async () => {
-                await approveTimesheet(row.id)
-                router.refresh()
-              })
-            }
-            disabled={pending}
-          >
-            {pending ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <CircleCheck className="mr-2 h-4 w-4" />
+        {mode === 'approve' ? (
+          <div className="flex justify-end gap-2 border-t pt-3">
+            <Button variant="outline" onClick={() => setRejectOpen(true)} disabled={pending}>
+              Return for changes
+            </Button>
+            <Button
+              onClick={() =>
+                startTransition(async () => {
+                  await approveTimesheet(row.id)
+                  router.refresh()
+                })
+              }
+              disabled={pending}
+            >
+              {pending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <CircleCheck className="mr-2 h-4 w-4" />
+              )}
+              Approve
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <Checkbox
+                checked={row.processed}
+                disabled={pending}
+                onCheckedChange={(v) =>
+                  startTransition(async () => {
+                    await setProcessed(row.id, v === true)
+                    router.refresh()
+                  })
+                }
+              />
+              Mark as processed
+            </label>
+            {row.processed && row.processed_at && (
+              <span className="text-xs text-muted-foreground">
+                Processed{' '}
+                {new Date(row.processed_at).toLocaleString('en-GB', {
+                  day: 'numeric',
+                  month: 'short',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </span>
             )}
-            Approve
-          </Button>
-        </div>
+          </div>
+        )}
       </CardContent>
 
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>

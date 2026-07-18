@@ -207,6 +207,9 @@ export function EngineersTable({
     role_id: NO_ROLE,
     // 'inherit' = use the assigned role's default; 'yes'/'no' = per-user override.
     timesheet_required: 'inherit' as 'inherit' | 'yes' | 'no',
+    // Per-user timesheet approver/processor overrides (empty = inherit role).
+    timesheet_approver_ids: [] as string[],
+    timesheet_processor_ids: [] as string[],
     employee_number: '',
     holiday_entitlement_days: '',
     holiday_entitlement_hours: '',
@@ -355,6 +358,8 @@ export function EngineersTable({
           : user.timesheet_required
             ? 'yes'
             : 'no',
+      timesheet_approver_ids: user.timesheet_approver_ids ?? [],
+      timesheet_processor_ids: user.timesheet_processor_ids ?? [],
       employee_number: user.employee_number ?? '',
       holiday_entitlement_days:
         user.holiday_entitlement_days != null ? String(user.holiday_entitlement_days) : '',
@@ -417,6 +422,8 @@ export function EngineersTable({
             editForm.timesheet_required === 'inherit'
               ? null
               : editForm.timesheet_required === 'yes',
+          timesheet_approver_ids: editForm.timesheet_approver_ids,
+          timesheet_processor_ids: editForm.timesheet_processor_ids,
           employee_number: editForm.employee_number.trim() || null,
           holiday_entitlement_days: days === '' ? null : Number(days),
           holiday_entitlement_hours: hours === '' ? null : Number(hours),
@@ -833,6 +840,70 @@ export function EngineersTable({
                 <p className="text-xs text-muted-foreground">Overrides the role&apos;s default for this user.</p>
               </div>
             </div>
+            {editForm.timesheet_required !== 'no' && (
+              <div className="grid gap-4 rounded-lg border p-3 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <p className="text-sm font-medium">Timesheet approvals</p>
+                  <p className="text-xs text-muted-foreground">
+                    Who approves and processes this user&apos;s timesheets. Leave empty to
+                    inherit the role default; if that is also empty, approval falls back to
+                    the nominated manager and processing to office/admin.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Approver(s)</Label>
+                  <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border p-2">
+                    {users
+                      .filter((u) => u.id !== editUser?.id && u.role !== 'client')
+                      .map((u) => (
+                        <label key={u.id} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-input"
+                            checked={editForm.timesheet_approver_ids.includes(u.id)}
+                            onChange={() =>
+                              setEditForm({
+                                ...editForm,
+                                timesheet_approver_ids:
+                                  editForm.timesheet_approver_ids.includes(u.id)
+                                    ? editForm.timesheet_approver_ids.filter((x) => x !== u.id)
+                                    : [...editForm.timesheet_approver_ids, u.id],
+                              })
+                            }
+                          />
+                          {u.full_name || u.email}
+                        </label>
+                      ))}
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Processor(s)</Label>
+                  <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border p-2">
+                    {users
+                      .filter((u) => u.id !== editUser?.id && u.role !== 'client')
+                      .map((u) => (
+                        <label key={u.id} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-input"
+                            checked={editForm.timesheet_processor_ids.includes(u.id)}
+                            onChange={() =>
+                              setEditForm({
+                                ...editForm,
+                                timesheet_processor_ids:
+                                  editForm.timesheet_processor_ids.includes(u.id)
+                                    ? editForm.timesheet_processor_ids.filter((x) => x !== u.id)
+                                    : [...editForm.timesheet_processor_ids, u.id],
+                              })
+                            }
+                          />
+                          {u.full_name || u.email}
+                        </label>
+                      ))}
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="edit-status">Status</Label>

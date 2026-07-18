@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import type { Profile, Timesheet, TimesheetManualEntry, Role } from '@/lib/types/database'
-import { isTimesheetRequired } from '@/lib/types/database'
+import { isTimesheetRequired, resolveExplicitTimesheetActors } from '@/lib/types/database'
 import { notifyUsers } from '@/lib/notifications'
 import {
   computeTimesheet,
@@ -27,6 +27,7 @@ import {
 
 const TIMESHEET_PATH = '/dashboard/timesheet'
 const REVIEW_PATH = '/dashboard/timesheet/review'
+const APPROVALS_PATH = '/dashboard/approvals'
 
 async function getAuth() {
   const supabase = await createClient()
@@ -138,7 +139,7 @@ export async function getOrBuildTimesheet(
     work_start_time: (profile as any).work_start_time,
     work_end_time: (profile as any).work_end_time,
     lunch_minutes: (profile as any).lunch_minutes,
-  }, weekEnding, manualEntries)
+  }, weekEnding, manualEntries, ts.night_shift_dates)
 
   return {
     ok: true,
@@ -157,6 +158,7 @@ async function buildSummary(
   profile: TimesheetInputs['profile'],
   weekEnding: string,
   manualEntries: TimesheetManualEntry[],
+  nightShiftDates?: string[] | null,
 ): Promise<TimesheetSummary> {
   const dates = weekDates(weekEnding)
   const from = dates[0]
@@ -257,6 +259,7 @@ async function buildSummary(
     calendar,
     manual,
     config,
+    nightShiftDates: nightShiftDates ?? null,
   })
 }
 
@@ -309,6 +312,47 @@ export async function deleteManualEntry(id: string): Promise<{ ok: boolean; erro
   return { ok: true }
 }
 
+// --- Night-shift confirmation -----------------------------------------------
+
+/**
+ * Saves the user's explicit set of night-shift dates for a draft timesheet.
+ * A night shift no longer defaults on just because work ran into the evening;
+ * the user ticks each day that was genuinely night-shift working. Passing the
+ * full (possibly empty) list makes the choice explicit so the summary stops
+ * falling back to the auto-suggestion.
+ */
+export async function setNightShiftDates(input: {
+  timesheetId: string
+  dates: string[]
+}): Promise<{ ok: boolean; error?: string }> {
+  const auth = await getAuth()
+  if ('error' in auth) return { ok: false, error: auth.error as string }
+  const { supabase, userId } = auth
+
+  const { data: ts } = await supabase
+    .from('timesheets')
+    .select('id, user_id, status')
+    .eq('id', input.timesheetId)
+    .maybeSingle()
+  if (!ts) return { ok: false, error: 'Timesheet not found' }
+  if ((ts as Timesheet).user_id !== userId) return { ok: false, error: 'Not authorised' }
+  if ((ts as Timesheet).status !== 'draft' && (ts as Timesheet).status !== 'rejected') {
+    return { ok: false, error: 'This timesheet is locked.' }
+  }
+
+  // Constrain to this week's dates and de-dupe.
+  const valid = new Set(weekDates((ts as Timesheet).week_ending))
+  const cleaned = Array.from(new Set(input.dates.filter((d) => valid.has(d)))).sort()
+
+  const { error } = await supabase
+    .from('timesheets')
+    .update({ night_shift_dates: cleaned, updated_at: new Date().toISOString() })
+    .eq('id', input.timesheetId)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(TIMESHEET_PATH)
+  return { ok: true }
+}
+
 // --- Submit / review --------------------------------------------------------
 
 /**
@@ -350,7 +394,7 @@ export async function submitTimesheet(input: {
     .from('timesheet_manual_entries')
     .select('*')
     .eq('timesheet_id', ts.id)
-  const summary = await buildSummary(supabase, profile as any, ts.week_ending, (manual as TimesheetManualEntry[]) ?? [])
+  const summary = await buildSummary(supabase, profile as any, ts.week_ending, (manual as TimesheetManualEntry[]) ?? [], ts.night_shift_dates)
 
   const late = new Date() > deadlineFor(ts.week_ending)
 
@@ -369,11 +413,11 @@ export async function submitTimesheet(input: {
     .eq('id', ts.id)
   if (error) return { ok: false, error: error.message }
 
-  // Notify the manager (fall back to none — cron/review queue still surfaces it).
-  const managerId = (profile as { manager_id?: string | null }).manager_id
-  if (managerId) {
+  // Notify the resolved approver(s) — per-user/role nominees, else the manager.
+  const { approverIds } = await resolveTimesheetActors(supabase, userId)
+  if (approverIds.length > 0) {
     await notifyUsers({
-      userIds: [managerId],
+      userIds: approverIds,
       title: 'Timesheet submitted for review',
       body: `${(profile as { full_name?: string }).full_name ?? 'A team member'} submitted their timesheet for week ending ${ts.week_ending}${late ? ' (late)' : ''}.`,
       url: REVIEW_PATH,
@@ -387,6 +431,66 @@ export async function submitTimesheet(input: {
   return { ok: true }
 }
 
+/**
+ * Resolve the effective approver + processor user-ids for a timesheet owner.
+ *   - Approvers: per-user list > role list > [manager] (fallback).
+ *   - Processors: per-user list > role list > all office/admin users (fallback).
+ * Returns de-duplicated id arrays. Used both to notify the right people and to
+ * authorise approve/process actions.
+ */
+async function resolveTimesheetActors(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ownerId: string,
+): Promise<{ approverIds: string[]; processorIds: string[] }> {
+  const { data: owner } = await supabase
+    .from('profiles')
+    .select(
+      'id, manager_id, role_id, timesheet_approver_ids, timesheet_processor_ids',
+    )
+    .eq('id', ownerId)
+    .maybeSingle()
+  if (!owner) return { approverIds: [], processorIds: [] }
+
+  const o = owner as {
+    manager_id: string | null
+    role_id: string | null
+    timesheet_approver_ids: string[] | null
+    timesheet_processor_ids: string[] | null
+  }
+
+  let roleApprovers: string[] = []
+  let roleProcessors: string[] = []
+  if (o.role_id) {
+    const { data: role } = await supabase
+      .from('roles')
+      .select('timesheet_approver_ids, timesheet_processor_ids')
+      .eq('id', o.role_id)
+      .maybeSingle()
+    roleApprovers = (role as { timesheet_approver_ids?: string[] } | null)?.timesheet_approver_ids ?? []
+    roleProcessors = (role as { timesheet_processor_ids?: string[] } | null)?.timesheet_processor_ids ?? []
+  }
+
+  // Approvers.
+  let approverIds = resolveExplicitTimesheetActors(o.timesheet_approver_ids, roleApprovers)
+  if (approverIds.length === 0 && o.manager_id) approverIds = [o.manager_id]
+
+  // Processors.
+  let processorIds = resolveExplicitTimesheetActors(o.timesheet_processor_ids, roleProcessors)
+  if (processorIds.length === 0) {
+    const { data: officeAdmin } = await supabase
+      .from('profiles')
+      .select('id')
+      .in('role', ['admin', 'office'])
+      .eq('status', 'active')
+    processorIds = ((officeAdmin as { id: string }[]) ?? []).map((p) => p.id)
+  }
+
+  return {
+    approverIds: Array.from(new Set(approverIds)),
+    processorIds: Array.from(new Set(processorIds)),
+  }
+}
+
 async function requireReviewer(timesheetUserId: string) {
   const auth = await getAuth()
   if ('error' in auth) return auth
@@ -394,13 +498,23 @@ async function requireReviewer(timesheetUserId: string) {
   const { data: me } = await supabase.from('profiles').select('role').eq('id', userId).single()
   const role = (me as { role?: string } | null)?.role
   if (role === 'admin' || role === 'office') return auth
-  // Manager of the timesheet owner?
-  const { data: owner } = await supabase
-    .from('profiles')
-    .select('manager_id')
-    .eq('id', timesheetUserId)
-    .single()
-  if ((owner as { manager_id?: string } | null)?.manager_id === userId) return auth
+  // A nominated approver for this owner (per-user list, role list, or the
+  // fallback manager)?
+  const { approverIds } = await resolveTimesheetActors(supabase, timesheetUserId)
+  if (approverIds.includes(userId)) return auth
+  return { error: 'Not authorised' as const }
+}
+
+/** Authorise the caller as a processor for the given timesheet owner. */
+async function requireProcessor(timesheetUserId: string) {
+  const auth = await getAuth()
+  if ('error' in auth) return auth
+  const { supabase, userId } = auth
+  const { data: me } = await supabase.from('profiles').select('role').eq('id', userId).single()
+  const role = (me as { role?: string } | null)?.role
+  if (role === 'admin' || role === 'office') return auth
+  const { processorIds } = await resolveTimesheetActors(supabase, timesheetUserId)
+  if (processorIds.includes(userId)) return auth
   return { error: 'Not authorised' as const }
 }
 
@@ -413,7 +527,15 @@ export async function approveTimesheet(id: string): Promise<{ ok: boolean; error
   if ('error' in auth) return { ok: false, error: auth.error as string }
   const { error } = await auth.supabase
     .from('timesheets')
-    .update({ status: 'approved', approved_by: auth.userId, approved_at: new Date().toISOString() })
+    .update({
+      status: 'approved',
+      approved_by: auth.userId,
+      approved_at: new Date().toISOString(),
+      // Entering the processing stage fresh: clear any prior processed flag.
+      processed: false,
+      processed_by: null,
+      processed_at: null,
+    })
     .eq('id', id)
   if (error) return { ok: false, error: error.message }
   await notifyUsers({
@@ -424,8 +546,21 @@ export async function approveTimesheet(id: string): Promise<{ ok: boolean; error
     category: 'timesheet',
     createdBy: auth.userId,
   })
+  // Hand off to the nominated processor(s) for payroll processing.
+  const { processorIds } = await resolveTimesheetActors(auth.supabase, (ts as Timesheet).user_id)
+  if (processorIds.length > 0) {
+    await notifyUsers({
+      userIds: processorIds,
+      title: 'Timesheet ready to process',
+      body: 'An approved timesheet is ready for processing.',
+      url: APPROVALS_PATH,
+      category: 'timesheet',
+      createdBy: auth.userId,
+    })
+  }
   revalidatePath(REVIEW_PATH)
   revalidatePath(TIMESHEET_PATH)
+  revalidatePath(APPROVALS_PATH)
   return { ok: true }
 }
 
@@ -457,7 +592,11 @@ export async function rejectTimesheet(
   return { ok: true }
 }
 
-/** Timesheets awaiting review for the signed-in reviewer (manager/admin/office). */
+/**
+ * Timesheets awaiting approval for the signed-in approver. Office/admin see all
+ * submitted sheets; everyone else sees only sheets whose owner resolves to them
+ * as a nominated approver (per-user list, role list, or fallback manager).
+ */
 export async function getReviewQueue(): Promise<
   Array<Timesheet & { user_name: string | null }>
 > {
@@ -468,15 +607,91 @@ export async function getReviewQueue(): Promise<
   const role = (me as { role?: string } | null)?.role
   const isOfficeAdmin = role === 'admin' || role === 'office'
 
-  let query = supabase
+  const { data } = await supabase
     .from('timesheets')
-    .select('*, profiles!timesheets_user_id_fkey ( full_name, manager_id )')
-    .in('status', ['submitted', 'rejected'])
+    .select('*, profiles!timesheets_user_id_fkey ( full_name )')
+    .in('status', ['submitted'])
     .order('week_ending', { ascending: false })
 
-  const { data } = await query
-  const rows = ((data as any[]) ?? [])
-    .filter((t) => isOfficeAdmin || t.profiles?.manager_id === userId)
-    .map((t) => ({ ...(t as Timesheet), user_name: t.profiles?.full_name ?? null }))
-  return rows
+  const raw = (data as any[]) ?? []
+  let rows = raw
+  if (!isOfficeAdmin) {
+    const flags = await Promise.all(
+      raw.map(async (t) => {
+        const { approverIds } = await resolveTimesheetActors(supabase, t.user_id)
+        return approverIds.includes(userId)
+      }),
+    )
+    rows = raw.filter((_, i) => flags[i])
+  }
+  return rows.map((t) => ({ ...(t as Timesheet), user_name: t.profiles?.full_name ?? null }))
+}
+
+/**
+ * Approved timesheets awaiting (or completed) payroll processing for the
+ * signed-in processor. Office/admin see all approved sheets; everyone else sees
+ * only sheets whose owner resolves to them as a nominated processor.
+ */
+export async function getProcessingQueue(): Promise<
+  Array<Timesheet & { user_name: string | null }>
+> {
+  const auth = await getAuth()
+  if ('error' in auth) return []
+  const { supabase, userId } = auth
+  const { data: me } = await supabase.from('profiles').select('role').eq('id', userId).single()
+  const role = (me as { role?: string } | null)?.role
+  const isOfficeAdmin = role === 'admin' || role === 'office'
+
+  const { data } = await supabase
+    .from('timesheets')
+    .select('*, profiles!timesheets_user_id_fkey ( full_name )')
+    .eq('status', 'approved')
+    .order('processed', { ascending: true })
+    .order('week_ending', { ascending: false })
+
+  const raw = (data as any[]) ?? []
+  let rows = raw
+  if (!isOfficeAdmin) {
+    const flags = await Promise.all(
+      raw.map(async (t) => {
+        const { processorIds } = await resolveTimesheetActors(supabase, t.user_id)
+        return processorIds.includes(userId)
+      }),
+    )
+    rows = raw.filter((_, i) => flags[i])
+  }
+  return rows.map((t) => ({ ...(t as Timesheet), user_name: t.profiles?.full_name ?? null }))
+}
+
+/** Toggle the 'processed' flag on an approved timesheet (processor only). */
+export async function setProcessed(
+  id: string,
+  processed: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const base = await getAuth()
+  if ('error' in base) return { ok: false, error: base.error }
+  const { data: ts } = await base.supabase
+    .from('timesheets')
+    .select('user_id, status')
+    .eq('id', id)
+    .maybeSingle()
+  if (!ts) return { ok: false, error: 'Not found' }
+  if ((ts as Timesheet).status !== 'approved') {
+    return { ok: false, error: 'Only approved timesheets can be processed.' }
+  }
+  const auth = await requireProcessor((ts as Timesheet).user_id)
+  if ('error' in auth) return { ok: false, error: auth.error as string }
+  const { error } = await auth.supabase
+    .from('timesheets')
+    .update({
+      processed,
+      processed_by: processed ? auth.userId : null,
+      processed_at: processed ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(APPROVALS_PATH)
+  revalidatePath(REVIEW_PATH)
+  return { ok: true }
 }

@@ -114,9 +114,14 @@ export async function POST(request: NextRequest) {
     }[]
     const authorisedPoExists = poList.some((r) => !!r.authorised_at && !!r.po_number)
 
-    // PO required = client account requires a PO AND this call isn't exempt.
-    const poRequired = !!client?.requires_po && !task.po_not_required
-    // PO satisfied = a client reference is recorded OR an authorised PO exists.
+    // PO required = client account requires a PO, the call is chargeable, and
+    // this call isn't exempt. Non-chargeable work (e.g. routine PPM visits) never
+    // chases a PO even when the client account has requires_po set.
+    const poRequired =
+      !!client?.requires_po && !!task.chargeable && !task.po_not_required
+    // PO satisfied = a PO / client reference has already been entered on the call
+    // at the time of logging, OR an authorised PO exists. When satisfied we never
+    // create a new request.
     const poProvided = !!task.client_ref || authorisedPoExists
 
     // When a PO is required but missing, offer the client a link to provide it.

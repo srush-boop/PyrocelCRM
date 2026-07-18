@@ -10,6 +10,7 @@ import {
   subDays,
   startOfDay,
   endOfDay,
+  endOfWeek,
   isAfter,
   isBefore,
 } from 'date-fns'
@@ -104,6 +105,77 @@ export function classifyTask(
   }
   // Not completed: a miss only once the window has fully closed.
   return isAfter(today, window.end) ? 'overdue' : 'pending'
+}
+
+// ─── Call "overdue" reporting ────────────────────────────────────────────────
+// A pending call should NOT read as overdue the instant its due date slips: it
+// stays "pending" until the client KPI target date (the far edge of its
+// tolerance window) has actually expired. The one exception is weekly / monthly
+// recurring PPM, which is always expected to be done within the due week / month
+// — those get no tolerance extension.
+
+export interface CallOverdueInput {
+  /** The call's scheduled/due date. */
+  scheduledDate: string | Date | null
+  /** Call lifecycle status — only 'pending' calls can be overdue. */
+  status: string
+  /** Whether the underlying service type recurs on a PPM cadence. */
+  isRecurring?: boolean | null
+  /** Service cadence between visits (drives the weekly/monthly exception). */
+  frequencyValue?: number | null
+  frequencyUnit?: 'weeks' | 'months' | null
+  /** Client KPI override for this site/service, when set. */
+  clientToleranceValue?: number | null
+  clientToleranceUnit?: ToleranceUnit | null
+  /** Regulatory baseline the client tier falls back to when no override. */
+  regulatoryToleranceValue?: number | null
+  regulatoryToleranceUnit?: ToleranceUnit | null
+}
+
+/**
+ * Decide whether a call currently reports as overdue.
+ *
+ * - Weekly recurring: overdue only once the due week has ended.
+ * - Monthly recurring: overdue only once the due month has ended.
+ * - Everything else: overdue only once the client KPI target date (the end of
+ *   the client tolerance window, falling back to the regulatory standard) has
+ *   passed. With no KPI configured this collapses to the plain "past due date"
+ *   behaviour.
+ */
+export function isCallOverdue(
+  input: CallOverdueInput,
+  today: Date = new Date(),
+): boolean {
+  if (input.status !== 'pending') return false
+  const due = toDate(input.scheduledDate)
+  if (!due) return false
+
+  // Weekly / monthly recurring PPM must be completed within the due period.
+  if (input.isRecurring && (input.frequencyValue ?? 0) === 1) {
+    if (input.frequencyUnit === 'weeks') {
+      return isAfter(today, endOfWeek(due, { weekStartsOn: 1 }))
+    }
+    if (input.frequencyUnit === 'months') {
+      return isAfter(today, endOfMonth(due))
+    }
+  }
+
+  // Otherwise: hold until the client KPI target date expires. Prefer the
+  // per-site/service client override, else the regulatory baseline.
+  const tolerance: ToleranceConfig | null =
+    input.clientToleranceValue != null
+      ? { value: input.clientToleranceValue, unit: input.clientToleranceUnit ?? 'days' }
+      : input.regulatoryToleranceValue != null
+        ? {
+            value: input.regulatoryToleranceValue,
+            unit: input.regulatoryToleranceUnit ?? 'days',
+          }
+        : null
+
+  // No KPI configured → fall back to the plain past-due-date behaviour.
+  if (!tolerance) return isAfter(today, endOfDay(due))
+
+  return isAfter(today, getToleranceWindow(due, tolerance).end)
 }
 
 export interface ComplianceCounts {

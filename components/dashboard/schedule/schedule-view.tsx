@@ -11,6 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { formatDateUK, formatBookedSlot } from '@/lib/utils'
+import { isCallOverdue } from '@/lib/kpi'
 import { bookExistingCall } from '@/app/(dashboard)/dashboard/schedule/book-call-actions'
 import {
   Select,
@@ -231,6 +232,25 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
+
+  // A call only reports as overdue once its client KPI target date has expired
+  // (weekly/monthly recurring PPM stays tied to the due week/month). Centralised
+  // in lib/kpi so the grid, tiles and portal all agree.
+  const taskOverdue = (task: TaskWithDetails) =>
+    isCallOverdue(
+      {
+        scheduledDate: task.scheduled_date,
+        status: task.status,
+        isRecurring: task.site_service?.service_type?.is_recurring,
+        frequencyValue: task.site_service?.frequency_value,
+        frequencyUnit: task.site_service?.frequency_unit,
+        clientToleranceValue: task.site_service?.client_tolerance_value,
+        clientToleranceUnit: task.site_service?.client_tolerance_unit,
+        regulatoryToleranceValue: task.site_service?.service_type?.regulatory_tolerance_value,
+        regulatoryToleranceUnit: task.site_service?.service_type?.regulatory_tolerance_unit,
+      },
+      today,
+    )
 
   const isEngineer = profile.role === 'engineer'
   const isAdminOrOffice = profile.role === 'admin' || profile.role === 'office'
@@ -506,9 +526,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
       task.status === 'pending' || task.status === 'in_progress' || task.status === 'paused'
   )
   const completedTasks = sortedTasks.filter((task) => task.status === 'completed')
-  const overdueTasks = upcomingTasks.filter(
-    (task) => new Date(task.scheduled_date) < today && task.status === 'pending'
-  )
+  const overdueTasks = upcomingTasks.filter((task) => taskOverdue(task))
 
   // Inline control to pick up an open task. Only shown to admin/office for
   // unassigned, still-actionable tasks (e.g. CDO non-route work like dampers).
@@ -545,8 +563,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   }
 
   const TaskCard = ({ task }: { task: TaskWithDetails }) => {
-    const taskDate = new Date(task.scheduled_date)
-    const isOverdue = taskDate < today && task.status === 'pending'
+    const isOverdue = taskOverdue(task)
     const system = task.site_service?.service_type?.system_type
     const sysColors = getSystemColors(system?.color)
     const bookedSlot = formatBookedSlot(task.booked_start_time, task.booked_end_time)
@@ -624,8 +641,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
 
   const TaskRow = ({ task }: { task: TaskWithDetails }) => {
     const config = statusConfig[task.status]
-    const taskDate = new Date(task.scheduled_date)
-    const isOverdue = taskDate < today && task.status === 'pending'
+    const isOverdue = taskOverdue(task)
     const actionable =
       canPreviewCall &&
       task.status !== 'completed' &&

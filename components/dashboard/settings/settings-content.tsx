@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home, Wrench, HardHat, FileText, Database, PhoneCall, ShieldCheck, Receipt, Tags, Coins, Hash } from 'lucide-react'
+import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home, Wrench, HardHat, FileText, Database, PhoneCall, ShieldCheck, Receipt, Tags, Coins, Hash, ClipboardCheck } from 'lucide-react'
 import type { User as AuthUser } from '@supabase/supabase-js'
 import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType, DocumentTemplate } from '@/lib/types/database'
 import type { LoneWorkerManagedUser } from '@/app/(dashboard)/dashboard/lone-worker/actions'
@@ -29,6 +29,8 @@ import { RateCardsSettings } from './rate-cards-settings'
 import { ChargeTemplatesSettings } from './charge-templates-settings'
 import { NominalCodesSettings } from './nominal-codes-settings'
 import { DocumentTagsSettings } from './document-tags-settings'
+import { InternalTasksSettings } from './internal-tasks-settings'
+import type { InternalTaskTemplate } from '@/lib/types/database'
 import type { RateCard } from '@/lib/billing/rate-cards'
 import type { ChargeTemplate, NominalCode } from '@/lib/types/database'
 import type { TagWithUsage } from '@/lib/actions/document-tags'
@@ -57,9 +59,14 @@ interface SettingsContentProps {
   canManageTags: boolean
   documentTags: TagWithUsage[]
   openingHours: OpeningHours
+  canManageInternalTasks: boolean
+  internalTaskTemplates: InternalTaskTemplate[]
+  internalTaskUsers: Pick<Profile, 'id' | 'full_name' | 'role'>[]
+  internalTaskDepartments: Department[]
+  internalTaskRoles: Role[]
 }
 
-export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards, chargeTemplates, nominalCodes, canManageTags, documentTags, openingHours }: SettingsContentProps) {
+export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards, chargeTemplates, nominalCodes, canManageTags, documentTags, openingHours, canManageInternalTasks, internalTaskTemplates, internalTaskUsers, internalTaskDepartments, internalTaskRoles }: SettingsContentProps) {
   const isAdmin = profile.role === 'admin'
   // Templates are managed by office/admin (mail-merge letters for client correspondence).
   const canManageTemplates = profile.role === 'admin' || profile.role === 'office'
@@ -225,6 +232,12 @@ export function SettingsContent({ user, profile, company, branches, departments,
           <TabsTrigger value="tags" className="gap-2">
             <Tags className="h-4 w-4" />
             Tags
+          </TabsTrigger>
+        )}
+        {canManageInternalTasks && (
+          <TabsTrigger value="internal-tasks" className="gap-2">
+            <ClipboardCheck className="h-4 w-4" />
+            Internal Tasks
           </TabsTrigger>
         )}
       </TabsList>
@@ -474,6 +487,17 @@ export function SettingsContent({ user, profile, company, branches, departments,
       {canManageTags && (
         <TabsContent value="tags" className="space-y-4">
           <DocumentTagsSettings tags={documentTags} />
+        </TabsContent>
+      )}
+
+      {canManageInternalTasks && (
+        <TabsContent value="internal-tasks" className="space-y-4">
+          <InternalTasksSettings
+            templates={internalTaskTemplates}
+            departments={internalTaskDepartments}
+            roles={internalTaskRoles}
+            users={internalTaskUsers}
+          />
         </TabsContent>
       )}
 

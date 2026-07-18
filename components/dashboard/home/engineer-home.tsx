@@ -29,6 +29,7 @@ import { LocationSharingToggle } from '@/components/dashboard/home/location-shar
 import { LoneWorkerShiftCard } from '@/components/dashboard/lone-worker/lone-worker-shift-card'
 import { getEngineerEngagementStats } from '@/lib/engagement-stats'
 import { EngineerStandingCard } from '@/components/dashboard/home/engineer-standing-card'
+import { YourTasksTile } from '@/components/dashboard/internal-tasks/your-tasks-tile'
 
 // Greeting that reflects the time of day, so the home feels alive.
 function greeting(d: Date): string {
@@ -140,6 +141,9 @@ export async function EngineerHome({
       {/* Lone worker safety — start/finish shift and check-in frequency.
           Internal staff only; not shown to external sub-contractors. */}
       {!isSubcontractor && <LoneWorkerShiftCard />}
+
+      {/* Outstanding internal quality/management tasks (toolbox talks etc). */}
+      <YourTasksTile />
 
       {/* Today's schedule */}
       <Card>

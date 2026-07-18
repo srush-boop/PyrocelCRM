@@ -263,6 +263,24 @@ export async function saveInternalTaskTemplate(
   return { ok: true, id: (data as { id: string }).id }
 }
 
+/**
+ * Permanently deletes a template and (via ON DELETE CASCADE) every instance and
+ * completion recorded against it. Manager-only.
+ */
+export async function deleteInternalTaskTemplate(
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireManager()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { error } = await auth.supabase
+    .from('internal_task_templates')
+    .delete()
+    .eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(SETTINGS_PATH)
+  return { ok: true }
+}
+
 export async function setInternalTaskTemplateActive(
   id: string,
   active: boolean,

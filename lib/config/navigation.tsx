@@ -87,6 +87,17 @@ const sitesNavItem: NavItem = {
   icon: Building2,
 }
 
+// "Your Tasks" — recurring internal quality/management tasks (toolbox talks,
+// vehicle checks, nominations). Available to every user, including external
+// sub-contractors, so it is locked (can never be permission-toggled off).
+const myTasksNavItem: NavItem = {
+  key: 'my-tasks',
+  title: 'Your Tasks',
+  href: '/dashboard/my-tasks',
+  icon: ClipboardCheck,
+  locked: true,
+}
+
 // Service is a clickable group: clicking it opens the Service Dashboard and
 // expands its children (Service Dashboard, All Calls, Map, Transfers, Reports,
 // Defects). The `key` stays `calls` so existing per-user permissions still map.
@@ -401,6 +412,7 @@ const adminNavItems: NavItem[] = [
   sitesNavItem,
   adminCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
+  myTasksNavItem,
   chatNavItem,
   salesNavItem,
   jobsNavItem,
@@ -421,6 +433,7 @@ const officeNavItems: NavItem[] = [
   sitesNavItem,
   officeCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
+  myTasksNavItem,
   chatNavItem,
   salesNavItem,
   jobsNavItem,
@@ -437,6 +450,7 @@ const engineerNavItems: NavItem[] = [
   { key: 'home', title: 'Home', href: '/dashboard', icon: LayoutDashboard, locked: true },
   engineerCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
+  myTasksNavItem,
   chatNavItem,
   engineerPeopleNavItem,
   engineerStockNavItem,
@@ -463,6 +477,7 @@ const subcontractorCallsNavItem: NavItem = {
 const subcontractorNavItems: NavItem[] = [
   { key: 'home', title: 'Home', href: '/dashboard', icon: LayoutDashboard, locked: true },
   subcontractorCallsNavItem,
+  myTasksNavItem,
 ]
 
 // Returns the full default top-level menu for a role (before applying any

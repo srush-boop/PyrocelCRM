@@ -248,6 +248,16 @@ export function weekEndingFor(date: Date): string {
   return fmtDate(d)
 }
 
+/** Compute the Mon 09:00 deadline (local) for a Sunday week-ending date. */
+export function deadlineFor(weekEnding: string): Date {
+  const [y, m, d] = weekEnding.split('-').map(Number)
+  const sunday = new Date(y, (m || 1) - 1, d || 1)
+  const monday = new Date(sunday)
+  monday.setDate(sunday.getDate() + 1)
+  monday.setHours(9, 0, 0, 0)
+  return monday
+}
+
 /** The seven dates Mon..Sun for a Sunday week-ending. */
 export function weekDates(weekEnding: string): string[] {
   const end = localDate(weekEnding)

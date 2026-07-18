@@ -10,6 +10,7 @@ import {
   parseTimesheetConfig,
   weekDates,
   weekEndingFor,
+  deadlineFor,
   fmtDate,
   type TimesheetInputs,
   type TimesheetSummary,
@@ -34,16 +35,6 @@ async function getAuth() {
   } = await supabase.auth.getUser()
   if (!user) return { error: 'Not signed in' as const }
   return { supabase, userId: user.id }
-}
-
-/** Compute the Mon 09:00 deadline (local) for a Sunday week-ending date. */
-export function deadlineFor(weekEnding: string): Date {
-  const [y, m, d] = weekEnding.split('-').map(Number)
-  const sunday = new Date(y, (m || 1) - 1, d || 1)
-  const monday = new Date(sunday)
-  monday.setDate(sunday.getDate() + 1)
-  monday.setHours(9, 0, 0, 0)
-  return monday
 }
 
 export interface TimesheetView {
@@ -279,7 +270,7 @@ export async function addManualEntry(input: {
   description?: string
 }): Promise<{ ok: boolean; error?: string }> {
   const auth = await getAuth()
-  if ('error' in auth) return { ok: false, error: auth.error }
+  if ('error' in auth) return { ok: false, error: auth.error as string }
   const { supabase } = auth
 
   if (new Date(input.endAt) <= new Date(input.startAt)) {
@@ -311,7 +302,7 @@ export async function addManualEntry(input: {
 
 export async function deleteManualEntry(id: string): Promise<{ ok: boolean; error?: string }> {
   const auth = await getAuth()
-  if ('error' in auth) return { ok: false, error: auth.error }
+  if ('error' in auth) return { ok: false, error: auth.error as string }
   const { error } = await auth.supabase.from('timesheet_manual_entries').delete().eq('id', id)
   if (error) return { ok: false, error: error.message }
   revalidatePath(TIMESHEET_PATH)
@@ -332,7 +323,7 @@ export async function submitTimesheet(input: {
   toolboxReference?: string
 }): Promise<{ ok: boolean; error?: string }> {
   const auth = await getAuth()
-  if ('error' in auth) return { ok: false, error: auth.error }
+  if ('error' in auth) return { ok: false, error: auth.error as string }
   const { supabase, userId } = auth
 
   const { data: tsRow } = await supabase
@@ -419,7 +410,7 @@ export async function approveTimesheet(id: string): Promise<{ ok: boolean; error
   const { data: ts } = await base.supabase.from('timesheets').select('user_id, status').eq('id', id).maybeSingle()
   if (!ts) return { ok: false, error: 'Not found' }
   const auth = await requireReviewer((ts as Timesheet).user_id)
-  if ('error' in auth) return { ok: false, error: auth.error }
+  if ('error' in auth) return { ok: false, error: auth.error as string }
   const { error } = await auth.supabase
     .from('timesheets')
     .update({ status: 'approved', approved_by: auth.userId, approved_at: new Date().toISOString() })
@@ -440,14 +431,14 @@ export async function approveTimesheet(id: string): Promise<{ ok: boolean; error
 
 export async function rejectTimesheet(
   id: string,
-  reason: string,
+  reason?: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const base = await getAuth()
   if ('error' in base) return { ok: false, error: base.error }
   const { data: ts } = await base.supabase.from('timesheets').select('user_id').eq('id', id).maybeSingle()
   if (!ts) return { ok: false, error: 'Not found' }
   const auth = await requireReviewer((ts as Timesheet).user_id)
-  if ('error' in auth) return { ok: false, error: auth.error }
+  if ('error' in auth) return { ok: false, error: auth.error as string }
   const { error } = await auth.supabase
     .from('timesheets')
     .update({ status: 'rejected', rejection_reason: reason || 'No reason given', approved_by: null, approved_at: null })

@@ -34,6 +34,7 @@ import {
   ShieldCheck,
   GraduationCap,
   ClipboardCheck,
+  Clock,
   CalendarCheck,
   CalendarClock,
   TrendingUp,
@@ -95,6 +96,17 @@ const myTasksNavItem: NavItem = {
   title: 'Your Tasks',
   href: '/dashboard/my-tasks',
   icon: ClipboardCheck,
+  locked: true,
+}
+
+// "Timesheet" — weekly (Sun week-ending) timesheet. Only meaningful for users
+// with timesheet_required (resolved per-user/role); the page hard-gates access,
+// so the link is safe to show to internal field + office/admin roles.
+const timesheetNavItem: NavItem = {
+  key: 'timesheet',
+  title: 'Timesheet',
+  href: '/dashboard/timesheet',
+  icon: Clock,
   locked: true,
 }
 
@@ -303,6 +315,7 @@ const adminPeopleNavItem: NavItem = {
   icon: Users,
   children: [
     { title: 'Approvals', href: '/dashboard/approvals', icon: ClipboardCheck },
+    { title: 'Timesheets', href: '/dashboard/timesheet/review', icon: Clock },
     { title: 'Training', href: '/dashboard/training', icon: GraduationCap },
     { title: 'My Leave', href: '/dashboard/my-leave', icon: CalendarClock },
     { title: 'Leave Summary', href: '/dashboard/leave-summary', icon: CalendarCheck },
@@ -316,6 +329,7 @@ const officePeopleNavItem: NavItem = {
   icon: Users,
   children: [
     { title: 'Approvals', href: '/dashboard/approvals', icon: ClipboardCheck },
+    { title: 'Timesheets', href: '/dashboard/timesheet/review', icon: Clock },
     { title: 'Training', href: '/dashboard/training', icon: GraduationCap },
     { title: 'My Leave', href: '/dashboard/my-leave', icon: CalendarClock },
     { title: 'Leave Summary', href: '/dashboard/leave-summary', icon: CalendarCheck },
@@ -413,6 +427,7 @@ const adminNavItems: NavItem[] = [
   adminCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   myTasksNavItem,
+  timesheetNavItem,
   chatNavItem,
   salesNavItem,
   jobsNavItem,
@@ -434,6 +449,7 @@ const officeNavItems: NavItem[] = [
   officeCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   myTasksNavItem,
+  timesheetNavItem,
   chatNavItem,
   salesNavItem,
   jobsNavItem,
@@ -451,6 +467,7 @@ const engineerNavItems: NavItem[] = [
   engineerCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   myTasksNavItem,
+  timesheetNavItem,
   chatNavItem,
   engineerPeopleNavItem,
   engineerStockNavItem,

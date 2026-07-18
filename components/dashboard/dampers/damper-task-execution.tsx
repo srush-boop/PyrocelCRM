@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useShiftGate } from '@/components/dashboard/tasks/use-shift-gate'
+import { useCompletionExit } from '@/components/dashboard/tasks/use-completion-exit'
 import { useRouter } from 'next/navigation'
 import { CompletedReportActions } from '@/components/dashboard/reports/completed-report-actions'
 import { Button } from '@/components/ui/button'
@@ -13,16 +14,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { TaskHeader } from '@/components/dashboard/tasks/task-header'
 import { PauseResumeControls } from '@/components/dashboard/tasks/pause-resume-controls'
 import { Progress } from '@/components/ui/progress'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import {
   Dialog,
   DialogContent,
@@ -45,9 +36,7 @@ import {
   Loader2,
   Search,
   Wind,
-  FileText,
   Plus,
-  CheckCircle2,
 } from 'lucide-react'
 import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
 import { CallPartsPicker } from '@/components/dashboard/tasks/call-parts-picker'
@@ -147,17 +136,16 @@ export function DamperTaskExecution({
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [showSubmit, setShowSubmit] = useState(false)
   const [dampers, setDampers] = useState<Damper[]>(initialDampers)
   const [addOpen, setAddOpen] = useState(false)
   const [addForm, setAddForm] = useState(emptyDamperForm)
   const [addingDamper, setAddingDamper] = useState(false)
   const [highlightId, setHighlightId] = useState<string | null>(null)
   const [scanError, setScanError] = useState<string | null>(null)
-  const [showDone, setShowDone] = useState(false)
   const router = useRouter()
   const supabase = createClient()
   const { ensureOnShift, checking: checkingShift, shiftGateDialog } = useShiftGate()
+  const { runExit, nearbyPrompt } = useCompletionExit(profile.role)
 
   const [states, setStates] = useState<Record<string, InspectionState>>(() => {
     const map: Record<string, InspectionState> = {}
@@ -168,7 +156,7 @@ export function DamperTaskExecution({
     return map
   })
 
-  const isEngineer = profile.role === 'engineer'
+  const isEngineer = profile.role === 'engineer' || profile.role === 'subcontractor'
   // Paused inspections are read-only until resumed (see PauseResumeControls).
   const canEdit = status !== 'completed' && status !== 'cancelled' && status !== 'paused' && (isEngineer || profile.role !== 'engineer')
   // Office/admin can correct parts at any status (incl. completed); the engineer
@@ -327,17 +315,29 @@ export function DamperTaskExecution({
     const rows = await persistInspections(true)
     const today = new Date().toISOString().split('T')[0]
 
-    // Update each damper's latest result snapshot
+    // Update each damper's latest result snapshot. Rather than one round-trip
+    // per damper (slow on large sites), group by result value and issue a single
+    // batched update per distinct result — typically just pass/remedial/fail.
+    const nowIso = new Date().toISOString()
+    const idsByResult = new Map<DamperResult, string[]>()
     for (const row of rows) {
-      await supabase
-        .from('dampers')
-        .update({
-          latest_result: row.overall_result as DamperResult,
-          last_inspected_date: today,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', row.damper_id)
+      const result = row.overall_result as DamperResult
+      const ids = idsByResult.get(result)
+      if (ids) ids.push(row.damper_id)
+      else idsByResult.set(result, [row.damper_id])
     }
+    await Promise.all(
+      Array.from(idsByResult.entries()).map(([result, ids]) =>
+        supabase
+          .from('dampers')
+          .update({
+            latest_result: result,
+            last_inspected_date: today,
+            updated_at: nowIso,
+          })
+          .in('id', ids),
+      ),
+    )
 
     // Write a task_result summary so existing reports/dashboards work
     const overall = overallTaskStatus()
@@ -430,11 +430,10 @@ export function DamperTaskExecution({
       console.log('[v0] Visit billing request error:', err)
     }
 
-    setSubmitting(false)
-    setShowSubmit(false)
     setStatus('completed')
-    setShowDone(true)
-    router.refresh()
+    setSubmitting(false)
+    // No success screen / confirm — return to Calls (via nearby-calls prompt).
+    await runExit(task.id)
   }
 
   return (
@@ -575,12 +574,16 @@ export function DamperTaskExecution({
           </Button>
           <div className="flex flex-1 flex-col items-stretch gap-1">
             <Button
-              onClick={() => setShowSubmit(true)}
-              disabled={summary.tested < summary.total}
+              onClick={handleSubmit}
+              disabled={summary.tested < summary.total || submitting}
               className="w-full"
             >
-              <Send className="mr-2 h-4 w-4" />
-              Complete & Submit
+              {submitting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="mr-2 h-4 w-4" />
+              )}
+              {submitting ? 'Submitting…' : 'Complete & Submit'}
             </Button>
             {summary.tested < summary.total && (
               <p className="text-center text-xs text-muted-foreground">
@@ -591,28 +594,6 @@ export function DamperTaskExecution({
           </div>
         </div>
       )}
-
-      <AlertDialog open={showSubmit} onOpenChange={setShowSubmit}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Complete Damper Inspection</AlertDialogTitle>
-            <AlertDialogDescription>
-              You have tested {summary.tested} of {summary.total} dampers ({summary.passed} pass,{' '}
-              {summary.remedial} remedial, {summary.failed} fail). Submitting marks the task complete,
-              updates each damper&apos;s record, and emails the report.
-              {summary.tested < summary.total &&
-                ' Untested dampers will not be included in this report.'}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSubmit} disabled={submitting}>
-              {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Complete Inspection
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Add damper in the field */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
@@ -697,42 +678,8 @@ export function DamperTaskExecution({
         </DialogContent>
       </Dialog>
 
-      {/* Inspection complete — let the engineer choose what to do next */}
-      <Dialog open={showDone} onOpenChange={setShowDone}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-              <CheckCircle2 className="h-6 w-6 text-primary" />
-            </div>
-            <DialogTitle className="text-center">Inspection complete</DialogTitle>
-            <DialogDescription className="text-center">
-              The report has been generated and emailed to the site contacts. What would you
-              like to do next?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex-col gap-2 sm:flex-col">
-            {(profile.role === 'admin' || profile.role === 'office') && (
-              <Button
-                className="w-full"
-                onClick={() => router.push(`/dashboard/dampers/report/${task.id}`)}
-              >
-                <FileText className="mr-2 h-4 w-4" />
-                View report
-              </Button>
-            )}
-            <Button
-              variant={profile.role === 'admin' || profile.role === 'office' ? 'outline' : 'default'}
-              className="w-full"
-              onClick={() => {
-                setShowDone(false)
-                router.push('/dashboard')
-              }}
-            >
-              Return to tasks
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Post-completion: offer nearby overdue / due-soon calls, then Calls. */}
+      {nearbyPrompt}
     </div>
   )
 }

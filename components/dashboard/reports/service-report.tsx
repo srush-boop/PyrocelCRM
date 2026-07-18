@@ -124,9 +124,13 @@ function computeStats(input: ChecklistResult[]): ChecklistStats {
   let pass = 0
   let fail = 0
   let advisory = 0
+  let na = 0
   let other = 0
   for (const item of checklist) {
-    if (item.type === 'pass_fail') {
+    if (item.na) {
+      // N/A items (any type) carry no outcome and are tallied separately.
+      na++
+    } else if (item.type === 'pass_fail') {
       if (item.advisory) advisory++
       else if (item.passed) pass++
       else fail++
@@ -144,7 +148,7 @@ function computeStats(input: ChecklistResult[]): ChecklistStats {
     fail,
     remedial: 0,
     advisory,
-    na: 0,
+    na,
     other,
     passRate,
   }
@@ -323,7 +327,14 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
                       <tr className="border-t align-top odd:bg-muted/30">
                         <td className="px-3 py-2 font-medium">{item.label}</td>
                         <td className="px-3 py-2">
-                          {item.type === 'pass_fail' ? (
+                          {item.na ? (
+                            <span
+                              className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase text-white"
+                              style={{ backgroundColor: REPORT_COLORS.na }}
+                            >
+                              N/A
+                            </span>
+                          ) : item.type === 'pass_fail' ? (
                             <span
                               className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase text-white"
                               style={{

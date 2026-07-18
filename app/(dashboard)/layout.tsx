@@ -36,7 +36,10 @@ export default async function DashboardLayout({
     redirect('/portal')
   }
 
-  const isEngineer = (profile as Profile).role === 'engineer'
+  // Sub-contractors get the same mobile-first field UI as engineers (bottom
+  // nav, extra padding) but a heavily restricted navigation.
+  const role = (profile as Profile).role
+  const isEngineer = role === 'engineer' || role === 'subcontractor'
 
   return (
     <SidebarProvider>

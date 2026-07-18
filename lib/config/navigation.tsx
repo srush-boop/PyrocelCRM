@@ -443,6 +443,28 @@ const engineerNavItems: NavItem[] = [
   engineerAssetsNavItem,
 ]
 
+// Sub-contractors are external workers. They only ever see the calls allocated
+// to them plus the ability to pick up / book nearby calls — nothing internal
+// (no chat, people, stock, assets, calendar, reports, KPIs, etc.). Their Service
+// group opens straight to their Calls list. Every item is locked so it can never
+// be permission-toggled into exposing more of the app.
+const subcontractorCallsNavItem: NavItem = {
+  key: 'calls',
+  title: 'Calls',
+  href: '/dashboard/schedule',
+  icon: Wrench,
+  locked: true,
+  children: [
+    { title: 'My Calls', href: '/dashboard/schedule', icon: Calendar },
+    { title: 'Nearby Calls', href: '/dashboard/nearby', icon: Navigation },
+  ],
+}
+
+const subcontractorNavItems: NavItem[] = [
+  { key: 'home', title: 'Home', href: '/dashboard', icon: LayoutDashboard, locked: true },
+  subcontractorCallsNavItem,
+]
+
 // Returns the full default top-level menu for a role (before applying any
 // per-user permission overrides).
 export function getMenuForRole(role: UserRole): NavItem[] {
@@ -451,6 +473,8 @@ export function getMenuForRole(role: UserRole): NavItem[] {
       return adminNavItems
     case 'office':
       return officeNavItems
+    case 'subcontractor':
+      return subcontractorNavItems
     default:
       return engineerNavItems
   }

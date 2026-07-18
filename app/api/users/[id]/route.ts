@@ -125,7 +125,7 @@ export async function PUT(
     const callerIsOwner =
       (callerProfile.email ?? '').trim().toLowerCase() === LABOUR_COST_OWNER_EMAIL
 
-    const validRoles = ['admin', 'office', 'engineer', 'client']
+    const validRoles = ['admin', 'office', 'engineer', 'subcontractor', 'client']
     if (role && !validRoles.includes(role)) {
       return NextResponse.json({ error: 'Invalid role.' }, { status: 400 })
     }

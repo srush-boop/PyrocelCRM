@@ -79,7 +79,8 @@ import {
   ImageIcon,
   X,
   CornerDownRight,
-} from 'lucide-react'
+  Ban,
+  } from 'lucide-react'
 import type { 
   Profile, 
   TaskWithDetails, 
@@ -178,6 +179,8 @@ function buildInitialResults(
 // row's answer. Active rules reveal their requirements (photo/note/follow-ups)
 // and are enforced at submit; inactive rules stay hidden and are ignored.
 function isConditionActive(row: ChecklistResult, cond: ChecklistCondition): boolean {
+  // An item marked N/A carries no answer, so no follow-up rule can fire.
+  if (row.na) return false
   switch (cond.when) {
     case 'fail':
       return row.passed === false && !row.advisory
@@ -210,6 +213,38 @@ function isConditionActive(row: ChecklistResult, cond: ChecklistCondition): bool
     default:
       return false
   }
+}
+
+// Compact "N/A" toggle shown beside checkbox / text / number checklist inputs.
+// When active the item is marked not-applicable and excluded from the outcome.
+function NaToggle({
+  active,
+  disabled,
+  onToggle,
+}: {
+  active: boolean
+  disabled?: boolean
+  onToggle: () => void
+}) {
+  return (
+    <Button
+      type="button"
+      variant={active ? 'default' : 'outline'}
+      size="sm"
+      onClick={onToggle}
+      disabled={disabled}
+      className={cn(
+        'h-9 shrink-0 gap-1 px-3 text-xs font-semibold',
+        active
+          ? 'bg-muted-foreground text-background hover:bg-muted-foreground/90 border-muted-foreground'
+          : 'text-muted-foreground hover:text-foreground',
+      )}
+      aria-pressed={active}
+    >
+      <Ban className="h-4 w-4" />
+      N/A
+    </Button>
+  )
 }
 
 // Whether a follow-up row still needs an answer (only meaningful when required).
@@ -384,6 +419,10 @@ export function TaskExecution({
   const systemType = serviceType?.system_type
   const clientName = task.client?.name ?? site?.client?.name ?? null
   const isAdminOrOffice = profile.role === 'admin' || profile.role === 'office'
+  // Sub-contractors are external: they execute the checklist, add photos/notes,
+  // book/rebook and submit, but never see internal-only surfaces (parts pickers,
+  // costs/labour, transfers, further-works escalation, internal report actions).
+  const canSeeInternal = profile.role !== 'subcontractor'
 
   // Quick-assign (or reassign) this call to an engineer straight from the summary.
   const assignEngineer = async (value: string) => {
@@ -404,10 +443,11 @@ export function TaskExecution({
     
     // Advisory items are observations, not pass/fail outcomes, so they never
     // affect the overall result (a report of all passes + advisories is a pass).
-    // Conditional follow-up rows (parent_item_id set) are supplementary detail and
-    // never drive the overall pass/fail either.
+    // N/A items carry no answer and are likewise excluded. Conditional follow-up
+    // rows (parent_item_id set) are supplementary detail and never drive the
+    // overall pass/fail either.
     const passFailItems = checklistResults.filter(
-      (r) => r.type === 'pass_fail' && !r.advisory && !r.parent_item_id,
+      (r) => r.type === 'pass_fail' && !r.advisory && !r.na && !r.parent_item_id,
     )
     if (passFailItems.length === 0) return 'pass'
     
@@ -575,7 +615,9 @@ export function TaskExecution({
   }
 
   const [submitBlockers, setSubmitBlockers] = useState<string[]>([])
-  // Gate the submit dialog behind conditional-requirement validation.
+  // Complete the call. Validates conditional requirements first; there is no
+  // confirmation dialog — completing returns the engineer straight to Calls
+  // (or the nearby-calls prompt). handleSubmit is hoisted below.
   const handleAttemptSubmit = () => {
     const blockers = collectSubmitBlockers()
     if (blockers.length > 0) {
@@ -584,7 +626,7 @@ export function TaskExecution({
       return
     }
     setSubmitBlockers([])
-    setShowSubmitDialog(true)
+    void handleSubmit()
   }
   const checklistCardRef = useRef<HTMLDivElement>(null)
 
@@ -772,6 +814,7 @@ export function TaskExecution({
     // Before leaving, check for overdue / due-soon calls at other nearby sites so
     // the engineer can take them on while they're in the area (avoids sending a
     // second engineer out later). Best-effort — never block completion on it.
+    // Internal engineers only — sub-contractors go straight back to Calls.
     if (profile.role === 'engineer') {
       try {
         const res = await findNearbyOverdueCalls({ fromTaskId: task.id })
@@ -798,7 +841,8 @@ export function TaskExecution({
     router.refresh()
   }
 
-  const isEngineer = profile.role === 'engineer'
+  // Sub-contractors execute their allocated tasks exactly like engineers.
+  const isEngineer = profile.role === 'engineer' || profile.role === 'subcontractor'
   // Paused inspections are read-only until resumed (see PauseResumeControls).
   const canEdit = isEngineer && status !== 'completed' && status !== 'cancelled' && status !== 'paused'
 
@@ -1276,15 +1320,15 @@ export function TaskExecution({
                         <Label className="text-base font-medium">{result.label}</Label>
 
                         {result.type === 'pass_fail' && (
-                          <div className="grid grid-cols-3 gap-2 mt-3">
+                          <div className="grid grid-cols-4 gap-2 mt-3">
                             <Button
                               type="button"
-                              variant={result.passed === true && !result.advisory ? 'default' : 'outline'}
-                              onClick={() => updateChecklistResult(result.item_id, { value: true, passed: true, advisory: false })}
+                              variant={result.passed === true && !result.advisory && !result.na ? 'default' : 'outline'}
+                              onClick={() => updateChecklistResult(result.item_id, { value: true, passed: true, advisory: false, na: false })}
                               disabled={!canEdit}
                               className={cn(
                                 'h-12 flex-col gap-0.5 text-xs font-semibold',
-                                result.passed === true && !result.advisory
+                                result.passed === true && !result.advisory && !result.na
                                   ? 'bg-green-600 hover:bg-green-700 border-green-600'
                                   : 'hover:border-green-600 hover:text-green-700',
                               )}
@@ -1294,12 +1338,12 @@ export function TaskExecution({
                             </Button>
                             <Button
                               type="button"
-                              variant={result.advisory ? 'default' : 'outline'}
-                              onClick={() => updateChecklistResult(result.item_id, { value: true, passed: null, advisory: true })}
+                              variant={result.advisory && !result.na ? 'default' : 'outline'}
+                              onClick={() => updateChecklistResult(result.item_id, { value: true, passed: null, advisory: true, na: false })}
                               disabled={!canEdit}
                               className={cn(
                                 'h-12 flex-col gap-0.5 text-xs font-semibold',
-                                result.advisory
+                                result.advisory && !result.na
                                   ? 'bg-amber-500 text-white hover:bg-amber-600 border-amber-500'
                                   : 'hover:border-amber-500 hover:text-amber-600',
                               )}
@@ -1309,12 +1353,12 @@ export function TaskExecution({
                             </Button>
                             <Button
                               type="button"
-                              variant={result.passed === false && !result.advisory ? 'default' : 'outline'}
-                              onClick={() => updateChecklistResult(result.item_id, { value: false, passed: false, advisory: false })}
+                              variant={result.passed === false && !result.advisory && !result.na ? 'default' : 'outline'}
+                              onClick={() => updateChecklistResult(result.item_id, { value: false, passed: false, advisory: false, na: false })}
                               disabled={!canEdit}
                               className={cn(
                                 'h-12 flex-col gap-0.5 text-xs font-semibold',
-                                result.passed === false && !result.advisory
+                                result.passed === false && !result.advisory && !result.na
                                   ? 'bg-destructive hover:bg-destructive/90 border-destructive'
                                   : 'hover:border-destructive hover:text-destructive',
                               )}
@@ -1322,41 +1366,92 @@ export function TaskExecution({
                               <XCircle className="h-5 w-5" />
                               Fail
                             </Button>
+                            <Button
+                              type="button"
+                              variant={result.na ? 'default' : 'outline'}
+                              onClick={() => updateChecklistResult(result.item_id, { value: false, passed: null, advisory: false, na: true })}
+                              disabled={!canEdit}
+                              className={cn(
+                                'h-12 flex-col gap-0.5 text-xs font-semibold',
+                                result.na
+                                  ? 'bg-muted-foreground text-background hover:bg-muted-foreground/90 border-muted-foreground'
+                                  : 'hover:border-muted-foreground hover:text-foreground',
+                              )}
+                            >
+                              <Ban className="h-5 w-5" />
+                              N/A
+                            </Button>
                           </div>
                         )}
 
                         {result.type === 'checkbox' && (
-                          <div className="flex items-center gap-2 mt-2">
-                            <Checkbox
-                              checked={result.value as boolean}
-                              onCheckedChange={(checked) =>
-                                updateChecklistResult(result.item_id, { value: checked as boolean })
-                              }
+                          <div className="mt-2 flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                checked={result.value as boolean}
+                                onCheckedChange={(checked) =>
+                                  updateChecklistResult(result.item_id, { value: checked as boolean, na: false })
+                                }
+                                disabled={!canEdit || result.na}
+                              />
+                              <span className={cn('text-sm', result.na && 'text-muted-foreground line-through')}>
+                                Completed
+                              </span>
+                            </div>
+                            <NaToggle
+                              active={!!result.na}
                               disabled={!canEdit}
+                              onToggle={() =>
+                                updateChecklistResult(result.item_id, {
+                                  na: !result.na,
+                                  ...(result.na ? {} : { value: false }),
+                                })
+                              }
                             />
-                            <span className="text-sm">Completed</span>
                           </div>
                         )}
 
                         {result.type === 'text' && (
-                          <Input
-                            value={result.value as string}
-                            onChange={(e) => updateChecklistResult(result.item_id, { value: e.target.value })}
-                            placeholder="Enter value..."
-                            className="mt-2"
-                            disabled={!canEdit}
-                          />
+                          <div className="mt-2 flex items-center gap-2">
+                            <Input
+                              value={result.na ? '' : (result.value as string)}
+                              onChange={(e) => updateChecklistResult(result.item_id, { value: e.target.value, na: false })}
+                              placeholder={result.na ? 'Not applicable' : 'Enter value...'}
+                              disabled={!canEdit || result.na}
+                            />
+                            <NaToggle
+                              active={!!result.na}
+                              disabled={!canEdit}
+                              onToggle={() =>
+                                updateChecklistResult(result.item_id, {
+                                  na: !result.na,
+                                  ...(result.na ? {} : { value: '' }),
+                                })
+                              }
+                            />
+                          </div>
                         )}
 
                         {result.type === 'number' && (
-                          <Input
-                            type="number"
-                            value={result.value as number}
-                            onChange={(e) => updateChecklistResult(result.item_id, { value: parseFloat(e.target.value) || 0 })}
-                            placeholder="Enter value..."
-                            className="mt-2"
-                            disabled={!canEdit}
-                          />
+                          <div className="mt-2 flex items-center gap-2">
+                            <Input
+                              type="number"
+                              value={result.na ? '' : (result.value as number)}
+                              onChange={(e) => updateChecklistResult(result.item_id, { value: parseFloat(e.target.value) || 0, na: false })}
+                              placeholder={result.na ? 'Not applicable' : 'Enter value...'}
+                              disabled={!canEdit || result.na}
+                            />
+                            <NaToggle
+                              active={!!result.na}
+                              disabled={!canEdit}
+                              onToggle={() =>
+                                updateChecklistResult(result.item_id, {
+                                  na: !result.na,
+                                  ...(result.na ? {} : { value: 0 }),
+                                })
+                              }
+                            />
+                          </div>
                         )}
 
                         {/* Notes for failed and advisory items */}
@@ -1603,13 +1698,15 @@ export function TaskExecution({
           </CardContent>
         </Card>
 
-        {/* Suggested parts (internal) — shown when a defect/failure is present */}
-        {checklistResults.some((r) => r.type === 'pass_fail' && r.passed === false) && (
-          <SuggestedPartsPicker taskId={task.id} canEdit={canEdit} />
-        )}
+        {/* Suggested parts (internal) — shown when a defect/failure is present.
+            Hidden from external sub-contractors. */}
+        {canSeeInternal &&
+          checklistResults.some((r) => r.type === 'pass_fail' && r.passed === false) && (
+            <SuggestedPartsPicker taskId={task.id} canEdit={canEdit} />
+          )}
 
-        {/* Parts used on this call (internal) — always available */}
-        <CallPartsPicker taskId={task.id} canEdit={canManageParts} />
+        {/* Parts used on this call (internal) — hidden from sub-contractors */}
+        {canSeeInternal && <CallPartsPicker taskId={task.id} canEdit={canManageParts} />}
         </>
       )}
 
@@ -1656,10 +1753,11 @@ export function TaskExecution({
                       label: r.label,
                       type: r.type,
                       value: r.value,
-                      passed: r.passed,
-                      advisory: r.advisory,
-                      notes: r.notes,
-                    })),
+                          passed: r.passed,
+                          advisory: r.advisory,
+                          na: r.na,
+                          notes: r.notes,
+                        })),
                   }}
                   onInsert={(text, applyMode) =>
                     setEngineerNotes((prev) =>
@@ -1707,14 +1805,24 @@ export function TaskExecution({
                 </>
               )}
             </Button>
-            <Button onClick={handleAttemptSubmit} className="h-12 flex-1">
-              <Send className="mr-2 h-4 w-4" />
-              Complete & Submit
+            <Button onClick={handleAttemptSubmit} disabled={submitting} className="h-12 flex-1">
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <Send className="mr-2 h-4 w-4" />
+                  Complete &amp; Submit
+                </>
+              )}
             </Button>
           </div>
           {/* Non-recurring calls (reactive / emergency / planned) can be flagged as
-              needing further works, which raises a follow-up for review. */}
-          {isNonRecurringCall(task) && (
+              needing further works, which raises a follow-up for review. Internal
+              escalation — hidden from external sub-contractors. */}
+          {canSeeInternal && isNonRecurringCall(task) && (
             <div className="flex">
               <FurtherWorksSheet
                 taskId={task.id}
@@ -1746,17 +1854,21 @@ export function TaskExecution({
               Completed on {formatDateUK(task.completed_at)} at{' '}
               {formatTimeUK(task.completed_at)}
             </p>
-            <CompletedReportActions
-              taskId={task.id}
-              serviceName={serviceType?.name}
-              emailSentAt={existingResult.email_sent_at}
-              chargeable={task.chargeable}
-              chargeReviewStatus={task.charge_review_status}
-              chargeReason={task.charge_reason}
-              clientRef={(task as any).client_ref ?? null}
-              chargeInvoicedAt={(task as any).charge_invoiced_at ?? null}
-              canReview={profile.role === 'admin' || profile.role === 'office'}
-            />
+            {/* Internal report management + chargeable review — hidden from
+                external sub-contractors. */}
+            {canSeeInternal && (
+              <CompletedReportActions
+                taskId={task.id}
+                serviceName={serviceType?.name}
+                emailSentAt={existingResult.email_sent_at}
+                chargeable={task.chargeable}
+                chargeReviewStatus={task.charge_review_status}
+                chargeReason={task.charge_reason}
+                clientRef={(task as any).client_ref ?? null}
+                chargeInvoicedAt={(task as any).charge_invoiced_at ?? null}
+                canReview={profile.role === 'admin' || profile.role === 'office'}
+              />
+            )}
           </CardContent>
         </Card>
       )}
@@ -1767,33 +1879,6 @@ export function TaskExecution({
       {/* Submit Confirmation Dialog */}
       {/* Lone-worker shift gate — blocks starting a call until on shift. */}
       {shiftGateDialog}
-
-      <AlertDialog open={showSubmitDialog} onOpenChange={setShowSubmitDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Complete Inspection</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to submit this inspection? This will mark the task as completed
-              {calculateOverallStatus() === 'fail' || calculateOverallStatus() === 'partial'
-                ? ' and notify the office of any issues found.'
-                : ' and send a confirmation to the client.'}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSubmit} disabled={submitting}>
-              {submitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Submitting...
-                </>
-              ) : (
-                'Complete Inspection'
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Post-completion: offer nearby overdue / due-soon calls to take on */}
       <NearbyCallsPrompt

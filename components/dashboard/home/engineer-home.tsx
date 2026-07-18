@@ -22,7 +22,8 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
-import type { Profile } from '@/lib/types/database'
+import type { Profile, WorkerType } from '@/lib/types/database'
+import { isTaskVisibleToEngineer } from '@/lib/engineer-visibility'
 import { getDailyFact } from '@/lib/system-facts'
 import { LocationSharingToggle } from '@/components/dashboard/home/location-sharing-toggle'
 import { LoneWorkerShiftCard } from '@/components/dashboard/lone-worker/lone-worker-shift-card'
@@ -51,12 +52,22 @@ type EngineerTask = {
   booked_start_time: string | null
   booked_end_time: string | null
   site_service: {
+    worker_type?: WorkerType | null
     site: { name: string | null; address: string | null; postcode: string | null } | null
-    service_type: { name: string | null } | null
+    service_type: { name: string | null; default_worker_type?: WorkerType | null } | null
   } | null
 }
 
-export async function EngineerHome({ profile }: { profile: Profile }) {
+export async function EngineerHome({
+  profile,
+  isSubcontractor = false,
+}: {
+  profile: Profile
+  // Sub-contractors are external workers: they see their day/schedule but not
+  // the internal-only cards (lone-worker shift, department standings, location
+  // sharing / H&S tracking).
+  isSubcontractor?: boolean
+}) {
   const supabase = await createClient()
 
   const now = new Date()
@@ -72,8 +83,9 @@ export async function EngineerHome({ profile }: { profile: Profile }) {
     booked_start_time,
     booked_end_time,
     site_service:site_services(
+      worker_type,
       site:sites(name, address, postcode),
-      service_type:service_types(name)
+      service_type:service_types(name, default_worker_type)
     )
   `
 
@@ -93,13 +105,19 @@ export async function EngineerHome({ profile }: { profile: Profile }) {
       .gt('scheduled_date', todayStr),
   ])
 
-  const todayTasks = (todayRows as unknown as EngineerTask[]) ?? []
+  // CDO isolation + hide sub-contracted work (matches the Calls list rules).
+  const todayTasks = ((todayRows as unknown as EngineerTask[]) ?? []).filter((t) =>
+    isTaskVisibleToEngineer(t, profile.discipline),
+  )
   const remaining = todayTasks.filter((t) => t.status !== 'completed')
   const doneToday = todayTasks.length - remaining.length
 
   // Encouragement: the engineer's own standing within their department. Null when
   // the feature is switched off, or they have no department / not enough data.
-  const engagementStats = await getEngineerEngagementStats(supabase, profile)
+  // Sub-contractors are external and excluded from internal standings.
+  const engagementStats = isSubcontractor
+    ? null
+    : await getEngineerEngagementStats(supabase, profile)
 
   return (
     <div className="space-y-6">
@@ -119,8 +137,9 @@ export async function EngineerHome({ profile }: { profile: Profile }) {
         </p>
       </div>
 
-      {/* Lone worker safety — start/finish shift and check-in frequency */}
-      <LoneWorkerShiftCard />
+      {/* Lone worker safety — start/finish shift and check-in frequency.
+          Internal staff only; not shown to external sub-contractors. */}
+      {!isSubcontractor && <LoneWorkerShiftCard />}
 
       {/* Today's schedule */}
       <Card>
@@ -247,24 +266,27 @@ export async function EngineerHome({ profile }: { profile: Profile }) {
       {/* Encouragement: your standing in the department */}
       {engagementStats && <EngineerStandingCard stats={engagementStats} />}
 
-      {/* Location sharing — engineers only. Kept on for health & safety. */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Signal className="h-4 w-4" />
-            Location sharing
-          </CardTitle>
-          <CardDescription>
-            Kept on for health &amp; safety reasons, so we can reach you quickly and
-            send help to your location if something goes wrong on the road.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <LocationSharingToggle
-            initialEnabled={profile.location_sharing_enabled ?? false}
-          />
-        </CardContent>
-      </Card>
+      {/* Location sharing — internal engineers only. Kept on for health &
+          safety. Not shown to external sub-contractors. */}
+      {!isSubcontractor && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Signal className="h-4 w-4" />
+              Location sharing
+            </CardTitle>
+            <CardDescription>
+              Kept on for health &amp; safety reasons, so we can reach you quickly and
+              send help to your location if something goes wrong on the road.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <LocationSharingToggle
+              initialEnabled={profile.location_sharing_enabled ?? false}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Daily fact */}
       <Card className="border-primary/30 bg-primary/5">

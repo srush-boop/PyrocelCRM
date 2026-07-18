@@ -168,6 +168,7 @@ const roleColors: Record<UserRole, string> = {
   engineer: 'bg-accent text-accent-foreground',
   office: 'bg-secondary text-secondary-foreground',
   client: 'bg-muted text-muted-foreground',
+  subcontractor: 'bg-muted text-muted-foreground',
 }
 
 export function EngineersTable({
@@ -540,10 +541,11 @@ export function EngineersTable({
             <SelectValue placeholder="Filter by user type" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All User Types</SelectItem>
-            <SelectItem value="admin">Admin</SelectItem>
-            <SelectItem value="engineer">Engineer</SelectItem>
-            <SelectItem value="office">Office</SelectItem>
+                <SelectItem value="all">All User Types</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="engineer">Engineer</SelectItem>
+                <SelectItem value="subcontractor">Sub-contractor</SelectItem>
+                <SelectItem value="office">Office</SelectItem>
           </SelectContent>
         </Select>
         <PrintButton targetId="engineers-grid" title="Team Members" className="ml-auto" />
@@ -672,6 +674,9 @@ export function EngineersTable({
                         <DropdownMenuItem onClick={() => handleRoleChange(user.id, 'engineer')}>
                           Set as Engineer
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleRoleChange(user.id, 'subcontractor')}>
+                          Set as Sub-contractor
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleRoleChange(user.id, 'office')}>
                           Set as Office
                         </DropdownMenuItem>
@@ -771,6 +776,7 @@ export function EngineersTable({
                     <SelectItem value="admin">Admin</SelectItem>
                     <SelectItem value="office">Office</SelectItem>
                     <SelectItem value="engineer">Engineer</SelectItem>
+                    <SelectItem value="subcontractor">Sub-contractor</SelectItem>
                     <SelectItem value="client">Client</SelectItem>
                   </SelectContent>
                 </Select>

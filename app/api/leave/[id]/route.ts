@@ -45,7 +45,9 @@ export async function PATCH(
       return NextResponse.json({ error: 'Not a leave entry.' }, { status: 400 })
     }
 
-    // Authorisation: admin/office, or the leave-taker's nominated manager.
+    // Authorisation: admin/office, the leave-taker's direct manager, or the
+    // senior manager (the direct manager's own manager). Both manager levels
+    // may approve/reject as an oversight layer.
     const isAdminOrOffice = caller?.role === 'admin' || caller?.role === 'office'
     let isManager = false
     if (!isAdminOrOffice && entry.user_id) {
@@ -55,6 +57,15 @@ export async function PATCH(
         .eq('id', entry.user_id as string)
         .single()
       isManager = subject?.manager_id === user.id
+      // Senior manager: the direct manager's own manager.
+      if (!isManager && subject?.manager_id) {
+        const { data: mgr } = await admin
+          .from('profiles')
+          .select('manager_id')
+          .eq('id', subject.manager_id as string)
+          .single()
+        isManager = mgr?.manager_id === user.id
+      }
     }
     if (!isAdminOrOffice && !isManager) {
       return NextResponse.json({ error: 'Forbidden.' }, { status: 403 })

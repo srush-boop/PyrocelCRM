@@ -27,3 +27,13 @@ export function tileAccentStyle(hex?: string | null): CSSProperties | undefined 
   if (!hex || !/^#[0-9a-f]{6}$/i.test(hex)) return undefined
   return { backgroundColor: hex }
 }
+
+/**
+ * Inline style tinting the whole tile background with a very light (~8%)
+ * transparent wash of the tile colour, so a colour-coded tile reads at a glance
+ * without overpowering its content. Returns undefined for "no override".
+ */
+export function tileCardStyle(hex?: string | null): CSSProperties | undefined {
+  if (!hex || !/^#[0-9a-f]{6}$/i.test(hex)) return undefined
+  return { backgroundColor: `${hex}14` } // hex + 0x14 alpha ≈ 8%
+}

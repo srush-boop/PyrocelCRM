@@ -129,6 +129,11 @@ export interface CallTileProps {
   // ── Meta row ──
   reference?: string | null
   scheduledDate?: string | null
+  /**
+   * The client KPI "complete by" / target date. When provided on an open call
+   * this is shown (labelled "Complete by") instead of the raw visit date.
+   */
+  completeByDate?: string | Date | null
   completedDate?: string | null
   isOverdue?: boolean
   engineerName?: string | null
@@ -174,6 +179,7 @@ export function CallTile({
   result,
   reference,
   scheduledDate,
+  completeByDate,
   completedDate,
   isOverdue,
   engineerName,
@@ -203,7 +209,15 @@ export function CallTile({
   // else in-progress uses the brand primary; otherwise a plain border.
   const accentStyle =
     !isOverdue && accentColor ? { borderLeftColor: accentColor } : undefined
-  const dateValue = isCompleted && completedDate ? completedDate : scheduledDate
+  // Open calls show the client KPI "complete by" date when supplied (else the
+  // visit date). Completed calls always show the actual completion date.
+  const showCompleteBy = !isCompleted && completeByDate != null
+  const dateValue =
+    isCompleted && completedDate
+      ? completedDate
+      : showCompleteBy
+        ? completeByDate
+        : scheduledDate
 
   return (
     <Card
@@ -335,6 +349,7 @@ export function CallTile({
                 {dateValue && (
                   <span className="flex items-center gap-1">
                     <CalendarIcon className="h-3.5 w-3.5 shrink-0" />
+                    {showCompleteBy && <span className="opacity-90">Complete by</span>}
                     <span className={cn(isOverdue && 'font-medium text-destructive')}>
                       {formatDateUK(dateValue)}
                     </span>

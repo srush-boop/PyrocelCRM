@@ -474,6 +474,18 @@ async function resolveTimesheetActors(
   let approverIds = resolveExplicitTimesheetActors(o.timesheet_approver_ids, roleApprovers)
   if (approverIds.length === 0 && o.manager_id) approverIds = [o.manager_id]
 
+  // Senior manager (the owner's manager's manager) always has oversight
+  // approval, in addition to whoever is resolved above.
+  if (o.manager_id) {
+    const { data: mgr } = await supabase
+      .from('profiles')
+      .select('manager_id')
+      .eq('id', o.manager_id)
+      .maybeSingle()
+    const seniorId = (mgr as { manager_id: string | null } | null)?.manager_id
+    if (seniorId) approverIds = [...approverIds, seniorId]
+  }
+
   // Processors.
   let processorIds = resolveExplicitTimesheetActors(o.timesheet_processor_ids, roleProcessors)
   if (processorIds.length === 0) {

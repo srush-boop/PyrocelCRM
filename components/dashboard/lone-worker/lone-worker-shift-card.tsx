@@ -198,10 +198,12 @@ export function LoneWorkerShiftCard() {
                 />
               </div>
             </div>
-            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Clock className="h-3.5 w-3.5" />
-              Check-ins every {data.timings.checkinMinutes} min. Adjust the times above if you&apos;re
-              working a different shift today.
+            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+              <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                Check-ins every {data.timings.checkinMinutes} min. Adjust the times above if you&apos;re
+                working a different shift today.
+              </span>
             </p>
             <Button onClick={onStart} disabled={starting} className="w-full gap-2">
               {starting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}

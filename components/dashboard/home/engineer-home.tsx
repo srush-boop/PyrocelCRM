@@ -22,7 +22,8 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
-import type { Profile } from '@/lib/types/database'
+import type { Profile, WorkerType } from '@/lib/types/database'
+import { isTaskVisibleToEngineer } from '@/lib/engineer-visibility'
 import { getDailyFact } from '@/lib/system-facts'
 import { LocationSharingToggle } from '@/components/dashboard/home/location-sharing-toggle'
 import { LoneWorkerShiftCard } from '@/components/dashboard/lone-worker/lone-worker-shift-card'
@@ -51,8 +52,9 @@ type EngineerTask = {
   booked_start_time: string | null
   booked_end_time: string | null
   site_service: {
+    worker_type?: WorkerType | null
     site: { name: string | null; address: string | null; postcode: string | null } | null
-    service_type: { name: string | null } | null
+    service_type: { name: string | null; default_worker_type?: WorkerType | null } | null
   } | null
 }
 
@@ -72,8 +74,9 @@ export async function EngineerHome({ profile }: { profile: Profile }) {
     booked_start_time,
     booked_end_time,
     site_service:site_services(
+      worker_type,
       site:sites(name, address, postcode),
-      service_type:service_types(name)
+      service_type:service_types(name, default_worker_type)
     )
   `
 
@@ -93,7 +96,10 @@ export async function EngineerHome({ profile }: { profile: Profile }) {
       .gt('scheduled_date', todayStr),
   ])
 
-  const todayTasks = (todayRows as unknown as EngineerTask[]) ?? []
+  // CDO isolation + hide sub-contracted work (matches the Calls list rules).
+  const todayTasks = ((todayRows as unknown as EngineerTask[]) ?? []).filter((t) =>
+    isTaskVisibleToEngineer(t, profile.discipline),
+  )
   const remaining = todayTasks.filter((t) => t.status !== 'completed')
   const doneToday = todayTasks.length - remaining.length
 

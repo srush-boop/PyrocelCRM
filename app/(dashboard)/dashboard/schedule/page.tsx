@@ -13,6 +13,7 @@ import { getBranchScope } from '@/lib/branches'
 import type { Profile, Site, ServiceType, SiteService, SystemType, TaskWithDetails } from '@/lib/types/database'
 import { normalizeTasks } from '@/lib/normalize-task'
 import { getMyCurrentOncall } from '@/lib/oncall/queries'
+import { isTaskVisibleToEngineer } from '@/lib/engineer-visibility'
 
 export default async function SchedulePage({
   searchParams,
@@ -65,8 +66,9 @@ export default async function SchedulePage({
     `)
     .order('scheduled_date', { ascending: true })
 
-  // Engineers only see their tasks
-  if ((profile as Profile).role === 'engineer') {
+  // Engineers and sub-contractors only see tasks allocated to them.
+  const role = (profile as Profile).role
+  if (role === 'engineer' || role === 'subcontractor') {
     tasksQuery = tasksQuery.eq('assigned_engineer_id', user.id)
   }
 
@@ -78,9 +80,18 @@ export default async function SchedulePage({
 
   // Scope tasks to the active branch (by the task's site branch). Engineers are
   // already limited to their own tasks; this further narrows admin/office views.
-  const tasks = scope.activeBranchId
+  const branchScoped = scope.activeBranchId
     ? normalizedTasks.filter((t) => t.site_service?.site?.branch_id === scope.activeBranchId)
     : normalizedTasks
+
+  // CDO isolation + hide sub-contracted work for internal engineers. CDO
+  // engineers see only CDO work; non-CDO engineers never see CDO work; no
+  // internal engineer sees sub-contracted work. (Sub-contractor logins are
+  // already scoped to their own allocated tasks above, so they are exempt.)
+  const tasks =
+    role === 'engineer'
+      ? branchScoped.filter((t) => isTaskVisibleToEngineer(t, (profile as Profile).discipline))
+      : branchScoped
 
   // Booking data. Loaded for admin/office (full scheduled + reactive) and for
   // on-call engineers (reactive only).

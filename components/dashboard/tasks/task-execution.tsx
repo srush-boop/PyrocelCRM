@@ -79,7 +79,8 @@ import {
   ImageIcon,
   X,
   CornerDownRight,
-} from 'lucide-react'
+  Ban,
+  } from 'lucide-react'
 import type { 
   Profile, 
   TaskWithDetails, 
@@ -178,6 +179,8 @@ function buildInitialResults(
 // row's answer. Active rules reveal their requirements (photo/note/follow-ups)
 // and are enforced at submit; inactive rules stay hidden and are ignored.
 function isConditionActive(row: ChecklistResult, cond: ChecklistCondition): boolean {
+  // An item marked N/A carries no answer, so no follow-up rule can fire.
+  if (row.na) return false
   switch (cond.when) {
     case 'fail':
       return row.passed === false && !row.advisory
@@ -210,6 +213,38 @@ function isConditionActive(row: ChecklistResult, cond: ChecklistCondition): bool
     default:
       return false
   }
+}
+
+// Compact "N/A" toggle shown beside checkbox / text / number checklist inputs.
+// When active the item is marked not-applicable and excluded from the outcome.
+function NaToggle({
+  active,
+  disabled,
+  onToggle,
+}: {
+  active: boolean
+  disabled?: boolean
+  onToggle: () => void
+}) {
+  return (
+    <Button
+      type="button"
+      variant={active ? 'default' : 'outline'}
+      size="sm"
+      onClick={onToggle}
+      disabled={disabled}
+      className={cn(
+        'h-9 shrink-0 gap-1 px-3 text-xs font-semibold',
+        active
+          ? 'bg-muted-foreground text-background hover:bg-muted-foreground/90 border-muted-foreground'
+          : 'text-muted-foreground hover:text-foreground',
+      )}
+      aria-pressed={active}
+    >
+      <Ban className="h-4 w-4" />
+      N/A
+    </Button>
+  )
 }
 
 // Whether a follow-up row still needs an answer (only meaningful when required).
@@ -404,10 +439,11 @@ export function TaskExecution({
     
     // Advisory items are observations, not pass/fail outcomes, so they never
     // affect the overall result (a report of all passes + advisories is a pass).
-    // Conditional follow-up rows (parent_item_id set) are supplementary detail and
-    // never drive the overall pass/fail either.
+    // N/A items carry no answer and are likewise excluded. Conditional follow-up
+    // rows (parent_item_id set) are supplementary detail and never drive the
+    // overall pass/fail either.
     const passFailItems = checklistResults.filter(
-      (r) => r.type === 'pass_fail' && !r.advisory && !r.parent_item_id,
+      (r) => r.type === 'pass_fail' && !r.advisory && !r.na && !r.parent_item_id,
     )
     if (passFailItems.length === 0) return 'pass'
     
@@ -1276,15 +1312,15 @@ export function TaskExecution({
                         <Label className="text-base font-medium">{result.label}</Label>
 
                         {result.type === 'pass_fail' && (
-                          <div className="grid grid-cols-3 gap-2 mt-3">
+                          <div className="grid grid-cols-4 gap-2 mt-3">
                             <Button
                               type="button"
-                              variant={result.passed === true && !result.advisory ? 'default' : 'outline'}
-                              onClick={() => updateChecklistResult(result.item_id, { value: true, passed: true, advisory: false })}
+                              variant={result.passed === true && !result.advisory && !result.na ? 'default' : 'outline'}
+                              onClick={() => updateChecklistResult(result.item_id, { value: true, passed: true, advisory: false, na: false })}
                               disabled={!canEdit}
                               className={cn(
                                 'h-12 flex-col gap-0.5 text-xs font-semibold',
-                                result.passed === true && !result.advisory
+                                result.passed === true && !result.advisory && !result.na
                                   ? 'bg-green-600 hover:bg-green-700 border-green-600'
                                   : 'hover:border-green-600 hover:text-green-700',
                               )}
@@ -1294,12 +1330,12 @@ export function TaskExecution({
                             </Button>
                             <Button
                               type="button"
-                              variant={result.advisory ? 'default' : 'outline'}
-                              onClick={() => updateChecklistResult(result.item_id, { value: true, passed: null, advisory: true })}
+                              variant={result.advisory && !result.na ? 'default' : 'outline'}
+                              onClick={() => updateChecklistResult(result.item_id, { value: true, passed: null, advisory: true, na: false })}
                               disabled={!canEdit}
                               className={cn(
                                 'h-12 flex-col gap-0.5 text-xs font-semibold',
-                                result.advisory
+                                result.advisory && !result.na
                                   ? 'bg-amber-500 text-white hover:bg-amber-600 border-amber-500'
                                   : 'hover:border-amber-500 hover:text-amber-600',
                               )}
@@ -1309,12 +1345,12 @@ export function TaskExecution({
                             </Button>
                             <Button
                               type="button"
-                              variant={result.passed === false && !result.advisory ? 'default' : 'outline'}
-                              onClick={() => updateChecklistResult(result.item_id, { value: false, passed: false, advisory: false })}
+                              variant={result.passed === false && !result.advisory && !result.na ? 'default' : 'outline'}
+                              onClick={() => updateChecklistResult(result.item_id, { value: false, passed: false, advisory: false, na: false })}
                               disabled={!canEdit}
                               className={cn(
                                 'h-12 flex-col gap-0.5 text-xs font-semibold',
-                                result.passed === false && !result.advisory
+                                result.passed === false && !result.advisory && !result.na
                                   ? 'bg-destructive hover:bg-destructive/90 border-destructive'
                                   : 'hover:border-destructive hover:text-destructive',
                               )}
@@ -1322,41 +1358,92 @@ export function TaskExecution({
                               <XCircle className="h-5 w-5" />
                               Fail
                             </Button>
+                            <Button
+                              type="button"
+                              variant={result.na ? 'default' : 'outline'}
+                              onClick={() => updateChecklistResult(result.item_id, { value: false, passed: null, advisory: false, na: true })}
+                              disabled={!canEdit}
+                              className={cn(
+                                'h-12 flex-col gap-0.5 text-xs font-semibold',
+                                result.na
+                                  ? 'bg-muted-foreground text-background hover:bg-muted-foreground/90 border-muted-foreground'
+                                  : 'hover:border-muted-foreground hover:text-foreground',
+                              )}
+                            >
+                              <Ban className="h-5 w-5" />
+                              N/A
+                            </Button>
                           </div>
                         )}
 
                         {result.type === 'checkbox' && (
-                          <div className="flex items-center gap-2 mt-2">
-                            <Checkbox
-                              checked={result.value as boolean}
-                              onCheckedChange={(checked) =>
-                                updateChecklistResult(result.item_id, { value: checked as boolean })
-                              }
+                          <div className="mt-2 flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                checked={result.value as boolean}
+                                onCheckedChange={(checked) =>
+                                  updateChecklistResult(result.item_id, { value: checked as boolean, na: false })
+                                }
+                                disabled={!canEdit || result.na}
+                              />
+                              <span className={cn('text-sm', result.na && 'text-muted-foreground line-through')}>
+                                Completed
+                              </span>
+                            </div>
+                            <NaToggle
+                              active={!!result.na}
                               disabled={!canEdit}
+                              onToggle={() =>
+                                updateChecklistResult(result.item_id, {
+                                  na: !result.na,
+                                  ...(result.na ? {} : { value: false }),
+                                })
+                              }
                             />
-                            <span className="text-sm">Completed</span>
                           </div>
                         )}
 
                         {result.type === 'text' && (
-                          <Input
-                            value={result.value as string}
-                            onChange={(e) => updateChecklistResult(result.item_id, { value: e.target.value })}
-                            placeholder="Enter value..."
-                            className="mt-2"
-                            disabled={!canEdit}
-                          />
+                          <div className="mt-2 flex items-center gap-2">
+                            <Input
+                              value={result.na ? '' : (result.value as string)}
+                              onChange={(e) => updateChecklistResult(result.item_id, { value: e.target.value, na: false })}
+                              placeholder={result.na ? 'Not applicable' : 'Enter value...'}
+                              disabled={!canEdit || result.na}
+                            />
+                            <NaToggle
+                              active={!!result.na}
+                              disabled={!canEdit}
+                              onToggle={() =>
+                                updateChecklistResult(result.item_id, {
+                                  na: !result.na,
+                                  ...(result.na ? {} : { value: '' }),
+                                })
+                              }
+                            />
+                          </div>
                         )}
 
                         {result.type === 'number' && (
-                          <Input
-                            type="number"
-                            value={result.value as number}
-                            onChange={(e) => updateChecklistResult(result.item_id, { value: parseFloat(e.target.value) || 0 })}
-                            placeholder="Enter value..."
-                            className="mt-2"
-                            disabled={!canEdit}
-                          />
+                          <div className="mt-2 flex items-center gap-2">
+                            <Input
+                              type="number"
+                              value={result.na ? '' : (result.value as number)}
+                              onChange={(e) => updateChecklistResult(result.item_id, { value: parseFloat(e.target.value) || 0, na: false })}
+                              placeholder={result.na ? 'Not applicable' : 'Enter value...'}
+                              disabled={!canEdit || result.na}
+                            />
+                            <NaToggle
+                              active={!!result.na}
+                              disabled={!canEdit}
+                              onToggle={() =>
+                                updateChecklistResult(result.item_id, {
+                                  na: !result.na,
+                                  ...(result.na ? {} : { value: 0 }),
+                                })
+                              }
+                            />
+                          </div>
                         )}
 
                         {/* Notes for failed and advisory items */}
@@ -1656,10 +1743,11 @@ export function TaskExecution({
                       label: r.label,
                       type: r.type,
                       value: r.value,
-                      passed: r.passed,
-                      advisory: r.advisory,
-                      notes: r.notes,
-                    })),
+                          passed: r.passed,
+                          advisory: r.advisory,
+                          na: r.na,
+                          notes: r.notes,
+                        })),
                   }}
                   onInsert={(text, applyMode) =>
                     setEngineerNotes((prev) =>

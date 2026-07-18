@@ -2,7 +2,10 @@
 
 // The user's permission level / user type. Shown in the UI as "User Type".
 // Governs access and RLS. Do not confuse with `Role` below.
-export type UserRole = 'admin' | 'engineer' | 'office' | 'client'
+// 'subcontractor' is an external worker login: an engineer-style view scoped to
+// only the tasks allocated to them (via assigned_engineer_id), with all internal
+// information hidden.
+export type UserRole = 'admin' | 'engineer' | 'office' | 'client' | 'subcontractor'
 
 // A descriptive, admin-managed job role (e.g. "Lead Engineer", "Estimator").
 // Purely a label used on documents and communications alongside a signature;
@@ -471,6 +474,11 @@ export interface Profile {
   // Engineer discipline / trade. Drives map colour-coding, iconography and the
   // skill match when dispatching a call. NULL for non-engineers.
   discipline: Discipline | null
+  // For 'subcontractor' role logins: the supplier org (suppliers.id,
+  // supplier_type='subcontractor') this external worker belongs to. NULL for all
+  // other roles. Reference/reporting only — task allocation is via
+  // assigned_engineer_id like an engineer.
+  subcontractor_id: string | null
   // Primary mobile contact number. Used on documents at times and shown in the
   // on-call rota / out-of-hours call-handling view.
   phone: string | null
@@ -1381,6 +1389,11 @@ export interface Task {
   // When true, `passed` is null and the item is excluded from the pass/fail
   // outcome, but it is still surfaced in the defects log for review.
   advisory?: boolean
+  // Not applicable: the engineer has marked this item as N/A for this visit.
+  // Available on ALL item types. When true the item is excluded from the
+  // pass/fail outcome and defect sync, never blocks submission, and never
+  // activates conditional follow-up questions. `passed` is null when na.
+  na?: boolean
   notes?: string
   // When a system has configured panels, the general checklist is repeated once
   // per panel. These tag each result with the panel it belongs to. Absent on

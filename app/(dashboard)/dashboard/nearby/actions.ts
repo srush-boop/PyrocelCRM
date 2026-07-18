@@ -5,6 +5,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { geocodePostcodes, distanceMiles, type LatLng } from '@/lib/geocode'
 import { notifyUsers } from '@/lib/notifications'
 import { revalidatePath } from 'next/cache'
+import { isWorkerTypeVisibleToEngineer } from '@/lib/engineer-visibility'
+import type { Discipline, WorkerType } from '@/lib/types/database'
 
 /**
  * An engineer requests a part from a specific stock location. The owner of
@@ -168,6 +170,14 @@ export async function findNearbyCalls(
 
   const origin: LatLng = { latitude: input.latitude, longitude: input.longitude }
 
+  // Requesting engineer's discipline drives CDO isolation of suggestions.
+  const { data: me } = await supabase
+    .from('profiles')
+    .select('discipline')
+    .eq('id', user.id)
+    .single()
+  const myDiscipline = (me as { discipline: Discipline | null } | null)?.discipline ?? null
+
   // Pull incomplete calls with their site + service + client + assignee.
   let query = supabase
     .from('tasks')
@@ -175,8 +185,8 @@ export async function findNearbyCalls(
       `id, status, scheduled_date, assigned_engineer_id,
        assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(id, full_name),
        site_service:site_services(
-         service_type_id,
-         service_type:service_types(id, name, system_type:system_types(name)),
+         service_type_id, worker_type,
+         service_type:service_types(id, name, default_worker_type, system_type:system_types(name)),
          site:sites(id, name, postcode, address, latitude, longitude, geocoded_at,
            client:clients(id, name))
        )`
@@ -199,7 +209,13 @@ export async function findNearbyCalls(
     assigned_engineer: { id: string; full_name: string | null } | null
     site_service: {
       service_type_id: string | null
-      service_type: { id: string; name: string; system_type: { name: string } | null } | null
+      worker_type: string | null
+      service_type: {
+        id: string
+        name: string
+        default_worker_type: string | null
+        system_type: { name: string } | null
+      } | null
       site: {
         id: string
         name: string
@@ -216,12 +232,15 @@ export async function findNearbyCalls(
   const rows = (tasks || []) as unknown as Row[]
 
   // When filtering by service type, the embedded filter can still return tasks
-  // whose site_service is null; drop those defensively.
+  // whose site_service is null; drop those defensively. Also apply CDO isolation
+  // + sub-contract hiding based on the requesting engineer's discipline.
   const usable = rows.filter((r) => {
-    if (input.serviceTypeId) {
-      return r.site_service && r.site_service.service_type_id === input.serviceTypeId
-    }
-    return r.site_service
+    if (!r.site_service) return false
+    if (input.serviceTypeId && r.site_service.service_type_id !== input.serviceTypeId) return false
+    const wt = (r.site_service.worker_type ??
+      r.site_service.service_type?.default_worker_type ??
+      'engineer') as WorkerType
+    return isWorkerTypeVisibleToEngineer(wt, myDiscipline)
   })
 
   // Geocode any sites missing coordinates.
@@ -353,6 +372,14 @@ export async function findNearbyOverdueCalls(input: {
 
   const radiusMiles = input.radiusMiles ?? 15
 
+  // Requesting engineer's discipline drives CDO isolation of suggestions.
+  const { data: me } = await supabase
+    .from('profiles')
+    .select('discipline')
+    .eq('id', user.id)
+    .single()
+  const myDiscipline = (me as { discipline: Discipline | null } | null)?.discipline ?? null
+
   // Resolve the completed task's site as the search origin.
   const { data: fromTask } = await supabase
     .from('tasks')
@@ -443,9 +470,11 @@ export async function findNearbyOverdueCalls(input: {
     // Never surface the just-completed task itself.
     if (r.id === input.fromTaskId) continue
 
-    // Exclude services delivered by CDOs (route-planned, not ad-hoc claimable).
-    const workerType = ss.worker_type ?? ss.service_type?.default_worker_type ?? null
-    if (workerType === 'cdo') continue
+    // CDO isolation + hide sub-contracted work, per the requesting engineer's
+    // discipline: non-CDO engineers skip CDO (route-planned) work, CDO engineers
+    // only see CDO work, and sub-contracted work is never suggested.
+    const workerType = (ss.worker_type ?? ss.service_type?.default_worker_type ?? 'engineer') as WorkerType
+    if (!isWorkerTypeVisibleToEngineer(workerType, myDiscipline)) continue
 
     // Exclude anything that requires booking (site- or service-level).
     if (ss.booking_required === true || site.booking_required === true) continue

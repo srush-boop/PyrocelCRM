@@ -13,6 +13,7 @@ import type {
 } from '@/lib/types/database'
 import { resolveBillingAccount } from '@/lib/billing/resolve-billing-account'
 import { renderInvoicePdfBuffer } from '@/lib/pdf/invoice-pdf'
+import { resolveInvoiceLineSites } from '@/lib/billing/invoice-line-sites'
 import { sendEmail } from '@/lib/email/send-email'
 import {
   billingDueHint,
@@ -1248,12 +1249,16 @@ export async function sendInvoiceToClient(
     supabase.from('company_info').select('*').limit(1).maybeSingle(),
   ])
 
+  const emailLines = (lines ?? []) as InvoiceLineItem[]
+  const emailSiteByLineId = await resolveInvoiceLineSites(supabase, emailLines)
+
   let pdf: Buffer
   try {
     pdf = await renderInvoicePdfBuffer({
       invoice: fresh,
-      lines: (lines ?? []) as InvoiceLineItem[],
+      lines: emailLines,
       company: (company ?? null) as CompanyInfo | null,
+      siteByLineId: emailSiteByLineId,
     })
   } catch (err) {
     console.error('[v0] Invoice PDF render failed:', err)

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { renderInvoicePdfBuffer } from '@/lib/pdf/invoice-pdf'
+import { resolveInvoiceLineSites } from '@/lib/billing/invoice-line-sites'
 import type { CompanyInfo, Invoice, InvoiceLineItem, Profile } from '@/lib/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -43,10 +44,14 @@ export async function GET(
     supabase.from('company_info').select('*').limit(1).maybeSingle(),
   ])
 
+  const lineList = (lines ?? []) as InvoiceLineItem[]
+  const siteByLineId = await resolveInvoiceLineSites(supabase, lineList)
+
   const buffer = await renderInvoicePdfBuffer({
     invoice: invoice as unknown as Invoice & { billing_account: { name: string } | null },
-    lines: (lines ?? []) as InvoiceLineItem[],
+    lines: lineList,
     company: (company ?? null) as CompanyInfo | null,
+    siteByLineId,
   })
 
   const safeNumber = String(invoice.invoice_number).replace(/[^a-zA-Z0-9-_]/g, '')

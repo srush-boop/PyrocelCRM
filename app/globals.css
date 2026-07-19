@@ -173,6 +173,47 @@
   }
 }
 
+/* Lone-worker dashboard tile: flashing border ring so an active warning (amber)
+   or emergency (red) is impossible to miss without shifting layout. */
+@keyframes lw-border-flash-amber {
+  0%,
+  100% {
+    border-color: rgb(245 158 11 / 0.25);
+    box-shadow: 0 0 0 0 rgb(245 158 11 / 0);
+  }
+  50% {
+    border-color: rgb(245 158 11 / 0.9);
+    box-shadow: 0 0 0 4px rgb(245 158 11 / 0.35);
+  }
+}
+@keyframes lw-border-flash-red {
+  0%,
+  100% {
+    border-color: rgb(239 68 68 / 0.3);
+    box-shadow: 0 0 0 0 rgb(239 68 68 / 0);
+  }
+  50% {
+    border-color: rgb(239 68 68 / 0.95);
+    box-shadow: 0 0 0 4px rgb(239 68 68 / 0.4);
+  }
+}
+.lw-border-flash-amber {
+  animation: lw-border-flash-amber 1.3s ease-in-out infinite;
+}
+.lw-border-flash-red {
+  animation: lw-border-flash-red 0.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lw-border-flash-amber {
+    animation: none;
+    border-color: rgb(245 158 11 / 0.9);
+  }
+  .lw-border-flash-red {
+    animation: none;
+    border-color: rgb(239 68 68 / 0.95);
+  }
+}
+
 /* Print: hide app chrome and use clean white page for labels & reports */
 @media print {
   /* Hide dashboard chrome (sidebar, header) and anything explicitly marked */

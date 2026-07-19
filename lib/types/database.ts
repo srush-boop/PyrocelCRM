@@ -455,6 +455,9 @@ export interface Profile {
   // Per-user ordered list of dashboard module tile titles (e.g. ["Service",
   // "Jobs", ...]). Empty array = default order; unknown/new titles appended.
   dashboard_tile_positions: string[] | null
+  // Per-user dashboard quick-shortcut destination keys (max 3), e.g.
+  // ["calendar","invoices","sites"]. Missing entries = unset slot.
+  dashboard_shortcuts: string[] | null
   // Nominated line manager for this user (self-referencing). Recorded for HR /
   // future approvals wiring. NULL = no manager set.
   manager_id: string | null

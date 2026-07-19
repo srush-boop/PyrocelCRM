@@ -29,6 +29,7 @@ import { ApprovalsWidget } from '@/components/dashboard/approvals/approvals-widg
 import { LoneWorkerDashboardTiles } from '@/components/dashboard/lone-worker/lone-worker-dashboard-tiles'
 import { TileColorPicker } from '@/components/dashboard/home/tile-color-picker'
 import { DashboardTileGrid, type DashboardTile } from '@/components/dashboard/home/dashboard-tile-grid'
+import { DashboardShortcuts } from '@/components/dashboard/home/dashboard-shortcuts'
 import { tileIconStyle, tileAccentStyle, tileCardStyle } from '@/lib/dashboard-tile-colors'
 import { getVisibleLeaveRequests } from '@/lib/leave-approvals'
 import { EngineerHome } from '@/components/dashboard/home/engineer-home'
@@ -203,6 +204,9 @@ export default async function DashboardPage({
   // Per-user preferred tile order (array of tile titles). Empty = default order.
   const savedTileOrder = (profile as Profile).dashboard_tile_positions ?? []
 
+  // Per-user pinned quick-shortcut destinations (max 3). Empty = all unset.
+  const savedShortcuts = (profile as Profile).dashboard_shortcuts ?? []
+
   const modules: ModuleCard[] = [
     {
       title: 'Approvals',
@@ -367,13 +371,15 @@ export default async function DashboardPage({
         <ApprovalsWidget />
       </Suspense>
 
-      {/* Outstanding internal quality/management tasks for this manager. */}
-      <Suspense fallback={null}>
-        <YourTasksTile />
-      </Suspense>
-
-      {/* Live lone-worker safety status (0 when healthy; pulses on emergency) */}
-      <LoneWorkerDashboardTiles />
+      {/* Compact utility row shared by Your Tasks, live Lone Worker safety
+          status, and 3 user-configurable quick-shortcut slots. */}
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <Suspense fallback={null}>
+          <YourTasksTile />
+        </Suspense>
+        <LoneWorkerDashboardTiles />
+        <DashboardShortcuts saved={savedShortcuts} />
+      </div>
 
       {/* Company overview — one hub per module. Rendered through a client grid
           that lets the user drag tiles into their preferred, saved order. */}

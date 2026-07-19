@@ -3,6 +3,7 @@
 import { useState, useTransition, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { loadAllMyCalls } from '@/app/(dashboard)/dashboard/schedule/search-actions'
+import { CompletedCallsTable } from '@/components/dashboard/reports/completed-calls-table'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -100,6 +101,8 @@ interface ScheduleViewProps {
   tasks: TaskWithDetails[]
   profile: Profile
   engineers?: Profile[]
+  /** Which tab to open on mount (e.g. deep-linked from ?tab=completed). */
+  initialTab?: string
 }
 
 const statusConfig = {
@@ -203,7 +206,7 @@ function BookingEditor({
   )
 }
 
-export function ScheduleView({ tasks: baseTasks, profile, engineers = [] }: ScheduleViewProps) {
+export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initialTab }: ScheduleViewProps) {
   const router = useRouter()
   const supabase = createClient()
   const [search, setSearch] = useState('')
@@ -213,7 +216,9 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [] }: Sche
   // responsive (no ~130ms click jank) and the heavier view paints when ready.
   const [isSwitchingView, startViewTransition] = useTransition()
   const selectView = (mode: ViewMode) => startViewTransition(() => setViewMode(mode))
-  const [activeTab, setActiveTab] = useState('upcoming')
+  const [activeTab, setActiveTab] = useState(
+    initialTab && ['upcoming', 'overdue', 'completed'].includes(initialTab) ? initialTab : 'upcoming',
+  )
   const [sortBy, setSortBy] = useState<SortKey>('date')
   // Engineer's live location, captured on demand for the "nearby" sort.
   const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | null>(null)
@@ -582,6 +587,12 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [] }: Sche
     search.trim() && tabCounts[activeTab] === 0
       ? (['upcoming', 'overdue', 'completed'].find((t) => tabCounts[t] > 0) ?? activeTab)
       : activeTab
+
+  // On the Completed tab, office/admin see the rich "reports" table (its own
+  // filters, statuses, margins, email actions) instead of tiles/list. This is
+  // the merged Reports view. Engineers/subcontractors never had Reports access,
+  // so they keep the tile/list layout for completed calls.
+  const showRichCompleted = isAdminOrOffice && effectiveTab === 'completed'
 
   // Inline control to pick up an open task. Only shown to admin/office for
   // unassigned, still-actionable tasks (e.g. CDO non-route work like dampers).
@@ -994,6 +1005,10 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [] }: Sche
 
   return (
     <div className="space-y-2">
+      {/* The shared schedule toolbar is hidden on the rich Completed table,
+          which carries its own search + filters. */}
+      {!showRichCompleted && (
+        <>
       {/* Row 1: search | quick-filter pill buttons | engineer select | dates | clear */}
       <div className="flex items-center gap-2 overflow-x-auto scrollbar-none [-webkit-overflow-scrolling:touch] [scrollbar-width:none]">
         <GridSearch
@@ -1181,8 +1196,8 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [] }: Sche
           {viewToggle}
         </div>
       </div>
-
-
+        </>
+      )}
 
       <Tabs
         value={effectiveTab}
@@ -1223,7 +1238,11 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [] }: Sche
         </TabsContent>
 
         <TabsContent value="completed" className="mt-4">
-          {renderTasks(completedTasks, 'No completed calls')}
+          {showRichCompleted ? (
+            <CompletedCallsTable embedded />
+          ) : (
+            renderTasks(completedTasks, 'No completed calls')
+          )}
         </TabsContent>
       </Tabs>
 

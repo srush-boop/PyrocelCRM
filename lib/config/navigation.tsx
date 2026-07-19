@@ -111,8 +111,9 @@ const timesheetNavItem: NavItem = {
 }
 
 // Service is a clickable group: clicking it opens the Service Dashboard and
-// expands its children (Service Dashboard, All Calls, Map, Transfers, Reports,
-// Defects). The `key` stays `calls` so existing per-user permissions still map.
+// expands its children (Service Dashboard, All Calls, Map, Transfers, Defects).
+// Completed calls/reports now live on the All Calls → Completed tab. The `key`
+// stays `calls` so existing per-user permissions still map.
 // Service Management is now a nested sub-menu that sits at the BOTTOM of the
 // Service group (mirrors the Sales → Configure pattern). Routes lives here.
 const adminServiceManagementChild: NavChild = {
@@ -150,7 +151,6 @@ const adminCallsNavItem: NavItem = {
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
     { title: 'On-call', href: '/dashboard/oncall', icon: LifeBuoy },
     { title: 'Lone Worker', href: '/dashboard/lone-worker', icon: ShieldCheck },
-    { title: 'Reports', href: '/dashboard/reports', icon: FileText },
     { title: 'Chargeable Calls', href: '/dashboard/chargeable', icon: Coins },
     { title: 'Follow-ups', href: '/dashboard/follow-ups', icon: Wrench },
     { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },
@@ -171,7 +171,6 @@ const officeCallsNavItem: NavItem = {
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
     { title: 'On-call', href: '/dashboard/oncall', icon: LifeBuoy },
     { title: 'Lone Worker', href: '/dashboard/lone-worker', icon: ShieldCheck },
-    { title: 'Reports', href: '/dashboard/reports', icon: FileText },
     { title: 'Chargeable Calls', href: '/dashboard/chargeable', icon: Coins },
     { title: 'Follow-ups', href: '/dashboard/follow-ups', icon: Wrench },
     { title: 'Defects', href: '/dashboard/defects', icon: AlertTriangle },

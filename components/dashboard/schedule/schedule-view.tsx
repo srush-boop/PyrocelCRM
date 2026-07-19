@@ -532,6 +532,21 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   const completedTasks = sortedTasks.filter((task) => task.status === 'completed')
   const overdueTasks = upcomingTasks.filter((task) => taskOverdue(task))
 
+  // The list is split into Upcoming / Overdue / Completed tabs, so a search hit
+  // that lives in a different tab than the one selected would look "missing".
+  // When a search is active and the selected tab has no matches, fall through to
+  // whichever tab does — so searching (e.g. a completed call's reference number)
+  // surfaces the match regardless of the call's status.
+  const tabCounts: Record<string, number> = {
+    upcoming: upcomingTasks.length,
+    overdue: overdueTasks.length,
+    completed: completedTasks.length,
+  }
+  const effectiveTab =
+    search.trim() && tabCounts[activeTab] === 0
+      ? (['upcoming', 'overdue', 'completed'].find((t) => tabCounts[t] > 0) ?? activeTab)
+      : activeTab
+
   // Inline control to pick up an open task. Only shown to admin/office for
   // unassigned, still-actionable tasks (e.g. CDO non-route work like dampers).
   const AssignControl = ({ task, className }: { task: TaskWithDetails; className?: string }) => {
@@ -1125,7 +1140,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
 
 
       <Tabs
-        value={activeTab}
+        value={effectiveTab}
         onValueChange={setActiveTab}
         className={
           isSwitchingView ? 'opacity-60 transition-opacity duration-150' : 'transition-opacity'

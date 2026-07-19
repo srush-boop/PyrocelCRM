@@ -588,6 +588,8 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
           (task.visit_type?.name ? ` · ${task.visit_type.name}` : '')
         }
         status={task.status}
+        result={task.task_result?.overall_status ?? null}
+        reference={task.task_result?.reference_number ?? null}
         scheduledDate={task.scheduled_date}
         completeByDate={taskTargetDate(task)}
         isOverdue={isOverdue}
@@ -693,6 +695,9 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
               )}
             </div>
             <p className="truncate text-xs text-muted-foreground leading-tight">
+              {task.task_result?.reference_number && (
+                <span className="font-mono text-foreground">{task.task_result.reference_number} · </span>
+              )}
               {task.site_service?.service_type?.name}
               {task.visit_type?.name ? ` · ${task.visit_type.name}` : ''}
               {!isEngineer

@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { loadAllMyCalls } from '@/app/(dashboard)/dashboard/schedule/search-actions'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -202,7 +203,7 @@ function BookingEditor({
   )
 }
 
-export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewProps) {
+export function ScheduleView({ tasks: baseTasks, profile, engineers = [] }: ScheduleViewProps) {
   const router = useRouter()
   const supabase = createClient()
   const [search, setSearch] = useState('')
@@ -229,6 +230,41 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null)
   // Call selected for the read-only "View Call" preview dialog.
   const [viewTask, setViewTask] = useState<TaskWithDetails | null>(null)
+
+  // Engineers/sub-contractors only receive recent completed calls in their
+  // initial payload (a 90-day cutoff in schedule/page.tsx keeps the field
+  // payload bounded). So the search can still reach OLDER calls, lazily pull
+  // their full call history the first time they type a search, then merge it in.
+  // Admin/office already load everything, so this never runs for them.
+  const cutoffApplies = profile.role === 'engineer' || profile.role === 'subcontractor'
+  const [extraTasks, setExtraTasks] = useState<TaskWithDetails[]>([])
+  const [loadingAll, setLoadingAll] = useState(false)
+  const loadStarted = useRef(false)
+
+  useEffect(() => {
+    if (!cutoffApplies || loadStarted.current) return
+    if (search.trim().length < 2) return
+    loadStarted.current = true
+    setLoadingAll(true)
+    loadAllMyCalls()
+      .then((res) => {
+        if (res.ok && res.tasks) setExtraTasks(res.tasks)
+      })
+      .catch((err) => {
+        console.error('[v0] Failed to load full call history for search:', err)
+        // Allow a retry on the next search keystroke.
+        loadStarted.current = false
+      })
+      .finally(() => setLoadingAll(false))
+  }, [search, cutoffApplies])
+
+  // Merge the initial (bounded) payload with any lazily-loaded older calls,
+  // de-duping by id. This merged list feeds the whole filter/sort pipeline.
+  const tasks = useMemo(() => {
+    if (extraTasks.length === 0) return baseTasks
+    const seen = new Set(baseTasks.map((t) => t.id))
+    return [...baseTasks, ...extraTasks.filter((t) => !seen.has(t.id))]
+  }, [baseTasks, extraTasks])
 
   // Bulk assignment state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -964,6 +1000,13 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
           placeholder="Search calls or ref number..."
           className="shrink-0 w-[200px] max-w-none sm:w-[240px]"
         />
+
+        {loadingAll && (
+          <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Searching all calls...
+          </span>
+        )}
 
         {(needsBookingCount > 0 || needsBookingOnly) && (
           <Button

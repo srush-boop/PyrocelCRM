@@ -14,7 +14,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { LogOut, User, ArrowLeft } from 'lucide-react'
+import { LogOut, User, ArrowLeft, LayoutDashboard } from 'lucide-react'
+import Link from 'next/link'
 import { GlobalSiteSearch } from '@/components/dashboard/global-site-search'
 import { NotificationBell } from '@/components/dashboard/notifications/notification-bell'
 import type { Profile } from '@/lib/types/database'
@@ -33,6 +34,12 @@ export function DashboardHeader({ profile }: DashboardHeaderProps) {
   // Task detail pages render their own contextual Back button (task-header.tsx),
   // so we suppress the global one there to avoid a duplicate.
   const showBack = pathname !== '/dashboard' && !pathname.startsWith('/dashboard/tasks/')
+
+  // Office/admin get a prominent "Your Dashboard" shortcut back to the manager
+  // home from any page, encouraging dashboard-first navigation. Hidden on the
+  // dashboard itself where it would be redundant.
+  const isManager = profile.role === 'admin' || profile.role === 'office'
+  const showDashboardButton = isManager && pathname !== '/dashboard'
 
   const handleBack = () => {
     // 1. Prefer an explicit origin passed by the linking page (?from=). Detail
@@ -73,28 +80,41 @@ export function DashboardHeader({ profile }: DashboardHeaderProps) {
     : profile.email.slice(0, 2).toUpperCase()
 
   return (
-    <header data-dashboard-header className="flex h-16 items-center gap-2 border-b border-border bg-background px-3 sm:gap-4 sm:px-6">
-      <SidebarTrigger className="-ml-2" />
+    <header
+      data-dashboard-header
+      className="flex h-16 items-center gap-1.5 border-b border-border/70 bg-background/80 px-3 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 sm:gap-3 sm:px-6"
+    >
+      <SidebarTrigger className="-ml-2 text-muted-foreground hover:text-foreground" />
       <Separator orientation="vertical" className="h-6" />
+      {showDashboardButton && (
+        <Button asChild size="sm" className="gap-2 shadow-sm">
+          <Link href="/dashboard">
+            <LayoutDashboard className="h-4 w-4" />
+            <span className="hidden sm:inline">Your Dashboard</span>
+            <span className="sm:hidden">Dashboard</span>
+          </Link>
+        </Button>
+      )}
       {showBack && (
         <Button
           variant="ghost"
           size="sm"
           onClick={handleBack}
-          className="gap-2"
+          className="gap-2 text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back
+          <span className="hidden sm:inline">Back</span>
         </Button>
       )}
       <div className="flex-1" />
-      {(profile.role === 'admin' || profile.role === 'office') && (
-        <GlobalSiteSearch />
-      )}
+      {isManager && <GlobalSiteSearch />}
       <NotificationBell />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="relative h-9 w-9 rounded-full">
+          <Button
+            variant="ghost"
+            className="relative h-9 w-9 rounded-full ring-offset-background transition-shadow hover:ring-2 hover:ring-primary/30 hover:ring-offset-2"
+          >
             <Avatar className="h-9 w-9">
               <AvatarFallback className="bg-primary text-primary-foreground">
                 {initials}

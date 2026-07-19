@@ -23,7 +23,6 @@ import {
 } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 import Link from 'next/link'
-import { ScanQrButton } from '@/components/dashboard/dampers/scan-qr-button'
 import { AddRequestDialog } from '@/components/dashboard/requests/add-request-dialog'
 import { ApprovalsWidget } from '@/components/dashboard/approvals/approvals-widget'
 import { LoneWorkerDashboardTiles } from '@/components/dashboard/lone-worker/lone-worker-dashboard-tiles'
@@ -343,18 +342,24 @@ export default async function DashboardPage({
     },
   ]
 
+  // Time-aware greeting hero, mirroring the engineer home for a consistent,
+  // modern feel across the app.
+  const hour = today.getHours()
+  const greeting =
+    hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
+  const firstName = ((profile as Profile).full_name || 'there').split(' ')[0]
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">
-            Welcome back, {(profile as Profile).full_name || 'User'}
-          </p>
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight text-balance">
+            {greeting}, {firstName}
+          </h1>
+          <p className="text-muted-foreground">{format(today, 'EEEE, d MMMM yyyy')}</p>
         </div>
         <div className="flex items-center gap-2">
           <AddRequestDialog triggerVariant="outline" />
-          <ScanQrButton />
         </div>
       </div>
 

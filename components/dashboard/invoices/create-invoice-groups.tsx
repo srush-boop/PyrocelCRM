@@ -9,6 +9,14 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   Table,
   TableBody,
   TableCell,
@@ -17,11 +25,13 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { toast } from 'sonner'
-import { Loader2, ReceiptText, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { Loader2, ReceiptText, AlertTriangle, CheckCircle2, Eye } from 'lucide-react'
 import { formatPence, BILLING_FREQUENCY_LABELS } from '@/lib/billing/invoices'
 import {
   createInvoiceFromTasks,
   getInvoiceForActions,
+  previewInvoiceFromTasks,
+  type InvoicePreview,
   type ReadyGroup,
 } from '@/lib/actions/invoices'
 import { InvoiceQuickActions } from '@/components/dashboard/invoices/invoice-quick-actions'
@@ -66,8 +76,14 @@ function GroupCard({ group, canEdit }: { group: ReadyGroup; canEdit: boolean }) 
     // When the client is invoiced per-call, start with nothing bulk-selected.
     individual ? new Set() : new Set(group.tasks.map((t) => t.id)),
   )
+  // Key of the action currently loading a preview: 'bulk' or a single task id.
+  const [busyKey, setBusyKey] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
-  const [raisingId, setRaisingId] = useState<string | null>(null)
+  // The computed (not-yet-saved) preview + the calls it covers, shown in a
+  // dialog so the user reviews the exact lines before the draft is raised.
+  const [preview, setPreview] = useState<InvoicePreview | null>(null)
+  const [previewIds, setPreviewIds] = useState<string[]>([])
+  const [previewOpen, setPreviewOpen] = useState(false)
   // Draft(s) just created from this group, shown inline with quick-actions
   // (Preview / Edit / Send) so the user can review without a page redirect.
   const [createdInvoices, setCreatedInvoices] = useState<Invoice[]>([])
@@ -92,6 +108,8 @@ function GroupCard({ group, canEdit }: { group: ReadyGroup; canEdit: boolean }) 
     .reduce((s, t) => s + t.partsTotalPence, 0)
 
   const canCreate = !!group.accountId && !group.onHold && !noneSelected
+  const canAct = !!group.accountId && !group.onHold
+  const busy = busyKey !== null || creating
 
   // Show the freshly created draft inline (with Preview / Edit / Send) rather
   // than redirecting away, so the user stays in the raise-invoice flow.
@@ -105,34 +123,35 @@ function GroupCard({ group, canEdit }: { group: ReadyGroup; canEdit: boolean }) 
     router.refresh()
   }
 
-  const handleCreate = async () => {
-    if (!group.accountId) return
+  // Compute the invoice preview for a set of calls, then open the review dialog.
+  const openPreview = async (ids: string[], key: string) => {
+    if (!group.accountId || ids.length === 0) return
+    setBusyKey(key)
+    const res = await previewInvoiceFromTasks(group.accountId, ids)
+    setBusyKey(null)
+    if (res.error || !res.preview) {
+      toast.error(res.error ?? 'Could not build a preview')
+      return
+    }
+    setPreview(res.preview)
+    setPreviewIds(ids)
+    setPreviewOpen(true)
+  }
+
+  // Commit the previewed calls as a draft invoice.
+  const confirmCreate = async () => {
+    if (!group.accountId || previewIds.length === 0) return
     setCreating(true)
-    const res = await createInvoiceFromTasks(group.accountId, Array.from(selected))
+    const res = await createInvoiceFromTasks(group.accountId, previewIds)
     setCreating(false)
     if (res.error) {
       toast.error(res.error)
       return
     }
     toast.success('Draft invoice created')
+    setPreviewOpen(false)
     await showCreated(res.invoiceId)
   }
-
-  // Raise a standalone invoice for a single call (one call = one invoice).
-  const handleRaiseSingle = async (taskId: string) => {
-    if (!group.accountId) return
-    setRaisingId(taskId)
-    const res = await createInvoiceFromTasks(group.accountId, [taskId])
-    setRaisingId(null)
-    if (res.error) {
-      toast.error(res.error)
-      return
-    }
-    toast.success('Draft invoice created')
-    await showCreated(res.invoiceId)
-  }
-
-  const canAct = !!group.accountId && !group.onHold
 
   return (
     <Card>
@@ -237,13 +256,13 @@ function GroupCard({ group, canEdit }: { group: ReadyGroup; canEdit: boolean }) 
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => handleRaiseSingle(t.id)}
-                      disabled={!canAct || raisingId !== null || creating}
+                      onClick={() => openPreview([t.id], t.id)}
+                      disabled={!canAct || busy}
                     >
-                      {raisingId === t.id ? (
+                      {busyKey === t.id ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        'Raise invoice'
+                        'Preview'
                       )}
                     </Button>
                   </TableCell>
@@ -256,8 +275,8 @@ function GroupCard({ group, canEdit }: { group: ReadyGroup; canEdit: boolean }) 
         <div className="flex flex-wrap items-center justify-between gap-3">
           {individual ? (
             <p className="text-sm text-muted-foreground">
-              This client is invoiced per call — raise each call individually using
-              the buttons above.
+              This client is invoiced per call — preview and raise each call individually
+              using the buttons above.
             </p>
           ) : (
             <>
@@ -266,13 +285,16 @@ function GroupCard({ group, canEdit }: { group: ReadyGroup; canEdit: boolean }) 
                 {group.tasks.length === 1 ? '' : 's'} selected. Each call adds a labour
                 line to price up.
               </p>
-              <Button onClick={handleCreate} disabled={!canCreate || creating || raisingId !== null}>
-                {creating ? (
+              <Button
+                onClick={() => openPreview(Array.from(selected), 'bulk')}
+                disabled={!canCreate || busy}
+              >
+                {busyKey === 'bulk' ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
-                  <ReceiptText className="mr-2 h-4 w-4" />
+                  <Eye className="mr-2 h-4 w-4" />
                 )}
-                Create draft invoice
+                Preview &amp; create
               </Button>
             </>
           )}
@@ -306,6 +328,150 @@ function GroupCard({ group, canEdit }: { group: ReadyGroup; canEdit: boolean }) 
           </div>
         )}
       </CardContent>
+
+      <PreviewDialog
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        accountName={group.accountName}
+        callCount={previewIds.length}
+        preview={preview}
+        creating={creating}
+        onConfirm={confirmCreate}
+      />
     </Card>
+  )
+}
+
+function PreviewDialog({
+  open,
+  onOpenChange,
+  accountName,
+  callCount,
+  preview,
+  creating,
+  onConfirm,
+}: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  accountName: string
+  callCount: number
+  preview: InvoicePreview | null
+  creating: boolean
+  onConfirm: () => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Invoice preview</DialogTitle>
+          <DialogDescription>
+            Review the auto-priced lines for {accountName} before raising the draft. Nothing
+            is saved until you create it — all lines stay editable afterwards.
+          </DialogDescription>
+        </DialogHeader>
+
+        {!preview ? (
+          <p className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Building preview…
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {/* Bill-to header block. */}
+            <div className="grid gap-3 rounded-lg border bg-muted/30 p-3 sm:grid-cols-2">
+              <div>
+                <p className="text-xs font-medium uppercase text-muted-foreground">Bill to</p>
+                <p className="font-medium">{preview.billToName}</p>
+                {preview.billToAddress && (
+                  <p className="whitespace-pre-line text-sm text-muted-foreground">
+                    {preview.billToAddress}
+                  </p>
+                )}
+                <p className="text-sm text-muted-foreground">
+                  {preview.billToEmail || (
+                    <span className="text-destructive">No invoice email set</span>
+                  )}
+                </p>
+              </div>
+              <div className="sm:text-right">
+                <p className="text-xs font-medium uppercase text-muted-foreground">Details</p>
+                <p className="text-sm">
+                  {callCount} call{callCount === 1 ? '' : 's'}
+                </p>
+                {preview.poNumber && (
+                  <p className="text-sm text-muted-foreground">PO {preview.poNumber}</p>
+                )}
+                <p className="text-sm text-muted-foreground">VAT {preview.taxRate}%</p>
+              </div>
+            </div>
+
+            {/* Line items exactly as they will be created. */}
+            <div className="rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Description</TableHead>
+                    <TableHead className="w-16 text-center">Qty</TableHead>
+                    <TableHead className="w-24 text-right">Unit</TableHead>
+                    <TableHead className="w-24 text-right">Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {preview.lines.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="py-6 text-center text-sm text-muted-foreground">
+                        No line items would be created.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    preview.lines.map((l, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="text-sm">{l.description}</TableCell>
+                        <TableCell className="text-center tabular-nums">{l.quantity}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {formatPence(l.unitPricePence)}
+                        </TableCell>
+                        <TableCell className="text-right font-medium tabular-nums">
+                          {formatPence(l.amountPence)}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Totals. */}
+            <div className="ml-auto w-full max-w-xs space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span className="tabular-nums">{formatPence(preview.subtotalPence)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">VAT ({preview.taxRate}%)</span>
+                <span className="tabular-nums">{formatPence(preview.taxPence)}</span>
+              </div>
+              <div className="flex justify-between border-t pt-1 font-semibold">
+                <span>Total</span>
+                <span className="tabular-nums">{formatPence(preview.totalPence)}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={creating}>
+            Cancel
+          </Button>
+          <Button onClick={onConfirm} disabled={!preview || creating}>
+            {creating ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <ReceiptText className="mr-2 h-4 w-4" />
+            )}
+            Create draft invoice
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

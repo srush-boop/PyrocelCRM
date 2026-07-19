@@ -20,6 +20,8 @@ import {
   Siren,
   ClipboardCheck,
   Inbox,
+  Sun,
+  Lightbulb,
 } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 import Link from 'next/link'
@@ -32,11 +34,10 @@ import { DashboardShortcuts } from '@/components/dashboard/home/dashboard-shortc
 import { tileIconStyle, tileAccentStyle, tileCardStyle } from '@/lib/dashboard-tile-colors'
 import { getVisibleLeaveRequests } from '@/lib/leave-approvals'
 import { EngineerHome } from '@/components/dashboard/home/engineer-home'
-import { CompanyDayAheadTile } from '@/components/dashboard/home/company-day-ahead-tile'
-import { DidYouKnowTile } from '@/components/dashboard/home/did-you-know-tile'
+import { getDailyFact } from '@/lib/system-facts'
 import { YourTasksTile } from '@/components/dashboard/internal-tasks/your-tasks-tile'
 import { DashboardDateFilter } from '@/components/dashboard/home/dashboard-date-filter'
-import { Suspense } from 'react'
+import { Suspense, type ReactNode } from 'react'
 import { format, startOfMonth, endOfMonth, subDays, startOfDay, endOfDay } from 'date-fns'
 import { fetchKpiData } from '@/lib/kpi-data'
 import { buildKpiReport, type KpiTask } from '@/lib/kpi'
@@ -85,6 +86,7 @@ export default async function DashboardPage({
     openJobsCount,
     openQuotesCount,
     pendingRequestsCount,
+    todaysCallsCount,
   ] = await Promise.all([
     supabase.from('sites').select('id', { count: 'exact', head: true }),
     supabase.from('clients').select('id', { count: 'exact', head: true }),
@@ -118,6 +120,12 @@ export default async function DashboardPage({
       .from('inbound_requests')
       .select('id', { count: 'exact', head: true })
       .in('status', ['new', 'triaged']),
+    // Calls booked across the whole team for today (powers the day-ahead tile).
+    supabase
+      .from('tasks')
+      .select('id', { count: 'exact', head: true })
+      .eq('scheduled_date', todayStr)
+      .in('status', ['pending', 'in_progress', 'completed']),
   ])
 
   // ---------------------------------------------------------------------------
@@ -208,6 +216,9 @@ export default async function DashboardPage({
   // Per-user pinned quick-shortcut destinations (max 3). Empty = all unset.
   const savedShortcuts = (profile as Profile).dashboard_shortcuts ?? []
 
+  // Rotating daily system fact, shared with the engineer home.
+  const dailyFact = getDailyFact(today)
+
   const modules: ModuleCard[] = [
     {
       title: 'Approvals',
@@ -221,6 +232,13 @@ export default async function DashboardPage({
           alert: pendingApprovalsCount > 0,
         },
       ],
+    },
+    {
+      title: 'The day ahead',
+      description: 'Calls booked today',
+      icon: Sun,
+      href: '/dashboard/calendar',
+      metrics: [{ label: 'Booked today', value: todaysCallsCount.count || 0 }],
     },
     {
       title: 'Service',
@@ -342,6 +360,17 @@ export default async function DashboardPage({
       href: '/dashboard/calendar',
       metrics: [],
     },
+    {
+      title: 'Did you know?',
+      description: 'A daily fact about the systems we service',
+      icon: Lightbulb,
+      metrics: [],
+      body: (
+        <p className="line-clamp-4 text-pretty text-sm leading-relaxed text-muted-foreground">
+          {dailyFact}
+        </p>
+      ),
+    },
   ]
 
   // Time-aware greeting hero, mirroring the engineer home for a consistent,
@@ -388,11 +417,6 @@ export default async function DashboardPage({
         <DashboardShortcuts saved={savedShortcuts} />
       </div>
 
-      {/* Company-wide "day ahead" — every call booked across the team today. */}
-      <Suspense fallback={null}>
-        <CompanyDayAheadTile />
-      </Suspense>
-
       {/* Company overview — one hub per module. Rendered through a client grid
           that lets the user drag tiles into their preferred, saved order. */}
       <DashboardTileGrid
@@ -405,7 +429,7 @@ export default async function DashboardPage({
             node: (
             <Card
               key={m.title}
-              className="group relative h-full overflow-hidden transition-colors hover:border-primary/50 hover:bg-accent/40"
+              className="group relative flex h-full min-h-[184px] flex-col overflow-hidden transition-colors hover:border-primary/50 hover:bg-accent/40"
               style={tileCardStyle(color)}
             >
               {/* Colour accent bar for personalised tiles. */}
@@ -417,13 +441,16 @@ export default async function DashboardPage({
                 />
               )}
               {/* Full-card navigation overlay. Sits behind the (pointer-events-none)
-                  content so clicks anywhere navigate, except the colour picker. */}
-              <Link
-                href={m.href}
-                aria-label={`Open ${m.title}`}
-                className="absolute inset-0 z-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-              />
-              <div className="pointer-events-none relative z-[1]">
+                  content so clicks anywhere navigate, except the colour picker.
+                  Omitted for informational tiles with no destination. */}
+              {m.href && (
+                <Link
+                  href={m.href}
+                  aria-label={`Open ${m.title}`}
+                  className="absolute inset-0 z-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                />
+              )}
+              <div className="pointer-events-none relative z-[1] flex flex-1 flex-col">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -439,34 +466,40 @@ export default async function DashboardPage({
                     </div>
                     <div className="flex items-center gap-1">
                       <TileColorPicker tileKey={m.title} currentColor={color} />
-                      <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                      {m.href && (
+                        <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                      )}
                     </div>
                   </div>
                   <CardDescription className="pt-1">{m.description}</CardDescription>
                 </CardHeader>
-                {m.metrics.length > 0 && (
-                  <CardContent>
-                    <div className="flex flex-wrap gap-x-6 gap-y-2">
-                      {m.metrics.map((metric) => (
-                        <div key={metric.label} className="space-y-0.5">
-                          <div
-                            className={`flex items-center gap-1 text-2xl font-bold ${
-                              metric.alert ? 'text-destructive' : ''
-                            }`}
-                          >
-                            {metric.icon && <metric.icon className="h-5 w-5" />}
-                            {metric.display ?? metric.value}
+                {m.body ? (
+                  <CardContent className="flex-1">{m.body}</CardContent>
+                ) : (
+                  m.metrics.length > 0 && (
+                    <CardContent>
+                      <div className="flex flex-wrap gap-x-6 gap-y-2">
+                        {m.metrics.map((metric) => (
+                          <div key={metric.label} className="space-y-0.5">
+                            <div
+                              className={`flex items-center gap-1 text-2xl font-bold ${
+                                metric.alert ? 'text-destructive' : ''
+                              }`}
+                            >
+                              {metric.icon && <metric.icon className="h-5 w-5" />}
+                              {metric.display ?? metric.value}
+                            </div>
+                            <p className="text-xs text-muted-foreground">{metric.label}</p>
+                            {metric.caption && (
+                              <p className="text-[0.7rem] leading-tight text-muted-foreground/70">
+                                {metric.caption}
+                              </p>
+                            )}
                           </div>
-                          <p className="text-xs text-muted-foreground">{metric.label}</p>
-                          {metric.caption && (
-                            <p className="text-[0.7rem] leading-tight text-muted-foreground/70">
-                              {metric.caption}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
+                        ))}
+                      </div>
+                    </CardContent>
+                  )
                 )}
               </div>
             </Card>
@@ -474,9 +507,6 @@ export default async function DashboardPage({
           }
         })}
       />
-
-      {/* Daily system fact, shared with the engineer home. */}
-      <DidYouKnowTile />
     </div>
   )
 }
@@ -496,6 +526,9 @@ type ModuleCard = {
   title: string
   description: string
   icon: typeof Wrench
-  href: string
+  // Optional: informational tiles (e.g. "Did you know?") have no destination.
+  href?: string
   metrics: ModuleMetric[]
+  // Optional custom content rendered in place of metrics.
+  body?: ReactNode
 }

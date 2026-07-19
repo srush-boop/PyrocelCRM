@@ -320,33 +320,43 @@ export async function getReadyToInvoiceGroups(): Promise<ReadyGroup[]> {
 
 // ---- Create --------------------------------------------------------------
 
+// A built line item, minus its `invoice_id` (added when actually inserting) so
+// the same builder can serve both the live create and the pre-create preview.
+type PreparedInvoiceLine = {
+  task_id: string | null
+  part_id: string | null
+  kind: InvoiceLineKind
+  description: string
+  quantity: number
+  unit_price_pence: number
+  amount_pence: number
+  sort_order: number
+  nominal_code_id: string | null
+  nominal_code: string | null
+}
+
 /**
- * Create a draft invoice from a set of reviewed chargeable calls under one
- * billing account. Parts become priced line items automatically, and each call
- * is auto-priced against the resolved rate card (account override or company
- * default) into an attendance line plus a labour line for any chargeable hours.
- * All lines remain editable while the invoice is in draft.
+ * Shared builder: re-fetch the selected calls server-side (trusted data, guarding
+ * against double-invoicing), resolve the rate card + nominal codes, and produce
+ * the priced line items (attendance/labour + parts) exactly as they will appear
+ * on the invoice. Returned lines omit `invoice_id` so `createInvoiceFromTasks`
+ * and `previewInvoiceFromTasks` share identical logic and never drift. Also
+ * returns the invoice-level PO/site values common across the selected calls.
  */
-export async function createInvoiceFromTasks(
-  billingAccountId: string,
+async function buildInvoiceLineData(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  account: BillingAccount,
   taskIds: string[],
-): Promise<{ error: string | null; invoiceId?: string }> {
-  const ctx = await requireManager()
-  if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
-  const { supabase, userId } = ctx
-
-  if (!billingAccountId) return { error: 'A billing account is required' }
-  if (taskIds.length === 0) return { error: 'Select at least one call' }
-
-  const { data: account } = await supabase
-    .from('billing_accounts')
-    .select('*')
-    .eq('id', billingAccountId)
-    .single<BillingAccount>()
-  if (!account) return { error: 'Billing account not found' }
-
-  // Re-fetch the tasks server-side so line amounts come from trusted data, and
-  // guard against a call being invoiced twice via a stale client.
+): Promise<
+  | { error: string }
+  | {
+      rows: any[]
+      lines: PreparedInvoiceLine[]
+      commonPo: string | null
+      commonSiteId: string | null
+      commonSiteAddress: string | null
+    }
+> {
   const { data: tasks } = await supabase
     .from('tasks')
     .select(
@@ -417,65 +427,9 @@ export async function createInvoiceFromTasks(
   const mixedPo = commonPo === null && metas.some((m) => m.po)
   const mixedSite = commonSiteId === null && metas.length > 1
 
-  // Reserve a per-financial-year sequence number atomically.
-  const now = new Date()
-  const fy = financialYearOf(now)
-  const { data: seq, error: seqError } = await supabase.rpc('next_invoice_seq', {
-    p_fy: fy,
-  })
-  if (seqError || typeof seq !== 'number') {
-    return { error: seqError?.message || 'Could not allocate an invoice number' }
-  }
-  const invoiceNumber = formatInvoiceNumber(fy, seq)
-
-  const billToAddress = [account.invoice_address, account.invoice_postcode]
-    .filter(Boolean)
-    .join('\n')
-
-  const { data: invoice, error: invError } = await supabase
-    .from('invoices')
-    .insert({
-      invoice_number: invoiceNumber,
-      financial_year: fy,
-      sequence: seq,
-      billing_account_id: account.id,
-      client_id: account.client_id,
-      status: 'draft',
-      origin: 'adhoc',
-      po_number: commonPo,
-      site_id: commonSiteId,
-      site_address: commonSiteAddress,
-      bill_to_name: account.invoice_contact_name || account.name,
-      bill_to_address: billToAddress || null,
-      bill_to_email: account.invoice_email,
-      sage_account_ref: account.sage_account_ref,
-      payment_terms_days: account.payment_terms_days ?? 30,
-      tax_rate: DEFAULT_TAX_RATE,
-      created_by: userId,
-    })
-    .select('id')
-    .single()
-
-  if (invError || !invoice) {
-    return { error: invError?.message || 'Could not create the invoice' }
-  }
-  const invoiceId = invoice.id as string
-
   // Build line items: priced attendance (+ labour) lines per call, then a line
   // per chargeable part.
-  const lines: {
-    invoice_id: string
-    task_id: string | null
-    part_id: string | null
-    kind: InvoiceLineKind
-    description: string
-    quantity: number
-    unit_price_pence: number
-    amount_pence: number
-    sort_order: number
-    nominal_code_id: string | null
-    nominal_code: string | null
-  }[] = []
+  const lines: PreparedInvoiceLine[] = []
   let order = 0
 
   for (const t of rows) {
@@ -528,7 +482,6 @@ export async function createInvoiceFromTasks(
 
       // Attendance / call-out line (always present, even at £0).
       lines.push({
-        invoice_id: invoiceId,
         task_id: t.id,
         part_id: null,
         kind: 'labour',
@@ -543,7 +496,6 @@ export async function createInvoiceFromTasks(
       // Labour line only when there are chargeable hours beyond the fee.
       if (priced.chargeHours > 0) {
         lines.push({
-          invoice_id: invoiceId,
           task_id: t.id,
           part_id: null,
           kind: 'labour',
@@ -559,7 +511,6 @@ export async function createInvoiceFromTasks(
       // No rate card configured: keep the legacy single £0 labour line for the
       // office to price up by hand.
       lines.push({
-        invoice_id: invoiceId,
         task_id: t.id,
         part_id: null,
         kind: 'labour',
@@ -580,7 +531,6 @@ export async function createInvoiceFromTasks(
       // Part's own nominal wins; else fall back to the call's service type.
       const partNominalId: string | null = part?.nominal_code_id ?? svcNominalId
       lines.push({
-        invoice_id: invoiceId,
         task_id: t.id,
         part_id: p.part_id ?? null,
         kind: 'part',
@@ -593,6 +543,165 @@ export async function createInvoiceFromTasks(
       })
     }
   }
+
+  return { rows, lines, commonPo, commonSiteId, commonSiteAddress }
+}
+
+// A single line as shown in the pre-create preview.
+export interface InvoicePreviewLine {
+  kind: InvoiceLineKind
+  description: string
+  quantity: number
+  unitPricePence: number
+  amountPence: number
+}
+
+export interface InvoicePreview {
+  billToName: string
+  billToEmail: string | null
+  billToAddress: string | null
+  poNumber: string | null
+  taxRate: number
+  lines: InvoicePreviewLine[]
+  subtotalPence: number
+  taxPence: number
+  totalPence: number
+  callCount: number
+}
+
+/**
+ * Compute (but do NOT persist) what a draft invoice would contain for the given
+ * calls, so the office can review the exact auto-priced lines and totals before
+ * committing. Read-only: reserves no invoice number and links no calls.
+ */
+export async function previewInvoiceFromTasks(
+  billingAccountId: string,
+  taskIds: string[],
+): Promise<{ error: string | null; preview?: InvoicePreview }> {
+  const ctx = await requireManager()
+  if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
+  const { supabase } = ctx
+
+  if (!billingAccountId) return { error: 'A billing account is required' }
+  if (taskIds.length === 0) return { error: 'Select at least one call' }
+
+  const { data: account } = await supabase
+    .from('billing_accounts')
+    .select('*')
+    .eq('id', billingAccountId)
+    .single<BillingAccount>()
+  if (!account) return { error: 'Billing account not found' }
+
+  const built = await buildInvoiceLineData(supabase, account, taskIds)
+  if ('error' in built) return { error: built.error }
+
+  const { subtotalPence, taxPence, totalPence } = computeInvoiceTotals(
+    built.lines.map((l) => ({ amount_pence: l.amount_pence })),
+    DEFAULT_TAX_RATE,
+  )
+  const billToAddress =
+    [account.invoice_address, account.invoice_postcode].filter(Boolean).join('\n') || null
+
+  return {
+    error: null,
+    preview: {
+      billToName: account.invoice_contact_name || account.name,
+      billToEmail: account.invoice_email,
+      billToAddress,
+      poNumber: built.commonPo,
+      taxRate: DEFAULT_TAX_RATE,
+      lines: built.lines.map((l) => ({
+        kind: l.kind,
+        description: l.description,
+        quantity: l.quantity,
+        unitPricePence: l.unit_price_pence,
+        amountPence: l.amount_pence,
+      })),
+      subtotalPence,
+      taxPence,
+      totalPence,
+      callCount: built.rows.length,
+    },
+  }
+}
+
+/**
+ * Create a draft invoice from a set of reviewed chargeable calls under one
+ * billing account. Parts become priced line items automatically, and each call
+ * is auto-priced against the resolved rate card (account override or company
+ * default) into an attendance line plus a labour line for any chargeable hours.
+ * All lines remain editable while the invoice is in draft.
+ */
+export async function createInvoiceFromTasks(
+  billingAccountId: string,
+  taskIds: string[],
+): Promise<{ error: string | null; invoiceId?: string }> {
+  const ctx = await requireManager()
+  if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
+  const { supabase, userId } = ctx
+
+  if (!billingAccountId) return { error: 'A billing account is required' }
+  if (taskIds.length === 0) return { error: 'Select at least one call' }
+
+  const { data: account } = await supabase
+    .from('billing_accounts')
+    .select('*')
+    .eq('id', billingAccountId)
+    .single<BillingAccount>()
+  if (!account) return { error: 'Billing account not found' }
+
+  // Build the priced line data (fetch + rate-card + parts) via the shared helper
+  // so what we persist matches the pre-create preview exactly.
+  const built = await buildInvoiceLineData(supabase, account, taskIds)
+  if ('error' in built) return { error: built.error }
+  const { rows, lines: preparedLines, commonPo, commonSiteId, commonSiteAddress } = built
+
+  // Reserve a per-financial-year sequence number atomically.
+  const now = new Date()
+  const fy = financialYearOf(now)
+  const { data: seq, error: seqError } = await supabase.rpc('next_invoice_seq', {
+    p_fy: fy,
+  })
+  if (seqError || typeof seq !== 'number') {
+    return { error: seqError?.message || 'Could not allocate an invoice number' }
+  }
+  const invoiceNumber = formatInvoiceNumber(fy, seq)
+
+  const billToAddress = [account.invoice_address, account.invoice_postcode]
+    .filter(Boolean)
+    .join('\n')
+
+  const { data: invoice, error: invError } = await supabase
+    .from('invoices')
+    .insert({
+      invoice_number: invoiceNumber,
+      financial_year: fy,
+      sequence: seq,
+      billing_account_id: account.id,
+      client_id: account.client_id,
+      status: 'draft',
+      origin: 'adhoc',
+      po_number: commonPo,
+      site_id: commonSiteId,
+      site_address: commonSiteAddress,
+      bill_to_name: account.invoice_contact_name || account.name,
+      bill_to_address: billToAddress || null,
+      bill_to_email: account.invoice_email,
+      sage_account_ref: account.sage_account_ref,
+      payment_terms_days: account.payment_terms_days ?? 30,
+      tax_rate: DEFAULT_TAX_RATE,
+      created_by: userId,
+    })
+    .select('id')
+    .single()
+
+  if (invError || !invoice) {
+    return { error: invError?.message || 'Could not create the invoice' }
+  }
+  const invoiceId = invoice.id as string
+
+  // Attach the new invoice id to the pre-built lines before inserting them.
+  const lines = preparedLines.map((l) => ({ ...l, invoice_id: invoiceId }))
 
   if (lines.length > 0) {
     const { error: liError } = await supabase.from('invoice_line_items').insert(lines)
@@ -855,6 +964,45 @@ export async function updateInvoiceMeta(
   await recomputeTotals(supabase, invoiceId)
   revalidatePath(`/dashboard/invoices/${invoiceId}`)
   return { error: null }
+}
+
+// ---- Bulk status transitions ---------------------------------------------
+
+export interface BulkInvoiceResult {
+  ok: number
+  failures: { invoiceId: string; error: string }[]
+}
+
+/**
+ * Issue several draft invoices in one pass. Each is run through the same guarded
+ * `issueInvoice` (nominal-code + on-hold + draft-only checks), collecting
+ * per-invoice failures so the caller can report partial success.
+ */
+export async function bulkIssueInvoices(invoiceIds: string[]): Promise<BulkInvoiceResult> {
+  const failures: { invoiceId: string; error: string }[] = []
+  let ok = 0
+  for (const id of invoiceIds) {
+    const res = await issueInvoice(id)
+    if (res.error) failures.push({ invoiceId: id, error: res.error })
+    else ok++
+  }
+  return { ok, failures }
+}
+
+/**
+ * Email several invoices to their clients in one pass (auto-issuing any drafts
+ * first), reusing the guarded `sendInvoiceToClient`. Skips/records any that are
+ * already sent or missing an invoice email. Returns per-invoice failures.
+ */
+export async function bulkSendInvoices(invoiceIds: string[]): Promise<BulkInvoiceResult> {
+  const failures: { invoiceId: string; error: string }[] = []
+  let ok = 0
+  for (const id of invoiceIds) {
+    const res = await sendInvoiceToClient(id)
+    if (res.error) failures.push({ invoiceId: id, error: res.error })
+    else ok++
+  }
+  return { ok, failures }
 }
 
 // ---- Status transitions --------------------------------------------------

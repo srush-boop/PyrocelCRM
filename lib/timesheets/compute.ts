@@ -459,13 +459,14 @@ export function computeTimesheet(inputs: TimesheetInputs): TimesheetSummary {
     // Auto-suggestion: does the worked span overlap the configured night window?
     const nightAutoSuggested =
       !!shiftStart && !!shiftEnd && overlapsNight(date, epochMin(shiftStart), epochMin(shiftEnd), cfg)
-    // Effective value: the user's explicit tick when they've set the list at all,
-    // otherwise fall back to the auto-suggestion. Note a shift is no longer
+    // Effective value: night shift defaults to NO. It is only on when the user
+    // has explicitly ticked this date. `nightAutoSuggested` never turns it on by
+    // itself — it only drives the "(suggested)" hint next to the unticked box so
+    // the engineer knows their hours overlapped the night window. A shift is not
     // required for the manual tick — the user may confirm a night shift even if
     // no lone-worker session was recorded.
     const manualNights = inputs.nightShiftDates
-    const isNightShift =
-      manualNights != null ? manualNights.includes(date) : nightAutoSuggested
+    const isNightShift = manualNights != null ? manualNights.includes(date) : false
 
     // --- On-call band for this date ---
     const oncallForDay = inputs.oncall.find((o) => o.shift_date === date)

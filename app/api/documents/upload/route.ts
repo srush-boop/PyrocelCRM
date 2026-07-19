@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getDocumentAuth } from '@/lib/documents/auth'
 import { extractDocumentText } from '@/lib/ai/parse-document'
 import { resolveOrCreateTagIds, setFileTagRows } from '@/lib/documents/tags'
-import { validateUpload, DOCUMENT_MIME_TYPES, MB } from '@/lib/uploads/validate'
+import { validateUpload, scanForMalware, DOCUMENT_MIME_TYPES, MB } from '@/lib/uploads/validate'
 import type { DocumentOwnerType } from '@/lib/types/database'
 
 const OWNER_TYPES: DocumentOwnerType[] = [
@@ -55,6 +55,8 @@ export async function POST(request: NextRequest) {
     }
     const uploadCheck = validateUpload(file, { allow: DOCUMENT_MIME_TYPES, maxBytes: 25 * MB })
     if (!uploadCheck.ok) return uploadCheck.response
+    const uploadScan = await scanForMalware(file)
+    if (!uploadScan.ok) return uploadScan.response
     if (!ownerType || !OWNER_TYPES.includes(ownerType) || !ownerId) {
       return NextResponse.json({ error: 'Invalid owner' }, { status: 400 })
     }

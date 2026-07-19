@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { extractDocumentText } from '@/lib/ai/parse-document'
+import { enforceRateLimit } from '@/lib/rate-limit'
 
 // Extract readable plain text from an uploaded document (PDF / .docx / text) so
 // it can seed an AI brief. A route handler (not a Server Action) is used so
@@ -26,6 +27,9 @@ export async function POST(request: NextRequest) {
   if (!role || !['admin', 'office'].includes(role)) {
     return NextResponse.json({ ok: false, error: 'Not authorised.' }, { status: 403 })
   }
+
+  const limited = await enforceRateLimit('ai', user.id)
+  if (limited) return limited
 
   try {
     const formData = await request.formData()

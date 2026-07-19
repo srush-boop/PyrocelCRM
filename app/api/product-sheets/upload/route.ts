@@ -1,7 +1,7 @@
 import { put } from '@vercel/blob'
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { MB } from '@/lib/uploads/validate'
+import { MB, scanForMalware } from '@/lib/uploads/validate'
 
 // Browsers and operating systems report inconsistent MIME types for
 // spreadsheets (especially legacy .xls), so the filename extension is the
@@ -52,6 +52,9 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       )
     }
+
+    const scan = await scanForMalware(file)
+    if (!scan.ok) return scan.response
 
     // Store privately under a stable folder; randomSuffix keeps versions distinct.
     const blob = await put(`product-sheets/${file.name}`, file, {

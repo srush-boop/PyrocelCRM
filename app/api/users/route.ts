@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
+import { enforceRateLimit, clientIp } from '@/lib/rate-limit'
 
 /** Ensure the caller is an authenticated admin. Returns an error response or null. */
 async function requireAdmin() {
@@ -35,6 +36,8 @@ const STAFF_ROLES = ['admin', 'office', 'engineer', 'subcontractor']
  */
 export async function POST(req: NextRequest) {
   try {
+    const limited = await enforceRateLimit('auth', clientIp(req))
+    if (limited) return limited
     const guard = await requireAdmin()
     if (guard.error) return guard.error
 

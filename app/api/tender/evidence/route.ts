@@ -2,7 +2,7 @@ import { put } from '@vercel/blob'
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getTenderApiUser } from '@/lib/tender/access'
-import { validateUpload, DOCUMENT_MIME_TYPES, MB } from '@/lib/uploads/validate'
+import { validateUpload, scanForMalware, DOCUMENT_MIME_TYPES, MB } from '@/lib/uploads/validate'
 
 // Accepts multipart form data: title, description, tags (comma-separated),
 // expiry_date, and an optional file. The file is stored privately in Blob.
@@ -31,6 +31,8 @@ export async function POST(request: NextRequest) {
     if (file && file.size > 0) {
       const check = validateUpload(file, { allow: DOCUMENT_MIME_TYPES, maxBytes: 25 * MB })
       if (!check.ok) return check.response
+      const scan = await scanForMalware(file)
+      if (!scan.ok) return scan.response
       const safeName = file.name.replace(/[^\w.\-]+/g, '_')
       const blob = await put(`tender-evidence/${Date.now()}-${safeName}`, file, {
         access: 'private',

@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getTenderApiUser } from '@/lib/tender/access'
 import { extractTenderQuestions } from '@/lib/tender/extract-questions'
+import { enforceRateLimit } from '@/lib/rate-limit'
 
 // Reading a PDF/Word pack + one structured model call can take a while.
 export const maxDuration = 120
@@ -17,6 +18,9 @@ export async function POST(
 ) {
   const user = await getTenderApiUser()
   if (!user) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const limited = await enforceRateLimit('ai', user.id)
+  if (limited) return limited
 
   const { id: tenderId } = await params
 

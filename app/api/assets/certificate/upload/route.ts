@@ -1,7 +1,7 @@
 import { put } from '@vercel/blob'
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { validateUpload, DOCUMENT_MIME_TYPES, MB } from '@/lib/uploads/validate'
+import { validateUpload, scanForMalware, DOCUMENT_MIME_TYPES, MB } from '@/lib/uploads/validate'
 
 // Uploads an asset check / calibration certificate to private Blob storage and
 // returns its pathname/url. Any staff member (admin/office/engineer) can upload,
@@ -32,6 +32,8 @@ export async function POST(request: NextRequest) {
     }
     const check = validateUpload(file, { allow: DOCUMENT_MIME_TYPES, maxBytes: 25 * MB })
     if (!check.ok) return check.response
+    const scan = await scanForMalware(file)
+    if (!scan.ok) return scan.response
 
     const safeName = file.name.replace(/[^\w.\-]+/g, '_')
     const pathname = `asset-certificates/${user.id}/${Date.now()}-${safeName}`

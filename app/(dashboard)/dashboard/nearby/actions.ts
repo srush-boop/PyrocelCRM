@@ -407,7 +407,19 @@ export async function findNearbyOverdueCalls(input: {
   }
   if (!origin) return { ok: true, calls: [] }
 
+  // Time window for "overdue / due soon", computed up-front so we can push the
+  // date filter down to the database rather than pulling every open call.
+  const now = new Date()
+  const todayStr = now.toISOString().split('T')[0]
+  const soonCutoff = new Date(now.getTime() + 48 * 60 * 60 * 1000)
+  const soonCutoffIso = soonCutoff.toISOString()
+
   // Pull incomplete calls with site + service (incl. worker type + booking flags).
+  // A call can only be overdue/due-soon if its scheduled_date is on/before today
+  // OR its respond_by deadline is within the next 48h — so filter to exactly
+  // those rows server-side. This avoids dragging back the (potentially huge) set
+  // of future-dated recurring calls just to discard them in JS, which was adding
+  // a multi-second delay before the engineer was returned to their Calls list.
   const { data: tasks, error } = await supabase
     .from('tasks')
     .select(
@@ -421,6 +433,8 @@ export async function findNearbyOverdueCalls(input: {
        )`
     )
     .in('status', ['pending', 'in_progress'])
+    .or(`scheduled_date.lte.${todayStr},respond_by.lte.${soonCutoffIso}`)
+    .limit(200)
 
   if (error) return { ok: false, error: error.message }
 
@@ -454,10 +468,6 @@ export async function findNearbyOverdueCalls(input: {
   }
 
   const rows = (tasks || []) as unknown as Row[]
-
-  const now = new Date()
-  const todayStr = now.toISOString().split('T')[0]
-  const soonCutoff = new Date(now.getTime() + 48 * 60 * 60 * 1000)
 
   const calls: NearbyOverdueCall[] = []
   for (const r of rows) {

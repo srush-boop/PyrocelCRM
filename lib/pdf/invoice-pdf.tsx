@@ -97,11 +97,12 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   th: { fontSize: 7, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', color: MUTED },
-  cType: { width: 74, paddingRight: 6 },
+  cType: { width: 62, paddingRight: 6 },
   cDesc: { flex: 1, paddingRight: 8 },
-  cQty: { width: 46, textAlign: 'right' },
-  cUnit: { width: 70, textAlign: 'right' },
-  cAmount: { width: 74, textAlign: 'right' },
+  cSite: { width: 92, paddingRight: 8 },
+  cQty: { width: 40, textAlign: 'right' },
+  cUnit: { width: 64, textAlign: 'right' },
+  cAmount: { width: 68, textAlign: 'right' },
   totals: { marginTop: 18, alignItems: 'flex-end' },
   totalsBox: { width: 220 },
   totalsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 },
@@ -149,11 +150,17 @@ function InvoicePdfDocument({
   invoice,
   lines,
   company,
+  siteByLineId = {},
 }: {
   invoice: Invoice
   lines: InvoiceLineItem[]
   company: CompanyInfo | null
+  // Per-line site name, resolved from each line's linked call.
+  siteByLineId?: Record<string, string>
 }) {
+  // Only surface the Site column when at least one line has a resolved site,
+  // so single-site invoices don't carry an empty column.
+  const showSiteColumn = lines.some((l) => siteByLineId[l.id])
   const isCreditNote = invoice.document_type === 'credit_note'
   const isDraft = invoice.status === 'draft'
   const docLabel = isCreditNote ? 'Credit Note' : 'Invoice'
@@ -244,6 +251,7 @@ function InvoicePdfDocument({
         <View style={styles.tHead}>
           <Text style={[styles.th, styles.cType]}>Type</Text>
           <Text style={[styles.th, styles.cDesc]}>Description</Text>
+          {showSiteColumn ? <Text style={[styles.th, styles.cSite]}>Site</Text> : null}
           <Text style={[styles.th, styles.cQty]}>Qty</Text>
           <Text style={[styles.th, styles.cUnit]}>Unit</Text>
           <Text style={[styles.th, styles.cAmount]}>Amount</Text>
@@ -252,6 +260,9 @@ function InvoicePdfDocument({
           <View key={line.id} style={styles.tRow} wrap={false}>
             <Text style={[styles.cType, styles.muted]}>{KIND_LABELS[line.kind] ?? 'Charge'}</Text>
             <Text style={styles.cDesc}>{line.description}</Text>
+            {showSiteColumn ? (
+              <Text style={[styles.cSite, styles.muted]}>{siteByLineId[line.id] || '—'}</Text>
+            ) : null}
             <Text style={styles.cQty}>{line.quantity}</Text>
             <Text style={styles.cUnit}>{formatPence(line.unit_price_pence)}</Text>
             <Text style={[styles.cAmount, styles.bold]}>{formatPence(line.amount_pence)}</Text>
@@ -319,6 +330,7 @@ export async function renderInvoicePdfBuffer(args: {
   invoice: Invoice
   lines: InvoiceLineItem[]
   company: CompanyInfo | null
+  siteByLineId?: Record<string, string>
 }): Promise<Buffer> {
   return renderToBuffer(<InvoicePdfDocument {...args} />)
 }

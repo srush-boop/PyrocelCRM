@@ -124,22 +124,30 @@ export function TimesheetView({ initial, outstandingTasks }: Props) {
     })
   }
 
-  // Toggle a single day's night-shift confirmation. Builds the explicit set of
-  // ticked dates from the current summary (so the first tick also "locks in" the
-  // rest as not-night, ending any auto-suggestion), flips the target day, saves,
-  // then reloads so the summary + night count recompute.
+  // Toggle a single day's night-shift confirmation. Night shift defaults to NO,
+  // so `summary.days` only reports the days the user has explicitly ticked; we
+  // start from that set, flip the target day, save, then reload so the summary +
+  // night count recompute. Wrapped in try/catch so a failed action (e.g. a
+  // dropped mobile connection) shows an inline error instead of bubbling out of
+  // the transition and crashing the page.
   function toggleNightShift(date: string, checked: boolean) {
     const current = summary.days.filter((d) => d.isNightShift).map((d) => d.date)
     const next = checked
       ? Array.from(new Set([...current, date]))
       : current.filter((d) => d !== date)
     startTransition(async () => {
-      const res = await setNightShiftDates({ timesheetId: timesheet.id, dates: next })
-      if (!res.ok) {
-        setError(res.error ?? 'Could not update night shift.')
-        return
+      try {
+        setError(null)
+        const res = await setNightShiftDates({ timesheetId: timesheet.id, dates: next })
+        if (!res.ok) {
+          setError(res.error ?? 'Could not update night shift.')
+          return
+        }
+        await reload(summary.weekEnding)
+      } catch (err) {
+        console.error('[v0] Night shift toggle failed:', err)
+        setError('Could not update night shift. Please check your connection and try again.')
       }
-      await reload(summary.weekEnding)
     })
   }
 
@@ -197,6 +205,15 @@ export function TimesheetView({ initial, outstandingTasks }: Props) {
         <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
           <span>Returned for changes: {timesheet.rejection_reason}</span>
+        </div>
+      )}
+
+      {/* Inline action error (e.g. a failed night-shift save), so a dropped
+          request never crashes the page. */}
+      {error && (
+        <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{error}</span>
         </div>
       )}
 

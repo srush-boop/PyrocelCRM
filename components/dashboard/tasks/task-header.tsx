@@ -43,11 +43,15 @@ export function TaskHeader({
   task,
   status,
   canCreateDocument = false,
+  referenceNumber = null,
 }: {
   task: TaskWithDetails
   status: TaskStatus
   // Office/admin only: exposes the "Create document" action for this call.
   canCreateDocument?: boolean
+  // Call reference (from the task result, e.g. "PYR-2026-000121"). Shown to
+  // everyone — incl. engineers — once a result row exists for the call.
+  referenceNumber?: string | null
 }) {
   const handleBack = useBackNavigation('/dashboard/schedule')
 
@@ -126,6 +130,11 @@ export function TaskHeader({
           Back
         </Button>
         <div className="flex items-center gap-2">
+          {referenceNumber && (
+            <span className="rounded-md border bg-muted/60 px-2 py-0.5 font-mono text-xs font-medium text-muted-foreground">
+              {referenceNumber}
+            </span>
+          )}
           {canCreateDocument && (
             <CreateDocumentButton
               ownerType="task"

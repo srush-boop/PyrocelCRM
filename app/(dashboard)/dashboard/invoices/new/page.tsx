@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 import { getReadyToInvoiceGroups } from '@/lib/actions/invoices'
+import { profileCanEditInvoices } from '@/lib/auth/invoices'
 import { getRecurringDue } from '@/lib/actions/recurring-invoices'
 import { CreateInvoiceGroups } from '@/components/dashboard/invoices/create-invoice-groups'
 import { RecurringDueGroups } from '@/components/dashboard/invoices/recurring-due-groups'
@@ -31,6 +32,7 @@ export default async function NewInvoicePage() {
     getReadyToInvoiceGroups(),
     getRecurringDue(),
   ])
+  const canEdit = profileCanEditInvoices(profile as Profile)
 
   return (
     <div className="space-y-6">
@@ -57,7 +59,7 @@ export default async function NewInvoicePage() {
             Reviewed chargeable calls, grouped by billing account.
           </p>
         </div>
-        <CreateInvoiceGroups groups={groups} />
+        <CreateInvoiceGroups groups={groups} canEdit={canEdit} />
       </div>
     </div>
   )

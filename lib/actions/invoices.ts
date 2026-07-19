@@ -5,10 +5,15 @@ import { revalidatePath } from 'next/cache'
 import type {
   BillingAccount,
   BillingFrequency,
+  CompanyInfo,
+  Invoice,
+  InvoiceLineItem,
   InvoiceLineKind,
   Profile,
 } from '@/lib/types/database'
 import { resolveBillingAccount } from '@/lib/billing/resolve-billing-account'
+import { renderInvoicePdfBuffer } from '@/lib/pdf/invoice-pdf'
+import { sendEmail } from '@/lib/email/send-email'
 import {
   billingDueHint,
   computeInvoiceTotals,
@@ -48,6 +53,33 @@ async function requireManager() {
   const role = (profile as Pick<Profile, 'id' | 'role'> | null)?.role
   if (role !== 'admin' && role !== 'office') {
     return { error: 'Not authorised' as const }
+  }
+  return { supabase, userId: user.id }
+}
+
+/**
+ * Stricter guard for the controlled edit/send functions: the caller must be a
+ * billing manager AND hold the invoice-edit permission (admins implicit; office
+ * needs `can_edit_invoices`). Mirrors `profileCanEditInvoices` but re-checked
+ * server-side so the UI gate can never be the only line of defence.
+ */
+async function requireInvoiceEditor() {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not signed in' as const }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, role, can_edit_invoices')
+    .eq('id', user.id)
+    .single()
+
+  const p = profile as Pick<Profile, 'id' | 'role' | 'can_edit_invoices'> | null
+  const allowed = p?.role === 'admin' || (p?.role === 'office' && p?.can_edit_invoices === true)
+  if (!allowed) {
+    return { error: 'You do not have permission to edit or send invoices' as const }
   }
   return { supabase, userId: user.id }
 }
@@ -622,19 +654,23 @@ async function recomputeTotals(
     .eq('id', invoiceId)
 }
 
-// Guard: only draft invoices may be edited.
-async function assertDraft(
+// Guard: an invoice may be edited until it has been sent to the client. Sending
+// (not issuing) is now the lock, so draft AND issued invoices are editable while
+// `sent_at` is null. Void/credit-note invoices can never be edited.
+async function assertEditable(
   supabase: Awaited<ReturnType<typeof createClient>>,
   invoiceId: string,
 ): Promise<string | null> {
   const { data } = await supabase
     .from('invoices')
-    .select('status')
+    .select('status, sent_at')
     .eq('id', invoiceId)
     .single()
-  const status = (data as { status: string } | null)?.status
-  if (!status) return 'Invoice not found'
-  if (status !== 'draft') return 'Only draft invoices can be edited'
+  const row = data as { status: string; sent_at: string | null } | null
+  if (!row?.status) return 'Invoice not found'
+  if (row.status === 'void') return 'Void invoices cannot be edited'
+  if (row.status === 'paid') return 'Paid invoices cannot be edited'
+  if (row.sent_at) return 'This invoice has been sent to the client and can no longer be edited'
   return null
 }
 
@@ -644,11 +680,11 @@ export async function addInvoiceLine(
   invoiceId: string,
   input: { kind: InvoiceLineKind; description: string; quantity: number; unitPricePence: number },
 ): Promise<{ error: string | null }> {
-  const ctx = await requireManager()
+  const ctx = await requireInvoiceEditor()
   if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
   const { supabase } = ctx
 
-  const guard = await assertDraft(supabase, invoiceId)
+  const guard = await assertEditable(supabase, invoiceId)
   if (guard) return { error: guard }
   if (!input.description?.trim()) return { error: 'Description is required' }
 
@@ -699,11 +735,11 @@ export async function updateInvoiceLine(
   invoiceId: string,
   input: { description: string; quantity: number; unitPricePence: number },
 ): Promise<{ error: string | null }> {
-  const ctx = await requireManager()
+  const ctx = await requireInvoiceEditor()
   if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
   const { supabase } = ctx
 
-  const guard = await assertDraft(supabase, invoiceId)
+  const guard = await assertEditable(supabase, invoiceId)
   if (guard) return { error: guard }
   if (!input.description?.trim()) return { error: 'Description is required' }
 
@@ -736,11 +772,11 @@ export async function setInvoiceLineNominal(
   invoiceId: string,
   nominalCodeId: string | null,
 ): Promise<{ error: string | null }> {
-  const ctx = await requireManager()
+  const ctx = await requireInvoiceEditor()
   if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
   const { supabase } = ctx
 
-  const guard = await assertDraft(supabase, invoiceId)
+  const guard = await assertEditable(supabase, invoiceId)
   if (guard) return { error: guard }
 
   let codeText: string | null = null
@@ -768,11 +804,11 @@ export async function deleteInvoiceLine(
   lineId: string,
   invoiceId: string,
 ): Promise<{ error: string | null }> {
-  const ctx = await requireManager()
+  const ctx = await requireInvoiceEditor()
   if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
   const { supabase } = ctx
 
-  const guard = await assertDraft(supabase, invoiceId)
+  const guard = await assertEditable(supabase, invoiceId)
   if (guard) return { error: guard }
 
   const { error } = await supabase
@@ -796,11 +832,11 @@ export async function updateInvoiceMeta(
     siteAddress?: string | null
   },
 ): Promise<{ error: string | null }> {
-  const ctx = await requireManager()
+  const ctx = await requireInvoiceEditor()
   if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
   const { supabase } = ctx
 
-  const guard = await assertDraft(supabase, invoiceId)
+  const guard = await assertEditable(supabase, invoiceId)
   if (guard) return { error: guard }
 
   const taxRate = Math.max(0, Math.min(100, Number(input.taxRate) || 0))
@@ -824,12 +860,19 @@ export async function updateInvoiceMeta(
 // ---- Status transitions --------------------------------------------------
 
 export async function issueInvoice(invoiceId: string): Promise<{ error: string | null }> {
-  const ctx = await requireManager()
+  const ctx = await requireInvoiceEditor()
   if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
   const { supabase, userId } = ctx
 
-  const guard = await assertDraft(supabase, invoiceId)
-  if (guard) return { error: guard }
+  // Issuing still only happens from draft (it assigns issue/due dates).
+  const { data: statusRow } = await supabase
+    .from('invoices')
+    .select('status')
+    .eq('id', invoiceId)
+    .single()
+  const currentStatus = (statusRow as { status: string } | null)?.status
+  if (!currentStatus) return { error: 'Invoice not found' }
+  if (currentStatus !== 'draft') return { error: 'Only draft invoices can be issued' }
 
   // Every line must carry a nominal (accounting) code before the invoice can be
   // issued — this is what a future Sage 50 export keys off. Drafts may be
@@ -948,5 +991,153 @@ export async function voidInvoice(
   revalidatePath('/dashboard/invoices')
   revalidatePath(`/dashboard/invoices/${invoiceId}`)
   revalidatePath('/dashboard/chargeable')
+  return { error: null }
+}
+
+/**
+ * Fetch the minimal invoice fields the shared quick-actions menu needs (used by
+ * the raise-invoice page right after creating a draft, so it can offer inline
+ * Preview / Edit / Send without a full page redirect). Manager-gated.
+ */
+export async function getInvoiceForActions(
+  invoiceId: string,
+): Promise<{ error: string | null; invoice: Invoice | null }> {
+  const ctx = await requireManager()
+  if ('error' in ctx) return { error: ctx.error ?? 'Not authorised', invoice: null }
+  const { supabase } = ctx
+
+  const { data, error } = await supabase
+    .from('invoices')
+    .select(
+      'id, invoice_number, status, document_type, sent_at, bill_to_name, bill_to_email, total_pence, due_date',
+    )
+    .eq('id', invoiceId)
+    .maybeSingle()
+  if (error) return { error: error.message, invoice: null }
+  return { error: null, invoice: (data ?? null) as unknown as Invoice | null }
+}
+
+/**
+ * Fetch an invoice's line items for the inline quick-edit dialog. Kept out of the
+ * heavy list query so the invoices page stays light — lines load only when a user
+ * opens the editor. Requires the invoice-edit permission.
+ */
+export async function getInvoiceLinesForEdit(
+  invoiceId: string,
+): Promise<{ error: string | null; lines: InvoiceLineItem[] }> {
+  const ctx = await requireInvoiceEditor()
+  if ('error' in ctx) return { error: ctx.error ?? 'Not authorised', lines: [] }
+  const { supabase } = ctx
+
+  const { data, error } = await supabase
+    .from('invoice_line_items')
+    .select('*')
+    .eq('invoice_id', invoiceId)
+    .order('sort_order', { ascending: true })
+  if (error) return { error: error.message, lines: [] }
+  return { error: null, lines: (data ?? []) as InvoiceLineItem[] }
+}
+
+/**
+ * Send an invoice to the client: emails the PDF to the billing-account invoice
+ * email (bill_to_email) and locks the invoice against further line edits by
+ * stamping sent_at/by/to. If the invoice is still a draft it is issued first
+ * (so it gets a proper issue/due date) using the same nominal-code + hold gates.
+ * Controlled: requires the invoice-edit permission. Send address is the invoice
+ * email only — no CC to the client contact.
+ */
+export async function sendInvoiceToClient(
+  invoiceId: string,
+): Promise<{ error: string | null }> {
+  const ctx = await requireInvoiceEditor()
+  if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
+  const { supabase, userId } = ctx
+
+  const { data: invRow } = await supabase
+    .from('invoices')
+    .select('*, billing_account:billing_accounts(name)')
+    .eq('id', invoiceId)
+    .maybeSingle()
+  const invoice = invRow as (Invoice & { billing_account: { name: string } | null }) | null
+  if (!invoice) return { error: 'Invoice not found' }
+  if (invoice.document_type === 'credit_note') {
+    return { error: 'Credit notes cannot be sent from here' }
+  }
+  if (invoice.sent_at) return { error: 'This invoice has already been sent' }
+
+  const toEmail = invoice.bill_to_email?.trim()
+  if (!toEmail) {
+    return {
+      error:
+        'No invoice email set for this billing account. Add an invoice email before sending.',
+    }
+  }
+
+  // Auto-issue a draft first (assigns number stays, sets issue/due dates and
+  // enforces the nominal-code + hold guards) so we never email an unissued doc.
+  if (invoice.status === 'draft') {
+    const issued = await issueInvoice(invoiceId)
+    if (issued.error) return { error: issued.error }
+  } else if (invoice.status !== 'issued') {
+    return { error: `A ${invoice.status} invoice cannot be sent` }
+  }
+
+  // Re-fetch after a possible issue so the PDF carries the issue/due dates.
+  const { data: freshRow } = await supabase
+    .from('invoices')
+    .select('*, billing_account:billing_accounts(name)')
+    .eq('id', invoiceId)
+    .maybeSingle()
+  const fresh = freshRow as (Invoice & { billing_account: { name: string } | null }) | null
+  if (!fresh) return { error: 'Invoice not found' }
+
+  const [{ data: lines }, { data: company }] = await Promise.all([
+    supabase
+      .from('invoice_line_items')
+      .select('*')
+      .eq('invoice_id', invoiceId)
+      .order('sort_order', { ascending: true }),
+    supabase.from('company_info').select('*').limit(1).maybeSingle(),
+  ])
+
+  let pdf: Buffer
+  try {
+    pdf = await renderInvoicePdfBuffer({
+      invoice: fresh,
+      lines: (lines ?? []) as InvoiceLineItem[],
+      company: (company ?? null) as CompanyInfo | null,
+    })
+  } catch (err) {
+    console.error('[v0] Invoice PDF render failed:', err)
+    return { error: 'Could not generate the invoice PDF' }
+  }
+
+  const safeNumber = String(fresh.invoice_number).replace(/[^a-zA-Z0-9-_]/g, '')
+  const companyName = (company as CompanyInfo | null)?.name ?? 'Pyrocel'
+  const html = `
+    <p>Dear ${fresh.bill_to_name ?? 'Customer'},</p>
+    <p>Please find attached invoice <strong>${fresh.invoice_number}</strong> from ${companyName}.</p>
+    <p>The invoice total is <strong>&pound;${(fresh.total_pence / 100).toFixed(2)}</strong>${
+      fresh.due_date ? `, due by ${fresh.due_date}` : ''
+    }.</p>
+    <p>If you have any questions about this invoice, please reply to this email.</p>
+    <p>Kind regards,<br/>${companyName}</p>
+  `
+
+  const sent = await sendEmail(toEmail, `Invoice ${fresh.invoice_number} from ${companyName}`, html, {
+    attachments: [{ filename: `${safeNumber}.pdf`, content: pdf }],
+  })
+  if (!sent.success) {
+    return { error: sent.error || 'Failed to send the invoice email' }
+  }
+
+  const { error } = await supabase
+    .from('invoices')
+    .update({ sent_at: new Date().toISOString(), sent_by: userId, sent_to: toEmail })
+    .eq('id', invoiceId)
+  if (error) return { error: error.message }
+
+  revalidatePath('/dashboard/invoices')
+  revalidatePath(`/dashboard/invoices/${invoiceId}`)
   return { error: null }
 }

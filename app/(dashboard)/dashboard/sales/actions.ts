@@ -44,6 +44,8 @@ export interface QuoteLineInput {
   is_optional?: boolean
   option_group?: string | null
   standard?: string | null
+  // Per-system additional-service maintenance allowance line (default £350).
+  is_maintenance_allowance?: boolean
   // Serialised calculator inputs + result behind this line (installation /
   // maintenance), enabling the calculation to be re-opened later. NULL for
   // hand-entered lines.
@@ -201,6 +203,7 @@ function buildLineRows(
         is_optional: l.is_optional ?? false,
         option_group: l.option_group?.trim() || null,
         standard: l.standard?.trim() || null,
+        is_maintenance_allowance: l.is_maintenance_allowance ?? false,
         calculator_snapshot: l.calculator_snapshot ?? null,
         position: idx,
       }

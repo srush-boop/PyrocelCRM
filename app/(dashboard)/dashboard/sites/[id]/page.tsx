@@ -10,6 +10,7 @@ import { EditSiteButton } from '@/components/dashboard/sites/edit-site-button'
 import { CreateTaskDialog } from '@/components/dashboard/schedule/create-task-dialog'
 import { SiteServicesManager } from '@/components/dashboard/sites/site-services-manager'
 import { SiteBillingCard } from '@/components/dashboard/billing/site-billing-card'
+import { SitePosCard } from '@/components/dashboard/billing/site-pos-card'
 import { SiteSystemsManager } from '@/components/dashboard/sites/site-systems-manager'
 import { QuotesTable } from '@/components/dashboard/sales/quotes-table'
 import { SiteAssetsTab, type SiteAsset } from '@/components/dashboard/sites/site-assets-tab'
@@ -300,18 +301,19 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
     : { data: [] }
   const panelAssignments = (panelAssignmentsData || []) as PanelVisitAssignment[]
 
-  // Billing accounts belonging to this site's client (includes sub-clients), used
-  // by the Billing card to show/override which account each service is billed to.
+  // ALL billing accounts (across every client), used by the Billing card to
+  // show/override which account each service is billed to. Sites can be billed
+  // to another client's account (e.g. a central "Pyrocel" entity), so we don't
+  // filter by the site's own client here — the client name is embedded for the
+  // dropdown, and the client default is resolved by client_id in the card.
   const siteClientId = (site as Site).client_id
-  const { data: billingAccountsData } = siteClientId
-    ? await supabase
-        .from('billing_accounts')
-        .select('*')
-        .eq('client_id', siteClientId)
-        .order('is_default', { ascending: false })
-        .order('name', { ascending: true })
-    : { data: [] }
-  const billingAccounts = (billingAccountsData || []) as BillingAccount[]
+  const { data: billingAccountsData } = await supabase
+    .from('billing_accounts')
+    .select('*, client:clients(id, name)')
+    .order('name', { ascending: true })
+  const billingAccounts = (billingAccountsData || []) as (BillingAccount & {
+    client?: { id: string; name: string } | null
+  })[]
 
   // Get tasks for this site's services
   const siteServiceIds = siteServices.map(ss => ss.id)
@@ -896,6 +898,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
         {siteClientId && (
           <SiteBillingCard
             siteId={id}
+            clientId={siteClientId}
             siteBillingAccountId={(site as Site).billing_account_id ?? null}
             services={siteServices.map((ss) => ({
               id: ss.id,
@@ -905,6 +908,22 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             accounts={billingAccounts}
           />
         )}
+        <SitePosCard
+          siteId={id}
+          sitePo={(site as Site).po_number ?? null}
+          clientPo={(site as { client?: { po_number?: string | null } }).client?.po_number ?? null}
+          systems={siteSystems.map((sys) => ({
+            id: sys.id,
+            name: sys.name || sys.system_type?.name || 'System',
+            po_number: sys.po_number ?? null,
+          }))}
+          services={siteServices.map((ss) => ({
+            id: ss.id,
+            name: ss.service_type?.name ?? 'Service',
+            siteSystemId: ss.site_system_id ?? null,
+            po_number: ss.po_number ?? null,
+          }))}
+        />
           </div>
           <p className="mt-4 text-center text-xs text-muted-foreground">
             Site set up

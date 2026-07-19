@@ -45,3 +45,82 @@ export async function setTileColor(tileKey: string, color: string | null) {
   revalidatePath('/dashboard')
   return { ok: true as const }
 }
+
+/**
+ * Persist the signed-in user's preferred dashboard module tile order. Stored as
+ * an ordered array of tile titles on their profile (RLS `profiles_update_own`).
+ * Passing an empty array resets to the default order. Titles are stored as-is;
+ * unknown/removed titles are ignored when the dashboard renders, and any new
+ * tiles not present in the saved order are appended in their natural position.
+ */
+export async function setTileOrder(order: string[]) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false as const, error: 'Not signed in' }
+
+  // De-duplicate while preserving order and drop non-string entries.
+  const seen = new Set<string>()
+  const clean = order.filter((t) => {
+    if (typeof t !== 'string' || seen.has(t)) return false
+    seen.add(t)
+    return true
+  })
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ dashboard_tile_positions: clean })
+    .eq('id', user.id)
+
+  if (error) return { ok: false as const, error: error.message }
+
+  revalidatePath('/dashboard')
+  return { ok: true as const }
+}
+
+/**
+ * Set (or clear) one of the signed-in user's 3 dashboard quick-shortcut slots.
+ * `slot` is 0-2; `key` is a catalogue key or null to clear the slot. Stored as a
+ * 3-length array on the profile (RLS `profiles_update_own`). Selecting a key
+ * already pinned to another slot moves it (clears the old slot) so there are no
+ * duplicates.
+ */
+export async function setShortcut(slot: number, key: string | null) {
+  if (!Number.isInteger(slot) || slot < 0 || slot > 2) {
+    return { ok: false as const, error: 'Invalid slot' }
+  }
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false as const, error: 'Not signed in' }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('dashboard_shortcuts')
+    .eq('id', user.id)
+    .single()
+
+  const current = ((profile?.dashboard_shortcuts as string[] | null) ?? []).slice(0, 3)
+  while (current.length < 3) current.push('')
+  // Clear the chosen key from any other slot to avoid duplicates.
+  if (key) {
+    for (let i = 0; i < current.length; i++) if (current[i] === key) current[i] = ''
+  }
+  current[slot] = key ?? ''
+  // Trim trailing empties so the stored array stays compact.
+  const next = current.filter((k, i) => k || current.slice(i + 1).some(Boolean))
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ dashboard_shortcuts: next })
+    .eq('id', user.id)
+
+  if (error) return { ok: false as const, error: error.message }
+
+  revalidatePath('/dashboard')
+  return { ok: true as const }
+}

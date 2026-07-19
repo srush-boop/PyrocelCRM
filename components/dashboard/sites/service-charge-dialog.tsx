@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -52,6 +52,8 @@ interface ServiceChargeDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   siteServiceId: string
+  /** Open straight into edit mode for the service's existing (active) charge. */
+  autoEdit?: boolean
 }
 
   const NO_TEMPLATE = '__custom__'
@@ -84,6 +86,7 @@ export function ServiceChargeDialog({
   open,
   onOpenChange,
   siteServiceId,
+  autoEdit = false,
 }: ServiceChargeDialogProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
@@ -114,6 +117,9 @@ export function ServiceChargeDialog({
   // auto-resolved value, so switching templates doesn't clobber a manual pick.
   const [nominalCodeId, setNominalCodeId] = useState<string | null>(null)
   const [nominalManual, setNominalManual] = useState(false)
+  // When on, this charge is billed on its own invoice (via a unique group_key)
+  // instead of being grouped with the account's other charges.
+  const [individualInvoice, setIndividualInvoice] = useState(false)
 
   const resetForm = useCallback((c: ServiceChargeContext | null) => {
     setEditingCharge(null)
@@ -131,6 +137,7 @@ export function ServiceChargeDialog({
     // Auto-resolve to the service type's nominal code (no dept context here).
     setNominalCodeId(c?.serviceTypeNominalCodeId ?? null)
     setNominalManual(false)
+    setIndividualInvoice(false)
   }, [])
 
   // Load an existing charge into the form for editing. The template picker is
@@ -161,6 +168,8 @@ export function ServiceChargeDialog({
     setNominalCodeId(charge.nominal_code_id ?? null)
     // Treat as a manual pick so template switching logic never clobbers it.
     setNominalManual(true)
+    // Any group_key means this charge is already forced onto its own invoice.
+    setIndividualInvoice(!!charge.group_key)
   }, [])
 
   const load = useCallback(async () => {
@@ -180,6 +189,22 @@ export function ServiceChargeDialog({
   useEffect(() => {
     if (open) load()
   }, [open, load])
+
+  // "Edit charge" entry point: once the context has loaded, drop straight into
+  // editing the service's existing charge (prefer an active one). Runs once per
+  // open; if there are no charges yet it silently stays in add mode.
+  const autoEditDoneRef = useRef(false)
+  useEffect(() => {
+    if (!open) {
+      autoEditDoneRef.current = false
+      return
+    }
+    if (!autoEdit || autoEditDoneRef.current || !ctx) return
+    const charges = ctx.existingCharges
+    if (charges.length === 0) return
+    autoEditDoneRef.current = true
+    startEdit(charges.find((c) => c.active) ?? charges[0])
+  }, [open, autoEdit, ctx, startEdit])
 
   // Self-heal: if a saved override is no longer a clean divisor of the service's
   // current visit count (e.g. legacy data, or the visit frequency changed), drop
@@ -260,18 +285,24 @@ export function ServiceChargeDialog({
             : null,
         renewal_month: Number.parseInt(renewalMonth, 10),
       }
+      // Individual-invoice toggle drives group_key: a unique key forces the
+      // charge onto its own invoice; clearing it re-groups with the account.
+      // Reuse the existing key when already individual so we don't churn it.
+      const groupKey = individualInvoice
+        ? editingCharge?.group_key || `individual:${crypto.randomUUID()}`
+        : null
       // Editing preserves fields this dialog doesn't expose (subcontracting,
-      // grouping, date window) so an update never wipes them.
+      // date window) so an update never wipes them.
       const res = editingCharge
         ? await updateRecurringCharge(editingCharge.id, {
             ...base,
             is_subcontracted: editingCharge.is_subcontracted,
             subcontract_price_pence: editingCharge.subcontract_price_pence,
-            group_key: editingCharge.group_key,
+            group_key: groupKey,
             start_date: editingCharge.start_date,
             end_date: editingCharge.end_date,
           })
-        : await createRecurringCharge({ ...base, is_subcontracted: false })
+        : await createRecurringCharge({ ...base, group_key: groupKey, is_subcontracted: false })
       setSaving(false)
       if (res.error) {
         setError(res.error)
@@ -764,6 +795,22 @@ export function ServiceChargeDialog({
                 )}
               </div>
             </div>
+
+            <label className="flex items-start gap-2 rounded-md border px-3 py-2.5 text-sm">
+              <input
+                type="checkbox"
+                checked={individualInvoice}
+                onChange={(e) => setIndividualInvoice(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-input"
+              />
+              <span>
+                Invoice this charge individually
+                <span className="block text-xs text-muted-foreground">
+                  Bills this charge on its own invoice instead of grouping it with the account&apos;s
+                  other recurring charges.
+                </span>
+              </span>
+            </label>
 
             {error && (
               <div className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</div>

@@ -366,15 +366,19 @@ export function QuoteDocument({
               // Products and non-product services are shown as separate groups.
               // Client-selectable options are pulled into their own group and
               // only count toward the total once the client has selected them.
-              const coreLines = systemLines.filter((l) => !l.is_optional)
+              // The per-system service-allowance line is presented separately
+              // (its own sign-off panel) and is never part of the maintenance
+              // price, so it's excluded from every group and total here.
+              const priceableLines = systemLines.filter((l) => !l.is_maintenance_allowance)
+              const coreLines = priceableLines.filter((l) => !l.is_optional)
               const productLines = coreLines.filter((l) => !l.is_service)
               const serviceLines = coreLines.filter((l) => l.is_service)
               // Optional extras are only offered to the client when the quote opts
               // in; otherwise they are hidden and never counted in any total.
               const optionalLines = quote.show_optional_extras
-                ? systemLines.filter((l) => l.is_optional)
+                ? priceableLines.filter((l) => l.is_optional)
                 : []
-              const systemTotal = systemLines.reduce(
+              const systemTotal = priceableLines.reduce(
                 (sum, l) =>
                   sum +
                   (l.is_optional && (!quote.show_optional_extras || !isOptionSelected(l))

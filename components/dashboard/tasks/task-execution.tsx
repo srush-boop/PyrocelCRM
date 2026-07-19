@@ -43,7 +43,7 @@ import { useOfflineSync } from '@/lib/offline/use-offline-sync'
 import { persistTaskResult, isOnline } from '@/lib/offline/sync'
 import { cacheCallSnapshot } from '@/lib/offline/snapshots'
 import { isNonRecurringCall } from '@/lib/follow-up'
-import { formatDateUK, formatTimeUK, cn } from '@/lib/utils'
+import { formatDateUK, formatTimeUK, toDatetimeLocalValue, cn } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import {
   AlertDialog,
@@ -781,33 +781,33 @@ export function TaskExecution({
         .eq('id', task.site_service_id)
     }
 
-    // Send the completion report email (uses per-service emails if set,
-    // otherwise the site-level reporting emails).
-    try {
-      const reportRes = await fetch('/api/send-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId: task.id }),
+    // Terminal side-effects: send the completion report email (per-service
+    // emails if set, otherwise site-level) and run per-visit "invoice on
+    // completion" billing. Both are best-effort and idempotent server-side (the
+    // recurring due queue backstops billing), so we DON'T await them — that was
+    // adding ~10s to the engineer's completion before the UI navigated away.
+    // `keepalive` lets the requests finish even if the page unloads, and the
+    // client-side router navigation below won't interrupt in-flight fetches.
+    void fetch('/api/send-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskId: task.id }),
+      keepalive: true,
+    })
+      .then(async (reportRes) => {
+        if (!reportRes.ok) {
+          const data = await reportRes.json().catch(() => ({}))
+          console.error('[v0] Report email failed:', data?.error)
+        }
       })
-      if (!reportRes.ok) {
-        const data = await reportRes.json().catch(() => ({}))
-        console.error('[v0] Report email failed:', data?.error)
-      }
-    } catch (err) {
-      console.error('[v0] Report email request error:', err)
-    }
+      .catch((err) => console.error('[v0] Report email request error:', err))
 
-    // Per-visit "invoice on completion" billing. Best-effort and idempotent
-    // server-side — the recurring due queue is the backstop if this misses.
-    try {
-      await fetch('/api/tasks/complete-billing', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId: task.id }),
-      })
-    } catch (err) {
-      console.error('[v0] Visit billing request error:', err)
-    }
+    void fetch('/api/tasks/complete-billing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskId: task.id }),
+      keepalive: true,
+    }).catch((err) => console.error('[v0] Visit billing request error:', err))
 
     setShowSubmitDialog(false)
 
@@ -962,7 +962,12 @@ export function TaskExecution({
         status === 'in_progress' ? 'pb-44 lg:pb-6' : 'pb-6',
       )}
     >
-      <TaskHeader task={task} status={status} canCreateDocument={isAdminOrOffice} />
+      <TaskHeader
+        task={task}
+        status={status}
+        canCreateDocument={isAdminOrOffice}
+        referenceNumber={existingResult?.reference_number ?? null}
+      />
 
       <PauseResumeControls task={task} status={status} onStatusChange={setStatus} />
 
@@ -1215,7 +1220,7 @@ export function TaskExecution({
                   <div className="flex gap-2">
                     <Input
                       type="datetime-local"
-                      value={testingStartTime?.toISOString().slice(0, 16) || ''}
+                      value={toDatetimeLocalValue(testingStartTime)}
                       onChange={(e) => setTestingStartTime(e.target.value ? new Date(e.target.value) : null)}
                       disabled={!canEdit}
                       className="min-w-0 flex-1"
@@ -1240,7 +1245,7 @@ export function TaskExecution({
                   <div className="flex gap-2">
                     <Input
                       type="datetime-local"
-                      value={testingEndTime?.toISOString().slice(0, 16) || ''}
+                      value={toDatetimeLocalValue(testingEndTime)}
                       onChange={(e) => setTestingEndTime(e.target.value ? new Date(e.target.value) : null)}
                       disabled={!canEdit}
                       className="min-w-0 flex-1"

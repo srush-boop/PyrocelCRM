@@ -173,6 +173,97 @@ export function addPeriod(from: Date, frequency: RecurringFrequency): Date {
   return d
 }
 
+/** Step a date back by one period of the given frequency. */
+export function subPeriod(from: Date, frequency: RecurringFrequency): Date {
+  const d = new Date(from)
+  if (frequency === 'weekly') {
+    d.setDate(d.getDate() - 7)
+    return d
+  }
+  d.setMonth(d.getMonth() - frequencyMonths(frequency))
+  return d
+}
+
+// --- Coverage period (what a billed occurrence covers) ---------------------
+
+/**
+ * The date window a single billed occurrence covers, given the date being
+ * invoiced (`dueDateISO`, from nextDueDate). Advance charges cover the upcoming
+ * period starting at the due date; arrears cover the period that just ended.
+ * Completion-driven timings (on_completion / per_visit) are treated like the
+ * upcoming period from the due date as a reasonable default label.
+ */
+export function coverageWindow(
+  charge: Pick<RecurringCharge, 'frequency' | 'timing'>,
+  dueDateISO: string,
+): { start: Date; end: Date } {
+  const due = parseISODate(dueDateISO)
+  if (charge.timing === 'arrears') {
+    const start = subPeriod(due, charge.frequency)
+    const end = new Date(due)
+    end.setDate(end.getDate() - 1)
+    return { start, end }
+  }
+  const start = due
+  const end = subPeriod(addPeriod(due, charge.frequency), charge.frequency)
+  // end should be one day before the next period boundary.
+  const boundary = addPeriod(due, charge.frequency)
+  const inclusiveEnd = new Date(boundary)
+  inclusiveEnd.setDate(inclusiveEnd.getDate() - 1)
+  return { start, end: inclusiveEnd }
+}
+
+const MONTH_SHORT = MONTH_LABELS.map((m) => m.slice(0, 3))
+
+/**
+ * A concise human label for the period a billed occurrence covers, e.g.
+ * "Jul 2026" (monthly), "Jul–Sep 2026" (quarterly), "Oct 2026 – Mar 2027"
+ * (spanning years), or "7–13 Jul 2026" (weekly).
+ */
+export function formatCoveragePeriod(
+  charge: Pick<RecurringCharge, 'frequency' | 'timing'>,
+  dueDateISO: string,
+): string {
+  const { start, end } = coverageWindow(charge, dueDateISO)
+  const sMon = MONTH_SHORT[start.getMonth()]
+  const eMon = MONTH_SHORT[end.getMonth()]
+  const sYr = start.getFullYear()
+  const eYr = end.getFullYear()
+
+  if (charge.frequency === 'weekly') {
+    // Day-level range for weekly cover.
+    if (start.getMonth() === end.getMonth() && sYr === eYr) {
+      return `${start.getDate()}–${end.getDate()} ${sMon} ${sYr}`
+    }
+    return `${start.getDate()} ${sMon} ${sYr} – ${end.getDate()} ${eMon} ${eYr}`
+  }
+
+  if (charge.frequency === 'monthly') {
+    return `${sMon} ${sYr}`
+  }
+
+  // Multi-month periods: collapse the year when the range stays within it.
+  if (sYr === eYr) {
+    return sMon === eMon ? `${sMon} ${sYr}` : `${sMon}–${eMon} ${sYr}`
+  }
+  return `${sMon} ${sYr} – ${eMon} ${eYr}`
+}
+
+/**
+ * Build a "System / Service" label from the (possibly partial) names linked to
+ * a recurring charge's site_service. Returns null when nothing is known.
+ */
+export function systemServiceLabel(input: {
+  systemName?: string | null
+  systemTypeName?: string | null
+  serviceName?: string | null
+}): string | null {
+  const sys = input.systemName || input.systemTypeName || null
+  const svc = input.serviceName || null
+  if (sys && svc) return `${sys} / ${svc}`
+  return sys || svc || null
+}
+
 /**
  * The next date this charge should be invoiced, as a YYYY-MM-DD string.
  * Based on last_invoiced_date (or start_date) + one period. Charges never

@@ -83,6 +83,7 @@ export async function PUT(
       cost_per_hour_pence,
       can_view_labour_costs,
       can_use_query_tools,
+      can_edit_invoices,
     } = body as {
       full_name?: string
       email?: string
@@ -105,6 +106,7 @@ export async function PUT(
       cost_per_hour_pence?: number | null
       can_view_labour_costs?: boolean
       can_use_query_tools?: boolean
+      can_edit_invoices?: boolean
     }
 
     // Verify the caller is an authenticated admin
@@ -271,9 +273,14 @@ export async function PUT(
     }
     // Query-tools (Query Builder + User Cost Calculator) access. Same owner-only
     // gate: a non-owner admin cannot grant themselves or others these tools.
-    if (can_use_query_tools !== undefined && callerIsOwner) {
-      profilePatch.can_use_query_tools = Boolean(can_use_query_tools)
-    }
+  if (can_use_query_tools !== undefined && callerIsOwner) {
+    profilePatch.can_use_query_tools = Boolean(can_use_query_tools)
+  }
+  // Invoice edit/send permission. Grantable by any admin (not owner-only),
+  // since it's an operational rather than a sensitive-data permission.
+  if (can_edit_invoices !== undefined) {
+    profilePatch.can_edit_invoices = Boolean(can_edit_invoices)
+  }
     // Engineer home postcode: store it and (re)geocode to coordinates so the
     // calls map can anchor the engineer's route. Clearing the postcode clears
     // the cached coordinates too.

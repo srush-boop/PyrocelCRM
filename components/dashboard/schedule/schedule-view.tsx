@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -207,6 +207,11 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   const supabase = createClient()
   const [search, setSearch] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('list')
+  // Switching to the grouped "By route"/"By area" views does real grouping +
+  // sorting work. Run it as a non-blocking transition so the toggle stays
+  // responsive (no ~130ms click jank) and the heavier view paints when ready.
+  const [isSwitchingView, startViewTransition] = useTransition()
+  const selectView = (mode: ViewMode) => startViewTransition(() => setViewMode(mode))
   const [activeTab, setActiveTab] = useState('upcoming')
   const [sortBy, setSortBy] = useState<SortKey>('date')
   // Engineer's live location, captured on demand for the "nearby" sort.
@@ -918,7 +923,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
           variant={viewMode === mode ? 'secondary' : 'ghost'}
           size="sm"
           className="h-8 gap-1.5 px-2 sm:px-2.5"
-          onClick={() => setViewMode(mode)}
+          onClick={() => selectView(mode)}
           aria-pressed={viewMode === mode}
         >
           <Icon className="h-4 w-4" />
@@ -1113,7 +1118,13 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
 
 
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className={
+          isSwitchingView ? 'opacity-60 transition-opacity duration-150' : 'transition-opacity'
+        }
+      >
         <TabsList>
           <TabsTrigger value="upcoming" className="gap-1.5">
             Upcoming
@@ -1194,7 +1205,13 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
       )}
 
       <Dialog open={!!viewTask} onOpenChange={(open) => !open && setViewTask(null)}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+        {/* Don't auto-focus on open: the first focusable element is the booking
+            "Start time" input (type="time"), and focusing it makes the browser
+            pop its time-picker clock the moment you open the read-only preview. */}
+        <DialogContent
+          className="max-h-[85vh] overflow-y-auto sm:max-w-lg"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
           {viewTask && (() => {
             const site = viewTask.site_service?.site
             const config = statusConfig[viewTask.status]

@@ -10,6 +10,17 @@ interface SiteFlagBadgesProps {
   className?: string
 }
 
+// A distinct tint per flag so engineers can recognise each pre-attendance
+// requirement at a glance in the calls list. Remedial keeps the destructive red
+// (handled separately) as it's an alert, not just an informational flag.
+const FLAG_COLORS: Record<SiteFlagKey, string> = {
+  booking_required: 'border-blue-500/30 bg-blue-500/10 text-blue-600',
+  access_required: 'border-amber-500/30 bg-amber-500/10 text-amber-600',
+  keys_required: 'border-teal-500/30 bg-teal-500/10 text-teal-600',
+  two_engineers_required: 'border-indigo-500/30 bg-indigo-500/10 text-indigo-600',
+  remedial_required: 'border-destructive/30 bg-destructive/10 text-destructive',
+}
+
 /**
  * Renders the active pre-attendance flags as icons. In compact mode (used on
  * schedule task lines) each flag is a small icon with a tooltip; remedial uses
@@ -24,7 +35,7 @@ export function SiteFlagBadges({ flags, variant = 'compact', className }: SiteFl
       {active.map((key: SiteFlagKey) => {
         const meta = SITE_FLAG_META[key]
         const Icon = meta.icon
-        const isRemedial = key === 'remedial_required'
+        const colorClass = FLAG_COLORS[key]
 
         if (variant === 'full') {
           return (
@@ -32,9 +43,7 @@ export function SiteFlagBadges({ flags, variant = 'compact', className }: SiteFl
               key={key}
               className={cn(
                 'inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium',
-                isRemedial
-                  ? 'border-destructive/30 bg-destructive/10 text-destructive'
-                  : 'border-border bg-muted text-foreground',
+                colorClass,
               )}
             >
               <Icon className="h-3.5 w-3.5" />
@@ -49,9 +58,7 @@ export function SiteFlagBadges({ flags, variant = 'compact', className }: SiteFl
               <span
                 className={cn(
                   'inline-flex h-6 w-6 items-center justify-center rounded-md border',
-                  isRemedial
-                    ? 'border-destructive/30 bg-destructive/10 text-destructive'
-                    : 'border-border bg-muted text-muted-foreground',
+                  colorClass,
                 )}
                 aria-label={meta.label}
               >

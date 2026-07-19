@@ -23,14 +23,17 @@ import {
 } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
 import Link from 'next/link'
-import { ScanQrButton } from '@/components/dashboard/dampers/scan-qr-button'
 import { AddRequestDialog } from '@/components/dashboard/requests/add-request-dialog'
 import { ApprovalsWidget } from '@/components/dashboard/approvals/approvals-widget'
 import { LoneWorkerDashboardTiles } from '@/components/dashboard/lone-worker/lone-worker-dashboard-tiles'
 import { TileColorPicker } from '@/components/dashboard/home/tile-color-picker'
+import { DashboardTileGrid, type DashboardTile } from '@/components/dashboard/home/dashboard-tile-grid'
+import { DashboardShortcuts } from '@/components/dashboard/home/dashboard-shortcuts'
 import { tileIconStyle, tileAccentStyle, tileCardStyle } from '@/lib/dashboard-tile-colors'
 import { getVisibleLeaveRequests } from '@/lib/leave-approvals'
 import { EngineerHome } from '@/components/dashboard/home/engineer-home'
+import { CompanyDayAheadTile } from '@/components/dashboard/home/company-day-ahead-tile'
+import { DidYouKnowTile } from '@/components/dashboard/home/did-you-know-tile'
 import { YourTasksTile } from '@/components/dashboard/internal-tasks/your-tasks-tile'
 import { DashboardDateFilter } from '@/components/dashboard/home/dashboard-date-filter'
 import { Suspense } from 'react'
@@ -199,6 +202,12 @@ export default async function DashboardPage({
   // Per-user tile colour overrides (keyed by tile title). Empty = theme default.
   const tileColors = (profile as Profile).dashboard_tile_colors ?? {}
 
+  // Per-user preferred tile order (array of tile titles). Empty = default order.
+  const savedTileOrder = (profile as Profile).dashboard_tile_positions ?? []
+
+  // Per-user pinned quick-shortcut destinations (max 3). Empty = all unset.
+  const savedShortcuts = (profile as Profile).dashboard_shortcuts ?? []
+
   const modules: ModuleCard[] = [
     {
       title: 'Approvals',
@@ -335,18 +344,24 @@ export default async function DashboardPage({
     },
   ]
 
+  // Time-aware greeting hero, mirroring the engineer home for a consistent,
+  // modern feel across the app.
+  const hour = today.getHours()
+  const greeting =
+    hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
+  const firstName = ((profile as Profile).full_name || 'there').split(' ')[0]
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">
-            Welcome back, {(profile as Profile).full_name || 'User'}
-          </p>
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight text-balance">
+            {greeting}, {firstName}
+          </h1>
+          <p className="text-muted-foreground">{format(today, 'EEEE, d MMMM yyyy')}</p>
         </div>
         <div className="flex items-center gap-2">
           <AddRequestDialog triggerVariant="outline" />
-          <ScanQrButton />
         </div>
       </div>
 
@@ -363,20 +378,31 @@ export default async function DashboardPage({
         <ApprovalsWidget />
       </Suspense>
 
-      {/* Outstanding internal quality/management tasks for this manager. */}
+      {/* Compact utility row shared by Your Tasks, live Lone Worker safety
+          status, and 3 user-configurable quick-shortcut slots. */}
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <Suspense fallback={null}>
+          <YourTasksTile />
+        </Suspense>
+        <LoneWorkerDashboardTiles />
+        <DashboardShortcuts saved={savedShortcuts} />
+      </div>
+
+      {/* Company-wide "day ahead" — every call booked across the team today. */}
       <Suspense fallback={null}>
-        <YourTasksTile />
+        <CompanyDayAheadTile />
       </Suspense>
 
-      {/* Live lone-worker safety status (0 when healthy; pulses on emergency) */}
-      <LoneWorkerDashboardTiles />
-
-      {/* Company overview — one hub per module */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {modules.map((m) => {
+      {/* Company overview — one hub per module. Rendered through a client grid
+          that lets the user drag tiles into their preferred, saved order. */}
+      <DashboardTileGrid
+        savedOrder={savedTileOrder}
+        tiles={modules.map((m): DashboardTile => {
           const color = tileColors[m.title] ?? null
           const iconStyle = tileIconStyle(color)
-          return (
+          return {
+            title: m.title,
+            node: (
             <Card
               key={m.title}
               className="group relative h-full overflow-hidden transition-colors hover:border-primary/50 hover:bg-accent/40"
@@ -444,9 +470,13 @@ export default async function DashboardPage({
                 )}
               </div>
             </Card>
-          )
+            ),
+          }
         })}
-      </div>
+      />
+
+      {/* Daily system fact, shared with the engineer home. */}
+      <DidYouKnowTile />
     </div>
   )
 }

@@ -17,6 +17,8 @@ import type { InvoiceStatus } from '@/lib/types/database'
 import { formatPence, INVOICE_STATUS_LABELS } from '@/lib/billing/invoices'
 import type { InvoiceRow } from '@/app/(dashboard)/dashboard/invoices/page'
 import { cn } from '@/lib/utils'
+import { InvoiceQuickActions } from '@/components/dashboard/invoices/invoice-quick-actions'
+import type { Invoice } from '@/lib/types/database'
 
 type Filter = 'all' | InvoiceStatus
 
@@ -50,7 +52,13 @@ function formatDate(value: string | null): string {
   })
 }
 
-export function InvoicesTable({ invoices }: { invoices: InvoiceRow[] }) {
+export function InvoicesTable({
+  invoices,
+  canEdit,
+}: {
+  invoices: InvoiceRow[]
+  canEdit: boolean
+}) {
   const [filter, setFilter] = useState<Filter>('all')
 
   const counts = useMemo(() => {
@@ -96,28 +104,51 @@ export function InvoicesTable({ invoices }: { invoices: InvoiceRow[] }) {
                 <TableHead>Issued</TableHead>
                 <TableHead>Due</TableHead>
                 <TableHead className="text-right">Total</TableHead>
+                <TableHead className="w-10">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.map((inv) => (
-                <TableRow key={inv.id} className="cursor-pointer">
+                <TableRow key={inv.id}>
                   <TableCell className="font-medium">
                     <Link href={`/dashboard/invoices/${inv.id}`} className="hover:underline">
                       {inv.invoice_number}
                     </Link>
+                    {/* Site name as a muted description sub-line. */}
+                    {inv.site?.name && (
+                      <p className="text-xs font-normal text-muted-foreground">{inv.site.name}</p>
+                    )}
                   </TableCell>
                   <TableCell>
                     {inv.billing_account?.name || inv.bill_to_name || inv.client?.name || '—'}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className={cn('font-medium', statusClasses(inv.status))}>
-                      {INVOICE_STATUS_LABELS[inv.status]}
-                    </Badge>
+                    <div className="flex items-center gap-1.5">
+                      <Badge
+                        variant="outline"
+                        className={cn('font-medium', statusClasses(inv.status))}
+                      >
+                        {INVOICE_STATUS_LABELS[inv.status]}
+                      </Badge>
+                      {inv.sent_at && (
+                        <Badge
+                          variant="outline"
+                          className="border-emerald-200 bg-emerald-50 text-emerald-700"
+                        >
+                          Sent
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{formatDate(inv.issue_date)}</TableCell>
                   <TableCell className="text-muted-foreground">{formatDate(inv.due_date)}</TableCell>
                   <TableCell className="text-right font-medium">
                     {formatPence(inv.total_pence)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <InvoiceQuickActions invoice={inv as unknown as Invoice} canEdit={canEdit} />
                   </TableCell>
                 </TableRow>
               ))}

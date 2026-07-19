@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ClipboardCheck, ChevronRight, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -22,17 +22,17 @@ export async function YourTasksTile() {
   const count = instances.length
 
   return (
-    <Link href="/dashboard/my-tasks" className="block">
+    <Link href="/dashboard/my-tasks" className="block h-full">
       <Card
         className={cn(
-          'transition-colors hover:bg-muted/50',
+          'h-full transition-colors hover:bg-muted/50',
           hasOverdue && 'border-destructive/50',
         )}
       >
-        <CardContent className="flex items-center gap-4 py-4">
+        <div className="flex items-center gap-3 px-3 py-2.5">
           <div
             className={cn(
-              'flex size-10 shrink-0 items-center justify-center rounded-full',
+              'flex size-8 shrink-0 items-center justify-center rounded-lg',
               count === 0
                 ? 'bg-primary/10 text-primary'
                 : hasOverdue
@@ -41,23 +41,26 @@ export async function YourTasksTile() {
             )}
           >
             {hasOverdue ? (
-              <AlertTriangle className="size-5" />
+              <AlertTriangle className="size-4" />
             ) : (
-              <ClipboardCheck className="size-5" />
+              <ClipboardCheck className="size-4" />
             )}
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <p className="font-medium">Your Tasks</p>
+              <p className="text-sm font-semibold leading-tight">Your Tasks</p>
               {count > 0 ? (
-                <Badge variant={hasOverdue ? 'destructive' : 'secondary'}>
-                  {count} outstanding
+                <Badge
+                  variant={hasOverdue ? 'destructive' : 'secondary'}
+                  className="px-1.5 py-0 text-[11px]"
+                >
+                  {count}
                 </Badge>
               ) : null}
             </div>
-            <p className="truncate text-sm text-muted-foreground">
+            <p className="truncate text-xs text-muted-foreground">
               {count === 0
-                ? 'All internal tasks complete — nice work.'
+                ? 'All complete — nice work.'
                 : hasOverdue
                   ? `${overdue.length} overdue · ${soonest?.template?.name ?? ''}`
                   : `Next: ${soonest?.template?.name ?? ''} due ${
@@ -71,8 +74,8 @@ export async function YourTasksTile() {
                     }`}
             </p>
           </div>
-          <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
-        </CardContent>
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+        </div>
       </Card>
     </Link>
   )

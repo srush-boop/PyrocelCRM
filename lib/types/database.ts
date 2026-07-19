@@ -125,6 +125,8 @@ export interface Client {
   requires_po: boolean
   /** When true, this client's calls are invoiced one-per-call rather than in bulk. */
   invoice_calls_individually: boolean
+  /** Default customer PO, bottom of the charge->system->site->client fallback chain. */
+  po_number: string | null
   created_at: string
   updated_at: string
 }
@@ -234,6 +236,11 @@ export interface Invoice {
   /** Optional site the work relates to, plus a text snapshot of its address. */
   site_id: string | null
   site_address: string | null
+  // "Sent to client" milestone. sent_at IS NOT NULL locks line editing (it
+  // replaces "issued" as the edit lock — invoices stay editable until sent).
+  sent_at: string | null
+  sent_by: string | null
+  sent_to: string | null
   // Bill-to snapshot taken at issue time (the billing account can change later).
   bill_to_name: string | null
   bill_to_address: string | null
@@ -260,6 +267,8 @@ export interface Invoice {
   line_items?: InvoiceLineItem[]
   billing_account?: BillingAccount | null
   client?: Client | null
+  /** Optional embedded site (name only) for the invoice-tile description line. */
+  site?: { name: string } | null
 }
 
 export interface InvoiceLineItem {
@@ -281,6 +290,8 @@ export interface InvoiceLineItem {
   nominal_code_id: string | null
   /** Text snapshot of the code at issue time; survives master-list changes. */
   nominal_code: string | null
+  /** Customer PO resolved (charge->system->site->client) and snapshotted on the line. */
+  customer_po: string | null
   created_at: string
 }
 
@@ -448,6 +459,12 @@ export interface Profile {
   // Per-user dashboard tile colour overrides, keyed by tile title -> hex value
   // (e.g. { "Service": "#2563eb" }). Empty object = use default theme colour.
   dashboard_tile_colors: Record<string, string> | null
+  // Per-user ordered list of dashboard module tile titles (e.g. ["Service",
+  // "Jobs", ...]). Empty array = default order; unknown/new titles appended.
+  dashboard_tile_positions: string[] | null
+  // Per-user dashboard quick-shortcut destination keys (max 3), e.g.
+  // ["calendar","invoices","sites"]. Missing entries = unset slot.
+  dashboard_shortcuts: string[] | null
   // Nominated line manager for this user (self-referencing). Recorded for HR /
   // future approvals wiring. NULL = no manager set.
   manager_id: string | null
@@ -518,6 +535,9 @@ export interface Profile {
   // Owner-granted access to the admin Query Builder + User Cost Calculator
   // tools. Only grantable by the owner (steve.rush@pyrocel.co.uk).
   can_use_query_tools: boolean
+  // Per-user grant to preview/edit/send invoices from the invoice lists. Admins
+  // are implicitly allowed; office users require this grant (see lib/auth/invoices).
+  can_edit_invoices: boolean
   created_at: string
   updated_at: string
   department?: Department | null
@@ -947,6 +967,12 @@ export interface Site {
   // Billing account this site is invoiced under. null = inherit the client's
   // default billing account (see resolveBillingAccount).
   billing_account_id: string | null
+  /** Site-level customer PO; used when no system/service PO is set. */
+  po_number: string | null
+  /** Pre-authorised spend limit (pence) for NON-recurring works at this site. */
+  authorised_works_limit_pence: number | null
+  /** PO to stamp on non-recurring calls that fall within the authorised limit. */
+  authorised_works_po: string | null
   site_id_cash: string | null
   // Unique Property Reference Number (UK national property identifier).
   uprn: string | null
@@ -1072,6 +1098,12 @@ export interface Site {
     // When true, multi-panel visits spread the heavy (Annual) inspections across
     // the cycle's visit occurrences per panel_visit_assignments (opt-in).
     panel_rotation_enabled: boolean
+    /** System-level customer PO; used when no service PO is set, above the site PO. */
+    po_number: string | null
+    /** Pre-authorised additional-service spend (pence) written on quote acceptance. */
+    additional_service_limit_pence: number | null
+    /** PO covering additional maintenance services for this system. */
+    additional_service_po: string | null
     created_at: string
     updated_at: string
     site?: Site
@@ -1246,6 +1278,8 @@ export interface Site {
   // is how a single service can be billed to a different (sub-)client than its
   // site — "change the client at service level".
   billing_account_id: string | null
+  /** Service/charge-level customer PO; top of the fallback chain. */
+  po_number: string | null
   created_at: string
   site?: Site
   site_system?: SiteSystem | null
@@ -1452,6 +1486,9 @@ export interface Task {
   charge_reviewed_by: string | null
   // Optional client PO reference, entered at review/logging time
   client_ref: string | null
+  // True when client_ref was auto-imported from the site/system authorised-works
+  // PO at booking (so no PO request is needed and the call is invoiceable).
+  po_auto_authorised: boolean
   // Invoiced status — set after the call has been sent for invoicing
   charge_invoiced_at: string | null
   charge_invoiced_by: string | null
@@ -2000,6 +2037,16 @@ export interface QuoteLineItem {
   option_group: string | null
   standard: string | null
   client_selected: boolean | null
+  // Per-system maintenance additional-service allowance line (default £350).
+  // The client can amend the value, opt out, and must supply a PO (or reuse the
+  // maintenance PO) at sign-off; these overrides live on the line.
+  is_maintenance_allowance: boolean
+  /** Client-amended value (pence) for a maintenance-allowance line; null = use unit_price. */
+  client_amount_pence: number | null
+  /** PO the client supplied at sign-off for the allowance. */
+  client_po: string | null
+  /** When true the allowance should reuse the site/system/site maintenance PO. */
+  use_maintenance_po: boolean
   // Serialised inputs + result of the calculator (installation / maintenance)
   // that produced this line, enabling it to be re-opened and viewed later.
   // NULL for hand-entered lines. Typed as CalculatorSnapshot.

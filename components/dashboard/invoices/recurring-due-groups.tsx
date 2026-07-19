@@ -140,6 +140,7 @@ function RecurringGroupCard({ group }: { group: RecurringDueGroup }) {
                   />
                 </TableHead>
                 <TableHead>Charge</TableHead>
+                <TableHead>Period</TableHead>
                 <TableHead>Frequency</TableHead>
                 <TableHead>Timing</TableHead>
                 <TableHead className="text-center">Qty</TableHead>
@@ -156,7 +157,17 @@ function RecurringGroupCard({ group }: { group: RecurringDueGroup }) {
                       aria-label={`Select ${c.description}`}
                     />
                   </TableCell>
-                  <TableCell className="font-medium">{c.description}</TableCell>
+                  <TableCell className="font-medium">
+                    {c.description}
+                    {c.systemService && (
+                      <span className="block text-xs font-normal text-muted-foreground">
+                        {c.systemService}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground whitespace-nowrap">
+                    {c.coveragePeriod}
+                  </TableCell>
                   <TableCell className="text-muted-foreground">
                     {RECURRING_FREQUENCY_LABELS[c.frequency as RecurringFrequency] ?? c.frequency}
                   </TableCell>

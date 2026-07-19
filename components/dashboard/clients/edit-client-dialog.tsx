@@ -35,6 +35,7 @@ export function EditClientDialog({ client, open, onOpenChange }: EditClientDialo
     contact_phone: client.contact_phone || '',
     address: client.address || '',
     notes: client.notes || '',
+    po_number: client.po_number || '',
     requires_po: client.requires_po ?? false,
     invoice_calls_individually: client.invoice_calls_individually ?? false,
   })
@@ -67,6 +68,7 @@ export function EditClientDialog({ client, open, onOpenChange }: EditClientDialo
         contact_phone: formData.contact_phone || null,
         address: formData.address || null,
         notes: formData.notes || null,
+        po_number: formData.po_number.trim() || null,
         requires_po: formData.requires_po,
         invoice_calls_individually: formData.invoice_calls_individually,
         updated_at: new Date().toISOString(),
@@ -147,6 +149,18 @@ export function EditClientDialog({ client, open, onOpenChange }: EditClientDialo
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="client_po">Default PO number</Label>
+              <Input
+                id="client_po"
+                value={formData.po_number}
+                onChange={(e) => setFormData({ ...formData, po_number: e.target.value })}
+                placeholder="Fallback customer PO for this client"
+              />
+              <p className="text-xs text-muted-foreground text-pretty">
+                Used on invoices when the site, system or service charge has no PO of its own.
+              </p>
             </div>
             <div className="flex items-start justify-between gap-3 rounded-md border p-3">
               <div className="min-w-0">

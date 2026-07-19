@@ -331,6 +331,10 @@ export function SiteSystemsManager({
   }
   const openServiceSetup = (serviceId: string) => openServiceParam('editService', serviceId)
   const openServiceCharge = (serviceId: string) => openServiceParam('chargeService', serviceId)
+  // Open the charge dialog straight into edit mode for the service's existing
+  // charge (adds a `chargeEdit=1` flag the services manager reads).
+  const openServiceEditCharge = (serviceId: string) =>
+    router.push(`${pathname}?tab=systems&chargeService=${serviceId}&chargeEdit=1`)
   const openServiceBook = (serviceId: string) => openServiceParam('bookService', serviceId)
   const openServiceDelete = (serviceId: string) => openServiceParam('deleteService', serviceId)
 
@@ -876,10 +880,14 @@ export function SiteSystemsManager({
                                     <Settings2 className="mr-2 h-4 w-4" />
                                     Set up
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem onSelect={() => openServiceCharge(svc.id)}>
-                                    <Receipt className="mr-2 h-4 w-4" />
-                                    Add charge
-                                  </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => openServiceCharge(svc.id)}>
+                      <Receipt className="mr-2 h-4 w-4" />
+                      Add charge
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => openServiceEditCharge(svc.id)}>
+                      <Pencil className="mr-2 h-4 w-4" />
+                      Edit charge
+                    </DropdownMenuItem>
                                   <DropdownMenuItem
                                     disabled={isDead || inactive}
                                     onSelect={() => openServiceBook(svc.id)}
@@ -1048,7 +1056,7 @@ export function SiteSystemsManager({
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? 'Edit system' : 'Add system'}</DialogTitle>
             <DialogDescription>

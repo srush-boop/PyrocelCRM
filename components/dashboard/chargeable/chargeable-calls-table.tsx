@@ -60,6 +60,8 @@ export interface ChargeableCall {
   deadlineFailedReason: string | null
   deadlineFailedNote: string | null
   poNotRequired: boolean
+  /** PO auto-imported from the site/system authorised-works authorisation at booking. */
+  poAutoAuthorised: boolean
   siteName: string
   clientName: string
   serviceName: string

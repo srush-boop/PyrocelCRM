@@ -452,7 +452,8 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     const matchesSearch = !search ||
       task.site_service?.site?.name.toLowerCase().includes(search.toLowerCase()) ||
       task.site_service?.service_type?.name.toLowerCase().includes(search.toLowerCase()) ||
-      task.assigned_engineer?.full_name?.toLowerCase().includes(search.toLowerCase())
+      task.assigned_engineer?.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+      (task.task_result?.reference_number ?? '').toLowerCase().includes(search.toLowerCase())
     
     // Engineer filter (only for admin/office)
     const matchesEngineer = selectedEngineer === 'all' || 
@@ -531,6 +532,21 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
   const completedTasks = sortedTasks.filter((task) => task.status === 'completed')
   const overdueTasks = upcomingTasks.filter((task) => taskOverdue(task))
 
+  // The list is split into Upcoming / Overdue / Completed tabs, so a search hit
+  // that lives in a different tab than the one selected would look "missing".
+  // When a search is active and the selected tab has no matches, fall through to
+  // whichever tab does — so searching (e.g. a completed call's reference number)
+  // surfaces the match regardless of the call's status.
+  const tabCounts: Record<string, number> = {
+    upcoming: upcomingTasks.length,
+    overdue: overdueTasks.length,
+    completed: completedTasks.length,
+  }
+  const effectiveTab =
+    search.trim() && tabCounts[activeTab] === 0
+      ? (['upcoming', 'overdue', 'completed'].find((t) => tabCounts[t] > 0) ?? activeTab)
+      : activeTab
+
   // Inline control to pick up an open task. Only shown to admin/office for
   // unassigned, still-actionable tasks (e.g. CDO non-route work like dampers).
   const AssignControl = ({ task, className }: { task: TaskWithDetails; className?: string }) => {
@@ -588,6 +604,8 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
           (task.visit_type?.name ? ` · ${task.visit_type.name}` : '')
         }
         status={task.status}
+        result={task.task_result?.overall_status ?? null}
+        reference={task.task_result?.reference_number ?? null}
         scheduledDate={task.scheduled_date}
         completeByDate={taskTargetDate(task)}
         isOverdue={isOverdue}
@@ -693,6 +711,9 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
               )}
             </div>
             <p className="truncate text-xs text-muted-foreground leading-tight">
+              {task.task_result?.reference_number && (
+                <span className="font-mono text-foreground">{task.task_result.reference_number} · </span>
+              )}
               {task.site_service?.service_type?.name}
               {task.visit_type?.name ? ` · ${task.visit_type.name}` : ''}
               {!isEngineer
@@ -940,7 +961,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
         <GridSearch
           value={search}
           onChange={setSearch}
-          placeholder="Search calls..."
+          placeholder="Search calls or ref number..."
           className="shrink-0 w-[200px] max-w-none sm:w-[240px]"
         />
 
@@ -1119,7 +1140,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
 
 
       <Tabs
-        value={activeTab}
+        value={effectiveTab}
         onValueChange={setActiveTab}
         className={
           isSwitchingView ? 'opacity-60 transition-opacity duration-150' : 'transition-opacity'

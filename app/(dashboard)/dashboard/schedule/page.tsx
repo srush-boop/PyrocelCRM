@@ -62,7 +62,8 @@ export default async function SchedulePage({
       direct_system_type:system_types!tasks_system_type_id_fkey(*),
       assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(*),
       visit_type:service_visit_types(*),
-      client:clients(id, name)
+      client:clients(id, name),
+      task_result:task_results(reference_number, overall_status)
     `)
     .order('scheduled_date', { ascending: true })
 

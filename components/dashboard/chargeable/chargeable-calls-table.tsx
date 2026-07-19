@@ -104,6 +104,82 @@ function isPoOverdue(call: ChargeableCall, overdueAfterDays: number): boolean {
   return days >= overdueAfterDays
 }
 
+/** Has a PO been requested from the client (email sent) but not yet authorised? */
+function hasPendingPoRequest(call: ChargeableCall): boolean {
+  return call.poRequests.some((r) => !!r.email_sent_at && !r.authorised_at)
+}
+
+/** Status keys drive both the coloured badge and the status filter. */
+type CallStatusKey =
+  | 'awaiting'
+  | 'po_requested'
+  | 'po_overdue'
+  | 'po_received'
+  | 'reviewed'
+  | 'invoiced'
+
+interface CallStatus {
+  key: CallStatusKey
+  label: string
+  icon: typeof Clock
+  /** Tailwind classes for the badge (colour code). */
+  className: string
+}
+
+/**
+ * Single source of truth for a call's lifecycle status. Precedence:
+ * invoiced → reviewed → PO received (authorised, ready to review) →
+ * PO overdue → PO requested → awaiting review.
+ */
+function deriveCallStatus(call: ChargeableCall, overdueAfterDays: number): CallStatus {
+  if (call.chargeInvoicedAt) {
+    return {
+      key: 'invoiced',
+      label: 'Invoiced',
+      icon: Receipt,
+      className: 'bg-emerald-600 text-white hover:bg-emerald-600',
+    }
+  }
+  if (call.chargeReviewStatus === 'reviewed') {
+    return {
+      key: 'reviewed',
+      label: 'Reviewed',
+      icon: Check,
+      className: 'bg-slate-200 text-slate-700 hover:bg-slate-200',
+    }
+  }
+  if (call.poReadyToReview) {
+    return {
+      key: 'po_received',
+      label: 'PO received',
+      icon: CheckCircle,
+      className: 'bg-emerald-100 text-emerald-800 hover:bg-emerald-100',
+    }
+  }
+  if (hasPendingPoRequest(call)) {
+    if (isPoOverdue(call, overdueAfterDays)) {
+      return {
+        key: 'po_overdue',
+        label: 'PO overdue',
+        icon: AlertCircle,
+        className: 'bg-red-100 text-red-700 hover:bg-red-100',
+      }
+    }
+    return {
+      key: 'po_requested',
+      label: 'PO requested',
+      icon: FileText,
+      className: 'bg-blue-100 text-blue-700 hover:bg-blue-100',
+    }
+  }
+  return {
+    key: 'awaiting',
+    label: 'Awaiting review',
+    icon: Clock,
+    className: 'bg-amber-100 text-amber-800 hover:bg-amber-100',
+  }
+}
+
 /** Small inline editor for the client reference field. */
 function InlineClientRef({ taskId, value }: { taskId: string; value: string | null }) {
   const router = useRouter()
@@ -161,7 +237,7 @@ function InlineClientRef({ taskId, value }: { taskId: string; value: string | nu
   )
 }
 
-type StatusFilter = 'pending' | 'reviewed' | 'invoiced' | 'all'
+type StatusFilter = 'pending' | 'po_requested' | 'po_received' | 'reviewed' | 'invoiced' | 'all'
 
 export function ChargeableCallsTable({
   calls,
@@ -188,7 +264,10 @@ export function ChargeableCallsTable({
 
   const filtered = useMemo(() => {
     const rows = calls.filter((c) => {
-      if (statusFilter === 'pending' && (c.chargeReviewStatus !== 'pending' || !!c.chargeInvoicedAt)) return false
+      const isOpen = c.chargeReviewStatus === 'pending' && !c.chargeInvoicedAt
+      if (statusFilter === 'pending' && !isOpen) return false
+      if (statusFilter === 'po_requested' && !(isOpen && hasPendingPoRequest(c))) return false
+      if (statusFilter === 'po_received' && !(isOpen && c.poReadyToReview)) return false
       if (statusFilter === 'reviewed' && (c.chargeReviewStatus !== 'reviewed' || !!c.chargeInvoicedAt)) return false
       if (statusFilter === 'invoiced' && !c.chargeInvoicedAt) return false
       if (reasonFilter !== 'all' && c.chargeReason !== reasonFilter) return false
@@ -205,9 +284,10 @@ export function ChargeableCallsTable({
 
   const reviewCall = calls.find((c) => c.id === reviewId) ?? null
 
-  const pendingCount = calls.filter(
-    (c) => c.chargeReviewStatus === 'pending' && !c.chargeInvoicedAt,
-  ).length
+  const openCalls = calls.filter((c) => c.chargeReviewStatus === 'pending' && !c.chargeInvoicedAt)
+  const pendingCount = openCalls.length
+  const poRequestedCount = openCalls.filter((c) => hasPendingPoRequest(c)).length
+  const poReceivedCount = openCalls.filter((c) => c.poReadyToReview).length
   const reviewedCount = calls.filter(
     (c) => c.chargeReviewStatus === 'reviewed' && !c.chargeInvoicedAt,
   ).length
@@ -216,6 +296,8 @@ export function ChargeableCallsTable({
 
   const STATUS_OPTIONS: { value: StatusFilter; label: string; count: number }[] = [
     { value: 'pending', label: 'Awaiting review', count: pendingCount },
+    { value: 'po_requested', label: 'PO requested', count: poRequestedCount },
+    { value: 'po_received', label: 'PO received', count: poReceivedCount },
     { value: 'reviewed', label: 'Reviewed', count: reviewedCount },
     { value: 'invoiced', label: 'Invoiced', count: invoicedCount },
     { value: 'all', label: 'All', count: calls.length },
@@ -338,6 +420,7 @@ export function ChargeableCallsTable({
                   const poOverdue = isPoOverdue(c, overdueAfterDays)
                   const hasPos = c.poRequests.length > 0
                   const authorisedPos = c.poRequests.filter((r) => !!r.authorised_at)
+                  const status = deriveCallStatus(c, overdueAfterDays)
 
                   return (
                     <>
@@ -444,21 +527,10 @@ export function ChargeableCallsTable({
                         </TableCell>
 
                         <TableCell>
-                          {c.chargeInvoicedAt ? (
-                            <Badge variant="default" className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 gap-1">
-                              <Receipt className="h-3 w-3" />
-                              Invoiced
-                            </Badge>
-                          ) : c.chargeReviewStatus === 'reviewed' ? (
-                            <Badge variant="secondary">
-                              Reviewed
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="gap-1">
-                              <Clock className="h-3 w-3" />
-                              Awaiting review
-                            </Badge>
-                          )}
+                          <Badge className={`gap-1 ${status.className}`}>
+                            <status.icon className="h-3 w-3" />
+                            {status.label}
+                          </Badge>
                         </TableCell>
 
                         <TableCell className="text-right">

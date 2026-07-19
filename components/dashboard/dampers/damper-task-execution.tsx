@@ -380,7 +380,9 @@ export function DamperTaskExecution({
       .update({ last_service_date: today })
       .eq('id', task.site_service_id)
 
-    // Generate next recurring task if both the site and service type are live
+    // Roll the projected "next due" date forward. We deliberately do NOT create
+    // the next call here — future calls are only created via the office
+    // "Generate Calls" workflow.
     const { data: ss } = await supabase
       .from('site_services')
       .select('frequency_value, frequency_unit, anchor_next_to_schedule, active, site:sites!inner(status), service_type:service_types!inner(status)')
@@ -395,13 +397,6 @@ export function DamperTaskExecution({
       const nextDateStr = toDateString(
         computeNextScheduledDate(ss, { completedAt, scheduledDate: task.scheduled_date }),
       )
-      await supabase.from('tasks').insert({
-        site_service_id: task.site_service_id,
-        assigned_engineer_id: task.assigned_engineer_id,
-        scheduled_date: nextDateStr,
-        status: 'pending',
-        visit_type_id: task.visit_type_id ?? null,
-      })
       await supabase
         .from('site_services')
         .update({ next_service_date: nextDateStr })

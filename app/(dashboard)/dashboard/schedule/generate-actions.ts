@@ -324,9 +324,10 @@ export async function previewMonthlyCalls(
  *
  * Intended for the end-of-month office workflow: create next month's calls in
  * one click, and also to back-fill a current/past month that missed its
- * generate. It is a SUPPLEMENT to the existing on-completion auto-creation —
- * it only fills gaps and never duplicates a call that already exists for a
- * service+visit in the target month, so it is safe to run repeatedly.
+ * generate. This is now the ONLY place recurring calls are created — completing
+ * a call no longer auto-creates the next one. It never duplicates a call that
+ * already exists for a service+visit in the target month, so it is safe to run
+ * repeatedly.
  *
  * @param year  Full target year (e.g. 2026)
  * @param month 1-12 target month

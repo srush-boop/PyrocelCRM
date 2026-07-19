@@ -734,7 +734,10 @@ export function TaskExecution({
       })
       .eq('id', task.site_service_id)
 
-    // Generate next recurring task if both the site and service type are live
+    // Roll the service's projected "next due" date forward on completion so the
+    // office can see when the next visit falls due. NOTE: we deliberately do NOT
+    // create the next call here — future calls are only ever created via the
+    // office "Generate Calls" workflow.
     const { data: siteServiceData } = await supabase
       .from('site_services')
       .select(`
@@ -761,18 +764,8 @@ export function TaskExecution({
       })
       const nextDateStr = toDateString(nextDate)
 
-      // Create the next recurring task. Carry the visit type forward so each
-      // visit in a multi-visit service (e.g. Annual, Periodic) recurs on its own
-      // track one full cycle later.
-      await supabase.from('tasks').insert({
-        site_service_id: task.site_service_id,
-        assigned_engineer_id: task.assigned_engineer_id, // Keep same engineer
-        scheduled_date: nextDateStr,
-        status: 'pending',
-        visit_type_id: task.visit_type_id ?? null,
-      })
-
-      // Update next_service_date on site_service
+      // Update next_service_date on the site_service (projected "next due" only —
+      // no call is created).
       await supabase
         .from('site_services')
         .update({

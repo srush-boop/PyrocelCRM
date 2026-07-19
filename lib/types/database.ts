@@ -1416,6 +1416,11 @@ export type TaskStatus = 'pending' | 'in_progress' | 'paused' | 'completed' | 'c
 
 export interface Task {
   id: string
+  // Human-facing call reference (PYR-YYYY-NNNNNN). Assigned at creation by a DB
+  // trigger for EVERY call (recurring + reactive) and locked thereafter. The
+  // call's task_result inherits this same number so the call and its report
+  // share one reference.
+  reference_number: string | null
   // Recurring PPM calls hang off a site_service. Reactive / emergency calls have
   // no recurring service, so this is null and the call is anchored by site_id +
   // service_type_id + system_type_id instead. Exactly one anchor is guaranteed

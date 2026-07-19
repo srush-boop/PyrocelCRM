@@ -29,6 +29,13 @@ export function CallCostCard({ profit }: { profit: CallProfitResult }) {
       ? `${formatPence(profit.costPerHourPence)}/hr`
       : 'No cost rate set'
 
+  // Total cost is labour + parts. Show the split so the parts contribution is
+  // always visible (parts cost is included on every call).
+  const costSub =
+    profit.partsCostPence > 0
+      ? `Labour ${formatPence(profit.labourCostPence)} + parts ${formatPence(profit.partsCostPence)}`
+      : `${hoursLabel} · ${rateLabel}`
+
   return (
     <Card className="border-amber-200 bg-amber-50/40">
       <CardHeader className="pb-3">
@@ -42,7 +49,7 @@ export function CallCostCard({ profit }: { profit: CallProfitResult }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Metric label="Labour cost" value={formatPence(costPence)} sub={`${hoursLabel} · ${rateLabel}`} />
+          <Metric label="Cost" value={formatPence(costPence)} sub={costSub} />
           <Metric
             label="Revenue"
             value={revenueKnown ? formatPence(revenuePence) : '\u2014'}

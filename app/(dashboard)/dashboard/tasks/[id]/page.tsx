@@ -79,7 +79,8 @@ export default async function TaskPage({ params }: PageProps) {
       direct_service_type:service_types!tasks_service_type_id_fkey(*, system_type:system_types(*)),
       assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(*),
       visit_type:service_visit_types(*),
-      client:clients(id, name)
+      client:clients(id, name),
+      invoice:invoices(id, invoice_number)
     `)
     .eq('id', id)
     .single()

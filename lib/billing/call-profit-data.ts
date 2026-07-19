@@ -30,6 +30,13 @@ import type { RecurringFrequency } from '@/lib/types/database'
 export interface CallProfitResult extends CallProfit {
   onSiteHours: number
   costPerHourPence: number | null
+  /**
+   * Cost breakdown. `costPence` (from CallProfit) is the TOTAL and always
+   * includes parts. These expose the split for the UI.
+   */
+  labourCostPence: number
+  /** Cost of every part used on the call (unit cost × qty), always included. */
+  partsCostPence: number
   /** Where the revenue figure came from, for the UI to label/caveat. */
   revenueSource: 'invoice' | 'recurring_visit' | 'none'
   /** True when we have enough to show anything (a cost/hour was resolved). */
@@ -67,7 +74,24 @@ export async function getCallProfit(taskId: string): Promise<CallProfitResult | 
     (task as any).completed_at,
   )
   const hours = onSiteHours((task as any).started_at, (task as any).completed_at, pausedSeconds)
-  const costPence = labourCostPence(hours, costPerHourPence)
+  const labourPence = labourCostPence(hours, costPerHourPence)
+
+  // Parts cost — ALWAYS part of the true cost of the call, whether or not the
+  // parts are on-charged to the client. Uses each part's unit COST (not sale
+  // price) × quantity. Falls back to 0 for parts with no cost recorded.
+  const { data: partRows } = await supabase
+    .from('call_parts')
+    .select('unit_cost_pence, quantity')
+    .eq('task_id', taskId)
+  const partsCostPence = (partRows ?? []).reduce(
+    (sum, p) =>
+      sum +
+      ((p as { unit_cost_pence: number | null }).unit_cost_pence ?? 0) *
+        ((p as { quantity: number | null }).quantity ?? 1),
+    0,
+  )
+
+  const costPence = labourPence + partsCostPence
 
   // --- Revenue --------------------------------------------------------------
   let revenuePence = 0
@@ -110,6 +134,8 @@ export async function getCallProfit(taskId: string): Promise<CallProfitResult | 
     marginPct: revenueSource === 'none' ? null : profit.marginPct,
     onSiteHours: hours,
     costPerHourPence,
+    labourCostPence: labourPence,
+    partsCostPence,
     revenueSource,
     costKnown: costPerHourPence != null,
   }

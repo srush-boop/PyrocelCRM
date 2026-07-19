@@ -447,6 +447,8 @@ export function DamperTaskExecution({
             chargeReason={task.charge_reason}
             clientRef={(task as any).client_ref ?? null}
             chargeInvoicedAt={(task as any).charge_invoiced_at ?? null}
+            invoiceId={(task as any).invoice?.id ?? (task as any).invoice_id ?? null}
+            invoiceNumber={(task as any).invoice?.invoice_number ?? null}
             canReview={profile.role === 'admin' || profile.role === 'office'}
           />
         )}

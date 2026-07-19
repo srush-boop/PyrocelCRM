@@ -32,6 +32,8 @@ import { DashboardShortcuts } from '@/components/dashboard/home/dashboard-shortc
 import { tileIconStyle, tileAccentStyle, tileCardStyle } from '@/lib/dashboard-tile-colors'
 import { getVisibleLeaveRequests } from '@/lib/leave-approvals'
 import { EngineerHome } from '@/components/dashboard/home/engineer-home'
+import { CompanyDayAheadTile } from '@/components/dashboard/home/company-day-ahead-tile'
+import { DidYouKnowTile } from '@/components/dashboard/home/did-you-know-tile'
 import { YourTasksTile } from '@/components/dashboard/internal-tasks/your-tasks-tile'
 import { DashboardDateFilter } from '@/components/dashboard/home/dashboard-date-filter'
 import { Suspense } from 'react'
@@ -386,6 +388,11 @@ export default async function DashboardPage({
         <DashboardShortcuts saved={savedShortcuts} />
       </div>
 
+      {/* Company-wide "day ahead" — every call booked across the team today. */}
+      <Suspense fallback={null}>
+        <CompanyDayAheadTile />
+      </Suspense>
+
       {/* Company overview — one hub per module. Rendered through a client grid
           that lets the user drag tiles into their preferred, saved order. */}
       <DashboardTileGrid
@@ -467,6 +474,9 @@ export default async function DashboardPage({
           }
         })}
       />
+
+      {/* Daily system fact, shared with the engineer home. */}
+      <DidYouKnowTile />
     </div>
   )
 }

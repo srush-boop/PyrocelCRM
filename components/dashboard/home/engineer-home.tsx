@@ -11,7 +11,6 @@ import { Button } from '@/components/ui/button'
 import {
   Calendar,
   Clock,
-  Lightbulb,
   MapPin,
   Siren,
   CheckCircle2,
@@ -24,7 +23,7 @@ import Link from 'next/link'
 import { format } from 'date-fns'
 import type { Profile, WorkerType } from '@/lib/types/database'
 import { isTaskVisibleToEngineer } from '@/lib/engineer-visibility'
-import { getDailyFact } from '@/lib/system-facts'
+import { DidYouKnowTile } from '@/components/dashboard/home/did-you-know-tile'
 import { LocationSharingToggle } from '@/components/dashboard/home/location-sharing-toggle'
 import { LoneWorkerShiftCard } from '@/components/dashboard/lone-worker/lone-worker-shift-card'
 import { getEngineerEngagementStats } from '@/lib/engagement-stats'
@@ -74,7 +73,6 @@ export async function EngineerHome({
   const now = new Date()
   const todayStr = format(now, 'yyyy-MM-dd')
   const firstName = (profile.full_name || 'there').split(' ')[0]
-  const fact = getDailyFact(now)
 
   const taskSelect = `
     id,
@@ -292,19 +290,8 @@ export async function EngineerHome({
         </Card>
       )}
 
-      {/* Daily fact */}
-      <Card className="border-primary/30 bg-primary/5">
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Lightbulb className="h-5 w-5 text-primary" />
-            Did you know?
-          </CardTitle>
-          <CardDescription>A daily fact about the systems we service</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-pretty leading-relaxed">{fact}</p>
-        </CardContent>
-      </Card>
+      {/* Daily fact (shared with the office/admin dashboard) */}
+      <DidYouKnowTile />
     </div>
   )
 }

@@ -7,6 +7,7 @@ import { QuoteBuilder } from '@/components/dashboard/sales/quote-builder'
 import { QuoteStatusPanel } from '@/components/dashboard/sales/quote-status-panel'
 import { QuoteGroupPanel } from '@/components/dashboard/sales/quote-group-panel'
 import { QuoteQueriesPanel } from '@/components/dashboard/sales/quote-queries-panel'
+import { RemedialCallControls } from '@/components/dashboard/sales/remedial-call-controls'
 import { CreateDocumentButton } from '@/components/documents/create-document-dialog'
 import { AddRequestButton } from '@/components/dashboard/requests/add-request-button'
 import { EntityRequestsCard } from '@/components/dashboard/requests/entity-requests-card'
@@ -77,6 +78,15 @@ export default async function QuoteDetailPage({
     .select('id')
     .eq('quote_id', id)
     .maybeSingle()
+
+  // Remedial calls raised from this quote (accepted remedial quotes). Surfaced
+  // as links; when none exist yet the page offers a manual "Create" button.
+  const { data: remedialCalls } = await supabase
+    .from('tasks')
+    .select('id, reference_number')
+    .eq('source_quote_id', id)
+    .eq('is_remedial', true)
+    .order('created_at')
 
   // Classify from the quote's meaningful (non-empty) systems so the status
   // panel can offer the Contract Review actions for maintenance-only quotes.
@@ -240,6 +250,12 @@ export default async function QuoteDetailPage({
             </Link>
           </Button>
           <div className="flex items-center gap-2">
+            <RemedialCallControls
+              quoteId={typedQuote.id}
+              isRemedial={typedQuote.quote_type === 'remedial'}
+              isAccepted={typedQuote.status === 'accepted'}
+              calls={(remedialCalls ?? []) as { id: string; reference_number: string | null }[]}
+            />
             {linkedJob ? (
               <Button variant="outline" size="sm" className="w-fit" asChild>
                 <Link href={`/dashboard/jobs/${(linkedJob as { id: string }).id}`}>

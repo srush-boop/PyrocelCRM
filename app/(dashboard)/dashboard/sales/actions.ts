@@ -911,6 +911,37 @@ export async function setQuoteStatus(
 }
 
 /**
+ * Manually raise the remedial call(s) for an accepted remedial quote. Backs the
+ * "Create remedial call" button on the quote page as a fallback / re-run — the
+ * underlying creation is idempotent, so it will only fill in calls that don't
+ * already exist and never duplicates.
+ */
+export async function createRemedialCallForQuoteManually(
+  quoteId: string,
+): Promise<{ ok: boolean; created?: number; error?: string }> {
+  const { supabase, user, error } = await requireStaff()
+  if (error || !user) return { ok: false, error: error ?? 'Not authorised.' }
+
+  const { data: q } = await supabase
+    .from('quotes')
+    .select('status, quote_type')
+    .eq('id', quoteId)
+    .maybeSingle()
+  if (!q) return { ok: false, error: 'Quote not found.' }
+  if ((q as { quote_type: string }).quote_type !== 'remedial') {
+    return { ok: false, error: 'Only remedial quotes can raise remedial calls.' }
+  }
+  if ((q as { status: string }).status !== 'accepted') {
+    return { ok: false, error: 'Accept the quote before raising a remedial call.' }
+  }
+
+  const { created } = await createRemedialCallsForQuote(supabase, quoteId)
+  revalidatePath(`/dashboard/sales/${quoteId}`)
+  revalidatePath('/dashboard/schedule')
+  return { ok: true, created }
+}
+
+/**
  * Side-effects to run once a quote becomes accepted, regardless of whether it
  * was accepted via the dashboard, a manual/printed mark, or the public link.
  * Raises remedial calls, then routes Routine Maintenance (service_contract)

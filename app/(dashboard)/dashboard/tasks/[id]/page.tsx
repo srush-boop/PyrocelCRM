@@ -14,6 +14,7 @@ import { PreAttendancePanel } from '@/components/dashboard/site-info/pre-attenda
 import { AddRequestButton } from '@/components/dashboard/requests/add-request-button'
 import { EntityRequestsCard } from '@/components/dashboard/requests/entity-requests-card'
 import { CommissioningJobPanel } from '@/components/dashboard/tasks/commissioning-job-panel'
+import { RemedialCallPanel } from '@/components/dashboard/tasks/remedial-call-panel'
 import { resolveSiteFlags } from '@/lib/site-flags'
 import { getOpenRemedialForSite } from '@/lib/remedial'
 import { DeadlineFailedPanel } from '@/components/dashboard/tasks/deadline-failed-panel'
@@ -298,6 +299,65 @@ export default async function TaskPage({ params }: PageProps) {
       preAttendancePanel = (
         <>
           {commissioningPanel}
+          {preAttendancePanel}
+        </>
+      )
+    }
+  }
+
+  // Remedial calls raised from an accepted quote: tie the call back to that quote
+  // and to the original inspection call where the defect was found. Shown at the
+  // very top so the engineer/office has the full trail before starting.
+  if (task.is_remedial && (task.source_quote_id || task.source_defect_id)) {
+    const canOpenQuote = role === 'admin' || role === 'office'
+
+    let srcQuote: {
+      id: string
+      quote_number: string | null
+      reference: string | null
+      total_pence: number | null
+    } | null = null
+    if (task.source_quote_id) {
+      const { data: q } = await supabase
+        .from('quotes')
+        .select('id, quote_number, reference, total_pence')
+        .eq('id', task.source_quote_id as string)
+        .maybeSingle()
+      srcQuote = (q as typeof srcQuote) ?? null
+    }
+
+    // Resolve the originating inspection call via the source defect.
+    let originCall: { id: string; reference_number: string | null } | null = null
+    if (task.source_defect_id) {
+      const { data: defect } = await supabase
+        .from('defects')
+        .select('task_id, task_result_id')
+        .eq('id', task.source_defect_id as string)
+        .maybeSingle()
+      const d = defect as { task_id: string | null; task_result_id: string | null } | null
+      let originTaskId = d?.task_id ?? null
+      if (!originTaskId && d?.task_result_id) {
+        const { data: tr } = await supabase
+          .from('task_results')
+          .select('task_id')
+          .eq('id', d.task_result_id)
+          .maybeSingle()
+        originTaskId = (tr as { task_id: string | null } | null)?.task_id ?? null
+      }
+      if (originTaskId && originTaskId !== id) {
+        const { data: ot } = await supabase
+          .from('tasks')
+          .select('id, reference_number')
+          .eq('id', originTaskId)
+          .maybeSingle()
+        originCall = (ot as typeof originCall) ?? null
+      }
+    }
+
+    if (srcQuote || originCall) {
+      preAttendancePanel = (
+        <>
+          <RemedialCallPanel quote={srcQuote} originCall={originCall} canOpenQuote={canOpenQuote} />
           {preAttendancePanel}
         </>
       )

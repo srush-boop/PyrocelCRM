@@ -452,7 +452,8 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
     const matchesSearch = !search ||
       task.site_service?.site?.name.toLowerCase().includes(search.toLowerCase()) ||
       task.site_service?.service_type?.name.toLowerCase().includes(search.toLowerCase()) ||
-      task.assigned_engineer?.full_name?.toLowerCase().includes(search.toLowerCase())
+      task.assigned_engineer?.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+      (task.task_result?.reference_number ?? '').toLowerCase().includes(search.toLowerCase())
     
     // Engineer filter (only for admin/office)
     const matchesEngineer = selectedEngineer === 'all' || 
@@ -945,7 +946,7 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
         <GridSearch
           value={search}
           onChange={setSearch}
-          placeholder="Search calls..."
+          placeholder="Search calls or ref number..."
           className="shrink-0 w-[200px] max-w-none sm:w-[240px]"
         />
 

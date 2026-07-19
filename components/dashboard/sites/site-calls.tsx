@@ -386,7 +386,7 @@ export function SiteCalls({ calls, engineers, serviceTypes, reportingEmails = []
       <GridToolbar
         meta={`${filtered.length} of ${calls.length} ${calls.length === 1 ? 'call' : 'calls'}`}
       >
-        <GridSearch value={search} onChange={setSearch} placeholder="Search calls..." />
+        <GridSearch value={search} onChange={setSearch} placeholder="Search calls or ref number..." />
 
         <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
           <SelectTrigger className="w-[140px]">

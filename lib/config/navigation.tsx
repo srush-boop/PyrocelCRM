@@ -146,6 +146,7 @@ const adminCallsNavItem: NavItem = {
   icon: Wrench,
   children: [
     { title: 'Service Dashboard', href: '/dashboard/service', icon: LayoutDashboard },
+    { title: 'CDO Management', href: '/dashboard/cdo', icon: ClipboardCheck },
     { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
     { title: 'Map', href: '/dashboard/schedule/map', icon: MapPinned },
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },
@@ -166,6 +167,7 @@ const officeCallsNavItem: NavItem = {
   icon: Wrench,
   children: [
     { title: 'Service Dashboard', href: '/dashboard/service', icon: LayoutDashboard },
+    { title: 'CDO Management', href: '/dashboard/cdo', icon: ClipboardCheck },
     { title: 'All Calls', href: '/dashboard/schedule', icon: Calendar },
     { title: 'Map', href: '/dashboard/schedule/map', icon: MapPinned },
     { title: 'Transfers', href: '/dashboard/transfers', icon: ArrowLeftRight },

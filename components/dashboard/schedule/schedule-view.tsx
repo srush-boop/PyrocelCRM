@@ -1205,7 +1205,13 @@ export function ScheduleView({ tasks, profile, engineers = [] }: ScheduleViewPro
       )}
 
       <Dialog open={!!viewTask} onOpenChange={(open) => !open && setViewTask(null)}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+        {/* Don't auto-focus on open: the first focusable element is the booking
+            "Start time" input (type="time"), and focusing it makes the browser
+            pop its time-picker clock the moment you open the read-only preview. */}
+        <DialogContent
+          className="max-h-[85vh] overflow-y-auto sm:max-w-lg"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
           {viewTask && (() => {
             const site = viewTask.site_service?.site
             const config = statusConfig[viewTask.status]

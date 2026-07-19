@@ -18,7 +18,7 @@ import { isTaskVisibleToEngineer } from '@/lib/engineer-visibility'
 export default async function SchedulePage({
   searchParams,
 }: {
-  searchParams: Promise<{ branch?: string }>
+  searchParams: Promise<{ branch?: string; tab?: string }>
 }) {
   const supabase = await createClient()
 
@@ -41,7 +41,7 @@ export default async function SchedulePage({
     (profile as Profile).role === 'engineer' ? await getMyCurrentOncall() : null
   const needsBookingData = isAdminOrOffice || Boolean(onCallNow)
 
-  const { branch } = await searchParams
+  const { branch, tab: initialTab } = await searchParams
   const scope = await getBranchScope(profile as Profile, branch)
 
   // Build tasks query based on role
@@ -215,6 +215,7 @@ export default async function SchedulePage({
         tasks={tasks} 
         profile={profile as Profile}
         engineers={engineers}
+        initialTab={initialTab}
       />
     </div>
   )

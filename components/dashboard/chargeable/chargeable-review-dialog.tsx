@@ -627,6 +627,13 @@ export function ChargeableReviewDialog({
                       : 'Purchase order (not required by this client)'
                   }
                 >
+                  {call.poAutoAuthorised && (
+                    <div className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                      PO <strong>{call.clientRef || '—'}</strong> was auto-imported from this
+                      site/system&apos;s authorised-works authorisation, so no PO request is needed.
+                    </div>
+                  )}
+
                   {authorisedPo?.po_number && !clientRef.trim() && (
                     <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm">
                       <span className="text-emerald-800">

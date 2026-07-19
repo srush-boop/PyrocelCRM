@@ -1470,6 +1470,9 @@ export interface Task {
   charge_reviewed_by: string | null
   // Optional client PO reference, entered at review/logging time
   client_ref: string | null
+  // True when client_ref was auto-imported from the site/system authorised-works
+  // PO at booking (so no PO request is needed and the call is invoiceable).
+  po_auto_authorised: boolean
   // Invoiced status — set after the call has been sent for invoicing
   charge_invoiced_at: string | null
   charge_invoiced_by: string | null

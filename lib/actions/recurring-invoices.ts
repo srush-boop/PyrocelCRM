@@ -538,11 +538,19 @@ export async function createInvoiceFromRecurringCharges(
   const { error: lineError } = await supabase.from('invoice_line_items').insert(lines)
   if (lineError) return { error: lineError.message }
 
-  // Persist totals.
+  // Persist totals. When every line resolved to the same customer PO, also set
+  // it as the invoice header PO (a mix of POs stays per-line only).
   const { subtotalPence, taxPence, totalPence } = computeInvoiceTotals(lines, DEFAULT_TAX_RATE)
+  const distinctPos = Array.from(new Set(lines.map((l) => l.customer_po).filter(Boolean)))
+  const headerPo = distinctPos.length === 1 ? distinctPos[0] : null
   await supabase
     .from('invoices')
-    .update({ subtotal_pence: subtotalPence, tax_pence: taxPence, total_pence: totalPence })
+    .update({
+      subtotal_pence: subtotalPence,
+      tax_pence: taxPence,
+      total_pence: totalPence,
+      ...(headerPo ? { po_number: headerPo } : {}),
+    })
     .eq('id', invoiceId)
 
   // Stamp last_invoiced_date so these charges leave the due queue.

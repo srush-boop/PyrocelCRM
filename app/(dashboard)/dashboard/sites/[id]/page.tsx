@@ -10,6 +10,7 @@ import { EditSiteButton } from '@/components/dashboard/sites/edit-site-button'
 import { CreateTaskDialog } from '@/components/dashboard/schedule/create-task-dialog'
 import { SiteServicesManager } from '@/components/dashboard/sites/site-services-manager'
 import { SiteBillingCard } from '@/components/dashboard/billing/site-billing-card'
+import { SitePosCard } from '@/components/dashboard/billing/site-pos-card'
 import { SiteSystemsManager } from '@/components/dashboard/sites/site-systems-manager'
 import { QuotesTable } from '@/components/dashboard/sales/quotes-table'
 import { SiteAssetsTab, type SiteAsset } from '@/components/dashboard/sites/site-assets-tab'
@@ -907,6 +908,22 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             accounts={billingAccounts}
           />
         )}
+        <SitePosCard
+          siteId={id}
+          sitePo={(site as Site).po_number ?? null}
+          clientPo={(site as { client?: { po_number?: string | null } }).client?.po_number ?? null}
+          systems={siteSystems.map((sys) => ({
+            id: sys.id,
+            name: sys.name || sys.system_type?.name || 'System',
+            po_number: sys.po_number ?? null,
+          }))}
+          services={siteServices.map((ss) => ({
+            id: ss.id,
+            name: ss.service_type?.name ?? 'Service',
+            siteSystemId: ss.site_system_id ?? null,
+            po_number: ss.po_number ?? null,
+          }))}
+        />
           </div>
           <p className="mt-4 text-center text-xs text-muted-foreground">
             Site set up

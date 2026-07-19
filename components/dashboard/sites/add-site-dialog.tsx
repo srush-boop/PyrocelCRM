@@ -94,6 +94,9 @@ export function AddSiteDialog({
     uprn: '',
     status: 'live' as 'live' | 'dead',
     notes: '',
+    po_number: '',
+    authorised_works_limit: '',
+    authorised_works_po: '',
     has_remote_monitoring: false,
     remote_monitoring_type: '' as '' | 'fire' | 'fire_and_fault' | 'fault',
     monitoring_station_name: '',
@@ -215,6 +218,15 @@ export function AddSiteDialog({
       .from('sites')
       .insert({
       ...formData,
+      // Map the £ authorised-works limit string to the pence column; drop the
+      // raw string field so it isn't sent as an unknown column.
+      authorised_works_limit: undefined,
+      po_number: formData.po_number.trim() || null,
+      authorised_works_po: formData.authorised_works_po.trim() || null,
+      authorised_works_limit_pence:
+        (Number.parseFloat(formData.authorised_works_limit) || 0) > 0
+          ? Math.round(Number.parseFloat(formData.authorised_works_limit) * 100)
+          : null,
       created_by: user?.id ?? null,
       client_id: formData.client_id || null,
       branch_id: formData.branch_id || null,
@@ -317,6 +329,9 @@ export function AddSiteDialog({
         property_type_id: '',
         site_id_cash: '',
         uprn: '',
+        po_number: '',
+        authorised_works_limit: '',
+        authorised_works_po: '',
         status: 'live',
         notes: '',
         has_remote_monitoring: false,
@@ -721,6 +736,53 @@ export function AddSiteDialog({
                   </div>
                 </div>
               )}
+            </div>
+            <div className="rounded-lg border p-4 grid gap-4">
+              <div>
+                <Label className="text-sm font-medium">Purchase orders</Label>
+                <p className="text-xs text-muted-foreground">
+                  The site PO is used when a system or service charge has no PO of its own. The
+                  authorised-works limit + PO covers non-recurring works up to the value entered, so
+                  no PO request is raised.
+                </p>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="site_po">Site PO number</Label>
+                <Input
+                  id="site_po"
+                  value={formData.po_number}
+                  onChange={(e) => setFormData({ ...formData, po_number: e.target.value })}
+                  placeholder="Customer purchase order for this site"
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="aw_limit">Authorised works limit (£)</Label>
+                  <Input
+                    id="aw_limit"
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    value={formData.authorised_works_limit}
+                    onChange={(e) =>
+                      setFormData({ ...formData, authorised_works_limit: e.target.value })
+                    }
+                    placeholder="e.g. 500"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="aw_po">Authorised works PO</Label>
+                  <Input
+                    id="aw_po"
+                    value={formData.authorised_works_po}
+                    onChange={(e) =>
+                      setFormData({ ...formData, authorised_works_po: e.target.value })
+                    }
+                    placeholder="PO for non-recurring works"
+                  />
+                </div>
+              </div>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="notes">Notes</Label>

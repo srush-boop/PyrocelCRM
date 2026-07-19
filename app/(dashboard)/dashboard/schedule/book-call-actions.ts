@@ -163,12 +163,13 @@ export async function bookCall(input: BookCallInput): Promise<BookCallResult> {
     const hours = input.respondByHours ?? stRow.default_kpi_hours ?? null
     respondBy = computeRespondBy(hours)
 
+    const systemTypeId = input.systemTypeId || stRow.system_type_id || null
     insertRow = {
       ...base,
       site_service_id: null,
       site_id: input.siteId,
       service_type_id: input.serviceTypeId,
-      system_type_id: input.systemTypeId || stRow.system_type_id || null,
+      system_type_id: systemTypeId,
       visit_type_id: null,
       is_emergency: isEmergency,
       respond_by: respondBy,
@@ -179,7 +180,9 @@ export async function bookCall(input: BookCallInput): Promise<BookCallResult> {
     // accurate marker placement (falls back to the postcode centroid).
     const { data: site } = await supabase
       .from('sites')
-      .select('name, address, postcode, latitude, longitude')
+      .select(
+        'name, address, postcode, latitude, longitude, authorised_works_limit_pence, authorised_works_po',
+      )
       .eq('id', input.siteId)
       .single()
     const siteRow = site as
@@ -189,9 +192,46 @@ export async function bookCall(input: BookCallInput): Promise<BookCallResult> {
           postcode: string | null
           latitude: number | null
           longitude: number | null
+          authorised_works_limit_pence: number | null
+          authorised_works_po: string | null
         }
       | null
     siteName = siteRow?.name ?? null
+
+    // Auto-authorise: if the site (or the matching system) carries a standing
+    // authorised-works allowance (limit > 0 + PO), stamp that PO onto the call
+    // and mark PO-not-required so no PO request is raised and it's invoiceable.
+    // The system-level allowance is preferred over the site-level one.
+    let systemAllowance: {
+      additional_service_limit_pence: number | null
+      additional_service_po: string | null
+    } | null = null
+    if (systemTypeId) {
+      const { data: sysRow } = await supabase
+        .from('site_systems')
+        .select('additional_service_limit_pence, additional_service_po')
+        .eq('site_id', input.siteId)
+        .eq('system_type_id', systemTypeId)
+        .eq('active', true)
+        .limit(1)
+        .maybeSingle()
+      systemAllowance = sysRow as typeof systemAllowance
+    }
+
+    const { resolveAuthorisedWorks, isWithinAuthorisedWorks } = await import(
+      '@/lib/billing/authorised-works'
+    )
+    const authorised = resolveAuthorisedWorks({
+      systemLimitPence: systemAllowance?.additional_service_limit_pence ?? null,
+      systemPo: systemAllowance?.additional_service_po ?? null,
+      siteLimitPence: siteRow?.authorised_works_limit_pence ?? null,
+      sitePo: siteRow?.authorised_works_po ?? null,
+    })
+    if (isWithinAuthorisedWorks(authorised)) {
+      insertRow.client_ref = authorised.po
+      insertRow.po_not_required = true
+      insertRow.po_auto_authorised = true
+    }
     if (
       siteRow &&
       (siteRow.address || siteRow.postcode) &&

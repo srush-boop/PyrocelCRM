@@ -489,7 +489,7 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [] }: Sche
       task.site_service?.site?.name.toLowerCase().includes(search.toLowerCase()) ||
       task.site_service?.service_type?.name.toLowerCase().includes(search.toLowerCase()) ||
       task.assigned_engineer?.full_name?.toLowerCase().includes(search.toLowerCase()) ||
-      (task.task_result?.reference_number ?? '').toLowerCase().includes(search.toLowerCase())
+      (task.reference_number ?? task.task_result?.reference_number ?? '').toLowerCase().includes(search.toLowerCase())
     
     // Engineer filter (only for admin/office)
     const matchesEngineer = selectedEngineer === 'all' || 
@@ -641,7 +641,7 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [] }: Sche
         }
         status={task.status}
         result={task.task_result?.overall_status ?? null}
-        reference={task.task_result?.reference_number ?? null}
+        reference={task.reference_number ?? task.task_result?.reference_number ?? null}
         scheduledDate={task.scheduled_date}
         completeByDate={taskTargetDate(task)}
         isOverdue={isOverdue}
@@ -747,8 +747,10 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [] }: Sche
               )}
             </div>
             <p className="truncate text-xs text-muted-foreground leading-tight">
-              {task.task_result?.reference_number && (
-                <span className="font-mono text-foreground">{task.task_result.reference_number} · </span>
+              {(task.reference_number ?? task.task_result?.reference_number) && (
+                <span className="font-mono text-foreground">
+                  {task.reference_number ?? task.task_result?.reference_number} ·{' '}
+                </span>
               )}
               {task.site_service?.service_type?.name}
               {task.visit_type?.name ? ` · ${task.visit_type.name}` : ''}

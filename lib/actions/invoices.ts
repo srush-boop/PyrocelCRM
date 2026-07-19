@@ -363,6 +363,7 @@ async function buildInvoiceLineData(
     .select(
       `
       id, started_at, completed_at, scheduled_date, is_emergency, client_ref,
+      site_service_id, charge_reason, reference_number,
       task_result:task_results(reference_number),
       direct_site:sites!tasks_site_id_fkey(id, name, address, postcode),
       site_service:site_services(service_type:service_types(name, nominal_code_id), sites(id, name, address, postcode)),
@@ -442,9 +443,11 @@ async function buildInvoiceLineData(
     const serviceName = svcType?.name || 'attendance'
     const svcNominalId: string | null = svcType?.nominal_code_id ?? null
     const reference =
+      t.reference_number ||
       (Array.isArray(t.task_result)
         ? t.task_result[0]?.reference_number
-        : t.task_result?.reference_number) || ''
+        : t.task_result?.reference_number) ||
+      ''
 
     // When PO/site differ across the invoice's calls, surface each call's own
     // PO (and site is already in the suffix) on its line descriptions.
@@ -453,7 +456,17 @@ async function buildInvoiceLineData(
     const siteLabel = mixedSite ? meta?.siteName || siteName : siteName
     const suffix = `${siteLabel}${reference ? ` (${reference})` : ''}`
 
-    if (rateCard) {
+    // Parts replaced during a RECURRING service visit: the visit itself is
+    // already billed under the recurring contract, so there is no attendance
+    // (call-out) fee and no automatic labour line — only the parts are charged.
+    // Labour remains OPTIONAL: the reviewer can add a labour line by hand on the
+    // draft if the extra work warrants it. Reactive/one-off calls are unaffected
+    // (they keep their call-out fee).
+    const isRecurringPartsOnly = !!t.site_service_id && t.charge_reason === 'parts_added'
+
+    if (isRecurringPartsOnly) {
+      // Skip attendance + labour; parts lines are appended below.
+    } else if (rateCard) {
       // Derive the band from the attendance moment: prefer the actual start /
       // finish timestamp; fall back to the scheduled date (time unknown).
       let when: Date

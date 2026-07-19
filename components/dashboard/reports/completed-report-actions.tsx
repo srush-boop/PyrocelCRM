@@ -43,6 +43,10 @@ interface CompletedReportActionsProps {
   clientRef?: string | null
   /** ISO timestamp when the call was marked invoiced (if set, shows Invoiced badge). */
   chargeInvoicedAt?: string | null
+  /** Invoice this call was billed on (set at invoicing). Drives the invoice link. */
+  invoiceId?: string | null
+  /** Invoice number for the link label, if known. */
+  invoiceNumber?: string | null
   /** True for office/admin, who may change the charge/review state. */
   canReview?: boolean
 }
@@ -67,8 +71,13 @@ export function CompletedReportActions({
   chargeReason,
   clientRef: initialClientRef = null,
   chargeInvoicedAt = null,
+  invoiceId = null,
+  invoiceNumber = null,
   canReview = false,
 }: CompletedReportActionsProps) {
+  // Once a call is on an actual invoice its PO / Client Ref is locked — the
+  // reference has been billed and must not drift from what the client received.
+  const isInvoiced = !!chargeInvoicedAt
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [recipientMode, setRecipientMode] = useState<'default' | 'alternate'>('default')
@@ -84,6 +93,11 @@ export function CompletedReportActions({
   const showChargeSection = chargeable || chargeReviewStatus !== 'none' || canReview
 
   const saveClientRef = async () => {
+    if (isInvoiced) {
+      toast.error('This call has been invoiced — the client reference is locked.')
+      setEditingRef(false)
+      return
+    }
     setSavingRef(true)
     const { error } = await setChargeReview(taskId, {
       kind: 'set_client_ref',
@@ -196,6 +210,23 @@ export function CompletedReportActions({
             )}
           </div>
 
+          {/* Invoice link — once the call is on an actual invoice. */}
+          {isInvoiced && invoiceId && (
+            <div className="mt-3 border-t pt-3">
+              <Button
+                asChild
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1.5 border-emerald-300 bg-white text-xs text-emerald-700 hover:bg-emerald-50"
+              >
+                <Link href={`/dashboard/invoices/${invoiceId}`}>
+                  <Receipt className="h-3.5 w-3.5" />
+                  View invoice{invoiceNumber ? ` ${invoiceNumber}` : ''}
+                </Link>
+              </Button>
+            </div>
+          )}
+
           {/* Client Reference — shown on chargeable calls for office/admin */}
           {chargeable && canReview && (
             <div className="mt-3 border-t pt-3">
@@ -203,7 +234,13 @@ export function CompletedReportActions({
                 <Label htmlFor="client-ref" className="text-xs font-medium text-muted-foreground shrink-0">
                   Client Ref
                 </Label>
-                {editingRef ? (
+                {isInvoiced ? (
+                  // Locked once invoiced — reference has been billed.
+                  <span className="flex items-center gap-1.5 text-sm text-foreground">
+                    {clientRef || <span className="italic text-muted-foreground">Not set</span>}
+                    <span className="text-xs text-muted-foreground">(locked — invoiced)</span>
+                  </span>
+                ) : editingRef ? (
                   <>
                     <Input
                       id="client-ref"

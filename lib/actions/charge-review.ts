@@ -47,6 +47,21 @@ export async function setChargeReview(
   if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
   const { supabase, userId } = ctx
 
+  // Once a call has been placed on an actual invoice, its PO / client reference
+  // is locked — the reference has been billed and must not drift from what the
+  // client received. Re-check server-side so a stale UI or hand-rolled request
+  // can't bypass the lock. (Uninvoicing first, via the invoice, unlocks it.)
+  if (action.kind === 'set_client_ref' || action.kind === 'set_po_not_required') {
+    const { data: current } = await supabase
+      .from('tasks')
+      .select('charge_invoiced_at')
+      .eq('id', taskId)
+      .maybeSingle()
+    if ((current as { charge_invoiced_at: string | null } | null)?.charge_invoiced_at) {
+      return { error: 'This call has been invoiced — its PO / client reference is locked.' }
+    }
+  }
+
   const update: Record<string, unknown> = {}
 
   if (action.kind === 'reviewed') {

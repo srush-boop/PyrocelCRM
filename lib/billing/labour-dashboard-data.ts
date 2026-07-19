@@ -154,8 +154,9 @@ export async function getLabourDashboard(
     new Set(rows.map((t) => t.site_service?.service_type_id).filter(Boolean)),
   ) as string[]
   const invoicedTaskIds = rows.filter((t) => t.invoice_id).map((t) => t.id) as string[]
+  const allTaskIds = rows.map((t) => t.id) as string[]
 
-  const [chargeRes, weightRes, lineRes] = await Promise.all([
+  const [chargeRes, weightRes, lineRes, partsRes] = await Promise.all([
     siteServiceIds.length
       ? supabase
           .from('recurring_charges')
@@ -174,6 +175,12 @@ export async function getLabourDashboard(
           .from('invoice_line_items')
           .select('task_id, amount_pence')
           .in('task_id', invoicedTaskIds)
+      : Promise.resolve({ data: [] as any[] }),
+    allTaskIds.length
+      ? supabase
+          .from('call_parts')
+          .select('task_id, unit_cost_pence, quantity')
+          .in('task_id', allTaskIds)
       : Promise.resolve({ data: [] as any[] }),
   ])
 
@@ -194,6 +201,14 @@ export async function getLabourDashboard(
   for (const l of (lineRes.data ?? []) as any[]) {
     invoiceByTask.set(l.task_id, (invoiceByTask.get(l.task_id) ?? 0) + (l.amount_pence ?? 0))
   }
+  // Parts cost (unit cost × qty) per task — added to every call's cost.
+  const partsCostByTask = new Map<string, number>()
+  for (const p of (partsRes.data ?? []) as any[]) {
+    partsCostByTask.set(
+      p.task_id,
+      (partsCostByTask.get(p.task_id) ?? 0) + (p.unit_cost_pence ?? 0) * (p.quantity ?? 1),
+    )
+  }
 
   // --- Cost + value each call ----------------------------------------------
   const costed: CostedCall[] = []
@@ -205,7 +220,8 @@ export async function getLabourDashboard(
     )
     const pausedSeconds = effectivePausedSeconds(t.total_paused_seconds, t.paused_at, t.completed_at)
     const hours = onSiteHours(t.started_at, t.completed_at, pausedSeconds)
-    const costPence = labourCostPence(hours, costPerHour)
+    // Cost = labour + parts (parts cost is always part of the true call cost).
+    const costPence = labourCostPence(hours, costPerHour) + (partsCostByTask.get(t.id) ?? 0)
 
     // Revenue: invoice → recurring visit → unknown.
     let revenuePence = 0

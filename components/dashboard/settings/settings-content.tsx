@@ -30,6 +30,7 @@ import { ChargeTemplatesSettings } from './charge-templates-settings'
 import { NominalCodesSettings } from './nominal-codes-settings'
 import { DocumentTagsSettings } from './document-tags-settings'
 import { InternalTasksSettings } from './internal-tasks-settings'
+import { SecuritySettings } from './security-settings'
 import type { InternalTaskTemplate } from '@/lib/types/database'
 import type { RateCard } from '@/lib/billing/rate-cards'
 import type { ChargeTemplate, NominalCode } from '@/lib/types/database'
@@ -64,9 +65,11 @@ interface SettingsContentProps {
   internalTaskUsers: Pick<Profile, 'id' | 'full_name' | 'role'>[]
   internalTaskDepartments: Department[]
   internalTaskRoles: Role[]
+  mfaFactors: { id: string; friendlyName: string | null; createdAt: string }[]
+  mfaRequired: boolean
 }
 
-export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards, chargeTemplates, nominalCodes, canManageTags, documentTags, openingHours, canManageInternalTasks, internalTaskTemplates, internalTaskUsers, internalTaskDepartments, internalTaskRoles }: SettingsContentProps) {
+export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards, chargeTemplates, nominalCodes, canManageTags, documentTags, openingHours, canManageInternalTasks, internalTaskTemplates, internalTaskUsers, internalTaskDepartments, internalTaskRoles, mfaFactors, mfaRequired }: SettingsContentProps) {
   const isAdmin = profile.role === 'admin'
   // Templates are managed by office/admin (mail-merge letters for client correspondence).
   const canManageTemplates = profile.role === 'admin' || profile.role === 'office'
@@ -112,9 +115,9 @@ export function SettingsContent({ user, profile, company, branches, departments,
       return
     }
 
-    if (newPassword.length < 6) {
+    if (newPassword.length < 12) {
       setLoadingPassword(false)
-      setMessage({ type: 'error', text: 'Password must be at least 6 characters' })
+      setMessage({ type: 'error', text: 'Password must be at least 12 characters' })
       return
     }
 
@@ -149,6 +152,10 @@ export function SettingsContent({ user, profile, company, branches, departments,
         <TabsTrigger value="password" className="gap-2">
           <Lock className="h-4 w-4" />
           Password
+        </TabsTrigger>
+        <TabsTrigger value="security" className="gap-2">
+          <ShieldCheck className="h-4 w-4" />
+          Security
         </TabsTrigger>
         {isAdmin && (
           <TabsTrigger value="company" className="gap-2">
@@ -397,6 +404,10 @@ export function SettingsContent({ user, profile, company, branches, departments,
             </form>
           </CardContent>
         </Card>
+      </TabsContent>
+
+      <TabsContent value="security" className="space-y-4">
+        <SecuritySettings initialFactors={mfaFactors} required={mfaRequired} />
       </TabsContent>
 
       {isAdmin && (

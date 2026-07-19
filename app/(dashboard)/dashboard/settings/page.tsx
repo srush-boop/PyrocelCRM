@@ -9,6 +9,7 @@ import { getChargeTemplates } from '@/lib/actions/charge-templates'
 import { getNominalCodes } from '@/lib/actions/nominal-codes'
 import { listTagsWithUsage } from '@/lib/actions/document-tags'
 import { OPENING_HOURS_KEY, parseOpeningHours } from '@/lib/oncall/opening-hours'
+import { mfaRequiredForRole } from '@/lib/auth/mfa'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -113,6 +114,17 @@ export default async function SettingsPage() {
     ? await getLoneWorkerAdminData()
     : { users: [], timings: { checkinMinutes: 60, amberMinutes: 5, redMinutes: 5, soundEnabled: true } }
 
+  // MFA factors for the Security tab.
+  const { data: factorsData } = await supabase.auth.mfa.listFactors()
+  const mfaFactors = (factorsData?.totp ?? [])
+    .filter((f) => f.status === 'verified')
+    .map((f) => ({
+      id: f.id,
+      friendlyName: f.friendly_name ?? null,
+      createdAt: f.created_at,
+    }))
+  const mfaRequired = mfaRequiredForRole(role)
+
   return (
     <div className="space-y-6">
       <div>
@@ -149,6 +161,8 @@ export default async function SettingsPage() {
         internalTaskUsers={internalTaskUsers}
         internalTaskDepartments={internalTaskDepartments}
         internalTaskRoles={internalTaskRoles}
+        mfaFactors={mfaFactors}
+        mfaRequired={mfaRequired}
       />
     </div>
   )

@@ -681,7 +681,15 @@ export function CompletedCallsTable({ embedded = false }: CompletedCallsTablePro
                           aria-label={`Select report ${report.referenceNumber}`}
                         />
                       </TableCell>
-                      <TableCell className="font-mono text-xs font-medium">{report.referenceNumber}</TableCell>
+                      <TableCell className="font-mono text-xs font-medium">
+                        <Link
+                          href={`/dashboard/tasks/${report.taskId}`}
+                          className="text-primary underline-offset-2 hover:underline"
+                          title="Open call overview"
+                        >
+                          {report.referenceNumber}
+                        </Link>
+                      </TableCell>
                       <TableCell className="hidden xl:table-cell">{report.clientName || <span className="text-muted-foreground">-</span>}</TableCell>
                       <TableCell className="font-medium">{report.siteName}</TableCell>
                       <TableCell>{report.serviceName}</TableCell>

@@ -311,6 +311,9 @@ export function SiteServicesManager({
   // tab's service rows can open them, and reopening a different service works.
   const paramEdit = dialogsOnly ? searchParams.get('editService') : null
   const paramCharge = dialogsOnly ? searchParams.get('chargeService') : null
+  // When set alongside chargeService, the dialog opens straight into edit mode
+  // for the service's existing charge (from the row's "Edit charge" action).
+  const paramChargeEdit = dialogsOnly ? searchParams.get('chargeEdit') === '1' : false
   const paramBook = dialogsOnly ? searchParams.get('bookService') : null
   const paramDelete = dialogsOnly ? searchParams.get('deleteService') : null
 
@@ -948,16 +951,17 @@ export function SiteServicesManager({
       </AlertDialog>
 
       {chargeServiceId && (
-        <ServiceChargeDialog
-          open={!!chargeServiceId}
-          onOpenChange={(open) => {
-            if (!open) {
-              setChargeServiceId(null)
-              if (dialogsOnly) stripDialogParams('chargeService')
-            }
-          }}
-          siteServiceId={chargeServiceId}
-        />
+          <ServiceChargeDialog
+            open={!!chargeServiceId}
+            autoEdit={paramChargeEdit}
+            onOpenChange={(open) => {
+              if (!open) {
+                setChargeServiceId(null)
+                if (dialogsOnly) stripDialogParams('chargeService', 'chargeEdit')
+              }
+            }}
+            siteServiceId={chargeServiceId}
+          />
       )}
 
       {/* Edit Service Dialog */}

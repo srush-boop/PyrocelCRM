@@ -18,6 +18,7 @@ import { resolveSiteFlags } from '@/lib/site-flags'
 import { getOpenRemedialForSite } from '@/lib/remedial'
 import { DeadlineFailedPanel } from '@/components/dashboard/tasks/deadline-failed-panel'
 import { CallNotesCard } from '@/components/dashboard/tasks/call-notes-card'
+import { CallHistoryCard, type CallHistoryEntry } from '@/components/dashboard/tasks/call-history-card'
 import { CallCostCard } from '@/components/dashboard/tasks/call-cost-card'
 import { getCallProfit } from '@/lib/billing/call-profit-data'
 import { profileCanViewLabourCosts } from '@/lib/auth/labour-costs'
@@ -164,6 +165,96 @@ export default async function TaskPage({ params }: PageProps) {
         usedTags={engDocs.usedTags}
       />
     )
+  }
+
+  // ─── System call history ──────────────────────────────────────────────────
+  // Show the last 5 calls logged against the SAME system so the engineer has
+  // recent context (call type, date, result) before starting. Scope to every
+  // site_service attached to this call's physical system; for reactive calls
+  // with no linked system, fall back to services on the site matching the
+  // call's system type. Appended below the pre-attendance panel.
+  {
+    const systemId = task.site_service?.site_system_id ?? null
+    const historySystemTypeId =
+      (task as { system_type_id?: string | null }).system_type_id ??
+      task.site_service?.service_type?.system_type?.id ??
+      task.direct_service_type?.system_type?.id ??
+      null
+    const systemName =
+      task.site_service?.service_type?.system_type?.name ??
+      task.direct_service_type?.system_type?.name ??
+      null
+
+    // Resolve the set of sibling site_service ids scoped to the system.
+    let serviceIds: string[] = []
+    if (systemId) {
+      const { data: sysServices } = await supabase
+        .from('site_services')
+        .select('id')
+        .eq('site_system_id', systemId)
+      serviceIds = (sysServices || []).map((s) => s.id as string)
+    } else if (preAttendanceSiteId) {
+      const { data: siteServices } = await supabase
+        .from('site_services')
+        .select('id, service_type:service_types(system_type_id)')
+        .eq('site_id', preAttendanceSiteId)
+      serviceIds = ((siteServices || []) as unknown as {
+        id: string
+        service_type: { system_type_id: string | null } | null
+      }[])
+        .filter(
+          (s) =>
+            !historySystemTypeId ||
+            s.service_type?.system_type_id === historySystemTypeId,
+        )
+        .map((s) => s.id)
+    }
+
+    let historyEntries: CallHistoryEntry[] = []
+    if (serviceIds.length > 0) {
+      const { data: historyRows } = await supabase
+        .from('tasks')
+        .select(`
+          id, scheduled_date, completed_at, status,
+          visit_type:service_visit_types(name),
+          site_service:site_services(service_type:service_types(name)),
+          task_result:task_results(overall_status, reference_number)
+        `)
+        .in('site_service_id', serviceIds)
+        .neq('id', id)
+        .lte('scheduled_date', new Date().toISOString().split('T')[0])
+        .order('scheduled_date', { ascending: false })
+        .limit(5)
+
+      historyEntries = ((historyRows || []) as unknown as {
+        id: string
+        scheduled_date: string | null
+        completed_at: string | null
+        status: string
+        visit_type: { name: string } | null
+        site_service: { service_type: { name: string } | null } | null
+        task_result: { overall_status: string | null; reference_number: string | null } | null
+      }[]).map((r) => ({
+        id: r.id,
+        type:
+          [r.site_service?.service_type?.name, r.visit_type?.name]
+            .filter(Boolean)
+            .join(' · ') || 'Call',
+        date: r.status === 'completed' && r.completed_at ? r.completed_at : r.scheduled_date,
+        status: r.status,
+        result: r.task_result?.overall_status ?? null,
+        reference: r.task_result?.reference_number ?? null,
+      }))
+    }
+
+    if (historyEntries.length > 0) {
+      preAttendancePanel = (
+        <>
+          {preAttendancePanel}
+          <CallHistoryCard systemName={systemName} entries={historyEntries} />
+        </>
+      )
+    }
   }
 
   // Commissioning calls booked from a job: give the engineer the job context +

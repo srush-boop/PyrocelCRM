@@ -24,18 +24,27 @@ interface ServiceRow {
   billing_account_id: string | null
 }
 
+// A billing account plus its owning client (embedded) so the dropdown can show
+// which client an account belongs to when it isn't this site's own client.
+type AccountOption = BillingAccount & { client?: { id: string; name: string } | null }
+
 interface SiteBillingCardProps {
   siteId: string
+  // This site's own client — used to resolve the client default and to flag
+  // cross-client accounts in the dropdown.
+  clientId: string
   siteBillingAccountId: string | null
   services: ServiceRow[]
-  // All billing accounts belonging to this site's client (includes sub-clients).
-  accounts: BillingAccount[]
+  // ALL billing accounts across every client; a site may be billed to another
+  // client's account (e.g. a central billing entity).
+  accounts: AccountOption[]
 }
 
 const INHERIT = '__inherit__'
 
 export function SiteBillingCard({
   siteId,
+  clientId,
   siteBillingAccountId,
   services,
   accounts,
@@ -46,7 +55,13 @@ export function SiteBillingCard({
   // Billing detail is collapsed by default to keep the overview compact.
   const [expanded, setExpanded] = useState(false)
 
-  const clientDefault = accounts.find((a) => a.is_default) ?? null
+  // The client default is the default account belonging to THIS site's client.
+  const clientDefault = accounts.find((a) => a.client_id === clientId && a.is_default) ?? null
+
+  // Label an account, appending the client name when it belongs to a different
+  // client than this site (so cross-client selections are unambiguous).
+  const accountLabel = (a: AccountOption) =>
+    a.client_id !== clientId && a.client?.name ? `${a.name} — ${a.client.name}` : a.name
 
   // Resolved account for the site itself (site override -> client default).
   const siteResolved = resolveBillingAccount(
@@ -177,7 +192,7 @@ export function SiteBillingCard({
                   </SelectItem>
                   {accounts.map((a) => (
                     <SelectItem key={a.id} value={a.id}>
-                      {a.name}
+                      {accountLabel(a)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -233,7 +248,7 @@ export function SiteBillingCard({
                             <SelectItem value={INHERIT}>Inherit site</SelectItem>
                             {accounts.map((a) => (
                               <SelectItem key={a.id} value={a.id}>
-                                {a.name}
+                                {accountLabel(a)}
                               </SelectItem>
                             ))}
                           </SelectContent>

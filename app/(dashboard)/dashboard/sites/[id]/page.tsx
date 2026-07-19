@@ -300,18 +300,19 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
     : { data: [] }
   const panelAssignments = (panelAssignmentsData || []) as PanelVisitAssignment[]
 
-  // Billing accounts belonging to this site's client (includes sub-clients), used
-  // by the Billing card to show/override which account each service is billed to.
+  // ALL billing accounts (across every client), used by the Billing card to
+  // show/override which account each service is billed to. Sites can be billed
+  // to another client's account (e.g. a central "Pyrocel" entity), so we don't
+  // filter by the site's own client here — the client name is embedded for the
+  // dropdown, and the client default is resolved by client_id in the card.
   const siteClientId = (site as Site).client_id
-  const { data: billingAccountsData } = siteClientId
-    ? await supabase
-        .from('billing_accounts')
-        .select('*')
-        .eq('client_id', siteClientId)
-        .order('is_default', { ascending: false })
-        .order('name', { ascending: true })
-    : { data: [] }
-  const billingAccounts = (billingAccountsData || []) as BillingAccount[]
+  const { data: billingAccountsData } = await supabase
+    .from('billing_accounts')
+    .select('*, client:clients(id, name)')
+    .order('name', { ascending: true })
+  const billingAccounts = (billingAccountsData || []) as (BillingAccount & {
+    client?: { id: string; name: string } | null
+  })[]
 
   // Get tasks for this site's services
   const siteServiceIds = siteServices.map(ss => ss.id)
@@ -896,6 +897,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
         {siteClientId && (
           <SiteBillingCard
             siteId={id}
+            clientId={siteClientId}
             siteBillingAccountId={(site as Site).billing_account_id ?? null}
             services={siteServices.map((ss) => ({
               id: ss.id,

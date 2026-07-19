@@ -125,6 +125,8 @@ export interface Client {
   requires_po: boolean
   /** When true, this client's calls are invoiced one-per-call rather than in bulk. */
   invoice_calls_individually: boolean
+  /** Default customer PO, bottom of the charge->system->site->client fallback chain. */
+  po_number: string | null
   created_at: string
   updated_at: string
 }
@@ -281,6 +283,8 @@ export interface InvoiceLineItem {
   nominal_code_id: string | null
   /** Text snapshot of the code at issue time; survives master-list changes. */
   nominal_code: string | null
+  /** Customer PO resolved (charge->system->site->client) and snapshotted on the line. */
+  customer_po: string | null
   created_at: string
 }
 
@@ -947,6 +951,12 @@ export interface Site {
   // Billing account this site is invoiced under. null = inherit the client's
   // default billing account (see resolveBillingAccount).
   billing_account_id: string | null
+  /** Site-level customer PO; used when no system/service PO is set. */
+  po_number: string | null
+  /** Pre-authorised spend limit (pence) for NON-recurring works at this site. */
+  authorised_works_limit_pence: number | null
+  /** PO to stamp on non-recurring calls that fall within the authorised limit. */
+  authorised_works_po: string | null
   site_id_cash: string | null
   // Unique Property Reference Number (UK national property identifier).
   uprn: string | null
@@ -1072,6 +1082,12 @@ export interface Site {
     // When true, multi-panel visits spread the heavy (Annual) inspections across
     // the cycle's visit occurrences per panel_visit_assignments (opt-in).
     panel_rotation_enabled: boolean
+    /** System-level customer PO; used when no service PO is set, above the site PO. */
+    po_number: string | null
+    /** Pre-authorised additional-service spend (pence) written on quote acceptance. */
+    additional_service_limit_pence: number | null
+    /** PO covering additional maintenance services for this system. */
+    additional_service_po: string | null
     created_at: string
     updated_at: string
     site?: Site
@@ -1246,6 +1262,8 @@ export interface Site {
   // is how a single service can be billed to a different (sub-)client than its
   // site — "change the client at service level".
   billing_account_id: string | null
+  /** Service/charge-level customer PO; top of the fallback chain. */
+  po_number: string | null
   created_at: string
   site?: Site
   site_system?: SiteSystem | null
@@ -2000,6 +2018,16 @@ export interface QuoteLineItem {
   option_group: string | null
   standard: string | null
   client_selected: boolean | null
+  // Per-system maintenance additional-service allowance line (default £350).
+  // The client can amend the value, opt out, and must supply a PO (or reuse the
+  // maintenance PO) at sign-off; these overrides live on the line.
+  is_maintenance_allowance: boolean
+  /** Client-amended value (pence) for a maintenance-allowance line; null = use unit_price. */
+  client_amount_pence: number | null
+  /** PO the client supplied at sign-off for the allowance. */
+  client_po: string | null
+  /** When true the allowance should reuse the site/system/site maintenance PO. */
+  use_maintenance_po: boolean
   // Serialised inputs + result of the calculator (installation / maintenance)
   // that produced this line, enabling it to be re-opened and viewed later.
   // NULL for hand-entered lines. Typed as CalculatorSnapshot.

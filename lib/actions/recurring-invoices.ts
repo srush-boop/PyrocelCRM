@@ -10,8 +10,16 @@ import {
   formatInvoiceNumber,
   lineAmountPence,
 } from '@/lib/billing/invoices'
-import { isDueNow, nextDueDate, toISODate, perVisitAmountPence } from '@/lib/billing/recurring'
+import {
+  isDueNow,
+  nextDueDate,
+  toISODate,
+  perVisitAmountPence,
+  formatCoveragePeriod,
+  systemServiceLabel,
+} from '@/lib/billing/recurring'
 import { generateVisitCompletionInvoice } from '@/lib/actions/visit-billing'
+import { resolveCustomerPo } from '@/lib/billing/customer-po'
 
 // Phase B: assemble & raise invoices from DUE recurring charges. These invoices
 // are stamped origin='recurring' and are hard-segregated from ad-hoc/call
@@ -47,6 +55,10 @@ export interface RecurringDueCharge {
   timing: string
   groupKey: string | null
   nextDueDate: string
+  /** "System / Service" this charge relates to, when linked to a site_service. */
+  systemService: string | null
+  /** Human label of the period this occurrence covers, e.g. "Jul–Sep 2026". */
+  coveragePeriod: string
   /** For per_visit charges: completed visits awaiting billing (drives the raise). */
   perVisitTaskIds?: string[]
 }
@@ -83,6 +95,13 @@ interface ChargeRow {
     client_id: string | null
     client: { name: string } | null
   } | null
+  site_service: {
+    service_type: { name: string } | null
+    site_system: {
+      name: string | null
+      system_type: { name: string } | null
+    } | null
+  } | null
 }
 
 /**
@@ -100,7 +119,11 @@ export async function getRecurringDue(): Promise<RecurringDueGroup[]> {
       `
       id, billing_account_id, site_service_id, description, unit_price_pence,
       quantity, frequency, timing, visits_per_cycle, group_key, active, start_date, last_invoiced_date,
-      billing_account:billing_accounts(id, name, status, client_id, client:clients(name))
+      billing_account:billing_accounts(id, name, status, client_id, client:clients(name)),
+      site_service:site_services(
+        service_type:service_types(name),
+        site_system:site_systems(name, system_type:system_types(name))
+      )
     `,
     )
     .eq('active', true)
@@ -268,6 +291,11 @@ export async function getRecurringDue(): Promise<RecurringDueGroup[]> {
       }
       groups.set(key, group)
     }
+    const dueDate = nextDueDate({
+      frequency: r.frequency as never,
+      last_invoiced_date: r.last_invoiced_date,
+      start_date: r.start_date,
+    })
     group.charges.push({
       id: r.id,
       description: r.description,
@@ -277,11 +305,16 @@ export async function getRecurringDue(): Promise<RecurringDueGroup[]> {
       frequency: r.frequency,
       timing: r.timing,
       groupKey: r.group_key,
-      nextDueDate: nextDueDate({
-        frequency: r.frequency as never,
-        last_invoiced_date: r.last_invoiced_date,
-        start_date: r.start_date,
+      nextDueDate: dueDate,
+      systemService: systemServiceLabel({
+        systemName: r.site_service?.site_system?.name,
+        systemTypeName: r.site_service?.site_system?.system_type?.name,
+        serviceName: r.site_service?.service_type?.name,
       }),
+      coveragePeriod: formatCoveragePeriod(
+        { frequency: r.frequency as never, timing: r.timing as never },
+        dueDate,
+      ),
       perVisitTaskIds: pv?.taskIds,
     })
     group.totalPence += amountPence
@@ -321,13 +354,22 @@ export async function createInvoiceFromRecurringCharges(
   const { data: charges } = await supabase
     .from('recurring_charges')
     .select(
-      'id, description, unit_price_pence, quantity, tax_code, nominal_code, nominal_code_id, timing, site_service_id',
+      `id, description, unit_price_pence, quantity, tax_code, nominal_code, nominal_code_id,
+       timing, site_service_id, frequency, start_date, last_invoiced_date,
+       site:sites(po_number, client:clients(po_number)),
+       client:clients(po_number),
+       site_service:site_services(
+         po_number,
+         service_type:service_types(name),
+         site_system:site_systems(name, po_number, system_type:system_types(name)),
+         site:sites(po_number, client:clients(po_number))
+       )`,
     )
     .in('id', chargeIds)
     .eq('billing_account_id', billingAccountId)
     .eq('active', true)
 
-  const allRows = (charges ?? []) as {
+  const allRows = (charges ?? []) as unknown as {
     id: string
     description: string
     unit_price_pence: number
@@ -335,6 +377,21 @@ export async function createInvoiceFromRecurringCharges(
     nominal_code_id: string | null
     timing: string
     site_service_id: string | null
+    frequency: string
+    start_date: string | null
+    last_invoiced_date: string | null
+    site: { po_number: string | null; client: { po_number: string | null } | null } | null
+    client: { po_number: string | null } | null
+    site_service: {
+      po_number: string | null
+      service_type: { name: string } | null
+      site_system: {
+        name: string | null
+        po_number: string | null
+        system_type: { name: string } | null
+      } | null
+      site: { po_number: string | null; client: { po_number: string | null } | null } | null
+    } | null
   }[]
   if (allRows.length === 0) return { error: 'These charges are no longer available to invoice' }
 
@@ -437,14 +494,42 @@ export async function createInvoiceFromRecurringCharges(
   const lines = rows.map((r, i) => {
     const qty = typeof r.quantity === 'string' ? Number.parseFloat(r.quantity) : r.quantity
     const q = qty || 1
+    // Append the system/service and coverage period so the invoice line reads
+    // e.g. "Annual maintenance — Fire Alarm / Inspection · Jul–Sep 2026".
+    const label = systemServiceLabel({
+      systemName: r.site_service?.site_system?.name,
+      systemTypeName: r.site_service?.site_system?.system_type?.name,
+      serviceName: r.site_service?.service_type?.name,
+    })
+    const dueDate = nextDueDate({
+      frequency: r.frequency as never,
+      last_invoiced_date: r.last_invoiced_date,
+      start_date: r.start_date,
+    })
+    const period = formatCoveragePeriod(
+      { frequency: r.frequency as never, timing: r.timing as never },
+      dueDate,
+    )
+    const suffix = [label, period].filter(Boolean).join(' \u00b7 ')
+    const description = suffix ? `${r.description} \u2014 ${suffix}` : r.description
+    // Resolve the customer PO from the charge -> system -> site -> client chain
+    // and snapshot it onto the line so it survives later source edits.
+    const customerPo = resolveCustomerPo({
+      servicePo: r.site_service?.po_number,
+      systemPo: r.site_service?.site_system?.po_number,
+      sitePo: r.site_service?.site?.po_number ?? r.site?.po_number,
+      clientPo: r.site_service?.site?.client?.po_number ?? r.site?.client?.po_number ?? r.client?.po_number,
+    })
     return {
       invoice_id: invoiceId,
       kind: 'other' as const,
-      description: r.description,
+      description,
       quantity: q,
       unit_price_pence: r.unit_price_pence,
       amount_pence: lineAmountPence(q, r.unit_price_pence),
       sort_order: i,
+      site_service_id: r.site_service_id ?? null,
+      customer_po: customerPo,
       nominal_code_id: r.nominal_code_id ?? null,
       nominal_code: r.nominal_code_id ? nominalText.get(r.nominal_code_id) ?? null : null,
     }

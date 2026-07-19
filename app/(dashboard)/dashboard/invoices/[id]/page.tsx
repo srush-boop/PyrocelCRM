@@ -57,20 +57,33 @@ export default async function InvoiceDetailPage({
     new Set(lineList.map((l) => l.task_id).filter((t): t is string => !!t)),
   )
   const serviceTypeByLineId: Record<string, string> = {}
+  // Per-line site name, so the review view shows which site each line relates to.
+  const siteByLineId: Record<string, string> = {}
   if (taskIds.length > 0) {
     const { data: taskRows } = await supabase
       .from('tasks')
-      .select('id, site_service:site_services(service_type:service_types(name))')
+      .select(
+        'id, direct_site:sites!tasks_site_id_fkey(name), site_service:site_services(service_type:service_types(name), sites(name))',
+      )
       .in('id', taskIds)
     const nameByTask = new Map<string, string>()
+    const siteByTask = new Map<string, string>()
     for (const t of (taskRows ?? []) as any[]) {
       const ss = Array.isArray(t.site_service) ? t.site_service[0] : t.site_service
       const name = ss?.service_type?.name
       if (name) nameByTask.set(t.id, name)
+      // Prefer the task's direct site, falling back to the service's site.
+      const directSite = Array.isArray(t.direct_site) ? t.direct_site[0] : t.direct_site
+      const serviceSite = Array.isArray(ss?.sites) ? ss?.sites[0] : ss?.sites
+      const siteName = directSite?.name || serviceSite?.name
+      if (siteName) siteByTask.set(t.id, siteName)
     }
     for (const l of lineList) {
       if (l.task_id && nameByTask.has(l.task_id)) {
         serviceTypeByLineId[l.id] = nameByTask.get(l.task_id) as string
+      }
+      if (l.task_id && siteByTask.has(l.task_id)) {
+        siteByLineId[l.id] = siteByTask.get(l.task_id) as string
       }
     }
   }
@@ -91,6 +104,7 @@ export default async function InvoiceDetailPage({
         }}
         lines={lineList}
         serviceTypeByLineId={serviceTypeByLineId}
+        siteByLineId={siteByLineId}
         nominalCodes={nominalCodes}
         canEdit={profileCanEditInvoices(profile as Profile)}
       />

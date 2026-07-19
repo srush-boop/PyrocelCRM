@@ -34,6 +34,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { toast } from 'sonner'
 import {
   Loader2,
@@ -46,6 +47,8 @@ import {
   PlayCircle,
   ReceiptText,
   FileText,
+  Info,
+  MapPin,
 } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
@@ -111,12 +114,15 @@ export function InvoiceDetail({
   invoice,
   lines,
   serviceTypeByLineId = {},
+  siteByLineId = {},
   nominalCodes = [],
   canEdit = false,
 }: {
   invoice: InvoiceWithNames
   lines: InvoiceLineItem[]
   serviceTypeByLineId?: Record<string, string>
+  /** Per-line site name, shown as a sub-line under each line's description. */
+  siteByLineId?: Record<string, string>
   nominalCodes?: NominalCode[]
   /** Whether the current user holds the invoice-edit permission. */
   canEdit?: boolean
@@ -293,10 +299,12 @@ export function InvoiceDetail({
                   <TableRow>
                     <TableHead className="w-24">Type</TableHead>
                     <TableHead>Description</TableHead>
-                    <TableHead className="w-44">Nominal</TableHead>
                     <TableHead className="w-20 text-right">Qty</TableHead>
                     <TableHead className="w-28 text-right">Unit (£)</TableHead>
                     <TableHead className="w-28 text-right">Amount</TableHead>
+                    <TableHead className="w-10">
+                      <span className="sr-only">Additional info</span>
+                    </TableHead>
                     {isEditable && <TableHead className="w-10" />}
                   </TableRow>
                 </TableHeader>
@@ -316,15 +324,20 @@ export function InvoiceDetail({
                       return (
                         <Fragment key={serviceName}>
                           <TableRow className="bg-muted/50 hover:bg-muted/50">
-                            <TableCell colSpan={5} className="py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            <TableCell colSpan={4} className="py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                               {serviceName}
                             </TableCell>
                             <TableCell className="py-2 text-right text-xs font-medium text-muted-foreground">
                               {formatPence(subtotal)}
                             </TableCell>
+                            <TableCell className="py-2" />
                           </TableRow>
                           {groupLines.map((line) => (
-                            <ReadOnlyLineRow key={line.id} line={line} />
+                            <ReadOnlyLineRow
+                              key={line.id}
+                              line={line}
+                              siteName={siteByLineId[line.id]}
+                            />
                           ))}
                         </Fragment>
                       )
@@ -336,10 +349,15 @@ export function InvoiceDetail({
                           key={line.id}
                           line={line}
                           nominalCodes={nominalCodes}
+                          siteName={siteByLineId[line.id]}
                           onSaved={() => router.refresh()}
                         />
                       ) : (
-                        <ReadOnlyLineRow key={line.id} line={line} />
+                        <ReadOnlyLineRow
+                          key={line.id}
+                          line={line}
+                          siteName={siteByLineId[line.id]}
+                        />
                       ),
                     )
                   )}
@@ -355,8 +373,9 @@ export function InvoiceDetail({
               </p>
             )}
             <p className="text-xs text-muted-foreground">
-              <span className="font-medium">Nominal</span> codes are internal accounting references
-              (for Sage) and never appear on the copy sent to the customer.
+              Open a line&apos;s <Info className="mb-0.5 inline h-3 w-3" /> info for its internal
+              nominal (Sage) code and site — these are never shown on the customer invoice or PDF
+              preview.
               {isEditable && missingNominal > 0 && (
                 <span className="ml-1 font-medium text-amber-700">
                   {missingNominal} line{missingNominal === 1 ? '' : 's'} still need a code before you
@@ -565,10 +584,12 @@ export function InvoiceDetail({
 function EditableLineRow({
   line,
   nominalCodes,
+  siteName,
   onSaved,
 }: {
   line: InvoiceLineItem
   nominalCodes: NominalCode[]
+  siteName?: string
   onSaved: () => void
 }) {
   const [description, setDescription] = useState(line.description)
@@ -637,16 +658,12 @@ function EditableLineRow({
           onBlur={save}
           className="h-8"
         />
-      </TableCell>
-      <TableCell>
-        <NominalCodeSelect
-          value={nominalId}
-          onChange={saveNominal}
-          codes={nominalCodes}
-          noneLabel="— none —"
-          className={cn('h-8', !nominalId && 'border-amber-400 text-amber-700')}
-          disabled={nominalSaving}
-        />
+        {siteName && (
+          <span className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+            <MapPin className="h-3 w-3 shrink-0" />
+            {siteName}
+          </span>
+        )}
       </TableCell>
       <TableCell>
         <Input
@@ -674,6 +691,30 @@ function EditableLineRow({
         ) : (
           formatPence(amountPence)
         )}
+      </TableCell>
+      <TableCell className="text-right">
+        <LineInfoPopover missing={!nominalId}>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Nominal code (internal)</Label>
+            <NominalCodeSelect
+              value={nominalId}
+              onChange={saveNominal}
+              codes={nominalCodes}
+              noneLabel="— none —"
+              className={cn('h-8', !nominalId && 'border-amber-400 text-amber-700')}
+              disabled={nominalSaving}
+            />
+            <p className="text-xs text-muted-foreground">
+              Internal accounting reference (Sage). Never shown on the customer invoice.
+            </p>
+          </div>
+          {siteName && (
+            <div className="text-sm">
+              <span className="text-muted-foreground">Site: </span>
+              <span>{siteName}</span>
+            </div>
+          )}
+        </LineInfoPopover>
       </TableCell>
       <TableCell>
         <Button
@@ -895,19 +936,70 @@ function ConfirmButton({
   )
 }
 
-function ReadOnlyLineRow({ line }: { line: InvoiceLineItem }) {
+// Small "additional info" popover per line — keeps internal-only details (like
+// the nominal code) out of the main table and the customer-facing PDF, while
+// still one click away during review.
+function LineInfoPopover({
+  missing = false,
+  children,
+}: {
+  missing?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn('h-8 w-8 text-muted-foreground', missing && 'text-amber-600')}
+          aria-label="Additional line info"
+        >
+          <Info className="h-4 w-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-64 space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Additional info
+        </p>
+        {children}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function ReadOnlyLineRow({ line, siteName }: { line: InvoiceLineItem; siteName?: string }) {
   return (
     <TableRow>
       <TableCell>
         <Badge variant="secondary">{KIND_LABELS[line.kind]}</Badge>
       </TableCell>
-      <TableCell>{line.description}</TableCell>
-      <TableCell className="font-mono text-xs text-muted-foreground">
-        {line.nominal_code || '—'}
+      <TableCell>
+        <span>{line.description}</span>
+        {siteName && (
+          <span className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+            <MapPin className="h-3 w-3 shrink-0" />
+            {siteName}
+          </span>
+        )}
       </TableCell>
       <TableCell className="text-right">{line.quantity}</TableCell>
       <TableCell className="text-right">{(line.unit_price_pence / 100).toFixed(2)}</TableCell>
       <TableCell className="text-right font-medium">{formatPence(line.amount_pence)}</TableCell>
+      <TableCell className="text-right">
+        <LineInfoPopover>
+          <div className="text-sm">
+            <span className="text-muted-foreground">Nominal code: </span>
+            <span className="font-mono">{line.nominal_code || '—'}</span>
+          </div>
+          {siteName && (
+            <div className="text-sm">
+              <span className="text-muted-foreground">Site: </span>
+              <span>{siteName}</span>
+            </div>
+          )}
+        </LineInfoPopover>
+      </TableCell>
     </TableRow>
   )
 }

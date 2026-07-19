@@ -63,6 +63,7 @@ import {
   deleteInvoiceLine,
   issueInvoice,
   markInvoicePaid,
+  sendInvoiceToClient,
   setInvoiceLineNominal,
   updateInvoiceLine,
   updateInvoiceMeta,
@@ -111,15 +112,27 @@ export function InvoiceDetail({
   lines,
   serviceTypeByLineId = {},
   nominalCodes = [],
+  canEdit = false,
 }: {
   invoice: InvoiceWithNames
   lines: InvoiceLineItem[]
   serviceTypeByLineId?: Record<string, string>
   nominalCodes?: NominalCode[]
+  /** Whether the current user holds the invoice-edit permission. */
+  canEdit?: boolean
 }) {
   const router = useRouter()
   const isDraft = invoice.status === 'draft'
   const isCreditNote = invoice.document_type === 'credit_note'
+  const isSent = !!invoice.sent_at
+  // New lock model: an invoice stays editable until it is SENT (draft or issued),
+  // provided the user holds the edit permission. Sending replaces issuing as the
+  // point that locks line editing. Void/paid are never editable.
+  const isEditable =
+    canEdit && !isSent && invoice.status !== 'void' && invoice.status !== 'paid'
+  // Send is available (draft or issued) while unsent, for a real invoice only.
+  const canSend =
+    canEdit && !isSent && !isCreditNote && (invoice.status === 'draft' || invoice.status === 'issued')
   const [busy, setBusy] = useState(false)
   // Lines still missing an internal nominal code — blocks issuing.
   const missingNominal = lines.filter((l) => !l.nominal_code_id).length
@@ -129,7 +142,8 @@ export function InvoiceDetail({
   // resolved service type fall under "Other charges".
   const OTHER = 'Other charges'
   const groupedByService = (() => {
-    if (isDraft) return null
+    // Editable invoices show per-line edit rows; grouping is a read-only view.
+    if (isEditable) return null
     const groups = new Map<string, InvoiceLineItem[]>()
     for (const line of lines) {
       const key = serviceTypeByLineId[line.id] ?? OTHER
@@ -283,14 +297,14 @@ export function InvoiceDetail({
                     <TableHead className="w-20 text-right">Qty</TableHead>
                     <TableHead className="w-28 text-right">Unit (£)</TableHead>
                     <TableHead className="w-28 text-right">Amount</TableHead>
-                    {isDraft && <TableHead className="w-10" />}
+                    {isEditable && <TableHead className="w-10" />}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {lines.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={isDraft ? 7 : 6}
+                        colSpan={isEditable ? 7 : 6}
                         className="py-8 text-center text-muted-foreground"
                       >
                         No line items yet.
@@ -317,7 +331,7 @@ export function InvoiceDetail({
                     })
                   ) : (
                     lines.map((line) =>
-                      isDraft ? (
+                      isEditable ? (
                         <EditableLineRow
                           key={line.id}
                           line={line}
@@ -333,17 +347,17 @@ export function InvoiceDetail({
               </Table>
             </div>
 
-            {isDraft && (
+            {isEditable && (
               <p className="text-xs text-muted-foreground">
                 Call-out and labour lines are auto-priced from the account&apos;s rate card. Adjust
                 the labour <span className="font-medium">Qty</span> (hours) to account for travel
-                time or on-site adjustments before issuing.
+                time or on-site adjustments before sending.
               </p>
             )}
             <p className="text-xs text-muted-foreground">
               <span className="font-medium">Nominal</span> codes are internal accounting references
               (for Sage) and never appear on the copy sent to the customer.
-              {isDraft && missingNominal > 0 && (
+              {isEditable && missingNominal > 0 && (
                 <span className="ml-1 font-medium text-amber-700">
                   {missingNominal} line{missingNominal === 1 ? '' : 's'} still need a code before you
                   can issue.
@@ -351,7 +365,7 @@ export function InvoiceDetail({
               )}
             </p>
 
-            {isDraft && <AddLineForm invoiceId={invoice.id} onAdded={() => router.refresh()} />}
+            {isEditable && <AddLineForm invoiceId={invoice.id} onAdded={() => router.refresh()} />}
           </CardContent>
         </Card>
       </div>
@@ -376,7 +390,7 @@ export function InvoiceDetail({
               <span>{formatPence(invoice.total_pence)}</span>
             </div>
 
-            {isDraft && (
+            {isEditable && (
               <TaxRateAndNotes
                 invoiceId={invoice.id}
                 taxRate={invoice.tax_rate}
@@ -385,7 +399,7 @@ export function InvoiceDetail({
                 siteAddress={invoice.site_address}
               />
             )}
-            {!isDraft && invoice.notes && (
+            {!isEditable && invoice.notes && (
               <div className="border-t pt-3">
                 <p className="text-xs uppercase tracking-wide text-muted-foreground">Notes</p>
                 <p className="whitespace-pre-line text-sm">{invoice.notes}</p>
@@ -423,7 +437,7 @@ export function InvoiceDetail({
                   </Button>
                 }
                 title={isCreditNote ? 'Issue this credit note?' : 'Issue this invoice?'}
-                description="Issuing sets the dates and locks the line items. This cannot be undone (you can void it instead)."
+                description="Issuing assigns the issue and due dates. You can still edit lines until the invoice is sent to the client."
                 actionLabel="Issue"
                 onConfirm={() => run(() => issueInvoice(invoice.id), 'Issued')}
               />
@@ -451,10 +465,43 @@ export function InvoiceDetail({
                 Release hold
               </Button>
             )}
+            {canSend && (
+              <ConfirmButton
+                trigger={
+                  <Button
+                    className="w-full"
+                    disabled={busy || lines.length === 0 || invoice.on_hold || missingNominal > 0}
+                  >
+                    <Send className="mr-2 h-4 w-4" />
+                    Send to client
+                  </Button>
+                }
+                title="Send this invoice to the client?"
+                description={`Emails the invoice PDF to ${
+                  invoice.bill_to_email || 'the billing account email'
+                }${
+                  invoice.status === 'draft' ? ', issuing it first' : ''
+                }. Once sent, the invoice can no longer be edited.`}
+                actionLabel="Send"
+                onConfirm={() => run(() => sendInvoiceToClient(invoice.id), 'Invoice sent to client')}
+              />
+            )}
+            {isSent && (
+              <p className="flex items-center gap-2 text-sm text-emerald-700">
+                <CheckCircle2 className="h-4 w-4" />
+                Sent to {invoice.sent_to || 'client'}
+                {invoice.sent_at ? ` on ${formatDate(invoice.sent_at)}` : ''}.
+              </p>
+            )}
+            {canSend && !invoice.bill_to_email && (
+              <p className="text-xs text-amber-700">
+                No invoice email set for this billing account — add one before sending.
+              </p>
+            )}
             {invoice.status === 'issued' && !isCreditNote && (
               <ConfirmButton
                 trigger={
-                  <Button className="w-full" disabled={busy}>
+                  <Button className="w-full" variant="outline" disabled={busy}>
                     <CheckCircle2 className="mr-2 h-4 w-4" />
                     Mark as paid
                   </Button>

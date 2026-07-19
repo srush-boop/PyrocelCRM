@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -48,13 +49,17 @@ export function CreateInvoiceGroups({
   return (
     <div className="space-y-6">
       {groups.map((group) => (
-        <GroupCard key={group.accountId ?? `unassigned-${group.clientName}`} group={group} />
+        <GroupCard
+          key={group.accountId ?? `unassigned-${group.clientName}`}
+          group={group}
+          canEdit={canEdit}
+        />
       ))}
     </div>
   )
 }
 
-function GroupCard({ group }: { group: ReadyGroup }) {
+function GroupCard({ group, canEdit }: { group: ReadyGroup; canEdit: boolean }) {
   const router = useRouter()
   const individual = group.invoiceCallsIndividually
   const [selected, setSelected] = useState<Set<string>>(() =>
@@ -63,6 +68,9 @@ function GroupCard({ group }: { group: ReadyGroup }) {
   )
   const [creating, setCreating] = useState(false)
   const [raisingId, setRaisingId] = useState<string | null>(null)
+  // Draft(s) just created from this group, shown inline with quick-actions
+  // (Preview / Edit / Send) so the user can review without a page redirect.
+  const [createdInvoices, setCreatedInvoices] = useState<Invoice[]>([])
 
   const allSelected = selected.size === group.tasks.length
   const noneSelected = selected.size === 0
@@ -85,6 +93,18 @@ function GroupCard({ group }: { group: ReadyGroup }) {
 
   const canCreate = !!group.accountId && !group.onHold && !noneSelected
 
+  // Show the freshly created draft inline (with Preview / Edit / Send) rather
+  // than redirecting away, so the user stays in the raise-invoice flow.
+  const showCreated = async (invoiceId: string | undefined) => {
+    if (!invoiceId) {
+      router.refresh()
+      return
+    }
+    const { invoice } = await getInvoiceForActions(invoiceId)
+    if (invoice) setCreatedInvoices((prev) => [invoice, ...prev])
+    router.refresh()
+  }
+
   const handleCreate = async () => {
     if (!group.accountId) return
     setCreating(true)
@@ -95,8 +115,7 @@ function GroupCard({ group }: { group: ReadyGroup }) {
       return
     }
     toast.success('Draft invoice created')
-    if (res.invoiceId) router.push(`/dashboard/invoices/${res.invoiceId}`)
-    else router.refresh()
+    await showCreated(res.invoiceId)
   }
 
   // Raise a standalone invoice for a single call (one call = one invoice).
@@ -110,8 +129,7 @@ function GroupCard({ group }: { group: ReadyGroup }) {
       return
     }
     toast.success('Draft invoice created')
-    if (res.invoiceId) router.push(`/dashboard/invoices/${res.invoiceId}`)
-    else router.refresh()
+    await showCreated(res.invoiceId)
   }
 
   const canAct = !!group.accountId && !group.onHold
@@ -259,6 +277,34 @@ function GroupCard({ group }: { group: ReadyGroup }) {
             </>
           )}
         </div>
+
+        {createdInvoices.length > 0 && (
+          <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
+            <p className="flex items-center gap-1.5 text-sm font-medium text-emerald-700">
+              <CheckCircle2 className="h-4 w-4" />
+              Draft{createdInvoices.length === 1 ? '' : 's'} created
+            </p>
+            {createdInvoices.map((inv) => (
+              <div
+                key={inv.id}
+                className="flex items-center justify-between gap-2 rounded-md border bg-background px-3 py-2"
+              >
+                <Link
+                  href={`/dashboard/invoices/${inv.id}`}
+                  className="text-sm font-medium hover:underline"
+                >
+                  {inv.invoice_number}
+                </Link>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">
+                    {formatPence(inv.total_pence)}
+                  </span>
+                  <InvoiceQuickActions invoice={inv} canEdit={canEdit} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   )

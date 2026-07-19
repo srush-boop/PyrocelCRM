@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
 import type { Invoice, InvoiceLineItem, NominalCode, Profile } from '@/lib/types/database'
 import { InvoiceDetail } from '@/components/dashboard/invoices/invoice-detail'
+import { profileCanEditInvoices } from '@/lib/auth/invoices'
 
 export const dynamic = 'force-dynamic'
 
@@ -91,6 +92,7 @@ export default async function InvoiceDetailPage({
         lines={lineList}
         serviceTypeByLineId={serviceTypeByLineId}
         nominalCodes={nominalCodes}
+        canEdit={profileCanEditInvoices(profile as Profile)}
       />
     </div>
   )

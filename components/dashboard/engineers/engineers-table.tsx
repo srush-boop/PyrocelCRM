@@ -223,6 +223,8 @@ export function EngineersTable({
     can_view_labour_costs: false,
     // Query Builder + User Cost Calculator access (only editable by the owner).
     can_use_query_tools: false,
+    // Invoice edit/send permission (grantable by any admin, office users only).
+    can_edit_invoices: false,
   })
   const [editError, setEditError] = useState<string | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
@@ -372,6 +374,7 @@ export function EngineersTable({
         user.cost_per_hour_pence != null ? (user.cost_per_hour_pence / 100).toFixed(2) : '',
       can_view_labour_costs: user.can_view_labour_costs === true,
       can_use_query_tools: user.can_use_query_tools === true,
+      can_edit_invoices: user.can_edit_invoices === true,
     })
     setEditError(null)
   }
@@ -431,6 +434,8 @@ export function EngineersTable({
           phone: editForm.phone.trim() || null,
           secondary_phone: editForm.secondary_phone.trim() || null,
           cost_per_hour_pence: costPounds === '' ? null : Math.round(Number(costPounds) * 100),
+          // Invoice edit/send permission — any admin may grant it.
+          can_edit_invoices: editForm.can_edit_invoices,
           // Only the owner may change this; the API enforces it too.
         ...(canGrantLabourCosts
           ? {
@@ -1098,6 +1103,28 @@ export function EngineersTable({
                       <span className="block text-xs text-muted-foreground">
                         Grants access to the SQL Query Builder and User Cost Calculator. These can
                         modify data directly &mdash; grant with care.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              )}
+              {editForm.role === 'office' && (
+                <div className="space-y-1.5">
+                  <Label>Invoicing</Label>
+                  <label className="flex items-start gap-2 rounded-md border px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={editForm.can_edit_invoices}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, can_edit_invoices: e.target.checked })
+                      }
+                      className="mt-0.5 h-4 w-4 rounded border-input"
+                    />
+                    <span>
+                      Can edit &amp; send invoices
+                      <span className="block text-xs text-muted-foreground">
+                        Allows previewing, editing line items, and sending invoices to clients from
+                        the invoice lists. Admins can always do this.
                       </span>
                     </span>
                   </label>

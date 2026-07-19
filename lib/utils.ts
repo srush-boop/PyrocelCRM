@@ -66,6 +66,18 @@ export function formatNumberUK(value: number): string {
   return value.toLocaleString(UK_LOCALE)
 }
 
+// Format a Date for an <input type="datetime-local"> value. The input works in
+// the browser's LOCAL time and expects a "YYYY-MM-DDTHH:mm" string. Using
+// toISOString() here is wrong — it renders the value shifted to UTC, so a
+// 14:30 BST time shows as 13:30 (the classic "1 hour earlier" bug). We build the
+// string from the Date's local components so what the engineer sees matches the
+// clock, and new Date(value) on change round-trips back to the same instant.
+export function toDatetimeLocalValue(date: Date | null | undefined): string {
+  if (!date || Number.isNaN(date.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
 // Format a "HH:MM[:SS]" time-of-day string (e.g. from a Postgres `time`
 // column) as a UK 24h time like "09:00". Returns '' for empty input.
 export function formatClockTime(time: string | null | undefined): string {

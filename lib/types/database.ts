@@ -452,6 +452,9 @@ export interface Profile {
   // Per-user dashboard tile colour overrides, keyed by tile title -> hex value
   // (e.g. { "Service": "#2563eb" }). Empty object = use default theme colour.
   dashboard_tile_colors: Record<string, string> | null
+  // Per-user ordered list of dashboard module tile titles (e.g. ["Service",
+  // "Jobs", ...]). Empty array = default order; unknown/new titles appended.
+  dashboard_tile_positions: string[] | null
   // Nominated line manager for this user (self-referencing). Recorded for HR /
   // future approvals wiring. NULL = no manager set.
   manager_id: string | null

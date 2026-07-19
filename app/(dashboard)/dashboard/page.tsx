@@ -28,6 +28,7 @@ import { AddRequestDialog } from '@/components/dashboard/requests/add-request-di
 import { ApprovalsWidget } from '@/components/dashboard/approvals/approvals-widget'
 import { LoneWorkerDashboardTiles } from '@/components/dashboard/lone-worker/lone-worker-dashboard-tiles'
 import { TileColorPicker } from '@/components/dashboard/home/tile-color-picker'
+import { DashboardTileGrid, type DashboardTile } from '@/components/dashboard/home/dashboard-tile-grid'
 import { tileIconStyle, tileAccentStyle, tileCardStyle } from '@/lib/dashboard-tile-colors'
 import { getVisibleLeaveRequests } from '@/lib/leave-approvals'
 import { EngineerHome } from '@/components/dashboard/home/engineer-home'
@@ -198,6 +199,9 @@ export default async function DashboardPage({
 
   // Per-user tile colour overrides (keyed by tile title). Empty = theme default.
   const tileColors = (profile as Profile).dashboard_tile_colors ?? {}
+
+  // Per-user preferred tile order (array of tile titles). Empty = default order.
+  const savedTileOrder = (profile as Profile).dashboard_tile_positions ?? []
 
   const modules: ModuleCard[] = [
     {
@@ -371,12 +375,16 @@ export default async function DashboardPage({
       {/* Live lone-worker safety status (0 when healthy; pulses on emergency) */}
       <LoneWorkerDashboardTiles />
 
-      {/* Company overview — one hub per module */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {modules.map((m) => {
+      {/* Company overview — one hub per module. Rendered through a client grid
+          that lets the user drag tiles into their preferred, saved order. */}
+      <DashboardTileGrid
+        savedOrder={savedTileOrder}
+        tiles={modules.map((m): DashboardTile => {
           const color = tileColors[m.title] ?? null
           const iconStyle = tileIconStyle(color)
-          return (
+          return {
+            title: m.title,
+            node: (
             <Card
               key={m.title}
               className="group relative h-full overflow-hidden transition-colors hover:border-primary/50 hover:bg-accent/40"
@@ -444,9 +452,10 @@ export default async function DashboardPage({
                 )}
               </div>
             </Card>
-          )
+            ),
+          }
         })}
-      </div>
+      />
     </div>
   )
 }

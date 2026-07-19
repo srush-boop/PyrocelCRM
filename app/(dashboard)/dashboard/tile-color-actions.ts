@@ -45,3 +45,37 @@ export async function setTileColor(tileKey: string, color: string | null) {
   revalidatePath('/dashboard')
   return { ok: true as const }
 }
+
+/**
+ * Persist the signed-in user's preferred dashboard module tile order. Stored as
+ * an ordered array of tile titles on their profile (RLS `profiles_update_own`).
+ * Passing an empty array resets to the default order. Titles are stored as-is;
+ * unknown/removed titles are ignored when the dashboard renders, and any new
+ * tiles not present in the saved order are appended in their natural position.
+ */
+export async function setTileOrder(order: string[]) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false as const, error: 'Not signed in' }
+
+  // De-duplicate while preserving order and drop non-string entries.
+  const seen = new Set<string>()
+  const clean = order.filter((t) => {
+    if (typeof t !== 'string' || seen.has(t)) return false
+    seen.add(t)
+    return true
+  })
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ dashboard_tile_positions: clean })
+    .eq('id', user.id)
+
+  if (error) return { ok: false as const, error: error.message }
+
+  revalidatePath('/dashboard')
+  return { ok: true as const }
+}

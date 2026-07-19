@@ -18,9 +18,21 @@ import {
 import { toast } from 'sonner'
 import { Loader2, ReceiptText, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { formatPence, BILLING_FREQUENCY_LABELS } from '@/lib/billing/invoices'
-import { createInvoiceFromTasks, type ReadyGroup } from '@/lib/actions/invoices'
+import {
+  createInvoiceFromTasks,
+  getInvoiceForActions,
+  type ReadyGroup,
+} from '@/lib/actions/invoices'
+import { InvoiceQuickActions } from '@/components/dashboard/invoices/invoice-quick-actions'
+import type { Invoice } from '@/lib/types/database'
 
-export function CreateInvoiceGroups({ groups }: { groups: ReadyGroup[] }) {
+export function CreateInvoiceGroups({
+  groups,
+  canEdit,
+}: {
+  groups: ReadyGroup[]
+  canEdit: boolean
+}) {
   if (groups.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-center">

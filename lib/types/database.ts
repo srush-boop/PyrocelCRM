@@ -236,6 +236,11 @@ export interface Invoice {
   /** Optional site the work relates to, plus a text snapshot of its address. */
   site_id: string | null
   site_address: string | null
+  // "Sent to client" milestone. sent_at IS NOT NULL locks line editing (it
+  // replaces "issued" as the edit lock — invoices stay editable until sent).
+  sent_at: string | null
+  sent_by: string | null
+  sent_to: string | null
   // Bill-to snapshot taken at issue time (the billing account can change later).
   bill_to_name: string | null
   bill_to_address: string | null
@@ -262,6 +267,8 @@ export interface Invoice {
   line_items?: InvoiceLineItem[]
   billing_account?: BillingAccount | null
   client?: Client | null
+  /** Optional embedded site (name only) for the invoice-tile description line. */
+  site?: { name: string } | null
 }
 
 export interface InvoiceLineItem {
@@ -528,6 +535,9 @@ export interface Profile {
   // Owner-granted access to the admin Query Builder + User Cost Calculator
   // tools. Only grantable by the owner (steve.rush@pyrocel.co.uk).
   can_use_query_tools: boolean
+  // Per-user grant to preview/edit/send invoices from the invoice lists. Admins
+  // are implicitly allowed; office users require this grant (see lib/auth/invoices).
+  can_edit_invoices: boolean
   created_at: string
   updated_at: string
   department?: Department | null

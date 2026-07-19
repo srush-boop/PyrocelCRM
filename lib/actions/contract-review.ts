@@ -368,6 +368,12 @@ export async function commitContractReview(
             access_required: bool(p, 'access_required'),
             keys_required: bool(p, 'keys_required'),
             two_engineers_required: bool(p, 'two_engineers_required'),
+            // Client-accepted per-system additional-service allowance.
+            additional_service_limit_pence:
+              typeof p.additional_service_limit_pence === 'number'
+                ? p.additional_service_limit_pence
+                : null,
+            additional_service_po: str(p, 'additional_service_po'),
           })
           .select('id')
           .single()

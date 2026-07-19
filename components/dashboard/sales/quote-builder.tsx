@@ -166,10 +166,18 @@ interface EditLine {
   is_optional: boolean
   option_group: string | null
   standard: string | null
+  // Per-system additional-service maintenance allowance line (default £350).
+  // Optional + client-amendable; states "value per system" on the quote.
+  is_maintenance_allowance: boolean
   // Serialised inputs + result of the calculator that produced this line (if
   // any), so the calculation can be re-opened and viewed/adjusted later.
   calculatorSnapshot?: CalculatorSnapshot | null
 }
+
+// Default additional-service maintenance allowance value (per system), in £.
+// The quoter can amend it on the line and the client can amend/opt out at
+// sign-off.
+const MAINTENANCE_ALLOWANCE_DEFAULT_POUNDS = '350.00'
 
 interface EditSystem {
   key: string
@@ -226,6 +234,25 @@ function blankLine(): EditLine {
     is_optional: false,
     option_group: null,
     standard: null,
+    is_maintenance_allowance: false,
+  }
+}
+
+// Build the per-system "Additional service allowance" optional line. Priced at
+// the default (or provided) value; the client can amend or opt out at sign-off.
+function maintenanceAllowanceLine(valuePounds?: string): EditLine {
+  return {
+    ...blankLine(),
+    description: 'Additional service allowance',
+    detail:
+      'A pre-authorised allowance (value per system) for additional service or minor remedial works arising during maintenance. Add a PO to authorise, or opt out.',
+    is_service: true,
+    quantity: '1',
+    unit: 'per system',
+    unitCost: valuePounds || MAINTENANCE_ALLOWANCE_DEFAULT_POUNDS,
+    margin: '0',
+    is_optional: true,
+    is_maintenance_allowance: true,
   }
 }
 
@@ -469,6 +496,7 @@ function maintenanceLineToEditLine(
     is_optional: false,
     option_group: null,
     standard: l.standard ?? null,
+    is_maintenance_allowance: false,
     calculatorSnapshot: snapshot,
   }
 }
@@ -758,6 +786,8 @@ export function QuoteBuilder({
             is_optional: l.is_optional ?? false,
             option_group: l.option_group ?? null,
             standard: l.standard ?? null,
+            is_maintenance_allowance:
+              (l as { is_maintenance_allowance?: boolean }).is_maintenance_allowance ?? false,
             calculatorSnapshot: parseCalculatorSnapshot(l.calculator_snapshot),
           })),
           ppm: ppmToDraft((initialPpm ?? []).find((p) => p.quote_system_id === s.id) ?? null),
@@ -959,6 +989,7 @@ export function QuoteBuilder({
           is_optional: false,
           option_group: null,
           standard: null,
+          is_maintenance_allowance: false,
         }
         // Drop a previously-applied PPM line (same description) before re-adding.
         const otherLines = s.lines.filter(
@@ -990,6 +1021,7 @@ export function QuoteBuilder({
       is_optional: false,
       option_group: null,
       standard: null,
+      is_maintenance_allowance: false,
     })
   }
 
@@ -1030,6 +1062,7 @@ export function QuoteBuilder({
       is_optional: false,
       option_group: null,
       standard: null,
+      is_maintenance_allowance: false,
     })
   }
 
@@ -1051,6 +1084,56 @@ export function QuoteBuilder({
     )
     return { lineCount: sys.lines.length, total }
   }, [systems])
+
+  // --- Additional-service maintenance allowance (per system) ---------------
+  // Whether every maintenance system currently carries an allowance line, and
+  // the shared value (blank when systems disagree). Powers the toggle + input.
+  const maintenanceSystems = useMemo(
+    () => systems.filter((s) => quoteTypeFromWorkType(s.work_type) === 'service_contract'),
+    [systems],
+  )
+  const allowanceEnabled = useMemo(
+    () =>
+      maintenanceSystems.length > 0 &&
+      maintenanceSystems.every((s) => s.lines.some((l) => l.is_maintenance_allowance)),
+    [maintenanceSystems],
+  )
+  const allowanceValue = useMemo(() => {
+    const vals = new Set(
+      maintenanceSystems
+        .flatMap((s) => s.lines.filter((l) => l.is_maintenance_allowance))
+        .map((l) => l.unitCost),
+    )
+    return vals.size === 1 ? [...vals][0] : ''
+  }, [maintenanceSystems])
+
+  // Add/remove the allowance line on every maintenance system at once.
+  const toggleMaintenanceAllowance = useCallback((on: boolean) => {
+    setSystems((prev) =>
+      prev.map((s) => {
+        if (quoteTypeFromWorkType(s.work_type) !== 'service_contract') return s
+        const withoutAllowance = s.lines.filter((l) => !l.is_maintenance_allowance)
+        if (!on) return { ...s, lines: withoutAllowance }
+        if (s.lines.some((l) => l.is_maintenance_allowance)) return s
+        return { ...s, lines: [...withoutAllowance, maintenanceAllowanceLine()] }
+      }),
+    )
+  }, [])
+
+  // Update the allowance value across all maintenance systems.
+  const setMaintenanceAllowanceValue = useCallback((pounds: string) => {
+    setSystems((prev) =>
+      prev.map((s) => {
+        if (quoteTypeFromWorkType(s.work_type) !== 'service_contract') return s
+        return {
+          ...s,
+          lines: s.lines.map((l) =>
+            l.is_maintenance_allowance ? { ...l, unitCost: pounds } : l,
+          ),
+        }
+      }),
+    )
+  }, [])
 
   // Non-maintenance systems the installation calculator can add its service line
   // to. Falls back to a placeholder label for unnamed systems.
@@ -1189,6 +1272,7 @@ export function QuoteBuilder({
         is_optional: false,
         option_group: null,
         standard: null,
+        is_maintenance_allowance: false,
         calculatorSnapshot: result.snapshot,
       }
       setSystems((prev) =>
@@ -1305,6 +1389,7 @@ export function QuoteBuilder({
             is_optional: l.is_optional,
             option_group: l.option_group,
             standard: l.standard,
+            is_maintenance_allowance: l.is_maintenance_allowance,
             calculator_snapshot: l.calculatorSnapshot ?? null,
           })),
       })),
@@ -1968,6 +2053,47 @@ export function QuoteBuilder({
                 onCheckedChange={setShowMaintenanceAgreement}
                 disabled={disabled}
               />
+            </div>
+
+            {/* Additional-service allowance (per system) */}
+            <div className="rounded-lg border p-3 space-y-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="grid gap-0.5">
+                  <Label htmlFor="q-allowance" className="cursor-pointer">
+                    Additional service allowance
+                  </Label>
+                  <span className="text-xs text-muted-foreground text-pretty">
+                    Adds an optional pre-authorised allowance{' '}
+                    <strong>per system</strong> for additional service or minor remedial works. The
+                    client adds a PO (or reuses the maintenance PO) at sign-off, or opts out.
+                  </span>
+                </div>
+                <Switch
+                  id="q-allowance"
+                  checked={allowanceEnabled}
+                  onCheckedChange={toggleMaintenanceAllowance}
+                  disabled={disabled}
+                />
+              </div>
+              {allowanceEnabled && (
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="q-allowance-value" className="text-sm whitespace-nowrap">
+                    Value per system (£)
+                  </Label>
+                  <Input
+                    id="q-allowance-value"
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    className="max-w-[10rem]"
+                    value={allowanceValue}
+                    placeholder={MAINTENANCE_ALLOWANCE_DEFAULT_POUNDS}
+                    onChange={(e) => setMaintenanceAllowanceValue(e.target.value)}
+                    disabled={disabled}
+                  />
+                </div>
+              )}
             </div>
           </CardContent>
         )}

@@ -182,6 +182,12 @@ export async function updatePublicQuoteOptions(args: {
   token: string
   // The full set of optional line ids the client wants selected.
   selectedLineIds: string[]
+  // Per-maintenance-allowance-line client overrides: amended value (pounds),
+  // supplied PO, or a flag to reuse the maintenance PO. Keyed by line id.
+  allowanceOverrides?: Record<
+    string,
+    { amountPounds?: string; po?: string; useMaintenancePo?: boolean }
+  >
 }): Promise<Result & { totalPence?: number }> {
   const token = args.token?.trim()
   if (!token) return { ok: false, error: 'Invalid quote link.' }
@@ -224,13 +230,32 @@ export async function updatePublicQuoteOptions(args: {
     }
   }
 
-  // Persist the selection state on each optional line.
+  // Client-amended allowance values (pence), keyed by line id, so both the DB
+  // update and the totals recompute use the same figures.
+  const overrides = args.allowanceOverrides ?? {}
+  const amendedPence: Record<string, number> = {}
+  for (const line of optionalLines) {
+    if (!(line as { is_maintenance_allowance?: boolean }).is_maintenance_allowance) continue
+    const raw = overrides[line.id]?.amountPounds
+    if (raw == null || raw.trim() === '') continue
+    const pounds = Number.parseFloat(raw)
+    if (Number.isFinite(pounds) && pounds >= 0) amendedPence[line.id] = Math.round(pounds * 100)
+  }
+
+  // Persist the selection state (and any allowance overrides) on each optional line.
   for (const line of optionalLines) {
     const selected = wanted.has(line.id)
-    if (line.client_selected === selected) continue
+    const isAllowance = !!(line as { is_maintenance_allowance?: boolean }).is_maintenance_allowance
+    const ov = isAllowance ? overrides[line.id] : undefined
+    const patch: Record<string, unknown> = { client_selected: selected }
+    if (isAllowance) {
+      patch.client_amount_pence = amendedPence[line.id] ?? null
+      patch.client_po = ov?.po?.trim() || null
+      patch.use_maintenance_po = !!ov?.useMaintenancePo
+    }
     const { error: upErr } = await supabase
       .from('quote_line_items')
-      .update({ client_selected: selected })
+      .update(patch)
       .eq('id', line.id)
     if (upErr) {
       console.log('[v0] updatePublicQuoteOptions line update error:', upErr.message)
@@ -238,11 +263,12 @@ export async function updatePublicQuoteOptions(args: {
     }
   }
 
-  // Recompute the header totals with the new selection state applied.
+  // Recompute the header totals with the new selection state (and any amended
+  // allowance values) applied.
   const totals = computeQuoteTotals(
     lines.map((l) => ({
       quantity: l.quantity,
-      unit_price_pence: l.unit_price_pence,
+      unit_price_pence: amendedPence[l.id] ?? l.unit_price_pence,
       is_optional: l.is_optional,
       client_selected: l.is_optional ? wanted.has(l.id) : null,
     })),

@@ -318,9 +318,31 @@ export async function buildContractReviewDraft(
     // keep the single-service fallback.
     for (const sys of systemList) {
       const ppm = ppmBySystem.get(sys.id as string)
-      const sysLines = (linesBySystem.get(sys.id as string) ?? []).filter(
-        (l) => l.is_service !== false,
+      const allLinesForSys = linesBySystem.get(sys.id as string) ?? []
+      // Priced service lines (excluding the per-system service-allowance line,
+      // which folds into the system payload rather than becoming a service).
+      const sysLines = allLinesForSys.filter(
+        (l) => l.is_service !== false && l.is_maintenance_allowance !== true,
       )
+      // Resolve the client-accepted service allowance for this system: the
+      // allowance line must be selected on the shared quote and carry a PO
+      // (either supplied directly or "use the maintenance PO").
+      const acceptedAllowance = allLinesForSys.find(
+        (l) => l.is_maintenance_allowance === true && l.client_selected === true,
+      )
+      let allowanceLimitPence: number | null = null
+      let allowancePo: string | null = null
+      if (acceptedAllowance) {
+        allowanceLimitPence =
+          (acceptedAllowance.client_amount_pence as number | null) ??
+          (acceptedAllowance.unit_price_pence as number | null) ??
+          null
+        const suppliedPo = (acceptedAllowance.client_po as string | null)?.trim() || null
+        allowancePo =
+          acceptedAllowance.use_maintenance_po === true
+            ? (quote.po_number as string | null)?.trim() || suppliedPo
+            : suppliedPo
+      }
       // Maintenance-bearing systems: those with a PPM calc, a service type, a
       // Service/Maintenance work type (SVC), or priced service lines.
       const isMaintenance =
@@ -360,6 +382,10 @@ export async function buildContractReviewDraft(
           access_required: false,
           keys_required: false,
           two_engineers_required: false,
+          // Client-accepted per-system additional-service allowance (auto-
+          // authorises non-recurring calls up to this value against the PO).
+          additional_service_limit_pence: allowanceLimitPence,
+          additional_service_po: allowancePo,
         },
         source_quote_system_id: sys.id as string,
         position: pos++,

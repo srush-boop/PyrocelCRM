@@ -159,12 +159,22 @@ const CallMarkers = memo(function CallMarkers({
         <Marker
           key={c.taskId}
           position={[c.latitude, c.longitude]}
-          icon={c.isEmergency ? emergencyIcon(URGENCY_COLOR.overdue) : pinIcon(URGENCY_COLOR[c.urgency], BUILDING_SVG)}
+          icon={
+            c.isEmergency
+              ? // Assigned emergencies flash AMBER (engineer en route); still
+                // unassigned emergencies flash RED (needs dispatching).
+                emergencyIcon(c.assignedEngineerId ? URGENCY_COLOR['due-soon'] : URGENCY_COLOR.overdue)
+              : pinIcon(URGENCY_COLOR[c.urgency], BUILDING_SVG)
+          }
           zIndexOffset={c.isEmergency ? 1000 : 0}
         >
           <Tooltip direction="top" offset={[0, -18]}>
             <span className="text-xs">
-              {c.isEmergency && <strong style={{ color: URGENCY_COLOR.overdue }}>EMERGENCY · </strong>}
+              {c.isEmergency && (
+                <strong style={{ color: c.assignedEngineerId ? URGENCY_COLOR['due-soon'] : URGENCY_COLOR.overdue }}>
+                  EMERGENCY{c.assignedEngineerId ? ' (assigned)' : ''} ·{' '}
+                </strong>
+              )}
               <strong>{c.siteName}</strong>
               {' · '}~{formatDuration(c.expected.minutes)}
             </span>
@@ -172,8 +182,11 @@ const CallMarkers = memo(function CallMarkers({
           <Popup>
             <div className="min-w-[200px] space-y-1 text-[13px] leading-snug">
               {c.isEmergency && (
-                <p className="font-bold" style={{ color: URGENCY_COLOR.overdue }}>
-                  EMERGENCY CALL
+                <p
+                  className="font-bold"
+                  style={{ color: c.assignedEngineerId ? URGENCY_COLOR['due-soon'] : URGENCY_COLOR.overdue }}
+                >
+                  {c.assignedEngineerId ? 'EMERGENCY · ASSIGNED' : 'EMERGENCY CALL'}
                 </p>
               )}
               <p className="font-semibold">{c.siteName}</p>

@@ -42,6 +42,7 @@ import {
   Search,
   Siren,
   Truck,
+  UserCheck,
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -547,36 +548,82 @@ export function CallsMap({
                   filteredEmergencyCalls.length > 3 && 'max-h-[21rem] overflow-y-auto pr-1',
                 )}
               >
-                {filteredEmergencyCalls.map((c) => (
-                  <div key={c.taskId} className="rounded-md border border-destructive/30 bg-background p-2 text-xs">
-                    <p className="font-semibold">{c.siteName}</p>
-                    <p className="text-muted-foreground">
-                      {c.callTypeName ?? c.serviceTypeName ?? 'Emergency'}
-                      {c.assignedEngineerName ? ` · ${c.assignedEngineerName}` : ' · unassigned'}
-                    </p>
-                    {c.respondBy && (
-                      <p className="text-destructive">
-                        Attend by{' '}
-                        {new Date(c.respondBy).toLocaleString('en-GB', {
-                          day: '2-digit',
-                          month: 'short',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          timeZone: 'Europe/London',
-                        })}
-                      </p>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      className="mt-1 h-7 w-full gap-1 text-xs"
-                      onClick={() => startDispatchForCall(c)}
+                {filteredEmergencyCalls.map((c) => {
+                  const isAssigned = !!c.assignedEngineerId
+                  const attendBy = c.respondBy
+                    ? new Date(c.respondBy).toLocaleString('en-GB', {
+                        day: '2-digit',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        timeZone: 'Europe/London',
+                      })
+                    : null
+                  return (
+                    <div
+                      key={c.taskId}
+                      className={cn(
+                        'rounded-md border p-2 text-xs',
+                        isAssigned
+                          ? 'border-amber-300 bg-amber-50'
+                          : 'border-destructive/30 bg-background',
+                      )}
                     >
-                      <Truck className="h-3 w-3" />
-                      Dispatch
-                    </Button>
-                  </div>
-                ))}
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-semibold">{c.siteName}</p>
+                        {/* Status pill makes the assign state unmistakable. */}
+                        <span
+                          className={cn(
+                            'shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                            isAssigned
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-destructive/10 text-destructive',
+                          )}
+                        >
+                          {isAssigned ? 'Assigned' : 'To assign'}
+                        </span>
+                      </div>
+                      <p className="text-muted-foreground">
+                        {c.callTypeName ?? c.serviceTypeName ?? 'Emergency'}
+                      </p>
+                      {isAssigned ? (
+                        <>
+                          <p className="mt-0.5 flex items-center gap-1 font-medium text-amber-800">
+                            <UserCheck className="h-3 w-3" />
+                            {c.assignedEngineerName}
+                          </p>
+                          {attendBy && (
+                            <p className="text-amber-700">ETA — attend by {attendBy}</p>
+                          )}
+                          {/* Already dispatched: offer a quieter re-assign, not a
+                              prominent red Dispatch that implies it's still open. */}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="mt-1 h-7 w-full gap-1 border-amber-300 bg-white text-xs text-amber-800 hover:bg-amber-100"
+                            onClick={() => startDispatchForCall(c)}
+                          >
+                            <Truck className="h-3 w-3" />
+                            Reassign
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          {attendBy && <p className="text-destructive">Attend by {attendBy}</p>}
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="mt-1 h-7 w-full gap-1 text-xs"
+                            onClick={() => startDispatchForCall(c)}
+                          >
+                            <Truck className="h-3 w-3" />
+                            Dispatch
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </CardContent>
           </Card>

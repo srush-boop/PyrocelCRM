@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2 } from 'lucide-react'
+import { MfaChallenge } from '@/components/auth/mfa-challenge'
 
 interface LoginFormProps {
   /** Logo shown above the form. Defaults to the Pyrocel logo. */
@@ -21,6 +22,8 @@ interface LoginFormProps {
   subtitle?: string
   /** Optional positive tagline shown beneath the card header. */
   tagline?: string
+  /** Optional notice (e.g. an inactive-account message) shown above the form. */
+  notice?: string
 }
 
 export function LoginForm({
@@ -29,13 +32,32 @@ export function LoginForm({
   title = 'PYROCEL LTD',
   subtitle = 'Service & Compliance Management',
   tagline,
+  notice,
 }: LoginFormProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  // When the account has MFA enabled we switch to a second step to collect the
+  // authenticator code before completing the login.
+  const [needsChallenge, setNeedsChallenge] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+
+  // Resolve where to land (portal for clients, dashboard for staff) and go.
+  const finishLogin = async (userId?: string) => {
+    let destination = '/dashboard'
+    if (userId) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .single()
+      if (profile?.role === 'client') destination = '/portal'
+    }
+    router.push(destination)
+    router.refresh()
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -47,20 +69,19 @@ export function LoginForm({
     if (error) {
       setError(error.message)
       setLoading(false)
-    } else {
-      // Route client logins to the read-only portal, staff to the dashboard.
-      let destination = '/dashboard'
-      if (data.user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', data.user.id)
-          .single()
-        if (profile?.role === 'client') destination = '/portal'
-      }
-      router.push(destination)
-      router.refresh()
+      return
     }
+
+    // If the account has a verified TOTP factor, the session starts at aal1 and
+    // must be upgraded via a challenge before we let them in.
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+    if (aal?.nextLevel === 'aal2' && aal.currentLevel === 'aal1') {
+      setLoading(false)
+      setNeedsChallenge(true)
+      return
+    }
+
+    await finishLogin(data.user?.id)
   }
 
   return (
@@ -76,7 +97,20 @@ export function LoginForm({
         )}
       </CardHeader>
       <CardContent>
+        {needsChallenge ? (
+          <div className="space-y-4">
+            <div className="space-y-1 text-center">
+              <p className="text-sm font-medium">Two-factor authentication</p>
+            </div>
+            <MfaChallenge onVerified={() => finishLogin()} />
+          </div>
+        ) : (
         <form onSubmit={handleLogin} className="space-y-4">
+          {notice && !error && (
+            <Alert>
+              <AlertDescription>{notice}</AlertDescription>
+            </Alert>
+          )}
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
@@ -115,6 +149,7 @@ export function LoginForm({
             )}
           </Button>
         </form>
+        )}
       </CardContent>
     </Card>
   )

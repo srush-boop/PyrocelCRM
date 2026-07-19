@@ -95,8 +95,8 @@ export function InviteEngineerDialog({
       setError('Please enter a valid email address.')
       return
     }
-    if (formData.password.length < 8) {
-      setError('Password must be at least 8 characters.')
+    if (formData.password.length < 12) {
+      setError('Password must be at least 12 characters.')
       return
     }
 
@@ -224,7 +224,7 @@ export function InviteEngineerDialog({
                     required
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder="At least 8 characters"
+                    placeholder="At least 12 characters"
                     disabled={loading}
                     autoComplete="new-password"
                     className="font-mono"

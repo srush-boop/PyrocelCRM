@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { PortalHeader } from '@/components/portal/portal-header'
+import { getAalState } from '@/lib/auth/mfa'
 import type { Profile } from '@/lib/types/database'
 
 export default async function PortalLayout({
@@ -23,9 +24,20 @@ export default async function PortalLayout({
 
   if (!profile) redirect('/auth/login')
 
+  // Only activated accounts may use the app.
+  if ((profile as Profile).status !== 'active') {
+    redirect('/auth/login?error=account-inactive')
+  }
+
   // Only client logins use the portal; staff belong in the dashboard.
   if ((profile as Profile).role !== 'client') {
     redirect('/dashboard')
+  }
+
+  // If a client has opted into MFA, they must complete the challenge.
+  const aal = await getAalState(supabase)
+  if (aal.needsChallenge) {
+    redirect('/auth/mfa')
   }
 
   const clientName = (profile as any).clients?.name ?? null

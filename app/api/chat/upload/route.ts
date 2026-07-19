@@ -1,6 +1,7 @@
 import { put } from '@vercel/blob'
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { scanForMalware } from '@/lib/uploads/validate'
 
 /**
  * Upload an image to attach to a chat message. The Blob store is private, so we
@@ -27,6 +28,8 @@ export async function POST(request: NextRequest) {
     if (file.size > 8 * 1024 * 1024) {
       return NextResponse.json({ error: 'Image must be 8MB or smaller.' }, { status: 400 })
     }
+    const scan = await scanForMalware(file)
+    if (!scan.ok) return scan.response
 
     const safeName = file.name.replace(/[^\w.\-]+/g, '_') || 'image.png'
     const blob = await put(`chat/${user.id}/${safeName}`, file, {

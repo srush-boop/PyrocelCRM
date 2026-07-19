@@ -6,6 +6,7 @@ import { MobileBottomNav } from '@/components/dashboard/mobile-bottom-nav'
 import { OncallBanner } from '@/components/dashboard/oncall/oncall-banner'
 import { LoneWorkerPrompt } from '@/components/dashboard/lone-worker/lone-worker-prompt'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
+import { getAalState, mfaRequiredForRole } from '@/lib/auth/mfa'
 import type { Profile } from '@/lib/types/database'
 
 export default async function DashboardLayout({
@@ -31,14 +32,32 @@ export default async function DashboardLayout({
     redirect('/auth/login')
   }
 
+  // Only activated accounts may use the app. Self-registered/trigger-created
+  // rows start 'inactive' until an admin activates them.
+  if ((profile as Profile).status !== 'active') {
+    redirect('/auth/login?error=account-inactive')
+  }
+
   // Client logins are read-only and belong in the portal, not the staff dashboard.
   if ((profile as Profile).role === 'client') {
     redirect('/portal')
   }
 
+  const role = (profile as Profile).role
+
+  // Multi-factor enforcement:
+  //  - Anyone with a verified factor must complete a TOTP challenge (aal2).
+  //  - MFA-required roles without any factor are pushed into setup.
+  const aal = await getAalState(supabase)
+  if (aal.needsChallenge) {
+    redirect('/auth/mfa')
+  }
+  if (mfaRequiredForRole(role) && !aal.hasVerifiedFactor) {
+    redirect('/auth/mfa-setup')
+  }
+
   // Sub-contractors get the same mobile-first field UI as engineers (bottom
   // nav, extra padding) but a heavily restricted navigation.
-  const role = (profile as Profile).role
   const isEngineer = role === 'engineer' || role === 'subcontractor'
 
   return (

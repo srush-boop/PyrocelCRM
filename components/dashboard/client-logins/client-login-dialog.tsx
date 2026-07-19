@@ -191,8 +191,8 @@ export function ClientLoginDialog({
         setError('Email, password, and client are required.')
         return
       }
-      if (password.length < 8) {
-        setError('Password must be at least 8 characters.')
+      if (password.length < 12) {
+        setError('Password must be at least 12 characters.')
         return
       }
     }
@@ -200,8 +200,8 @@ export function ClientLoginDialog({
       setError('Select at least one site this login can view.')
       return
     }
-    if (isEdit && password && password.length < 8) {
-      setError('Password must be at least 8 characters.')
+    if (isEdit && password && password.length < 12) {
+      setError('Password must be at least 12 characters.')
       return
     }
 
@@ -282,7 +282,7 @@ export function ClientLoginDialog({
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 8 characters"
+              placeholder="At least 12 characters"
               autoComplete="new-password"
             />
           </div>

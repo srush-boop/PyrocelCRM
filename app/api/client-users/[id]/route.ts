@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
+import { enforceRateLimit, clientIp } from '@/lib/rate-limit'
 
 /** Ensure the caller is an authenticated admin. Returns an error response or null. */
 async function requireAdmin() {
@@ -31,6 +32,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const limited = await enforceRateLimit('auth', clientIp(req))
+    if (limited) return limited
     const guard = await requireAdmin()
     if (guard.error) return guard.error
 
@@ -40,9 +43,9 @@ export async function PATCH(
 
     // Optional password reset
     if (password !== undefined && password !== null && password !== '') {
-      if (typeof password !== 'string' || password.length < 8) {
+      if (typeof password !== 'string' || password.length < 12) {
         return NextResponse.json(
-          { error: 'Password must be at least 8 characters.' },
+          { error: 'Password must be at least 12 characters.' },
           { status: 400 },
         )
       }

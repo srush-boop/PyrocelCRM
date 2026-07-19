@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { analyzeClientRequest } from '@/lib/ai/analyze-client-request'
+import { enforceRateLimit, clientIp } from '@/lib/rate-limit'
 
 // Client-request analysis runs through a route handler (not a Server Action) so
 // large tender documents aren't rejected by the 1 MB Server Action body limit.
@@ -8,6 +9,8 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 
 export async function POST(request: NextRequest) {
+  const limited = await enforceRateLimit('ai', clientIp(request))
+  if (limited) return limited
   try {
     const formData = await request.formData()
     const result = await analyzeClientRequest(formData)

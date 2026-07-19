@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { enforceRateLimit, clientIp } from '@/lib/rate-limit'
 
 /**
  * Business / address finder backed by the Google Places API (New) Text Search.
@@ -73,6 +74,9 @@ const UK_BOUNDS = {
 }
 
 export async function GET(request: Request) {
+  const limited = await enforceRateLimit('public', clientIp(request))
+  if (limited) return limited
+
   const apiKey = resolveApiKey()
   if (!apiKey) {
     return NextResponse.json(

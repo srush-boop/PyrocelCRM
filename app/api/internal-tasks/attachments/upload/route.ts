@@ -1,6 +1,7 @@
 import { put } from '@vercel/blob'
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { validateUpload, scanForMalware, DOCUMENT_MIME_TYPES, MB } from '@/lib/uploads/validate'
 
 // Uploads a photo for an internal-task instance the caller owns. RLS on
 // internal_task_attachments enforces that the instance belongs to the uploader
@@ -24,6 +25,10 @@ export async function POST(request: NextRequest) {
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
+    const check = validateUpload(file, { allow: DOCUMENT_MIME_TYPES, maxBytes: 25 * MB })
+    if (!check.ok) return check.response
+    const scan = await scanForMalware(file)
+    if (!scan.ok) return scan.response
     if (!instanceId) {
       return NextResponse.json({ error: 'Missing instance_id' }, { status: 400 })
     }

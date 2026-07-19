@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { enforceRateLimit, clientIp } from '@/lib/rate-limit'
 
 /**
  * Keyless UK postcode lookup via postcodes.io. Given a (partial or full)
@@ -34,6 +35,9 @@ export interface PostcodeLookupResponse {
 }
 
 export async function GET(request: Request) {
+  const limited = await enforceRateLimit('public', clientIp(request))
+  if (limited) return limited
+
   const { searchParams } = new URL(request.url)
   const raw = (searchParams.get('q') || '').trim()
 

@@ -2,6 +2,7 @@ import { put } from '@vercel/blob'
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getDocumentAuth } from '@/lib/documents/auth'
+import { validateUpload, scanForMalware, DOCUMENT_MIME_TYPES, MB } from '@/lib/uploads/validate'
 
 // Any staff member (admin/office/engineer) may attach files to a call.
 export async function POST(request: NextRequest) {
@@ -18,6 +19,10 @@ export async function POST(request: NextRequest) {
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
+    const check = validateUpload(file, { allow: DOCUMENT_MIME_TYPES, maxBytes: 25 * MB })
+    if (!check.ok) return check.response
+    const scan = await scanForMalware(file)
+    if (!scan.ok) return scan.response
     if (!taskId) {
       return NextResponse.json({ error: 'Missing task_id' }, { status: 400 })
     }

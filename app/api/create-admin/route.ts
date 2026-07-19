@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { enforceRateLimit, clientIp } from '@/lib/rate-limit'
 
 export async function POST(req: NextRequest) {
   try {
+    const limited = await enforceRateLimit('auth', clientIp(req))
+    if (limited) return limited
+
     // Kill switch: this bootstrap endpoint stays fully disabled unless it is
     // explicitly turned on via env. Once your admins exist, leave this unset
     // (or "false") so the route cannot be used at all. We return 404 rather
@@ -30,9 +34,9 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    if (password.length < 8) {
+    if (password.length < 12) {
       return NextResponse.json(
-        { error: 'Password must be at least 8 characters.' },
+        { error: 'Password must be at least 12 characters.' },
         { status: 400 },
       )
     }

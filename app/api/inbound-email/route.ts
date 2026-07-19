@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { triageInboundRequest } from '@/lib/ai/triage-inbound-request'
+import { enforceRateLimit, clientIp } from '@/lib/rate-limit'
 
 // Inbound email arrives here from the mail provider (Resend Inbound, Postmark,
 // Mailgun, SendGrid, Cloudflare Email Worker, …). The provider is configured to
@@ -118,6 +119,9 @@ async function readPayload(req: Request): Promise<Record<string, unknown>> {
 }
 
 export async function POST(req: Request) {
+  const limited = await enforceRateLimit('public', clientIp(req))
+  if (limited) return limited
+
   // 1. Auth: shared secret must be configured and must match.
   const expected = process.env.INBOUND_EMAIL_SECRET?.trim()
   if (!expected) {

@@ -1,18 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
+import { enforceRateLimit, clientIp } from '@/lib/rate-limit'
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const limited = await enforceRateLimit('auth', clientIp(req))
+    if (limited) return limited
     const { id } = await params
     const { password } = await req.json()
 
-    if (!password || typeof password !== 'string' || password.length < 6) {
+    if (!password || typeof password !== 'string' || password.length < 12) {
       return NextResponse.json(
-        { error: 'Password must be at least 6 characters.' },
+        { error: 'Password must be at least 12 characters.' },
         { status: 400 },
       )
     }

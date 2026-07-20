@@ -972,6 +972,9 @@ export interface Site {
   // Billing account this site is invoiced under. null = inherit the client's
   // default billing account (see resolveBillingAccount).
   billing_account_id: string | null
+  // Site-level rate card override. null = inherit customer/default. Resolution:
+  // service -> site -> customer (billing account) -> company default.
+  rate_card_id: string | null
   /** Site-level customer PO; used when no system/service PO is set. */
   po_number: string | null
   /** Pre-authorised spend limit (pence) for NON-recurring works at this site. */
@@ -1253,6 +1256,9 @@ export interface Site {
   // to show the true margin vs the annualised recurring revenue. Only meaningful
   // when worker_type = 'subcontractor'.
   subcontractor_annual_cost_pence: number | null
+  // Service-level rate card override (most specific). null = inherit site,
+  // then customer (billing account), then company default.
+  rate_card_id: string | null
   assigned_engineer_id: string | null
   reporting_emails: string[]
   defects_to_email: string | null

@@ -36,6 +36,8 @@ interface RateCardRow {
   min_labour_hours: number | string
   round_increment_hours: number | string
   active: boolean
+  attendance_nominal_code_id: string | null
+  labour_nominal_code_id: string | null
   bands:
     | {
         band: string
@@ -66,6 +68,8 @@ function mapRateCard(row: RateCardRow): RateCard {
     min_labour_hours: Number(row.min_labour_hours) || 0,
     round_increment_hours: Number(row.round_increment_hours) || 0,
     active: row.active,
+    attendance_nominal_code_id: row.attendance_nominal_code_id ?? null,
+    labour_nominal_code_id: row.labour_nominal_code_id ?? null,
     bands,
   }
 }
@@ -157,6 +161,8 @@ export async function updateRateCard(
     roundIncrementHours: number
     isDefault: boolean
     active: boolean
+    attendanceNominalCodeId: string | null
+    labourNominalCodeId: string | null
   },
 ): Promise<{ error: string | null }> {
   const ctx = await requireManager()
@@ -191,6 +197,8 @@ export async function updateRateCard(
       is_default: nextDefault,
       // The default card must stay active so pricing always resolves.
       active: nextDefault ? true : !!input.active,
+      attendance_nominal_code_id: input.attendanceNominalCodeId || null,
+      labour_nominal_code_id: input.labourNominalCodeId || null,
     })
     .eq('id', id)
   if (error) return { error: error.message }
@@ -245,6 +253,52 @@ export async function deleteRateCard(id: string): Promise<{ error: string | null
   if (error) return { error: error.message }
 
   revalidatePath('/dashboard/settings')
+  return { error: null }
+}
+
+/**
+ * Set (or clear, with null) a site-level rate card override. Lets a customer pay
+ * different rates at different sites. Resolution: service -> site -> customer ->
+ * company default.
+ */
+export async function setSiteRateCard(
+  siteId: string,
+  rateCardId: string | null,
+): Promise<{ error: string | null }> {
+  const ctx = await requireManager()
+  if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
+  const { supabase } = ctx
+
+  const { error } = await supabase
+    .from('sites')
+    .update({ rate_card_id: rateCardId || null })
+    .eq('id', siteId)
+  if (error) return { error: error.message }
+
+  revalidatePath(`/dashboard/sites/${siteId}`)
+  return { error: null }
+}
+
+/**
+ * Set (or clear, with null) a service-level rate card override — the most
+ * specific level, so a customer can pay different rates for different services.
+ */
+export async function setServiceRateCard(
+  serviceId: string,
+  rateCardId: string | null,
+  siteId?: string,
+): Promise<{ error: string | null }> {
+  const ctx = await requireManager()
+  if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
+  const { supabase } = ctx
+
+  const { error } = await supabase
+    .from('site_services')
+    .update({ rate_card_id: rateCardId || null })
+    .eq('id', serviceId)
+  if (error) return { error: error.message }
+
+  if (siteId) revalidatePath(`/dashboard/sites/${siteId}`)
   return { error: null }
 }
 

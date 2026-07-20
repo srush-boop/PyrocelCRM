@@ -34,6 +34,10 @@ export interface RateCard {
   /** On-site hours are rounded up to a multiple of this. */
   round_increment_hours: number
   active: boolean
+  /** Nominal code for attendance / call-out fee lines (falls back to service type). */
+  attendance_nominal_code_id: string | null
+  /** Nominal code for hourly labour lines (falls back to service type). */
+  labour_nominal_code_id: string | null
   bands: RateCardBand[]
 }
 
@@ -167,6 +171,29 @@ export function resolveRateCard(
   if (overrideCardId) {
     const override = cardsById.get(overrideCardId)
     if (override && override.active) return override
+  }
+  return defaultCard
+}
+
+/**
+ * Resolve a rate card from the scoped override chain, most specific first:
+ * service -> site -> customer (billing account) -> company default. A client can
+ * therefore pay different rates for different sites and services. The first
+ * override that points at an active card wins; otherwise the company default.
+ */
+export function resolveRateCardFromChain(
+  overrides: {
+    serviceCardId?: string | null
+    siteCardId?: string | null
+    customerCardId?: string | null
+  },
+  cardsById: Map<string, RateCard>,
+  defaultCard: RateCard | null,
+): RateCard | null {
+  for (const id of [overrides.serviceCardId, overrides.siteCardId, overrides.customerCardId]) {
+    if (!id) continue
+    const card = cardsById.get(id)
+    if (card && card.active) return card
   }
   return defaultCard
 }

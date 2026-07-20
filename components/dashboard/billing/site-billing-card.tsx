@@ -14,14 +14,18 @@ import { Wallet, AlertTriangle, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import type { BillingAccount } from '@/lib/types/database'
+import type { RateCard } from '@/lib/billing/rate-cards'
+import { resolveRateCardFromChain } from '@/lib/billing/rate-cards'
 import { BillingStatusBadge } from './billing-status-badge'
 import { resolveBillingAccount, isBillingOnHold } from '@/lib/billing/resolve-billing-account'
 import { setSiteBillingAccount, setServiceBillingAccount } from '@/lib/actions/billing-accounts'
+import { setSiteRateCard, setServiceRateCard } from '@/lib/actions/rate-cards'
 
 interface ServiceRow {
   id: string
   name: string
   billing_account_id: string | null
+  rate_card_id: string | null
 }
 
 // A billing account plus its owning client (embedded) so the dropdown can show
@@ -38,6 +42,10 @@ interface SiteBillingCardProps {
   // ALL billing accounts across every client; a site may be billed to another
   // client's account (e.g. a central billing entity).
   accounts: AccountOption[]
+  // Active rate cards for the override selectors (+ the company default flag).
+  rateCards: RateCard[]
+  // Site-level rate card override (null = inherit customer/default).
+  siteRateCardId: string | null
 }
 
 const INHERIT = '__inherit__'
@@ -48,10 +56,22 @@ export function SiteBillingCard({
   siteBillingAccountId,
   services,
   accounts,
+  rateCards,
+  siteRateCardId,
 }: SiteBillingCardProps) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [busyKey, setBusyKey] = useState<string | null>(null)
+
+  // Rate card resolution helpers. Cards are keyed by id; the company default is
+  // the ultimate fallback below every override level.
+  const cardsById = new Map(rateCards.map((c) => [c.id, c]))
+  const defaultCard = rateCards.find((c) => c.is_default && c.active) ?? null
+  const rateCardName = (id: string | null) =>
+    (id ? cardsById.get(id)?.name : null) ?? '—'
+  // The customer (billing account) level rate card for a resolved account.
+  const customerCardId = (accountId: string | null | undefined) =>
+    (accountId ? accounts.find((a) => a.id === accountId)?.rate_card_id : null) ?? null
   // Billing detail is collapsed by default to keep the overview compact.
   const [expanded, setExpanded] = useState(false)
 
@@ -97,6 +117,36 @@ export function SiteBillingCard({
         return
       }
       toast.success('Service billing account updated')
+      router.refresh()
+    })
+  }
+
+  function handleSiteRateCardChange(value: string) {
+    const id = value === INHERIT ? null : value
+    setBusyKey('site-rate')
+    startTransition(async () => {
+      const result = await setSiteRateCard(siteId, id)
+      setBusyKey(null)
+      if (result.error) {
+        toast.error(result.error)
+        return
+      }
+      toast.success('Site rate card updated')
+      router.refresh()
+    })
+  }
+
+  function handleServiceRateCardChange(serviceId: string, value: string) {
+    const id = value === INHERIT ? null : value
+    setBusyKey(`rate-${serviceId}`)
+    startTransition(async () => {
+      const result = await setServiceRateCard(serviceId, id, siteId)
+      setBusyKey(null)
+      if (result.error) {
+        toast.error(result.error)
+        return
+      }
+      toast.success('Service rate card updated')
       router.refresh()
     })
   }
@@ -199,6 +249,55 @@ export function SiteBillingCard({
               </Select>
             </div>
 
+            {/* Site-level rate card override */}
+            {(() => {
+              const custId = customerCardId(siteResolved.account?.id)
+              const effective = resolveRateCardFromChain(
+                { siteCardId: siteRateCardId, customerCardId: custId },
+                cardsById,
+                defaultCard,
+              )
+              const src = siteRateCardId
+                ? 'set on site'
+                : custId
+                  ? 'from billing account'
+                  : 'company default'
+              return (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3">
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-sm font-medium">Rate card</p>
+                    <p className="text-xs text-muted-foreground">
+                      <span className="text-foreground">{effective?.name ?? 'None'}</span>{' '}
+                      {effective ? `(${src})` : '(no card configured)'}
+                    </p>
+                  </div>
+                  <Select
+                    value={siteRateCardId ?? INHERIT}
+                    onValueChange={handleSiteRateCardChange}
+                    disabled={pending && busyKey === 'site-rate'}
+                  >
+                    <SelectTrigger className="w-[220px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={INHERIT}>
+                        Inherit customer / default
+                        {custId ? ` (${rateCardName(custId)})` : defaultCard ? ` (${defaultCard.name})` : ''}
+                      </SelectItem>
+                      {rateCards
+                        .filter((c) => c.active)
+                        .map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.name}
+                            {c.is_default ? ' (default)' : ''}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )
+            })()}
+
             {/* Per-service overrides */}
             {services.length > 0 && (
               <div className="space-y-2">
@@ -236,23 +335,45 @@ export function SiteBillingCard({
                             )}
                           </div>
                         </div>
-                        <Select
-                          value={svc.billing_account_id ?? INHERIT}
-                          onValueChange={(v) => handleServiceChange(svc.id, v)}
-                          disabled={pending && busyKey === svc.id}
-                        >
-                          <SelectTrigger className="w-[220px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={INHERIT}>Inherit site</SelectItem>
-                            {accounts.map((a) => (
-                              <SelectItem key={a.id} value={a.id}>
-                                {accountLabel(a)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <div className="flex flex-col gap-2">
+                          <Select
+                            value={svc.billing_account_id ?? INHERIT}
+                            onValueChange={(v) => handleServiceChange(svc.id, v)}
+                            disabled={pending && busyKey === svc.id}
+                          >
+                            <SelectTrigger className="w-[220px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={INHERIT}>Inherit site</SelectItem>
+                              {accounts.map((a) => (
+                                <SelectItem key={a.id} value={a.id}>
+                                  {accountLabel(a)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Select
+                            value={svc.rate_card_id ?? INHERIT}
+                            onValueChange={(v) => handleServiceRateCardChange(svc.id, v)}
+                            disabled={pending && busyKey === `rate-${svc.id}`}
+                          >
+                            <SelectTrigger className="w-[220px]">
+                              <SelectValue placeholder="Rate card" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={INHERIT}>Rate card: inherit site</SelectItem>
+                              {rateCards
+                                .filter((c) => c.active)
+                                .map((c) => (
+                                  <SelectItem key={c.id} value={c.id}>
+                                    Rate card: {c.name}
+                                    {c.is_default ? ' (default)' : ''}
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </li>
                     )
                   })}

@@ -27,7 +27,7 @@ import {
   computeOnSiteHours,
   deriveRateBand,
   priceCall,
-  resolveRateCard,
+  resolveRateCardFromChain,
   RATE_BAND_LABELS,
   toLocalISODate,
   type RateCard,
@@ -95,6 +95,8 @@ interface RateCardRow {
   min_labour_hours: number | string
   round_increment_hours: number | string
   active: boolean
+  attendance_nominal_code_id: string | null
+  labour_nominal_code_id: string | null
   bands:
     | {
         band: string
@@ -115,6 +117,8 @@ function mapRateCard(row: RateCardRow): RateCard {
     min_labour_hours: Number(row.min_labour_hours) || 0,
     round_increment_hours: Number(row.round_increment_hours) || 0,
     active: row.active,
+    attendance_nominal_code_id: row.attendance_nominal_code_id ?? null,
+    labour_nominal_code_id: row.labour_nominal_code_id ?? null,
     bands: (row.bands ?? []).map((b) => ({
       band: b.band as RateCard['bands'][number]['band'],
       attendance_fee_pence: Number(b.attendance_fee_pence) || 0,
@@ -370,8 +374,8 @@ async function buildInvoiceLineData(
       id, started_at, completed_at, scheduled_date, is_emergency, client_ref,
       site_service_id, charge_reason, reference_number,
       task_result:task_results(reference_number),
-      direct_site:sites!tasks_site_id_fkey(id, name, address, postcode),
-      site_service:site_services(service_type:service_types(name, nominal_code_id), sites(id, name, address, postcode)),
+      direct_site:sites!tasks_site_id_fkey(id, name, address, postcode, rate_card_id),
+      site_service:site_services(rate_card_id, service_type:service_types(name, nominal_code_id), sites(id, name, address, postcode, rate_card_id)),
       call_parts(id, part_id, quantity, unit_cost_pence, sale_unit_price_pence, chargeable, part:parts(name, sku, unit_cost, nominal_code_id))
     `,
     )
@@ -386,14 +390,16 @@ async function buildInvoiceLineData(
     return { error: 'These calls are no longer available to invoice' }
   }
 
-  // Resolve the rate card (account override or company default) + bank holidays
-  // so each call's labour can be auto-priced. Falls back to null (zero-priced
-  // lines) when no card is configured.
+  // Load all rate cards + bank holidays so each call's labour can be auto-priced.
+  // The card is resolved PER CALL from the scoped override chain (service -> site
+  // -> customer -> company default) so a client can pay different rates for
+  // different sites and services. Falls back to null (zero-priced lines) when no
+  // card resolves.
   const [{ cardsById, defaultCard }, bankHolidays] = await Promise.all([
     loadRateCards(supabase),
     loadBankHolidays(supabase),
   ])
-  const rateCard = resolveRateCard(account.rate_card_id, cardsById, defaultCard)
+  const customerCardId = account.rate_card_id
 
   // Map nominal-code id → code text so each line can carry a stable snapshot.
   // Resolution for task lines: part's own code → its service type's code.
@@ -447,6 +453,25 @@ async function buildInvoiceLineData(
       : siteService?.service_type
     const serviceName = svcType?.name || 'attendance'
     const svcNominalId: string | null = svcType?.nominal_code_id ?? null
+
+    // Resolve THIS call's rate card from the scoped chain: service override →
+    // site override → customer (billing account) → company default.
+    const siteCardId: string | null =
+      siteService?.sites?.rate_card_id ?? t.direct_site?.rate_card_id ?? null
+    const rateCard = resolveRateCardFromChain(
+      {
+        serviceCardId: siteService?.rate_card_id ?? null,
+        siteCardId,
+        customerCardId,
+      },
+      cardsById,
+      defaultCard,
+    )
+    // Rate card nominal codes win over the service type (per user decision);
+    // attendance vs labour lines can post to different codes.
+    const attendanceNominalId: string | null =
+      rateCard?.attendance_nominal_code_id ?? svcNominalId
+    const labourNominalId: string | null = rateCard?.labour_nominal_code_id ?? svcNominalId
     const reference =
       t.reference_number ||
       (Array.isArray(t.task_result)
@@ -509,7 +534,7 @@ async function buildInvoiceLineData(
         unit_price_pence: priced.attendancePence,
         amount_pence: priced.attendancePence,
         sort_order: order++,
-        ...nominalFor(svcNominalId),
+        ...nominalFor(attendanceNominalId),
       })
 
       // Labour line only when there are chargeable hours beyond the fee.
@@ -523,7 +548,7 @@ async function buildInvoiceLineData(
           unit_price_pence: priced.hourlyRatePence,
           amount_pence: lineAmountPence(priced.chargeHours, priced.hourlyRatePence),
           sort_order: order++,
-          ...nominalFor(svcNominalId),
+          ...nominalFor(labourNominalId),
         })
       }
     } else {
@@ -538,7 +563,7 @@ async function buildInvoiceLineData(
         unit_price_pence: 0,
         amount_pence: 0,
         sort_order: order++,
-        ...nominalFor(svcNominalId),
+        ...nominalFor(labourNominalId),
       })
     }
 

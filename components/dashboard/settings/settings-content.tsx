@@ -481,7 +481,7 @@ export function SettingsContent({ user, profile, company, branches, departments,
 
         {canManageRates && (
           <TabsContent value="rates" className="space-y-4">
-            <RateCardsSettings rateCards={rateCards} />
+            <RateCardsSettings rateCards={rateCards} nominalCodes={nominalCodes} />
           </TabsContent>
         )}
         {canManageRates && (

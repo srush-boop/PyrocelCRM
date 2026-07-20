@@ -41,9 +41,12 @@ import {
   deleteRateCard,
 } from '@/lib/actions/rate-cards'
 import { RATE_BANDS, RATE_BAND_LABELS, type RateBand, type RateCard } from '@/lib/billing/rate-cards'
+import { NominalCodeSelect } from '@/components/dashboard/billing/nominal-code-select'
+import type { NominalCode } from '@/lib/types/database'
 
 interface RateCardsSettingsProps {
   rateCards: RateCard[]
+  nominalCodes: NominalCode[]
 }
 
 interface CardFormState {
@@ -54,6 +57,8 @@ interface CardFormState {
   roundIncrement: string
   isDefault: boolean
   active: boolean
+  attendanceNominalCodeId: string | null
+  labourNominalCodeId: string | null
 }
 
 function emptyForm(): CardFormState {
@@ -64,13 +69,15 @@ function emptyForm(): CardFormState {
     roundIncrement: '0.5',
     isDefault: false,
     active: true,
+    attendanceNominalCodeId: null,
+    labourNominalCodeId: null,
   }
 }
 
 const poundsFromPence = (pence: number) => (pence / 100).toFixed(2)
 const penceFromPounds = (pounds: string) => Math.max(0, Math.round((Number.parseFloat(pounds) || 0) * 100))
 
-export function RateCardsSettings({ rateCards }: RateCardsSettingsProps) {
+export function RateCardsSettings({ rateCards, nominalCodes }: RateCardsSettingsProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -93,6 +100,8 @@ export function RateCardsSettings({ rateCards }: RateCardsSettingsProps) {
       roundIncrement: String(card.round_increment_hours),
       isDefault: card.is_default,
       active: card.active,
+      attendanceNominalCodeId: card.attendance_nominal_code_id,
+      labourNominalCodeId: card.labour_nominal_code_id,
     })
     setMessage(null)
     setDialogOpen(true)
@@ -112,6 +121,8 @@ export function RateCardsSettings({ rateCards }: RateCardsSettingsProps) {
             roundIncrementHours: Number.parseFloat(form.roundIncrement) || 0,
             isDefault: form.isDefault,
             active: form.active,
+            attendanceNominalCodeId: form.attendanceNominalCodeId,
+            labourNominalCodeId: form.labourNominalCodeId,
           })
         : await createRateCard({
             name: form.name,
@@ -178,6 +189,7 @@ export function RateCardsSettings({ rateCards }: RateCardsSettingsProps) {
             <RateCardBlock
               key={card.id}
               card={card}
+              nominalCodes={nominalCodes}
               onEdit={() => openEdit(card)}
               onDelete={() => setDeleteTarget(card)}
             />
@@ -257,6 +269,41 @@ export function RateCardsSettings({ rateCards }: RateCardsSettingsProps) {
                 Active
               </label>
             )}
+            {form.id ? (
+              <div className="space-y-3 rounded-lg border p-3">
+                <p className="text-xs text-muted-foreground">
+                  Nominal codes for lines priced from this card (internal only). These take
+                  precedence over the service type&apos;s code; leave as Auto to inherit it.
+                </p>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="rc-att-nominal">Attendance / call-out nominal code</Label>
+                  <NominalCodeSelect
+                    id="rc-att-nominal"
+                    value={form.attendanceNominalCodeId}
+                    onChange={(id) => setForm({ ...form, attendanceNominalCodeId: id })}
+                    codes={nominalCodes}
+                    noneLabel="Auto / inherit service type"
+                    placeholder="Auto / inherit service type"
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="rc-lab-nominal">Labour nominal code</Label>
+                  <NominalCodeSelect
+                    id="rc-lab-nominal"
+                    value={form.labourNominalCodeId}
+                    onChange={(id) => setForm({ ...form, labourNominalCodeId: id })}
+                    codes={nominalCodes}
+                    noneLabel="Auto / inherit service type"
+                    placeholder="Auto / inherit service type"
+                  />
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Save the card first, then reopen it to link nominal codes for its attendance and
+                labour lines.
+              </p>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={isPending}>
@@ -302,14 +349,20 @@ export function RateCardsSettings({ rateCards }: RateCardsSettingsProps) {
 // A single rate card: meta header + editable per-band pricing grid.
 function RateCardBlock({
   card,
+  nominalCodes,
   onEdit,
   onDelete,
 }: {
   card: RateCard
+  nominalCodes: NominalCode[]
   onEdit: () => void
   onDelete: () => void
 }) {
   const router = useRouter()
+  const nominalLabel = (id: string) => {
+    const c = nominalCodes.find((n) => n.id === id)
+    return c ? c.code : '—'
+  }
   const [isPending, startTransition] = useTransition()
   const [savedBand, setSavedBand] = useState<RateBand | null>(null)
 
@@ -359,6 +412,18 @@ function RateCardBlock({
           <p className="text-xs text-muted-foreground">
             Min {card.min_labour_hours}h · rounds up to {card.round_increment_hours}h
           </p>
+          {(card.attendance_nominal_code_id || card.labour_nominal_code_id) && (
+            <p className="text-xs text-muted-foreground">
+              Nominal:{' '}
+              {card.attendance_nominal_code_id
+                ? `attendance ${nominalLabel(card.attendance_nominal_code_id)}`
+                : 'attendance auto'}
+              {' · '}
+              {card.labour_nominal_code_id
+                ? `labour ${nominalLabel(card.labour_nominal_code_id)}`
+                : 'labour auto'}
+            </p>
+          )}
         </div>
         <div className="flex gap-1">
           <Button variant="ghost" size="icon" onClick={onEdit} aria-label={`Edit ${card.name}`}>

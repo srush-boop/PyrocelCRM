@@ -1679,7 +1679,10 @@ export interface TaskResult {
   overall_status: TaskResultStatus
   photos: string[]
   engineer_notes: string | null
+  // On-site client sign-off captured on non-recurring calls. client_signature is
+  // a PNG data URL (self-contained), client_signature_name is the printed name.
   client_signature: string | null
+  client_signature_name: string | null
   testing_start_time: string | null
   testing_end_time: string | null
   email_sent_at: string | null

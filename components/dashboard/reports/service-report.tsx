@@ -465,6 +465,17 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
           />
         )}
 
+        {/* Client sign-off — only present on non-recurring calls where the
+            on-site representative signed to confirm the work. */}
+        {result?.client_signature && (
+          <SignatureBlock
+            signatureUrl={result.client_signature}
+            signatoryName={result.client_signature_name || 'Client'}
+            signatoryTitle="Client / on-site representative"
+            date={completedDate}
+          />
+        )}
+
         <ReportFooter
           headerColor={headerColor}
           companyInfo={companyInfo}

@@ -19,6 +19,9 @@ import {
   PlugZap,
   Check,
   Plus,
+  X,
+  BadgeCheck,
+  Layers,
 } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import {
@@ -212,11 +215,18 @@ export function QuoteDocument({
   const sortedRequirements = requirements.slice().sort((a, b) => a.position - b.position)
   const sortedSystems = systems.slice().sort((a, b) => a.position - b.position)
 
+  // Product combinations considered by Quote Studio (recommended first).
+  const designOptions = (quote.design_spec?.options ?? [])
+    .slice()
+    .sort((a, b) => Number(b.recommended) - Number(a.recommended))
+  const showDesignOptions = designOptions.length > 1
+
   // Section numbering: systems occupy 1..N, then the optional matrix / equipment
   // spec sections follow, so the whole document reads like a numbered spec.
   let nextSection = sortedSystems.length
   const requirementsSectionNo = showRequirements ? ++nextSection : 0
   const equipmentSectionNo = equipmentSpecSections.length > 0 ? ++nextSection : 0
+  const designOptionsSectionNo = showDesignOptions ? ++nextSection : 0
   const companyName = company?.name || 'Pyrocel Ltd'
   // The issuing branch selects which address/contact details appear in the
   // masthead under the company name; fall back to the company's own details.
@@ -802,6 +812,63 @@ export function QuoteDocument({
                     </table>
                   </div>
                 </section>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Product options considered (Quote Studio combinations) */}
+        {showDesignOptions && (
+          <section className="mt-10 break-inside-avoid">
+            <SectionHeading number={designOptionsSectionNo} title="Product options considered" />
+            <p className="mb-4 text-xs text-muted-foreground text-pretty">
+              We priced your requirements against several manufacturer combinations. Our recommended
+              choice is included in the pricing above; the alternatives below are shown for comparison.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {designOptions.map((opt) => (
+                <div
+                  key={`${opt.rangeId ?? 'generic'}-${opt.name}`}
+                  className={`flex flex-col rounded-lg border p-4 ${
+                    opt.recommended ? 'border-primary/60 bg-primary/5' : 'border-border bg-card'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      {opt.recommended ? (
+                        <BadgeCheck className="h-4 w-4 shrink-0 text-primary" />
+                      ) : (
+                        <Layers className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      )}
+                      <span className="font-semibold">{opt.name}</span>
+                    </div>
+                    {opt.recommended && (
+                      <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary-foreground">
+                        Recommended
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-2 text-lg font-semibold tabular-nums">
+                    {formatPence(opt.sellPence, quote.currency)}
+                    <span className="ml-1 text-xs font-normal text-muted-foreground">ex VAT</span>
+                  </div>
+                  {(opt.pros.length > 0 || opt.cons.length > 0) && (
+                    <div className="mt-3 space-y-1.5 text-xs">
+                      {opt.pros.map((pro, i) => (
+                        <div key={`pro-${i}`} className="flex items-start gap-1.5">
+                          <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                          <span>{pro}</span>
+                        </div>
+                      ))}
+                      {opt.cons.map((con, i) => (
+                        <div key={`con-${i}`} className="flex items-start gap-1.5">
+                          <X className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          <span className="text-muted-foreground">{con}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           </section>

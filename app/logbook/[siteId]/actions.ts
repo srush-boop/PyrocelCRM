@@ -3,6 +3,7 @@
 import crypto from 'crypto'
 import { cookies } from 'next/headers'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { createClient } from '@/lib/supabase/server'
 import type { LogbookEntry, LogbookEntryType, SiteBuildingInfo } from '@/lib/types/database'
 import type { BuildingInfoValues } from '@/app/(dashboard)/dashboard/sites/[id]/logbook-actions'
 import { LOGBOOK_ENTRY_TYPES } from '@/lib/logbook'
@@ -10,18 +11,32 @@ import { LOGBOOK_ENTRY_TYPES } from '@/lib/logbook'
 const COOKIE_PREFIX = 'lb_access_'
 // Access session lifetime: 8 hours.
 const MAX_AGE_SECONDS = 60 * 60 * 8
+// Roles that always bypass the log book password (mirrors the DB is_staff()).
+const STAFF_ROLES = ['admin', 'office', 'engineer']
 
 // Derived from the shared catalog so occupier/staff/portal stay in sync.
 const VALID_ENTRY_TYPES: LogbookEntryType[] = LOGBOOK_ENTRY_TYPES.map((t) => t.value)
 
-/** Server-only secret used to sign access cookies. */
+/** Server-only secret used to sign access cookies and hash passwords. */
 function signingSecret(): string {
   return process.env.SUPABASE_SERVICE_ROLE_KEY ?? 'pyrocel-logbook-fallback-secret'
 }
 
-/** Normalise a postcode for comparison: uppercase, no spaces. */
-function normalisePostcode(value: string): string {
-  return value.replace(/\s+/g, '').toUpperCase()
+/** Hash a log book password as `salt:hash` using scrypt. Never stores plaintext. */
+function hashPassword(password: string): string {
+  const salt = crypto.randomBytes(16).toString('hex')
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex')
+  return `${salt}:${hash}`
+}
+
+/** Verify a candidate password against a stored `salt:hash` value. */
+function verifyPassword(password: string, stored: string | null): boolean {
+  if (!stored) return false
+  const [salt, hash] = stored.split(':')
+  if (!salt || !hash) return false
+  const candidate = crypto.scryptSync(password, salt, 64).toString('hex')
+  if (candidate.length !== hash.length) return false
+  return crypto.timingSafeEqual(Buffer.from(candidate), Buffer.from(hash))
 }
 
 /** Create an HMAC token proving access to a given site was granted. */
@@ -44,31 +59,80 @@ function verifyToken(siteId: string, token: string | undefined): boolean {
   return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))
 }
 
-/** Has the current visitor already unlocked this site in this session? */
+/** Is the current visitor a logged-in Pyrocel staff member? (bypasses password) */
+export async function isStaffVisitor(): Promise<boolean> {
+  try {
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return false
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle()
+    const role = (profile as { role: string } | null)?.role
+    return !!role && STAFF_ROLES.includes(role)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Can the current visitor view this site's log book?
+ *  - open when the site has no password set, OR
+ *  - the visitor is logged-in Pyrocel staff, OR
+ *  - a valid signed unlock cookie is present.
+ */
 export async function hasLogbookAccess(siteId: string): Promise<boolean> {
+  const admin = createAdminClient()
+  const { data: site } = await admin
+    .from('sites')
+    .select('logbook_password_hash')
+    .eq('id', siteId)
+    .maybeSingle()
+
+  // No password → open access.
+  if (!site || !(site as { logbook_password_hash: string | null }).logbook_password_hash) {
+    return true
+  }
+  // Staff always bypass.
+  if (await isStaffVisitor()) return true
+  // Otherwise require a valid unlock cookie.
   const cookieStore = await cookies()
   const token = cookieStore.get(`${COOKIE_PREFIX}${siteId}`)?.value
   return verifyToken(siteId, token)
 }
 
-/** Verify a submitted postcode and, on success, set a signed access cookie. */
+/** Does this site require a password to view its log book? */
+export async function logbookRequiresPassword(siteId: string): Promise<boolean> {
+  const admin = createAdminClient()
+  const { data: site } = await admin
+    .from('sites')
+    .select('logbook_password_hash')
+    .eq('id', siteId)
+    .maybeSingle()
+  return !!(site as { logbook_password_hash: string | null } | null)?.logbook_password_hash
+}
+
+/** Verify a submitted password and, on success, set a signed access cookie. */
 export async function unlockLogbook(
   siteId: string,
-  postcode: string,
+  password: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const admin = createAdminClient()
   const { data: site, error } = await admin
     .from('sites')
-    .select('id, postcode')
+    .select('id, logbook_password_hash')
     .eq('id', siteId)
     .single()
 
   if (error || !site) return { ok: false, error: 'Site not found.' }
-  if (!site.postcode) {
-    return { ok: false, error: 'This log book is not yet available. Please contact Pyrocel.' }
-  }
-  if (normalisePostcode(site.postcode) !== normalisePostcode(postcode)) {
-    return { ok: false, error: 'Incorrect postcode. Please try again.' }
+  const stored = (site as { logbook_password_hash: string | null }).logbook_password_hash
+  if (!stored) return { ok: true } // no password → already open
+  if (!verifyPassword(password, stored)) {
+    return { ok: false, error: 'Incorrect password. Please try again.' }
   }
 
   const expires = Date.now() + MAX_AGE_SECONDS * 1000
@@ -80,6 +144,51 @@ export async function unlockLogbook(
     maxAge: MAX_AGE_SECONDS,
     path: `/logbook/${siteId}`,
   })
+  return { ok: true }
+}
+
+/**
+ * Set (or clear, when password is null/empty) the log book password. Allowed for
+ * Pyrocel staff, or a client who already has access to this log book (open site
+ * or valid unlock cookie). Passwords are hashed, never stored in plaintext.
+ */
+export async function setLogbookPassword(
+  siteId: string,
+  password: string | null,
+): Promise<{ ok: boolean; error?: string }> {
+  const staff = await isStaffVisitor()
+  if (!staff) {
+    // Non-staff must already be able to see the log book to change protection.
+    const cookieStore = await cookies()
+    const token = cookieStore.get(`${COOKIE_PREFIX}${siteId}`)?.value
+    const open = !(await logbookRequiresPassword(siteId))
+    if (!open && !verifyToken(siteId, token)) {
+      return { ok: false, error: 'You do not have permission to change this.' }
+    }
+  }
+
+  const trimmed = (password ?? '').trim()
+  if (trimmed && trimmed.length < 4) {
+    return { ok: false, error: 'Password must be at least 4 characters.' }
+  }
+
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from('sites')
+    .update({
+      logbook_password_hash: trimmed ? hashPassword(trimmed) : null,
+      logbook_password_set_by: staff ? 'staff' : 'client',
+      logbook_password_updated_at: new Date().toISOString(),
+    })
+    .eq('id', siteId)
+
+  if (error) return { ok: false, error: 'Could not update the password. Please try again.' }
+
+  // When removing the password, drop any stale unlock cookie so state is clean.
+  if (!trimmed) {
+    const cookieStore = await cookies()
+    cookieStore.delete(`${COOKIE_PREFIX}${siteId}`)
+  }
   return { ok: true }
 }
 
@@ -164,7 +273,7 @@ export async function addOccupierEntry(
   },
 ): Promise<{ ok: boolean; error?: string }> {
   if (!(await hasLogbookAccess(siteId))) {
-    return { ok: false, error: 'Your session has expired. Please re-enter the postcode.' }
+    return { ok: false, error: 'Your session has expired. Please re-enter the password.' }
   }
 
   if (!VALID_ENTRY_TYPES.includes(values.entry_type as LogbookEntryType)) {
@@ -198,7 +307,7 @@ export async function saveOccupierBuildingInfo(
   values: BuildingInfoValues,
 ): Promise<{ ok: boolean; error?: string }> {
   if (!(await hasLogbookAccess(siteId))) {
-    return { ok: false, error: 'Your session has expired. Please re-enter the postcode.' }
+    return { ok: false, error: 'Your session has expired. Please re-enter the password.' }
   }
 
   // Keep only non-empty contacts and normalise to the stored shape.

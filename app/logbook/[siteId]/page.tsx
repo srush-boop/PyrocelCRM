@@ -1,6 +1,11 @@
 import { notFound } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { hasLogbookAccess, getPublicLogbook } from './actions'
+import {
+  hasLogbookAccess,
+  getPublicLogbook,
+  isStaffVisitor,
+  logbookRequiresPassword,
+} from './actions'
 import { LogbookUnlock } from '@/components/logbook/logbook-unlock'
 import { PublicLogbook } from '@/components/logbook/public-logbook'
 
@@ -13,7 +18,7 @@ export default async function PublicLogbookPage({
 }) {
   const { siteId } = await params
 
-  // Confirm the site exists (without exposing the postcode).
+  // Confirm the site exists.
   const admin = createAdminClient()
   const { data: site } = await admin
     .from('sites')
@@ -34,5 +39,10 @@ export default async function PublicLogbookPage({
     return <LogbookUnlock siteId={siteId} siteName={site.name} />
   }
 
-  return <PublicLogbook data={data} />
+  const [isStaff, passwordProtected] = await Promise.all([
+    isStaffVisitor(),
+    logbookRequiresPassword(siteId),
+  ])
+
+  return <PublicLogbook data={data} isStaff={isStaff} passwordProtected={passwordProtected} />
 }

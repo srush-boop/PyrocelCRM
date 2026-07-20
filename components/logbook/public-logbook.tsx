@@ -6,13 +6,22 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LogbookTimeline } from '@/components/logbook/logbook-timeline'
 import { LogbookEntryForm, type LogbookEntryFormValues } from '@/components/logbook/logbook-entry-form'
 import { BuildingInfoForm } from '@/components/dashboard/sites/building-info-form'
+import { LogbookPublicControls } from '@/components/logbook/logbook-public-controls'
 import {
   addOccupierEntry,
   saveOccupierBuildingInfo,
   type PublicLogbookData,
 } from '@/app/logbook/[siteId]/actions'
 
-export function PublicLogbook({ data }: { data: PublicLogbookData }) {
+export function PublicLogbook({
+  data,
+  isStaff = false,
+  passwordProtected = false,
+}: {
+  data: PublicLogbookData
+  isStaff?: boolean
+  passwordProtected?: boolean
+}) {
   const router = useRouter()
 
   async function handleSubmit(values: LogbookEntryFormValues) {
@@ -33,13 +42,25 @@ export function PublicLogbook({ data }: { data: PublicLogbookData }) {
             className="h-full w-full object-contain"
           />
         </div>
-        <div>
+        <div className="flex-1">
           <h1 className="text-lg font-semibold leading-tight text-balance">Fire Safety Log Book</h1>
           <p className="text-sm text-muted-foreground">
             {data.site.name} · {data.site.address}
           </p>
+          {isStaff && (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Viewing as Pyrocel staff{passwordProtected ? ' — this log book is password protected for clients.' : '.'}
+            </p>
+          )}
         </div>
       </header>
+
+      <LogbookPublicControls
+        siteId={data.site.id}
+        siteName={data.site.name}
+        siteAddress={data.site.address}
+        passwordProtected={passwordProtected}
+      />
 
       <Tabs defaultValue="timeline" className="w-full">
         <TabsList className="grid w-full grid-cols-3">

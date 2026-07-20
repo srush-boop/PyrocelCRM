@@ -15,7 +15,7 @@ interface SiteLogbookProps {
   siteId: string
   siteName: string
   siteAddress: string
-  postcode: string | null
+  passwordProtected: boolean
   reports: ReportTimelineItem[]
   entries: LogbookEntry[]
   buildingInfo: SiteBuildingInfo | null
@@ -25,7 +25,7 @@ export function SiteLogbook({
   siteId,
   siteName,
   siteAddress,
-  postcode,
+  passwordProtected,
   reports,
   entries,
   buildingInfo,
@@ -77,7 +77,7 @@ export function SiteLogbook({
               siteId={siteId}
               siteName={siteName}
               siteAddress={siteAddress}
-              postcode={postcode}
+              passwordProtected={passwordProtected}
             />
           </TabsContent>
         </Tabs>

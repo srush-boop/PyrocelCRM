@@ -11,7 +11,7 @@ import { Lock, ShieldCheck } from 'lucide-react'
 
 export function LogbookUnlock({ siteId, siteName }: { siteId: string; siteName: string }) {
   const router = useRouter()
-  const [postcode, setPostcode] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
@@ -19,7 +19,7 @@ export function LogbookUnlock({ siteId, siteName }: { siteId: string; siteName: 
     e.preventDefault()
     setError(null)
     startTransition(async () => {
-      const result = await unlockLogbook(siteId, postcode)
+      const result = await unlockLogbook(siteId, password)
       if (result.ok) {
         router.refresh()
       } else {
@@ -49,18 +49,18 @@ export function LogbookUnlock({ siteId, siteName }: { siteId: string; siteName: 
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="postcode">Site postcode</Label>
+              <Label htmlFor="logbook-password">Log book password</Label>
               <Input
-                id="postcode"
-                value={postcode}
-                onChange={(e) => setPostcode(e.target.value)}
-                placeholder="e.g. AB12 3CD"
-                autoComplete="off"
-                autoCapitalize="characters"
+                id="logbook-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter password"
+                autoComplete="current-password"
                 required
               />
               <p className="text-xs text-muted-foreground">
-                Enter the site postcode to view and add log book entries.
+                This log book is password protected. Enter the password to view and add entries.
               </p>
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
@@ -70,7 +70,7 @@ export function LogbookUnlock({ siteId, siteName }: { siteId: string; siteName: 
           </form>
           <div className="mt-4 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
             <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-            Access is recorded and protected.
+            Pyrocel staff can view without a password when signed in.
           </div>
         </CardContent>
       </Card>

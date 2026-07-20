@@ -1010,7 +1010,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             siteId={id}
             siteName={site.name}
             siteAddress={site.address}
-            postcode={(site as Site).postcode}
+            passwordProtected={!!(site as { logbook_password_hash?: string | null }).logbook_password_hash}
                 reports={logbookReports}
                 entries={logbookEntries}
                 buildingInfo={buildingInfo}

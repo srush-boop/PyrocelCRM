@@ -72,7 +72,7 @@ export default async function CdoManagementPage() {
       `
       id, route_id, assigned_engineer_id, active,
       site:sites(id, name),
-      service_type:service_types(id, name),
+      service_type:service_types(id, name, route_eligible),
       route:routes(id, name, color)
     `,
     )
@@ -84,7 +84,7 @@ export default async function CdoManagementPage() {
     route_id: string | null
     assigned_engineer_id: string | null
     site: { id: string; name: string | null } | null
-    service_type: { id: string; name: string | null } | null
+    service_type: { id: string; name: string | null; route_eligible: boolean | null } | null
     route: { id: string; name: string | null; color: string | null } | null
   }
   const services = (serviceRows ?? []) as unknown as ServiceRow[]
@@ -263,8 +263,11 @@ export default async function CdoManagementPage() {
   })
 
   // ── Unrouted CDO services ─────────────────────────────────────────────────
+  // Only surface services that are meant to be routed. CDO work flagged
+  // route_eligible=false (e.g. extinguisher servicing, damper testing) is
+  // delivered by a CDO but never allocated to a route, so it is not "unrouted".
   const unrouted: CdoUnroutedService[] = services
-    .filter((s) => !s.route_id)
+    .filter((s) => !s.route_id && s.service_type?.route_eligible !== false)
     .map((s) => ({
       id: s.id,
       siteId: s.site?.id ?? null,

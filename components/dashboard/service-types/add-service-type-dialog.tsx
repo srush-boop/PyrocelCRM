@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { Plus, Loader2, Siren, Coins } from 'lucide-react'
+import { Plus, Loader2, Siren, Coins, Route } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -64,6 +64,7 @@ export function AddServiceTypeDialog({
     is_emergency: false,
     default_kpi_hours: 24,
     default_chargeable: false,
+    route_eligible: true,
     nominal_code_id: null as string | null,
   })
   // Per-system checklists for non-recurring call types (reactive/planned).
@@ -110,6 +111,9 @@ export function AddServiceTypeDialog({
         // KPI only applies to reactive call types (planned has no deadline/KPI).
         default_kpi_hours: isReactive ? formData.default_kpi_hours : null,
         default_chargeable: formData.default_chargeable,
+        // Only relevant for CDO delivery; non-CDO types are never routed anyway.
+        route_eligible:
+          formData.default_worker_type === 'cdo' ? formData.route_eligible : true,
         nominal_code_id: formData.nominal_code_id,
       })
       .select('id')
@@ -150,6 +154,7 @@ export function AddServiceTypeDialog({
         is_emergency: false,
         default_kpi_hours: 24,
         default_chargeable: false,
+        route_eligible: true,
         nominal_code_id: null,
       })
       setChecklists([])
@@ -393,6 +398,26 @@ export function AddServiceTypeDialog({
                 overridden per site.
               </p>
             </div>
+            {formData.default_worker_type === 'cdo' && (
+              <div className="flex items-start justify-between gap-3 rounded-md border border-dashed p-3">
+                <div className="space-y-0.5">
+                  <Label htmlFor="route-eligible" className="flex items-center gap-2">
+                    <Route className="h-4 w-4 text-teal-600" />
+                    Allocate to a route
+                  </Label>
+                  <p className="text-xs text-muted-foreground text-pretty">
+                    CDO-delivered services of this type can be added to a CDO route. Turn this off
+                    for CDO work that is never routed (e.g. fire extinguisher servicing, fire &amp;
+                    smoke damper testing).
+                  </p>
+                </div>
+                <Switch
+                  id="route-eligible"
+                  checked={formData.route_eligible}
+                  onCheckedChange={(v) => setFormData({ ...formData, route_eligible: v })}
+                />
+              </div>
+            )}
             <div className="grid gap-2">
               <Label htmlFor="defects-to-email">Defects to</Label>
               <Input

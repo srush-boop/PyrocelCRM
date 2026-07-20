@@ -55,6 +55,7 @@ import {
   Coins,
   Loader2,
   MoreHorizontal,
+  Route,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -931,6 +932,26 @@ export function SiteSystemsManager({
                               </DropdownMenu>
                             </div>
                             </div>
+                            {svc.route?.name && (
+                              <div className="flex flex-wrap items-center gap-2 pl-6">
+                                <Badge
+                                  variant="secondary"
+                                  className="gap-1 text-[10px] font-medium"
+                                  title="Allocated to this route"
+                                >
+                                  {svc.route.color ? (
+                                    <span
+                                      className="h-2 w-2 rounded-full"
+                                      style={{ backgroundColor: svc.route.color }}
+                                      aria-hidden
+                                    />
+                                  ) : (
+                                    <Route className="h-3 w-3" />
+                                  )}
+                                  Route · {svc.route.name}
+                                </Badge>
+                              </div>
+                            )}
                             {isSub && (
                               <div className="flex flex-wrap items-center gap-2 pl-6">
                                 <Badge
@@ -1025,9 +1046,27 @@ export function SiteSystemsManager({
             <ul className="divide-y rounded-md border">
               {unassigned.map((svc) => (
                 <li key={svc.id} className="flex items-center justify-between gap-3 px-3 py-2">
-                  <span className="flex items-center gap-2 text-sm">
-                    <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
-                    {svc.service_type?.name ?? 'Service'}
+                  <span className="flex min-w-0 items-center gap-2 text-sm">
+                    <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="truncate">{svc.service_type?.name ?? 'Service'}</span>
+                    {svc.route?.name && (
+                      <Badge
+                        variant="secondary"
+                        className="shrink-0 gap-1 text-[10px] font-medium"
+                        title="Allocated to this route"
+                      >
+                        {svc.route.color ? (
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{ backgroundColor: svc.route.color }}
+                            aria-hidden
+                          />
+                        ) : (
+                          <Route className="h-3 w-3" />
+                        )}
+                        Route · {svc.route.name}
+                      </Badge>
+                    )}
                   </span>
                   <Select
                     value={UNASSIGNED}

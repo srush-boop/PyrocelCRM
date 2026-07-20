@@ -665,6 +665,11 @@ export interface ServiceType {
   // automatically sent to the Chargeable Calls review queue on completion
   // (feeds future invoicing). Parts used on a call always force chargeable too.
   default_chargeable: boolean
+  // Only meaningful when default_worker_type === 'cdo'. When true, CDO-delivered
+  // services of this type may be allocated to a route; when false they are
+  // delivered by a CDO but never routed (e.g. fire extinguisher servicing, fire
+  // & smoke damper testing). Non-CDO delivery is never routed regardless.
+  route_eligible: boolean
   status: 'live' | 'dead'
   created_at: string
   system_type?: SystemType | null

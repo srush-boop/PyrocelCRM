@@ -208,7 +208,7 @@ export async function getReadyToInvoiceGroups(): Promise<ReadyGroup[]> {
           service_type:service_types(name),
           sites(id, name, billing_account_id, client_id, clients(id, name, invoice_calls_individually))
         ),
-        call_parts(id, quantity, unit_cost_pence, sale_unit_price_pence, chargeable, part:parts(name, sku))
+        call_parts(id, quantity, unit_cost_pence, sale_unit_price_pence, chargeable, part:parts(name, sku, unit_cost))
       `,
       )
       .eq('status', 'completed')
@@ -254,12 +254,17 @@ export async function getReadyToInvoiceGroups(): Promise<ReadyGroup[]> {
       pool,
     )
 
-    // Build chargeable part lines (sale price where set, else cost).
+    // Build chargeable part lines (sale price where set, else the snapshotted
+    // cost, else the live catalogue cost from parts.unit_cost as a last resort).
     const parts: ReadyPart[] = (t.call_parts ?? [])
       .filter((p: any) => p.chargeable !== false && (p.quantity ?? 0) > 0)
       .map((p: any) => {
         const part = Array.isArray(p.part) ? p.part[0] : p.part
-        const unit = p.sale_unit_price_pence ?? p.unit_cost_pence ?? 0
+        const catalogueCostPence =
+          part?.unit_cost != null && !Number.isNaN(Number(part.unit_cost))
+            ? Math.round(Number(part.unit_cost) * 100)
+            : null
+        const unit = p.sale_unit_price_pence ?? p.unit_cost_pence ?? catalogueCostPence ?? 0
         const qty = p.quantity ?? 0
         return {
           id: p.id,
@@ -367,7 +372,7 @@ async function buildInvoiceLineData(
       task_result:task_results(reference_number),
       direct_site:sites!tasks_site_id_fkey(id, name, address, postcode),
       site_service:site_services(service_type:service_types(name, nominal_code_id), sites(id, name, address, postcode)),
-      call_parts(id, part_id, quantity, unit_cost_pence, sale_unit_price_pence, chargeable, part:parts(name, sku, nominal_code_id))
+      call_parts(id, part_id, quantity, unit_cost_pence, sale_unit_price_pence, chargeable, part:parts(name, sku, unit_cost, nominal_code_id))
     `,
     )
     .in('id', taskIds)
@@ -540,7 +545,11 @@ async function buildInvoiceLineData(
     for (const p of (t.call_parts ?? []) as any[]) {
       if (p.chargeable === false || (p.quantity ?? 0) <= 0) continue
       const part = Array.isArray(p.part) ? p.part[0] : p.part
-      const unit = p.sale_unit_price_pence ?? p.unit_cost_pence ?? 0
+      const catalogueCostPence =
+        part?.unit_cost != null && !Number.isNaN(Number(part.unit_cost))
+          ? Math.round(Number(part.unit_cost) * 100)
+          : null
+      const unit = p.sale_unit_price_pence ?? p.unit_cost_pence ?? catalogueCostPence ?? 0
       const qty = p.quantity ?? 0
       // Part's own nominal wins; else fall back to the call's service type.
       const partNominalId: string | null = part?.nominal_code_id ?? svcNominalId

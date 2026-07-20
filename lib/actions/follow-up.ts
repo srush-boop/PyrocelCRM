@@ -511,6 +511,32 @@ export async function approveFollowUp(
     .select('part_id, quantity, action, location_id, location_ref, description')
     .eq('request_id', requestId)
     .neq('action', 'none')
+
+  // Snapshot the current catalogue unit cost (parts.unit_cost is £ numeric) onto
+  // each call_part so the completed call carries a cost for profitability and
+  // invoicing, rather than leaving it blank. Sale price is still set by the
+  // office during chargeable review.
+  const partIds = [
+    ...new Set(
+      (parts ?? [])
+        .map((p) => (p as { part_id: string | null }).part_id)
+        .filter((id): id is string => !!id),
+    ),
+  ]
+  const costByPartId = new Map<string, number>()
+  if (partIds.length > 0) {
+    const { data: partRows } = await ctx.supabase
+      .from('parts')
+      .select('id, unit_cost')
+      .in('id', partIds)
+    for (const pr of (partRows ?? []) as { id: string; unit_cost: number | string | null }[]) {
+      const cost = typeof pr.unit_cost === 'string' ? Number(pr.unit_cost) : pr.unit_cost
+      if (cost != null && !Number.isNaN(cost)) {
+        costByPartId.set(pr.id, Math.round(cost * 100))
+      }
+    }
+  }
+
   const callParts = (parts ?? [])
     .filter((p) => (p as { part_id: string | null }).part_id)
     .map((p) => {
@@ -531,6 +557,7 @@ export async function approveFollowUp(
         part_id: row.part_id,
         quantity: row.quantity,
         stock_location_id: row.location_id,
+        unit_cost_pence: costByPartId.get(row.part_id) ?? null,
         notes: noteBits.join(' '),
       }
     })

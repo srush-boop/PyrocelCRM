@@ -76,6 +76,7 @@ interface FormState {
   name: string
   product_code: string
   description: string
+  manufacturer: string
   category: string
   system_type_id: string
   supplier_id: string
@@ -93,6 +94,7 @@ function emptyForm(): FormState {
     name: '',
     product_code: '',
     description: '',
+    manufacturer: '',
     category: '',
     system_type_id: NO_SYSTEM,
     supplier_id: NO_SUPPLIER,
@@ -234,6 +236,7 @@ export function CatalogueManager({
         'Product code',
         'Name',
         'Description',
+        'Manufacturer',
         'Category',
         'System type',
         'Supplier',
@@ -250,6 +253,7 @@ export function CatalogueManager({
           i.product_code,
           i.name,
           i.description,
+          i.manufacturer,
           i.category,
           i.system_type_id ? (systemName.get(i.system_type_id) ?? '') : '',
           i.supplier_id ? (supplierName.get(i.supplier_id) ?? '') : '',
@@ -395,6 +399,7 @@ export function CatalogueManager({
       name: item.name,
       product_code: item.product_code ?? '',
       description: item.description ?? '',
+      manufacturer: item.manufacturer ?? '',
       category: item.category ?? '',
       system_type_id: item.system_type_id ?? NO_SYSTEM,
       supplier_id: item.supplier_id ?? NO_SUPPLIER,
@@ -416,6 +421,7 @@ export function CatalogueManager({
         name: form.name,
         product_code: form.product_code || null,
         description: form.description || null,
+        manufacturer: form.manufacturer || null,
         category: form.category || null,
         system_type_id: form.system_type_id === NO_SYSTEM ? null : form.system_type_id,
         supplier_id: form.supplier_id === NO_SUPPLIER ? null : form.supplier_id,
@@ -730,6 +736,15 @@ export function CatalogueManager({
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
+                <Label htmlFor="c-manufacturer">Manufacturer</Label>
+                <Input
+                  id="c-manufacturer"
+                  value={form.manufacturer}
+                  onChange={(e) => setForm({ ...form, manufacturer: e.target.value })}
+                  placeholder="e.g. Apollo, Hochiki"
+                />
+              </div>
+              <div className="grid gap-1.5">
                 <Label htmlFor="c-cat">Category</Label>
                 <Input
                   id="c-cat"
@@ -738,6 +753,8 @@ export function CatalogueManager({
                   placeholder="Supply, Labour…"
                 />
               </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="c-unit">Unit</Label>
                 <Input

@@ -2000,6 +2000,9 @@ export interface QuoteCatalogueItem {
   product_code: string | null
   description: string | null
   category: string | null
+  // Manufacturer / brand of the item (e.g. Apollo, Hochiki). Optional free text.
+  // Carried onto the stock part when the item is added to stock.
+  manufacturer: string | null
   service_type_id: string | null
   system_type_id: string | null
   default_unit: string | null
@@ -2664,6 +2667,8 @@ export interface Part {
   sku: string | null
   name: string
   description: string | null
+  // Manufacturer / brand of the part (e.g. Apollo, Hochiki). Optional free text.
+  manufacturer: string | null
   unit: string
   unit_cost: number
   default_min_level: number

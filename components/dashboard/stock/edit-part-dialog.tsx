@@ -42,6 +42,7 @@ export function EditPartDialog({ part, open, onOpenChange, suppliers = [], nomin
   const [formData, setFormData] = useState({
     name: part.name,
     sku: part.sku ?? '',
+    manufacturer: part.manufacturer ?? '',
     unit: part.unit,
     unit_cost: String(part.unit_cost ?? 0),
     default_min_level: String(part.default_min_level ?? 0),
@@ -62,6 +63,7 @@ export function EditPartDialog({ part, open, onOpenChange, suppliers = [], nomin
       .update({
         name: formData.name,
         sku: formData.sku || null,
+        manufacturer: formData.manufacturer || null,
         unit: formData.unit || 'each',
         unit_cost: formData.unit_cost ? Number.parseFloat(formData.unit_cost) : 0,
         default_min_level: Math.max(0, Number.parseInt(formData.default_min_level, 10) || 0),
@@ -117,6 +119,15 @@ export function EditPartDialog({ part, open, onOpenChange, suppliers = [], nomin
                   onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
                 />
               </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit_manufacturer">Manufacturer</Label>
+              <Input
+                id="edit_manufacturer"
+                value={formData.manufacturer}
+                onChange={(e) => setFormData({ ...formData, manufacturer: e.target.value })}
+                placeholder="e.g. Apollo, Hochiki"
+              />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">

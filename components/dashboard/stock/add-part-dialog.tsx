@@ -32,6 +32,7 @@ const NONE_VALUE = '__none__'
 const emptyForm = {
   name: '',
   sku: '',
+  manufacturer: '',
   unit: 'each',
   unit_cost: '',
   default_min_level: '',
@@ -59,6 +60,7 @@ export function AddPartDialog({ suppliers = [], nominalCodes = [] }: AddPartDial
     const { error } = await supabase.from('parts').insert({
       name: formData.name,
       sku: formData.sku || null,
+      manufacturer: formData.manufacturer || null,
       unit: formData.unit || 'each',
       unit_cost: formData.unit_cost ? Number.parseFloat(formData.unit_cost) : 0,
       default_min_level: formData.default_min_level
@@ -124,6 +126,15 @@ export function AddPartDialog({ suppliers = [], nominalCodes = [] }: AddPartDial
                   placeholder="each"
                 />
               </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="manufacturer">Manufacturer</Label>
+              <Input
+                id="manufacturer"
+                value={formData.manufacturer}
+                onChange={(e) => setFormData({ ...formData, manufacturer: e.target.value })}
+                placeholder="e.g. Apollo, Hochiki"
+              />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">

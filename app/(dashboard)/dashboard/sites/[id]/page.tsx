@@ -10,6 +10,7 @@ import { EditSiteButton } from '@/components/dashboard/sites/edit-site-button'
 import { CreateTaskDialog } from '@/components/dashboard/schedule/create-task-dialog'
 import { SiteServicesManager } from '@/components/dashboard/sites/site-services-manager'
 import { SiteBillingCard } from '@/components/dashboard/billing/site-billing-card'
+import { getRateCards } from '@/lib/actions/rate-cards'
 import { SitePosCard } from '@/components/dashboard/billing/site-pos-card'
 import { SiteSystemsManager } from '@/components/dashboard/sites/site-systems-manager'
 import { QuotesTable } from '@/components/dashboard/sales/quotes-table'
@@ -314,6 +315,11 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
   const billingAccounts = (billingAccountsData || []) as (BillingAccount & {
     client?: { id: string; name: string } | null
   })[]
+
+  // Rate cards for the per-site / per-service override selectors. The customer
+  // (billing account) level is resolved in the card from these accounts so the
+  // effective-card preview reflects service -> site -> customer -> default.
+  const rateCards = await getRateCards()
 
   // Get tasks for this site's services
   const siteServiceIds = siteServices.map(ss => ss.id)
@@ -904,8 +910,11 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
               id: ss.id,
               name: ss.service_type?.name ?? 'Service',
               billing_account_id: ss.billing_account_id ?? null,
+              rate_card_id: ss.rate_card_id ?? null,
             }))}
             accounts={billingAccounts}
+            rateCards={rateCards}
+            siteRateCardId={(site as Site).rate_card_id ?? null}
           />
         )}
         <SitePosCard

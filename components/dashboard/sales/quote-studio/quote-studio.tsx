@@ -112,6 +112,18 @@ const PHASES: { id: Phase; label: string; icon: ComponentType<{ className?: stri
 const gbp = (pence: number) =>
   new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format((pence || 0) / 100)
 
+/** Sentinel key for the generic / unbranded default combination (no range). */
+const GENERIC_KEY = '__generic__'
+
+/** Display label for a product combination (manufacturer + range name). */
+function combinationLabel(config: StudioConfig, key: string): string {
+  if (key === GENERIC_KEY) return 'Generic / unbranded'
+  const range = config.ranges.find((r) => r.id === key)
+  if (!range) return 'Unknown combination'
+  const manufacturer = config.manufacturers.find((m) => m.id === range.manufacturerId)
+  return [manufacturer?.name, range.name].filter(Boolean).join(' ')
+}
+
 let uidCounter = 0
 const nextUid = () => `row-${Date.now()}-${uidCounter++}`
 
@@ -164,6 +176,10 @@ export function QuoteStudio({
   const [margin, setMargin] = useState(40)
   const [manufacturerId, setManufacturerId] = useState<string>('')
   const [rangeId, setRangeId] = useState<string>('')
+  // Product combinations (manufacturer ranges) selected to compare on the quote.
+  // Keys are range ids or GENERIC_KEY; the recommended one is the active range.
+  const [compareKeys, setCompareKeys] = useState<string[]>([])
+  const [optionNotes, setOptionNotes] = useState<Record<string, { pros: string; cons: string }>>({})
   // Additional discipline sections (access control, intruder, CCTV, EL).
   const [sections, setSections] = useState<AdditionalSection[]>([])
   const [addingCode, setAddingCode] = useState<string | null>(null)
@@ -191,31 +207,93 @@ export function QuoteStudio({
     [config.deviceTypes, selectedRange],
   )
 
-  // Live pricing preview (pure, recomputed from the editable schedule).
-  const assembly = useMemo(() => {
-    const items = rows
-      .filter((r) => r.quantity > 0)
-      .map((r) => {
-        const dt = config.deviceTypes.find((d) => d.device_key === r.device_key)
-        return {
-          device_key: r.device_key,
-          label: r.label,
-          quantity: r.quantity,
-          catalogue_item_id: resolvePartId(r.device_key),
-          contributes_to_device_count: dt?.contributes_to_device_count ?? true,
-        }
+  // Price the current schedule against ANY range (pure). Used for the live
+  // preview and for the product-combination comparison table.
+  const computeAssemblyForRange = useCallback(
+    (rid: string | null) => {
+      const range = rid ? config.ranges.find((r) => r.id === rid) : null
+      const items = rows
+        .filter((r) => r.quantity > 0)
+        .map((r) => {
+          const dt = config.deviceTypes.find((d) => d.device_key === r.device_key)
+          const rangePart = range ? range.parts[r.device_key] : undefined
+          return {
+            device_key: r.device_key,
+            label: r.label,
+            quantity: r.quantity,
+            catalogue_item_id: rangePart ?? dt?.default_catalogue_item_id ?? null,
+            contributes_to_device_count: dt?.contributes_to_device_count ?? true,
+          }
+        })
+      const zoneCount = new Set(rows.filter((r) => r.quantity > 0).map((r) => r.zone || 'Z1')).size
+      return buildAssembly({
+        items,
+        kitRules: config.kitRules,
+        catalogue: config.catalogue,
+        zones: zoneCount,
+        loops: null,
+        rangeId: rid,
+        systemMargin: margin,
       })
-    const zoneCount = new Set(rows.filter((r) => r.quantity > 0).map((r) => r.zone || 'Z1')).size
-    return buildAssembly({
-      items,
-      kitRules: config.kitRules,
-      catalogue: config.catalogue,
-      zones: zoneCount,
-      loops: null,
-      rangeId: rangeId || null,
-      systemMargin: margin,
-    })
-  }, [rows, config, margin, rangeId, resolvePartId])
+    },
+    [rows, config, margin],
+  )
+
+  // Live pricing preview for the active (recommended) range.
+  const assembly = useMemo(
+    () => computeAssemblyForRange(rangeId || null),
+    [computeAssemblyForRange, rangeId],
+  )
+
+  // The recommended combination is always the active range.
+  const recommendedKey = rangeId || GENERIC_KEY
+
+  // Price every selected combination against the same schedule for comparison.
+  const comparison = useMemo(
+    () =>
+      compareKeys.map((key) => {
+        const rid = key === GENERIC_KEY ? null : key
+        const a = computeAssemblyForRange(rid)
+        return {
+          key,
+          rangeId: rid,
+          name: combinationLabel(config, key),
+          sellPence: a.totalSellPence,
+          recommended: key === recommendedKey,
+        }
+      }),
+    [compareKeys, computeAssemblyForRange, config, recommendedKey],
+  )
+
+  // Toggle a combination in/out of the comparison set.
+  const toggleCompare = useCallback((key: string) => {
+    setCompareKeys((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+    )
+  }, [])
+
+  // Mark a combination as recommended → drives the active range + manufacturer.
+  const setRecommended = useCallback(
+    (key: string) => {
+      setCompareKeys((prev) => (prev.includes(key) ? prev : [...prev, key]))
+      if (key === GENERIC_KEY) {
+        setRangeId('')
+        setManufacturerId('')
+      } else {
+        const range = config.ranges.find((r) => r.id === key)
+        setRangeId(key)
+        if (range) setManufacturerId(range.manufacturerId)
+      }
+    },
+    [config.ranges],
+  )
+
+  const setOptionNote = useCallback((key: string, patch: { pros?: string; cons?: string }) => {
+    setOptionNotes((prev) => ({
+      ...prev,
+      [key]: { pros: prev[key]?.pros ?? '', cons: prev[key]?.cons ?? '', ...patch },
+    }))
+  }, [])
 
   function resetAll() {
     setPhase('brief')
@@ -369,6 +447,21 @@ export function QuoteStudio({
         source: 'manual',
         margin,
         rangeId: rangeId || null,
+        comparisonOptions:
+          compareKeys.length > 0
+            ? compareKeys.map((key) => ({
+                rangeId: key === GENERIC_KEY ? null : key,
+                recommended: key === recommendedKey,
+                pros: (optionNotes[key]?.pros ?? '')
+                  .split('\n')
+                  .map((s) => s.trim())
+                  .filter(Boolean),
+                cons: (optionNotes[key]?.cons ?? '')
+                  .split('\n')
+                  .map((s) => s.trim())
+                  .filter(Boolean),
+              }))
+            : undefined,
         client_id: clientId || null,
         site_id: siteId || null,
         prospect_name: clientId ? null : prospectName.trim(),
@@ -535,6 +628,13 @@ export function QuoteStudio({
           onDraft={handleDraft}
           extracting={extracting}
           onUploadDocument={handleExtractDocument}
+          config={config}
+          compareKeys={compareKeys}
+          recommendedKey={recommendedKey}
+          optionNotes={optionNotes}
+          onToggleCompare={toggleCompare}
+          onRecommend={setRecommended}
+          onOptionNote={setOptionNote}
         />
       )}
 
@@ -576,6 +676,9 @@ export function QuoteStudio({
             setRangeId(def?.id ?? '')
           }}
           onRange={setRangeId}
+          comparison={comparison}
+          recommendedKey={recommendedKey}
+          onRecommend={setRecommended}
           onUpdateRow={updateRow}
           onRemoveRow={removeRow}
           onAddRow={addRow}
@@ -682,6 +785,13 @@ function BriefStep({
   onDraft,
   extracting,
   onUploadDocument,
+  config,
+  compareKeys,
+  recommendedKey,
+  optionNotes,
+  onToggleCompare,
+  onRecommend,
+  onOptionNote,
 }: {
   brief: string
   onBrief: (v: string) => void
@@ -699,6 +809,13 @@ function BriefStep({
   onDraft: () => void
   extracting: boolean
   onUploadDocument: (file: File) => void
+  config: StudioConfig
+  compareKeys: string[]
+  recommendedKey: string
+  optionNotes: Record<string, { pros: string; cons: string }>
+  onToggleCompare: (key: string) => void
+  onRecommend: (key: string) => void
+  onOptionNote: (key: string, patch: { pros?: string; cons?: string }) => void
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   return (
@@ -809,6 +926,91 @@ function BriefStep({
               </Select>
             </div>
           </div>
+
+          {config.ranges.length > 0 && (
+            <div className="flex flex-col gap-3 rounded-lg border p-4">
+              <div className="flex items-start gap-2">
+                <Factory className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <div>
+                  <p className="text-sm font-medium">Product combinations to compare</p>
+                  <p className="text-xs text-muted-foreground">
+                    Optional. Pick the manufacturer combinations to price (e.g. Advanced CIE with
+                    Hochiki devices, Morley CIE with Apollo devices). Mark one as recommended — the
+                    others appear on the quote as priced alternatives with your pros &amp; cons.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                {[GENERIC_KEY, ...config.ranges.map((r) => r.id)].map((key) => {
+                  const selected = compareKeys.includes(key)
+                  const isRecommended = recommendedKey === key && selected
+                  return (
+                    <div
+                      key={key}
+                      className={cn(
+                        'rounded-md border p-3 transition-colors',
+                        selected ? 'border-primary/40 bg-primary/5' : 'border-border',
+                      )}
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onToggleCompare(key)}
+                          className={cn(
+                            'flex h-5 w-5 items-center justify-center rounded border',
+                            selected
+                              ? 'border-primary bg-primary text-primary-foreground'
+                              : 'border-input',
+                          )}
+                          aria-pressed={selected}
+                          aria-label={selected ? 'Remove from comparison' : 'Add to comparison'}
+                        >
+                          {selected && <Check className="h-3.5 w-3.5" />}
+                        </button>
+                        <span className="text-sm font-medium">{combinationLabel(config, key)}</span>
+                        {selected && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={isRecommended ? 'default' : 'outline'}
+                            className="ml-auto h-7 gap-1.5 text-xs"
+                            onClick={() => onRecommend(key)}
+                          >
+                            <BadgeCheck className="h-3.5 w-3.5" />
+                            {isRecommended ? 'Recommended' : 'Set recommended'}
+                          </Button>
+                        )}
+                      </div>
+                      {selected && (
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div className="grid gap-1.5">
+                            <Label className="text-xs text-muted-foreground">Pros (one per line)</Label>
+                            <Textarea
+                              rows={3}
+                              value={optionNotes[key]?.pros ?? ''}
+                              onChange={(e) => onOptionNote(key, { pros: e.target.value })}
+                              placeholder={'Open protocol\nWidely stocked\nLower device cost'}
+                              className="resize-y text-sm"
+                            />
+                          </div>
+                          <div className="grid gap-1.5">
+                            <Label className="text-xs text-muted-foreground">Cons (one per line)</Label>
+                            <Textarea
+                              rows={3}
+                              value={optionNotes[key]?.cons ?? ''}
+                              onChange={(e) => onOptionNote(key, { cons: e.target.value })}
+                              placeholder={'Proprietary panel\nLonger lead time'}
+                              className="resize-y text-sm"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center justify-between gap-3">
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -1131,6 +1333,9 @@ function TakeoffStep({
   rangeId,
   onManufacturer,
   onRange,
+  comparison,
+  recommendedKey,
+  onRecommend,
   onUpdateRow,
   onRemoveRow,
   onAddRow,
@@ -1155,6 +1360,15 @@ function TakeoffStep({
   rangeId: string
   onManufacturer: (id: string) => void
   onRange: (id: string) => void
+  comparison: {
+    key: string
+    rangeId: string | null
+    name: string
+    sellPence: number
+    recommended: boolean
+  }[]
+  recommendedKey: string
+  onRecommend: (key: string) => void
   onUpdateRow: (uid: string, patch: Partial<TakeoffRow>) => void
   onRemoveRow: (uid: string) => void
   onAddRow: (deviceKey: string) => void
@@ -1247,6 +1461,82 @@ function TakeoffStep({
                   Clear
                 </Button>
               )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {comparison.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-col gap-3 p-4">
+            <div className="flex items-center gap-2">
+              <Layers className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-bold uppercase tracking-wide">Product combination comparison</h3>
+            </div>
+            <p className="text-xs text-muted-foreground text-pretty">
+              The same confirmed schedule priced against each selected combination. Set which one is
+              recommended — it prices the quote; the rest are summarised as alternatives.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <th className="pb-2 font-medium">Combination</th>
+                    <th className="w-32 pb-2 text-right font-medium">Sell (ex VAT)</th>
+                    <th className="w-32 pb-2 text-right font-medium">vs recommended</th>
+                    <th className="w-40 pb-2 pl-3 font-medium" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const rec = comparison.find((c) => c.recommended)
+                    const recPence = rec?.sellPence ?? 0
+                    return comparison.map((c) => {
+                      const delta = c.sellPence - recPence
+                      return (
+                        <tr key={c.key} className="border-b last:border-0">
+                          <td className="py-2 pr-2 font-medium">
+                            <span className="flex items-center gap-2">
+                              {c.name}
+                              {c.recommended && (
+                                <Badge variant="secondary" className="gap-1 text-[10px]">
+                                  <BadgeCheck className="h-3 w-3" />
+                                  Recommended
+                                </Badge>
+                              )}
+                            </span>
+                          </td>
+                          <td className="py-2 text-right tabular-nums">{gbp(c.sellPence)}</td>
+                          <td
+                            className={cn(
+                              'py-2 text-right tabular-nums',
+                              delta > 0 && 'text-amber-600',
+                              delta < 0 && 'text-emerald-600',
+                              delta === 0 && 'text-muted-foreground',
+                            )}
+                          >
+                            {c.recommended ? '—' : `${delta > 0 ? '+' : ''}${gbp(delta)}`}
+                          </td>
+                          <td className="py-2 pl-3">
+                            {!c.recommended && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 gap-1.5 text-xs"
+                                onClick={() => onRecommend(c.key)}
+                              >
+                                <BadgeCheck className="h-3.5 w-3.5" />
+                                Make recommended
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })
+                  })()}
+                </tbody>
+              </table>
             </div>
           </CardContent>
         </Card>

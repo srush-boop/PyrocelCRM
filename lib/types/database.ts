@@ -2177,12 +2177,34 @@ export interface Quote {
   created_by: string | null
   created_at: string
   updated_at: string
+  // Quote Studio design payload (understanding, spec, and the product-combination
+  // options considered). Null for quotes not produced by the studio.
+  design_spec: QuoteDesignSpec | null
   client?: Client | null
   site?: Site | null
   // The issuing branch (joined from branches via branch_id).
   branch?: Branch | null
   // The staff member who prepared the quote (joined from profiles via created_by).
   preparer?: { id: string; full_name: string | null } | null
+}
+
+// A priced product combination considered by Quote Studio, summarised on the
+// quote document so the client can see the recommended choice vs alternatives.
+export interface QuoteDesignOption {
+  rangeId: string | null
+  name: string
+  recommended: boolean
+  // Total sell price (ex VAT) for the SAME device schedule on this combination.
+  sellPence: number
+  pros: string[]
+  cons: string[]
+}
+
+export interface QuoteDesignSpec {
+  options?: QuoteDesignOption[]
+  // Other studio design fields (understanding, spec, etc.) are stored here too
+  // but are not strongly typed for document rendering yet.
+  [key: string]: unknown
 }
 
 export interface QuoteWithDetails extends Quote {

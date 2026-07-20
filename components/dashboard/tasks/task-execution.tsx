@@ -43,6 +43,8 @@ import { useOfflineSync } from '@/lib/offline/use-offline-sync'
 import { persistTaskResult, isOnline } from '@/lib/offline/sync'
 import { cacheCallSnapshot } from '@/lib/offline/snapshots'
 import { isNonRecurringCall } from '@/lib/follow-up'
+import { resolveCallKind } from '@/lib/call-kinds'
+import { SignaturePad } from '@/components/portal/signature-pad'
 import { formatDateUK, formatTimeUK, toDatetimeLocalValue, cn } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import {
@@ -353,6 +355,14 @@ export function TaskExecution({
     return buildInitialResults(checklistTemplate?.items || [], panels, panelChecklists)
   })
   const [engineerNotes, setEngineerNotes] = useState(existingResult?.engineer_notes || '')
+  // On-site client sign-off (non-recurring calls only). The signature is a PNG
+  // data URL captured on the SignaturePad; the name is the printed signatory.
+  const [clientSignature, setClientSignature] = useState<string | null>(
+    existingResult?.client_signature || null,
+  )
+  const [clientSignatureName, setClientSignatureName] = useState(
+    existingResult?.client_signature_name || '',
+  )
   const [testingStartTime, setTestingStartTime] = useState<Date | null>(
     existingResult?.testing_start_time ? new Date(existingResult.testing_start_time) : null
   )
@@ -423,6 +433,10 @@ export function TaskExecution({
   // book/rebook and submit, but never see internal-only surfaces (parts pickers,
   // costs/labour, transfers, further-works escalation, internal report actions).
   const canSeeInternal = profile.role !== 'subcontractor'
+  // Non-recurring = reactive / planned one-off work (or an ad-hoc call with no
+  // service type). Only these capture an on-site client name + signature; recurring
+  // PPM visits never prompt for one.
+  const isNonRecurring = serviceType ? resolveCallKind(serviceType) !== 'recurring' : true
 
   // Quick-assign (or reassign) this call to an engineer straight from the summary.
   const assignEngineer = async (value: string) => {
@@ -638,6 +652,8 @@ export function TaskExecution({
       checklist_results: checklistResults,
       overall_status: calculateOverallStatus(),
       engineer_notes: engineerNotes,
+      client_signature: clientSignature,
+      client_signature_name: clientSignatureName.trim() || null,
       testing_start_time: testingStartTime?.toISOString(),
       testing_end_time: testingEndTime?.toISOString(),
       photos: existingResult?.photos || [],
@@ -678,6 +694,8 @@ export function TaskExecution({
       checklist_results: checklistResults,
       overall_status: overallStatus,
       engineer_notes: engineerNotes,
+      client_signature: clientSignature,
+      client_signature_name: clientSignatureName.trim() || null,
       testing_start_time: testingStartTime?.toISOString(),
       testing_end_time: testingEndTime?.toISOString(),
       photos: existingResult?.photos || [],
@@ -852,6 +870,8 @@ export function TaskExecution({
       checklist_results: checklistResults,
       overall_status: calculateOverallStatus(),
       engineer_notes: engineerNotes,
+      client_signature: clientSignature,
+      client_signature_name: clientSignatureName.trim() || null,
       testing_start_time: testingStartTime?.toISOString() ?? null,
       testing_end_time: testingEndTime?.toISOString() ?? null,
       photos: existingResult?.photos || [],
@@ -867,7 +887,7 @@ export function TaskExecution({
     if (!queued) baseUpdatedAtRef.current = resultData.updated_at
     void offline.refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [checklistResults, engineerNotes, testingStartTime, testingEndTime, existingResult, task.id, supabase])
+  }, [checklistResults, engineerNotes, clientSignature, clientSignatureName, testingStartTime, testingEndTime, existingResult, task.id, supabase])
 
   // Draft autosave. As the engineer fills in the checklist and notes, persist a
   // draft to task_results after a short pause. This means accidentally leaving
@@ -1774,6 +1794,68 @@ export function TaskExecution({
               rows={4}
               disabled={!canEdit}
             />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Client sign-off — non-recurring calls only. Captures the on-site
+          representative's printed name + signature, shown on the report. */}
+      {(status === 'in_progress' || status === 'completed') && isNonRecurring && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Client sign-off</CardTitle>
+            <CardDescription>
+              Optional — capture the name and signature of the on-site
+              representative confirming the work carried out.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-1.5">
+              <Label htmlFor="client-signature-name">Client / representative name</Label>
+              <Input
+                id="client-signature-name"
+                value={clientSignatureName}
+                onChange={(e) => setClientSignatureName(e.target.value)}
+                placeholder="e.g. J. Smith (Facilities Manager)"
+                disabled={!canEdit}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label>Signature</Label>
+              {canEdit ? (
+                clientSignature ? (
+                  <div className="grid gap-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={clientSignature || '/placeholder.svg'}
+                      alt="Captured client signature"
+                      className="h-40 w-full rounded-md border border-input bg-background object-contain"
+                    />
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setClientSignature(null)}
+                      >
+                        Redraw signature
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <SignaturePad onChange={setClientSignature} />
+                )
+              ) : clientSignature ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={clientSignature || '/placeholder.svg'}
+                  alt="Client signature"
+                  className="h-40 w-full rounded-md border border-input bg-background object-contain"
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">No signature captured.</p>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}

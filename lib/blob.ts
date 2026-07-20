@@ -10,7 +10,12 @@ import { getPublicBaseUrl } from '@/lib/rams/base-url'
  */
 export function blobSrc(ref: string | null | undefined): string | null {
   if (!ref) return null
-  if (ref.startsWith('http://') || ref.startsWith('https://') || ref.startsWith('/api/blob')) {
+  if (
+    ref.startsWith('http://') ||
+    ref.startsWith('https://') ||
+    ref.startsWith('/api/blob') ||
+    ref.startsWith('data:')
+  ) {
     return ref
   }
   return `/api/blob?pathname=${encodeURIComponent(ref)}`
@@ -30,6 +35,9 @@ export function signatureSrc(
   opts: { absolute?: boolean } = {},
 ): string | null {
   if (!ref) return null
+  // Client sign-off signatures are captured on-device and stored inline as a PNG
+  // data URL — render them directly (works on public token reports + PDFs too).
+  if (ref.startsWith('data:')) return ref
   // Legacy rows may hold a full public URL from before the store was private.
   if (ref.startsWith('http://') || ref.startsWith('https://')) return ref
 

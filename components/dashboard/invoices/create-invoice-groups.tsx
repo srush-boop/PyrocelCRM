@@ -361,8 +361,8 @@ function PreviewDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[92vh] min-h-[320px] w-[92vw] min-w-[420px] max-w-[1100px] resize flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="border-b px-6 pb-4 pt-6">
           <DialogTitle>Invoice preview</DialogTitle>
           <DialogDescription>
             Review the auto-priced lines for {accountName} before raising the draft. Nothing
@@ -371,11 +371,11 @@ function PreviewDialog({
         </DialogHeader>
 
         {!preview ? (
-          <p className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+          <p className="flex flex-1 items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Building preview…
           </p>
         ) : (
-          <div className="space-y-4">
+          <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
             {/* Bill-to header block. */}
             <div className="grid gap-3 rounded-lg border bg-muted/30 p-3 sm:grid-cols-2">
               <div>
@@ -425,7 +425,9 @@ function PreviewDialog({
                   ) : (
                     preview.lines.map((l, i) => (
                       <TableRow key={i}>
-                        <TableCell className="text-sm">{l.description}</TableCell>
+                        <TableCell className="whitespace-normal break-words text-sm">
+                        {l.description}
+                      </TableCell>
                         <TableCell className="text-center tabular-nums">{l.quantity}</TableCell>
                         <TableCell className="text-right tabular-nums">
                           {formatPence(l.unitPricePence)}
@@ -458,7 +460,7 @@ function PreviewDialog({
           </div>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="border-t px-6 py-4">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={creating}>
             Cancel
           </Button>

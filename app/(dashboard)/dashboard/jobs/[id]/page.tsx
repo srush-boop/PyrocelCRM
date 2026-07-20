@@ -12,7 +12,10 @@ import {
   MapPin,
   User as UserIcon,
   Hammer,
+  Wallet,
   TrendingUp,
+  ShoppingCart,
+  PiggyBank,
   AlertTriangle,
 } from 'lucide-react'
 import { CreateDocumentButton } from '@/components/documents/create-document-dialog'
@@ -21,14 +24,17 @@ import { EntityRequestsCard } from '@/components/dashboard/requests/entity-reque
 import { BookJobCallButton } from '@/components/dashboard/jobs/book-job-call-button'
 import { RaiseJobInvoiceButton } from '@/components/dashboard/jobs/raise-job-invoice-button'
 import { RecordIssuedEquipmentButton } from '@/components/dashboard/jobs/record-issued-equipment-button'
-import { JobStagePanel, JobContractReview } from '@/components/dashboard/jobs/job-controls'
+import { JobContractReview } from '@/components/dashboard/jobs/job-controls'
+import { JobProgressTracker } from '@/components/dashboard/jobs/job-progress-tracker'
+import { JobInvoicesCard, type JobInvoiceRow } from '@/components/dashboard/jobs/job-invoices-card'
+import { JobCallsCard, type JobCallRow } from '@/components/dashboard/jobs/job-calls-card'
 import { JobPurchasing } from '@/components/dashboard/jobs/job-purchasing'
 import { jobStageMeta, jobStatusMeta } from '@/lib/jobs/stages'
 import { jobFinance } from '@/lib/jobs/finance'
 import { getJobCommittedCost, getJobPurchaseOrders, getJobOrderingProgress } from '@/lib/jobs/purchasing'
 import { formatPence } from '@/lib/sales'
 import { cn, formatDateUK } from '@/lib/utils'
-import type { Job, Profile } from '@/lib/types/database'
+import type { Job, JobStage, Profile } from '@/lib/types/database'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -75,40 +81,114 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   const finance = jobFinance(typedJob)
   const offContract = typedJob.site?.status === 'new' || typedJob.site?.status === 'dead'
 
-  // Purchasing: committed cost (live POs), the job's orders, per-supplier ordering
-  // progress (quoted vs ordered vs remaining) and the supplier list for the
-  // phased-order builder.
-  const [committedCostPence, purchaseOrders, orderingProgress, suppliersResult] = await Promise.all([
+  // Purchasing, linked invoices and calls — everything needed to both display
+  // the job and derive which pipeline stages have real supporting activity.
+  const [
+    committedCostPence,
+    purchaseOrders,
+    orderingProgress,
+    suppliersResult,
+    invoicesResult,
+    callsResult,
+  ] = await Promise.all([
     getJobCommittedCost(supabase, typedJob.id),
     getJobPurchaseOrders(supabase, typedJob.id),
     getJobOrderingProgress(supabase, typedJob.id),
     supabase.from('suppliers').select('id, name').order('name'),
+    supabase
+      .from('invoices')
+      .select('id, invoice_number, status, total_pence, subtotal_pence, issue_date, created_at, document_type')
+      .eq('job_id', typedJob.id)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('tasks')
+      .select('id, reference_number, title, status, scheduled_date, is_commissioning')
+      .eq('source_job_id', typedJob.id)
+      .order('scheduled_date', { ascending: true, nullsFirst: false }),
   ])
+
   const suppliers = (suppliersResult.data ?? []) as { id: string; name: string }[]
+  const invoices = (invoicesResult.data ?? []) as JobInvoiceRow[]
+  const calls = (callsResult.data ?? []) as JobCallRow[]
 
   const remainingBudgetPence = finance.quotedCostPence - committedCostPence
   const overCommitted = committedCostPence > finance.quotedCostPence
 
-  const financeRows: {
+  // Net invoiced (exclude void invoices) for the invoiced-of-quoted summary.
+  const invoicedNetPence = invoices
+    .filter((inv) => inv.status !== 'void')
+    .reduce((sum, inv) => sum + (inv.subtotal_pence ?? 0), 0)
+  const fullyInvoiced = finance.valuePence > 0 && invoicedNetPence >= finance.valuePence
+
+  const callsCount = calls.length
+  const completedCalls = calls.filter((c) => c.status === 'completed').length
+  const nothingToOrder = orderingProgress.length === 0
+
+  // Stage evidence: which pipeline stages have real activity behind them. This
+  // powers the progress tracker's ticks and its "suggested stage" hint.
+  const reviewed = !!typedJob.contract_reviewed_at
+  const stageDone: Record<JobStage, boolean> = {
+    contract_review: reviewed,
+    ordering: purchaseOrders.length > 0 || nothingToOrder,
+    in_progress: callsCount > 0,
+    commissioning: completedCalls > 0,
+    handover: false,
+    complete: typedJob.status === 'complete' || fullyInvoiced,
+  }
+  const stageDetail: Partial<Record<JobStage, string>> = {
+    contract_review: reviewed ? 'Reviewed' : undefined,
+    ordering: nothingToOrder
+      ? 'Nothing to order'
+      : purchaseOrders.length > 0
+        ? `${purchaseOrders.length} PO${purchaseOrders.length === 1 ? '' : 's'}`
+        : undefined,
+    in_progress: callsCount > 0 ? `${callsCount} call${callsCount === 1 ? '' : 's'}` : undefined,
+    commissioning: completedCalls > 0 ? `${completedCalls} completed` : undefined,
+    complete: fullyInvoiced
+      ? 'Invoiced in full'
+      : typedJob.status === 'complete'
+        ? 'Closed out'
+        : undefined,
+  }
+
+  const stats: {
     label: string
     value: string
-    strong?: boolean
+    icon: React.ComponentType<{ className?: string }>
     accent?: boolean
     warn?: boolean
+    hint?: string
   }[] = [
-    { label: 'Contract value (net)', value: formatPence(finance.valuePence), strong: true },
-    { label: 'Quoted cost', value: formatPence(finance.quotedCostPence) },
-    { label: 'Quoted margin', value: formatPence(finance.quotedMarginPence), accent: true },
-    { label: 'Committed (POs)', value: formatPence(committedCostPence) },
+    {
+      label: 'Contract value (net)',
+      value: formatPence(finance.valuePence),
+      icon: Wallet,
+    },
+    {
+      label: 'Quoted margin',
+      value: formatPence(finance.quotedMarginPence),
+      icon: TrendingUp,
+      accent: true,
+      hint: finance.quotedMarginPercent !== null ? `${finance.quotedMarginPercent}%` : undefined,
+    },
+    {
+      label: 'Committed (POs)',
+      value: formatPence(committedCostPence),
+      icon: ShoppingCart,
+      hint: `of ${formatPence(finance.quotedCostPence)} budget`,
+    },
     {
       label: 'Remaining budget',
       value: formatPence(remainingBudgetPence),
+      icon: PiggyBank,
       warn: overCommitted,
+      hint: overCommitted ? 'Over budget' : undefined,
     },
   ]
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6">
+      {/* Header */}
       <div className="flex flex-col gap-3">
         <Button variant="ghost" size="sm" className="-ml-2 w-fit" asChild>
           <Link href="/dashboard/jobs/list">
@@ -117,9 +197,9 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
           </Link>
         </Button>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Hammer className="h-5 w-5 text-muted-foreground" />
               <h1 className="text-2xl font-semibold tracking-tight text-balance">
                 {typedJob.job_number ?? 'Job'}
@@ -127,20 +207,17 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
               <Badge variant="outline" className={cn('capitalize', status.badgeClass)}>
                 {status.label}
               </Badge>
+              <Badge variant="secondary" className="bg-muted text-muted-foreground">
+                {stage.label}
+              </Badge>
             </div>
             <p className="text-muted-foreground text-pretty">
               {typedJob.title ?? typedJob.quote?.title ?? 'Untitled job'}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            {typedJob.quote ? (
-              <Button variant="outline" size="sm" asChild>
-                <Link href={`/dashboard/sales/${typedJob.quote.id}`}>
-                  <FileText className="mr-2 h-4 w-4" />
-                  View quote {typedJob.quote.quote_number ?? ''}
-                </Link>
-              </Button>
-            ) : null}
+
+          {/* Actions: primary delivery actions first, then documents/requests */}
+          <div className="flex flex-wrap items-center gap-2">
             <BookJobCallButton
               jobId={typedJob.id}
               siteId={typedJob.site?.id ?? null}
@@ -157,6 +234,15 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                 <RaiseJobInvoiceButton jobId={typedJob.id} />
               </>
             )}
+            <Separator orientation="vertical" className="hidden h-6 sm:block" />
+            {typedJob.quote ? (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/dashboard/sales/${typedJob.quote.id}`}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  Quote {typedJob.quote.quote_number ?? ''}
+                </Link>
+              </Button>
+            ) : null}
             <AddRequestButton
               entityType="job"
               entityId={typedJob.id}
@@ -177,17 +263,52 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
         </div>
       </div>
 
+      {/* Progress tracker */}
+      <JobProgressTracker
+        jobId={typedJob.id}
+        stage={typedJob.stage}
+        status={typedJob.status}
+        contractReviewedAt={typedJob.contract_reviewed_at}
+        stageDone={stageDone}
+        stageDetail={stageDetail}
+      />
+
+      {/* Finance KPI strip */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {stats.map((s) => (
+          <Card key={s.label}>
+            <CardContent className="flex flex-col gap-1 p-4">
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <s.icon className="h-3.5 w-3.5" />
+                {s.label}
+              </span>
+              <span
+                className={cn(
+                  'font-mono text-lg font-semibold tabular-nums',
+                  s.accent && 'text-chart-4',
+                  s.warn && 'text-destructive',
+                )}
+              >
+                {s.value}
+              </span>
+              {s.hint ? (
+                <span
+                  className={cn(
+                    'text-xs text-muted-foreground',
+                    s.warn && 'font-medium text-destructive',
+                  )}
+                >
+                  {s.hint}
+                </span>
+              ) : null}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Main column */}
         <div className="flex flex-col gap-6 lg:col-span-2">
-          <JobStagePanel
-            jobId={typedJob.id}
-            stage={typedJob.stage}
-            status={typedJob.status}
-            contractReviewedAt={typedJob.contract_reviewed_at}
-            reviewerName={typedJob.reviewer?.full_name ?? null}
-          />
-
           {typedJob.stage === 'contract_review' ? (
             <JobContractReview
               jobId={typedJob.id}
@@ -196,52 +317,19 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
             />
           ) : null}
 
-          {/* Profit monitor */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-2">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                Profit monitor
-              </CardTitle>
-              {finance.quotedMarginPercent !== null ? (
-                <Badge variant="secondary" className="bg-chart-4/15 text-foreground">
-                  {finance.quotedMarginPercent}% margin
-                </Badge>
-              ) : null}
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <dl className="space-y-2">
-                {financeRows.map((row) => (
-                  <div key={row.label} className="flex items-center justify-between gap-4">
-                    <dt className="text-sm text-muted-foreground">{row.label}</dt>
-                    <dd
-                      className={cn(
-                        'font-mono text-sm tabular-nums',
-                        row.strong && 'font-semibold',
-                        row.accent && 'text-chart-4',
-                        row.warn && 'font-semibold text-destructive',
-                      )}
-                    >
-                      {row.value}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-              <Separator />
-              <p className="text-xs text-muted-foreground text-pretty">
-                Contract value and quoted cost are the snapshot captured when the quote was
-                accepted. <strong>Committed</strong> reflects live purchase orders (excluding
-                cancelled). Actual costs (stock, expenses, subcontractors) will feed in as those
-                modules come online.
-              </p>
-            </CardContent>
-          </Card>
-
           <JobPurchasing
             jobId={typedJob.id}
             orders={purchaseOrders}
             progress={orderingProgress}
             suppliers={suppliers}
+          />
+
+          <JobCallsCard calls={calls} />
+
+          <JobInvoicesCard
+            invoices={invoices}
+            quotedNetPence={finance.valuePence}
+            invoicedNetPence={invoicedNetPence}
           />
         </div>
 
@@ -294,10 +382,6 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                 </span>
               </DetailRow>
 
-              <DetailRow icon={Hammer} label="Stage">
-                <span className="font-medium text-foreground">{stage.label}</span>
-              </DetailRow>
-
               <Separator />
 
               <div className="flex items-center justify-between gap-4">
@@ -314,6 +398,14 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                 <span className="text-muted-foreground">Created</span>
                 <span className="font-medium text-foreground">{formatDateUK(typedJob.created_at)}</span>
               </div>
+
+              <Separator />
+
+              <p className="text-xs text-muted-foreground text-pretty">
+                Contract value and quoted cost are the snapshot captured when the quote was
+                accepted. <strong>Committed</strong> reflects live purchase orders (excluding
+                cancelled).
+              </p>
             </CardContent>
           </Card>
 

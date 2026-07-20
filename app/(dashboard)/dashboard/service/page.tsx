@@ -14,14 +14,15 @@ import {
   AlertTriangle,
   Calendar,
   CheckCircle2,
-  Clock,
-  Users,
   ShieldCheck,
+  ShieldAlert,
   FileText,
   ChevronRight,
   Activity,
   Siren,
   Wrench,
+  Coins,
+  MapPinned,
 } from 'lucide-react'
 import type { Profile, ToleranceUnit } from '@/lib/types/database'
 
@@ -90,24 +91,14 @@ export default async function ServiceDashboardPage() {
   const trendStart = subWeeks(weekStart, 7)
 
   const [
-    sitesCount,
-    engineersCount,
-    pendingCount,
-    inProgressCount,
     completedMonthCount,
     openDefectsCount,
     emergencyCount,
+    chargeableCount,
+    followUpCount,
+    loneWorkerAlertCount,
+    todayCallsCount,
   ] = await Promise.all([
-    supabase.from('sites').select('id', { count: 'exact', head: true }),
-    supabase
-      .from('profiles')
-      .select('id', { count: 'exact', head: true })
-      .eq('role', 'engineer'),
-    supabase.from('tasks').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-    supabase
-      .from('tasks')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'in_progress'),
     supabase
       .from('tasks')
       .select('id', { count: 'exact', head: true })
@@ -123,6 +114,28 @@ export default async function ServiceDashboardPage() {
       .select('id', { count: 'exact', head: true })
       .eq('is_emergency', true)
       .in('status', ['pending', 'in_progress']),
+    // Completed calls flagged chargeable and still awaiting review before invoicing.
+    supabase
+      .from('tasks')
+      .select('id', { count: 'exact', head: true })
+      .eq('chargeable', true)
+      .eq('charge_review_status', 'pending'),
+    // Follow-up requests (further works) awaiting office review.
+    supabase
+      .from('follow_up_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'pending'),
+    // Active (unacknowledged) lone-worker amber/red alerts.
+    supabase
+      .from('lone_worker_events')
+      .select('id', { count: 'exact', head: true })
+      .is('acknowledged_at', null),
+    // Calls booked for today — the metric shown on the map tile.
+    supabase
+      .from('tasks')
+      .select('id', { count: 'exact', head: true })
+      .in('status', ['pending', 'in_progress'])
+      .eq('scheduled_date', todayStr),
   ])
 
   const taskSelect = `
@@ -215,7 +228,6 @@ export default async function ServiceDashboardPage() {
   })
 
   const reg = kpi.overall.regulatory
-  const totalOpen = (pendingCount.count || 0) + (inProgressCount.count || 0)
 
   // A past-due call only *reports* as overdue once its client KPI target date
   // has expired (weekly/monthly recurring PPM stays tied to the due
@@ -239,25 +251,12 @@ export default async function ServiceDashboardPage() {
 
   const stats = [
     {
-      label: 'Total Sites',
-      value: sitesCount.count || 0,
-      hint: 'Active client sites',
-      icon: Building2,
-      href: '/dashboard/sites',
-    },
-    {
-      label: 'Engineers',
-      value: engineersCount.count || 0,
-      hint: 'On the team',
-      icon: Users,
-      href: '/dashboard/engineers',
-    },
-    {
-      label: 'Open Calls',
-      value: totalOpen,
-      hint: `${inProgressCount.count || 0} in progress`,
-      icon: Clock,
+      label: 'Overdue',
+      value: overdueCount,
+      hint: 'KPI target date passed',
+      icon: AlertTriangle,
       href: '/dashboard/schedule',
+      alert: overdueCount > 0,
     },
     {
       label: 'Emergency Calls',
@@ -268,12 +267,12 @@ export default async function ServiceDashboardPage() {
       alert: (emergencyCount.count || 0) > 0,
     },
     {
-      label: 'Overdue',
-      value: overdueCount,
-      hint: 'KPI target date passed',
-      icon: AlertTriangle,
-      href: '/dashboard/schedule',
-      alert: overdueCount > 0,
+      label: 'Lone Worker',
+      value: loneWorkerAlertCount.count || 0,
+      hint: 'Active safety alerts',
+      icon: ShieldAlert,
+      href: '/dashboard/lone-worker',
+      alert: (loneWorkerAlertCount.count || 0) > 0,
     },
     {
       label: 'Open Defects',
@@ -282,6 +281,29 @@ export default async function ServiceDashboardPage() {
       icon: AlertTriangle,
       href: '/dashboard/defects',
       alert: (openDefectsCount.count || 0) > 0,
+    },
+    {
+      label: 'Chargeable Calls',
+      value: chargeableCount.count || 0,
+      hint: 'Awaiting charge review',
+      icon: Coins,
+      href: '/dashboard/chargeable',
+      alert: (chargeableCount.count || 0) > 0,
+    },
+    {
+      label: 'Follow-ups',
+      value: followUpCount.count || 0,
+      hint: 'Further works to review',
+      icon: Wrench,
+      href: '/dashboard/follow-ups',
+      alert: (followUpCount.count || 0) > 0,
+    },
+    {
+      label: 'Map',
+      value: todayCallsCount.count || 0,
+      hint: 'Calls booked today',
+      icon: MapPinned,
+      href: '/dashboard/schedule/map',
     },
     {
       label: 'Done This Month',
@@ -452,7 +474,7 @@ export default async function ServiceDashboardPage() {
         </Card>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((s) => (
           <Link
             key={s.label}

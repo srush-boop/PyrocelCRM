@@ -61,11 +61,17 @@ export function RaiseJobInvoiceButton({ jobId }: { jobId: string }) {
       return
     }
     setData(res.data)
-    // Pre-fill equipment with remaining issued qty.
+    // Pre-fill equipment with the remaining billable quantity. This mirrors the
+    // server, which caps equipment lines against the QUOTED quantity (not the
+    // separately-recorded "issued" quantity). When issued tracking has been used
+    // we prefer the remaining issued amount; otherwise we fall back to the quoted
+    // quantity so equipment can still be invoiced without a separate issue step.
     const eq: Record<string, string> = {}
     for (const l of res.data.lines) {
-      const remainingIssued = Math.max(0, l.issuedQty - l.invoicedQty)
-      if (!l.isService && remainingIssued > 0) eq[l.id] = String(remainingIssued)
+      if (l.isService) continue
+      const cap = l.issuedQty > 0 ? l.issuedQty : l.quantity
+      const remaining = Math.max(0, cap - l.invoicedQty)
+      if (remaining > 0) eq[l.id] = String(remaining)
     }
     setEquipQty(eq)
     setSelectedLines(new Set())
@@ -315,6 +321,7 @@ function EquipmentTable({
         <TableHeader>
           <TableRow>
             <TableHead>Item</TableHead>
+            <TableHead className="text-center">Quoted</TableHead>
             <TableHead className="text-center">Issued</TableHead>
             <TableHead className="text-center">Billed</TableHead>
             <TableHead className="w-24 text-center">Invoice qty</TableHead>
@@ -323,11 +330,15 @@ function EquipmentTable({
         </TableHeader>
         <TableBody>
           {lines.map((l) => {
-            const remainingIssued = Math.max(0, l.issuedQty - l.invoicedQty)
+            // Cap on the quoted quantity (matching the server); use issued as the
+            // cap only when issued has actually been recorded for the line.
+            const cap = l.issuedQty > 0 ? l.issuedQty : l.quantity
+            const remaining = Math.max(0, cap - l.invoicedQty)
             return (
               <TableRow key={l.id}>
                 <TableCell className="font-medium">{l.description}</TableCell>
-                <TableCell className="text-center">{l.issuedQty}</TableCell>
+                <TableCell className="text-center">{l.quantity}</TableCell>
+                <TableCell className="text-center text-muted-foreground">{l.issuedQty}</TableCell>
                 <TableCell className="text-center text-muted-foreground">
                   {l.invoicedQty}
                 </TableCell>
@@ -336,11 +347,11 @@ function EquipmentTable({
                     type="number"
                     inputMode="decimal"
                     value={qty[l.id] ?? ''}
-                    max={remainingIssued}
+                    max={remaining}
                     min={0}
                     onChange={(e) => setQty({ ...qty, [l.id]: e.target.value })}
                     className="h-8 text-center"
-                    disabled={remainingIssued <= 0}
+                    disabled={remaining <= 0}
                   />
                 </TableCell>
                 <TableCell className="text-right">{formatPence(l.unitPricePence)}</TableCell>

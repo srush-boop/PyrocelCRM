@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { Loader2, Siren, Coins } from 'lucide-react'
+import { Loader2, Siren, Coins, Route } from 'lucide-react'
 import type { ServiceType, WorkerType, ToleranceUnit, SystemType, ChecklistTemplate, NominalCode } from '@/lib/types/database'
 import { NominalCodeSelect } from '@/components/dashboard/billing/nominal-code-select'
 import { WORKER_TYPE_LABELS } from '@/lib/assignment'
@@ -68,6 +68,7 @@ export function EditServiceTypeDialog({ serviceType, systemTypes, nominalCodes, 
     is_emergency: serviceType.is_emergency ?? false,
     default_kpi_hours: serviceType.default_kpi_hours ?? 24,
     default_chargeable: serviceType.default_chargeable ?? false,
+    route_eligible: serviceType.route_eligible ?? true,
     nominal_code_id: serviceType.nominal_code_id ?? null,
   })
   const router = useRouter()
@@ -139,6 +140,10 @@ export function EditServiceTypeDialog({ serviceType, systemTypes, nominalCodes, 
         ...callKindFlags(formData.call_kind, formData.is_emergency),
         default_kpi_hours: isReactive ? formData.default_kpi_hours : null,
         default_chargeable: formData.default_chargeable,
+        // Only relevant for CDO delivery; force true otherwise so non-CDO types
+        // never carry a misleading "not routed" flag.
+        route_eligible:
+          formData.default_worker_type === 'cdo' ? formData.route_eligible : true,
         nominal_code_id: formData.nominal_code_id,
       })
       .eq('id', serviceType.id)
@@ -399,6 +404,26 @@ export function EditServiceTypeDialog({ serviceType, systemTypes, nominalCodes, 
                 Who usually performs this service. Sets the default when added to a site.
               </p>
             </div>
+            {formData.default_worker_type === 'cdo' && (
+              <div className="flex items-start justify-between gap-3 rounded-md border border-dashed p-3">
+                <div className="space-y-0.5">
+                  <Label htmlFor="route-eligible" className="flex items-center gap-2">
+                    <Route className="h-4 w-4 text-teal-600" />
+                    Allocate to a route
+                  </Label>
+                  <p className="text-xs text-muted-foreground text-pretty">
+                    CDO-delivered services of this type can be added to a CDO route. Turn this off
+                    for CDO work that is never routed (e.g. fire extinguisher servicing, fire &amp;
+                    smoke damper testing).
+                  </p>
+                </div>
+                <Switch
+                  id="route-eligible"
+                  checked={formData.route_eligible}
+                  onCheckedChange={(v) => setFormData({ ...formData, route_eligible: v })}
+                />
+              </div>
+            )}
             <div className="grid gap-2">
               <Label htmlFor="defects-to-email">Defects to</Label>
               <Input

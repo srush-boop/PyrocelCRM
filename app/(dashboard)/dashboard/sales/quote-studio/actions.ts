@@ -446,6 +446,28 @@ export async function buildStudioSpec(input: {
 
 // ---- Save the studio quote (persist takeoff + real quote) ------------
 
+/** A product combination the user chose to compare (a manufacturer range).
+ * The recommended one prices the main quote; the rest are summarised. */
+export interface StudioComparisonOptionInput {
+  /** Range id, or null for the generic / unbranded default combination. */
+  rangeId: string | null
+  recommended: boolean
+  pros: string[]
+  cons: string[]
+}
+
+/** A priced product option persisted onto the quote's design_spec for
+ * rendering the "Product options considered" comparison on the document. */
+export interface StudioQuoteOption {
+  rangeId: string | null
+  name: string
+  recommended: boolean
+  /** Total sell price (ex VAT) for the SAME device schedule on this combination. */
+  sellPence: number
+  pros: string[]
+  cons: string[]
+}
+
 export interface SaveStudioQuoteInput {
   title: string
   workType: string // WORK_TYPES code, e.g. 'SIC'
@@ -454,6 +476,9 @@ export interface SaveStudioQuoteInput {
   drawingBlobUrl?: string | null
   loops?: number | null
   rangeId?: string | null
+  /** Product combinations the user selected to compare on the quote. The
+   * recommended one should match `rangeId` (it prices the main quote). */
+  comparisonOptions?: StudioComparisonOptionInput[]
   margin: number
   client_id?: string | null
   site_id?: string | null
@@ -503,6 +528,46 @@ function resolveAssemblyItems(
       quantity: i.quantity,
       catalogue_item_id: rangePart ?? i.catalogue_item_id ?? dt?.default_catalogue_item_id ?? null,
       contributes_to_device_count: dt?.contributes_to_device_count ?? true,
+    }
+  })
+}
+
+/**
+ * Re-price each chosen product combination SERVER-SIDE against the SAME device
+ * schedule so the quote can summarise alternatives next to the recommended one.
+ * Prices are authoritative (recomputed from live catalogue costs).
+ */
+function buildComparisonOptions(
+  config: StudioConfig,
+  confirmedItems: StudioTakeoffItemInput[],
+  options: StudioComparisonOptionInput[] | undefined,
+  margin: number,
+  loops: number | null | undefined,
+): StudioQuoteOption[] {
+  if (!options || options.length === 0) return []
+  return options.map((opt) => {
+    const assembly = buildAssembly({
+      items: resolveAssemblyItems(config, confirmedItems, opt.rangeId),
+      kitRules: config.kitRules,
+      catalogue: config.catalogue,
+      loops: loops ?? null,
+      rangeId: opt.rangeId ?? null,
+      systemMargin: margin,
+    })
+    const range = opt.rangeId ? config.ranges.find((r) => r.id === opt.rangeId) : null
+    const manufacturer = range
+      ? config.manufacturers.find((m) => m.id === range.manufacturerId)
+      : null
+    const name = range
+      ? [manufacturer?.name, range.name].filter(Boolean).join(' ')
+      : 'Generic / unbranded'
+    return {
+      rangeId: opt.rangeId,
+      name,
+      recommended: opt.recommended,
+      sellPence: assembly.totalSellPence,
+      pros: opt.pros.filter((p) => p.trim()),
+      cons: opt.cons.filter((c) => c.trim()),
     }
   })
 }
@@ -591,6 +656,15 @@ export async function saveStudioQuote(
   })
 
   const lines = assembly.lines.map(toQuoteLineInput)
+
+  // Re-price the chosen product combinations for the comparison summary.
+  const comparisonOptions = buildComparisonOptions(
+    config,
+    confirmedItems,
+    input.comparisonOptions,
+    input.margin,
+    input.loops,
+  )
 
   // Build any additional discipline sections (access control, intruder, etc.).
   // Each becomes its own priced system within the same quote, re-priced
@@ -707,6 +781,7 @@ export async function saveStudioQuote(
         understanding: input.understanding,
         designCategory: input.designCategory,
         spec: input.spec,
+        options: comparisonOptions,
         generatedAt: new Date().toISOString(),
         generatedBy: user.id,
       },

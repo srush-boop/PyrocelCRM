@@ -21,6 +21,7 @@ export interface EmailFooter {
   message?: string | null
   imageUrl?: string | null
   links?: { label: string; url: string }[]
+  enabled?: boolean
 }
 
 export interface EmailData {
@@ -390,6 +391,7 @@ export const generateClientNoAccessEmail = (data: EmailData): { subject: string;
     ${detailsPanel(data, 'Attended')}
     ${engineerNotesHtml(data)}
     ${ctaButton(data.reportUrl, 'Open Full Report')}
+    ${logbookLink(data)}
     <h3 style="${H3}">What happens next</h3>
     <p style="margin:0 0 10px;font-size:14px;color:${BRAND.slate};">
       Please contact our service desk to arrange access so we can re-attend and complete the service.
@@ -398,7 +400,7 @@ export const generateClientNoAccessEmail = (data: EmailData): { subject: string;
     <p style="margin:18px 0 0;">Kind regards,<br/><strong>The Pyrocel Team</strong></p>`
   return {
     subject: `No access: ${data.serviceType} at ${data.siteName}${data.referenceNumber ? ` (Ref ${data.referenceNumber})` : ''}`,
-    html: emailShell({ ribbonLabel: 'Visit could not be completed', ribbonColor: '#d97706', body }),
+    html: emailShell({ ribbonLabel: 'Visit could not be completed', ribbonColor: '#d97706', body, footer: data.footer }),
   }
 }
 

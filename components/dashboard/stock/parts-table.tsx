@@ -53,7 +53,8 @@ export function PartsTable({ parts, suppliers = [], nominalCodes = [] }: PartsTa
   const filtered = parts.filter(
     (p) =>
       p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.sku?.toLowerCase().includes(search.toLowerCase()),
+      p.sku?.toLowerCase().includes(search.toLowerCase()) ||
+      p.manufacturer?.toLowerCase().includes(search.toLowerCase()),
   )
 
   const handleDelete = async () => {
@@ -91,6 +92,7 @@ export function PartsTable({ parts, suppliers = [], nominalCodes = [] }: PartsTa
             <TableRow>
               <TableHead>Part</TableHead>
               <TableHead className="hidden sm:table-cell">SKU</TableHead>
+              <TableHead className="hidden lg:table-cell">Manufacturer</TableHead>
               <TableHead className="hidden lg:table-cell">Supplier</TableHead>
               <TableHead className="hidden md:table-cell">Unit</TableHead>
               <TableHead className="text-right">Unit cost</TableHead>
@@ -102,7 +104,7 @@ export function PartsTable({ parts, suppliers = [], nominalCodes = [] }: PartsTa
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center">
+                <TableCell colSpan={9} className="h-24 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <Package className="mb-2 h-8 w-8 text-muted-foreground/50" />
                     <p className="text-muted-foreground">No parts in the catalogue yet</p>
@@ -122,6 +124,9 @@ export function PartsTable({ parts, suppliers = [], nominalCodes = [] }: PartsTa
                   </TableCell>
                   <TableCell className="hidden text-muted-foreground sm:table-cell">
                     {part.sku ?? '-'}
+                  </TableCell>
+                  <TableCell className="hidden text-muted-foreground lg:table-cell">
+                    {part.manufacturer ?? '-'}
                   </TableCell>
                   <TableCell className="hidden text-muted-foreground lg:table-cell">
                     {part.supplier?.name ?? '-'}

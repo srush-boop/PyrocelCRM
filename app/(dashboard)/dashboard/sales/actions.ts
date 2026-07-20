@@ -465,6 +465,7 @@ export interface CatalogueInput {
   name: string
   product_code?: string | null
   description?: string | null
+  manufacturer?: string | null
   category?: string | null
   // Parts/catalogue items are classified by system type (e.g. Fire Alarm),
   // not by the narrower service type.
@@ -492,6 +493,7 @@ export async function saveCatalogueItem(
   name: input.name.trim(),
   product_code: input.product_code?.trim() || null,
   description: input.description?.trim() || null,
+  manufacturer: input.manufacturer?.trim() || null,
   category: input.category?.trim() || null,
   system_type_id: input.system_type_id || null,
   // Legacy classification; parts are now scoped by system type.
@@ -725,6 +727,7 @@ export async function importCatalogueItems(
       name,
       product_code: code || null,
       description: pick(row, ['description', 'notes']) || null,
+      manufacturer: pick(row, ['manufacturer', 'brand', 'make']) || null,
       category: pick(row, ['category']) || null,
       system_type_id: systemName ? (systemByName.get(systemName) ?? null) : null,
       service_type_id: null,
@@ -791,7 +794,7 @@ export async function addCatalogueItemsToStock(
   // Load the chosen catalogue items.
   const { data: catItems, error: catErr } = await supabase
     .from('quote_catalogue_items')
-    .select('id, name, product_code, description, default_unit, unit_cost_pence, supplier_id')
+    .select('id, name, product_code, description, manufacturer, default_unit, unit_cost_pence, supplier_id')
     .in('id', ids)
   if (catErr || !catItems) {
     return { ok: false, added: 0, skipped: 0, error: 'Could not load catalogue items.' }
@@ -814,6 +817,7 @@ export async function addCatalogueItemsToStock(
       name: string
       product_code: string | null
       description: string | null
+      manufacturer: string | null
       default_unit: string | null
       unit_cost_pence: number
       supplier_id: string | null
@@ -823,6 +827,7 @@ export async function addCatalogueItemsToStock(
     .map((c) => ({
       name: c.name,
       sku: c.product_code?.trim() || null,
+      manufacturer: c.manufacturer?.trim() || null,
       unit: c.default_unit?.trim() || 'each',
       // parts.unit_cost is stored in pounds; catalogue cost is in pence.
       unit_cost: Math.round(c.unit_cost_pence) / 100,

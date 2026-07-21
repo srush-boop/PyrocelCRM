@@ -107,6 +107,45 @@ async function userName(admin: SupabaseClient, userId: string): Promise<string> 
 }
 
 /**
+ * Notify the WORKER on their own device (in-app + web push, so it reaches them
+ * even when the app/tab is closed). This closes the gap where a worker who shut
+ * the app never knew their check-in was overdue and silently escalated.
+ * Best-effort: a push failure must never break the state machine.
+ */
+async function notifyWorker(
+  session: SessionRow,
+  level: 'prompting' | 'amber' | 'red',
+): Promise<void> {
+  const copy = {
+    prompting: {
+      title: 'Safety check-in due',
+      body: "Open the app and confirm you're safe to reset your lone worker timer.",
+    },
+    amber: {
+      title: 'Missed safety check-in',
+      body: "You've missed a check-in. Confirm you're safe now or this will escalate to an emergency.",
+    },
+    red: {
+      title: 'Lone worker emergency raised',
+      body: "Your shift has escalated and the office has been alerted. If you're safe, confirm immediately.",
+    },
+  }[level]
+
+  try {
+    await notifyUsers({
+      userIds: [session.user_id],
+      title: copy.title,
+      body: copy.body,
+      url: '/dashboard',
+      category: 'lone_worker',
+      data: { kind: 'lone_worker_self', level, sessionId: session.id },
+    })
+  } catch (err) {
+    console.log('[v0] lone-worker worker push failed:', (err as Error).message)
+  }
+}
+
+/**
  * Advance a single session's state machine to reflect `now`. Idempotent: safe to
  * call repeatedly (from the per-minute cron AND the worker's on-device ticker).
  * Escalations insert one active event per level and notify office/admin once.
@@ -182,6 +221,10 @@ export async function evaluateSessionRow(
     }
     loc = await escalate('red')
   }
+
+  // Always nudge the WORKER on their own device (push reaches them even with the
+  // app closed) so a forgotten "Finish shift" can no longer escalate silently.
+  await notifyWorker(session, target as 'prompting' | 'amber' | 'red')
 
   const update: Record<string, unknown> = { prompt_state: target }
   if (loc && loc.lat != null && loc.lng != null) {

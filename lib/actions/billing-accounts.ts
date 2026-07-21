@@ -115,6 +115,58 @@ export async function createBillingAccount(
   return { error: null }
 }
 
+// Guarantee a client has a primary (default) billing account — this IS the
+// "client account" all billing settings live on. Called when the billing dialog
+// opens so every client always has one, even legacy data or clients created with
+// the "create default account" toggle off.
+export async function ensureDefaultBillingAccount(
+  clientId: string,
+  clientName: string,
+): Promise<{ error: string | null; created: boolean }> {
+  const ctx = await requireManager()
+  if ('error' in ctx) return { error: ctx.error ?? 'Not authorised', created: false }
+  const { supabase } = ctx
+
+  // Already has a default account — nothing to do.
+  const { data: existingDefault } = await supabase
+    .from('billing_accounts')
+    .select('id')
+    .eq('client_id', clientId)
+    .eq('is_default', true)
+    .maybeSingle()
+  if (existingDefault) return { error: null, created: false }
+
+  // Accounts exist but none is flagged default — promote the oldest.
+  const { data: oldest } = await supabase
+    .from('billing_accounts')
+    .select('id')
+    .eq('client_id', clientId)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  if (oldest) {
+    const { error } = await supabase
+      .from('billing_accounts')
+      .update({ is_default: true })
+      .eq('id', (oldest as { id: string }).id)
+    if (error) return { error: error.message, created: false }
+    revalidatePath(`/dashboard/clients/${clientId}`)
+    return { error: null, created: false }
+  }
+
+  // No accounts at all — create the client's primary account, named after them.
+  const { error } = await supabase.from('billing_accounts').insert({
+    client_id: clientId,
+    ...sanitiseInput({ name: clientName.trim() || 'Main account' }),
+    is_default: true,
+  })
+  if (error) return { error: error.message, created: false }
+
+  revalidatePath(`/dashboard/clients/${clientId}`)
+  return { error: null, created: true }
+}
+
 export async function updateBillingAccount(
   id: string,
   clientId: string,

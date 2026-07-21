@@ -38,6 +38,7 @@ import {
   updateBillingAccount,
   setBillingAccountStatus,
   setDefaultBillingAccount,
+  ensureDefaultBillingAccount,
   type BillingAccountInput,
 } from '@/lib/actions/billing-accounts'
 
@@ -92,6 +93,9 @@ export function BillingAccountsDialog({ client, open, onOpenChange }: BillingAcc
 
   const loadAccounts = useCallback(async () => {
     setLoading(true)
+    // Guarantee the client's primary account exists before loading, so the
+    // "client account" is always present (auto-created/​promoted server-side).
+    await ensureDefaultBillingAccount(client.id, client.name)
     const { data, error } = await supabase
       .from('billing_accounts')
       .select('*')
@@ -104,7 +108,7 @@ export function BillingAccountsDialog({ client, open, onOpenChange }: BillingAcc
       setAccounts((data || []) as BillingAccount[])
     }
     setLoading(false)
-  }, [supabase, client.id])
+  }, [supabase, client.id, client.name])
 
   useEffect(() => {
     if (open) {
@@ -197,128 +201,255 @@ export function BillingAccountsDialog({ client, open, onOpenChange }: BillingAcc
     router.refresh()
   }
 
+  // The default account IS the client's own billing account; the rest are
+  // linked additional billing entities (regions, subsidiaries, etc.).
+  const primary = accounts.find((a) => a.is_default) ?? null
+  const additional = accounts.filter((a) => !a.is_default)
+  const rateCardLabel = (id: string | null) => {
+    if (!id) {
+      const def = rateCards.find((c) => c.is_default)
+      return def ? `Company default (${def.name})` : 'Company default'
+    }
+    return rateCards.find((c) => c.id === id)?.name ?? 'Custom rate card'
+  }
+
+  // Compact row used for linked (non-default) additional billing accounts.
+  function renderAdditionalRow(account: BillingAccount) {
+    return (
+      <li key={account.id} className="rounded-md border p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium">{account.name}</span>
+              <BillingStatusBadge status={account.status} />
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
+              <span>
+                Sage ref:{' '}
+                {account.sage_account_ref ? (
+                  <span className="font-mono text-foreground">
+                    {account.sage_account_ref}
+                  </span>
+                ) : (
+                  <span className="italic">not set</span>
+                )}
+              </span>
+              <span>{account.payment_terms_days} day terms</span>
+              <span>
+                {account.default_tax_code} · {account.default_nominal_code}
+              </span>
+            </div>
+            {account.invoice_address && (
+              <p className="text-xs text-muted-foreground">
+                {account.invoice_address}
+                {account.invoice_postcode ? `, ${account.invoice_postcode}` : ''}
+              </p>
+            )}
+            {account.status !== 'live' && account.status_reason && (
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                {account.status === 'suspended' ? 'Suspended' : 'Closed'}:{' '}
+                {account.status_reason}
+              </p>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              aria-label={`Edit ${account.name}`}
+              onClick={() => startEdit(account)}
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-2 flex flex-wrap items-center gap-2 border-t pt-2">
+          <Label className="text-xs text-muted-foreground">Status</Label>
+          <Select
+            value={account.status}
+            onValueChange={(v) => handleStatusChange(account, v as BillingAccountStatus)}
+          >
+            <SelectTrigger className="h-8 w-[150px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="live">Live (contracted)</SelectItem>
+              <SelectItem value="suspended">Suspended (hold)</SelectItem>
+              <SelectItem value="dead">Closed</SelectItem>
+            </SelectContent>
+          </Select>
+          <RecurringChargesManager account={account} />
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto gap-1.5"
+            onClick={() => handleSetDefault(account)}
+          >
+            <Star className="h-3.5 w-3.5" />
+            Make primary
+          </Button>
+        </div>
+      </li>
+    )
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[680px]">
         <DialogHeader>
-          <DialogTitle>Billing accounts — {client.name}</DialogTitle>
+          <DialogTitle>Billing — {client.name}</DialogTitle>
           <DialogDescription>
-            Each billing account is a billable entity (sub-client) with its own Sage A/C ref
-            and invoice address. Sites and services are invoiced under their account, falling
-            back to the default.
+            The primary account is {client.name}&apos;s own billing account and holds all
+            billing settings used by default. Add linked accounts for separate billing entities
+            (regions, subsidiaries); sites and services can be invoiced under those instead.
           </DialogDescription>
         </DialogHeader>
 
-        {/* Existing accounts */}
-        <div className="space-y-3">
-          {loading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-            </div>
-          ) : accounts.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-8 text-center">
-              <Building2 className="h-7 w-7 text-muted-foreground/50" />
-              <p className="text-sm text-muted-foreground">No billing accounts yet.</p>
-            </div>
-          ) : (
-            <ul className="space-y-2">
-              {accounts.map((account) => (
-                <li key={account.id} className="rounded-md border p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium">{account.name}</span>
-                        <BillingStatusBadge status={account.status} />
-                        {account.is_default && (
-                          <Badge variant="secondary" className="gap-1 text-xs">
-                            <Star className="h-3 w-3" />
-                            Default
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
-                        <span>
-                          Sage ref:{' '}
-                          {account.sage_account_ref ? (
-                            <span className="font-mono text-foreground">
-                              {account.sage_account_ref}
-                            </span>
-                          ) : (
-                            <span className="italic">not set</span>
-                          )}
-                        </span>
-                        <span>{account.payment_terms_days} day terms</span>
-                        <span>
-                          {account.default_tax_code} · {account.default_nominal_code}
-                        </span>
-                      </div>
-                      {account.invoice_address && (
-                        <p className="text-xs text-muted-foreground">
-                          {account.invoice_address}
-                          {account.invoice_postcode ? `, ${account.invoice_postcode}` : ''}
-                        </p>
-                      )}
-                      {account.status !== 'live' && account.status_reason && (
-                        <p className="text-xs text-amber-700 dark:text-amber-300">
-                          {account.status === 'suspended' ? 'Suspended' : 'Closed'}:{' '}
-                          {account.status_reason}
-                        </p>
-                      )}
+        {loading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+          </div>
+        ) : (
+          <div className="space-y-5">
+            {/* Primary account = the client's own billing account (all settings). */}
+            {primary && (
+              <section className="space-y-3 rounded-lg border-2 border-primary/30 bg-primary/5 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className="gap-1 text-xs">
+                        <Star className="h-3 w-3" />
+                        Client account
+                      </Badge>
+                      <BillingStatusBadge status={primary.status} />
                     </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        aria-label={`Edit ${account.name}`}
-                        onClick={() => startEdit(account)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    <p className="font-medium">{primary.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      This is {client.name}&apos;s main billing account. All sites and services
+                      are invoiced under it unless assigned to a linked account below.
+                    </p>
                   </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 gap-1.5"
+                    onClick={() => startEdit(primary)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit details
+                  </Button>
+                </div>
 
-                  {/* Row actions: status + default */}
-                  <div className="mt-2 flex flex-wrap items-center gap-2 border-t pt-2">
-                    <Label className="text-xs text-muted-foreground">Status</Label>
-                    <Select
-                      value={account.status}
-                      onValueChange={(v) => handleStatusChange(account, v as BillingAccountStatus)}
-                    >
-                      <SelectTrigger className="h-8 w-[150px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="live">Live (contracted)</SelectItem>
-                        <SelectItem value="suspended">Suspended (hold)</SelectItem>
-                        <SelectItem value="dead">Closed</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <RecurringChargesManager account={account} />
-                    {!account.is_default && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="ml-auto gap-1.5"
-                        onClick={() => handleSetDefault(account)}
-                      >
-                        <Star className="h-3.5 w-3.5" />
-                        Make default
-                      </Button>
+                {/* All billing settings, visible on the client account. */}
+                <dl className="grid gap-x-6 gap-y-2 border-t pt-3 text-sm sm:grid-cols-2">
+                  <Detail label="Sage A/C ref">
+                    {primary.sage_account_ref ? (
+                      <span className="font-mono">{primary.sage_account_ref}</span>
+                    ) : (
+                      <span className="italic text-muted-foreground">not set</span>
                     )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+                  </Detail>
+                  <Detail label="Payment terms">
+                    {primary.payment_terms_days} days
+                  </Detail>
+                  <Detail label="Tax / nominal">
+                    {primary.default_tax_code} · {primary.default_nominal_code}
+                  </Detail>
+                  <Detail label="Rate card">{rateCardLabel(primary.rate_card_id)}</Detail>
+                  <Detail label="Billing frequency">
+                    {BILLING_FREQUENCY_LABELS[primary.billing_frequency ?? 'on_demand']}
+                  </Detail>
+                  <Detail label="Invoice contact">
+                    {primary.invoice_contact_name || (
+                      <span className="italic text-muted-foreground">—</span>
+                    )}
+                  </Detail>
+                  <Detail label="Invoice email">
+                    {primary.invoice_email || (
+                      <span className="italic text-muted-foreground">—</span>
+                    )}
+                  </Detail>
+                  <Detail label="Invoice phone">
+                    {primary.invoice_phone || (
+                      <span className="italic text-muted-foreground">—</span>
+                    )}
+                  </Detail>
+                  <Detail label="Invoice address" className="sm:col-span-2">
+                    {primary.invoice_address ? (
+                      <>
+                        {primary.invoice_address}
+                        {primary.invoice_postcode ? `, ${primary.invoice_postcode}` : ''}
+                      </>
+                    ) : (
+                      <span className="italic text-muted-foreground">
+                        Uses the site address
+                      </span>
+                    )}
+                  </Detail>
+                  {primary.notes && (
+                    <Detail label="Notes" className="sm:col-span-2">
+                      {primary.notes}
+                    </Detail>
+                  )}
+                </dl>
 
-          {editing === null && (
-            <Button onClick={startAdd} variant="outline" className="gap-2">
-              <Plus className="h-4 w-4" />
-              Add billing account
-            </Button>
-          )}
-        </div>
+                {primary.status !== 'live' && primary.status_reason && (
+                  <p className="text-xs text-amber-700 dark:text-amber-300">
+                    {primary.status === 'suspended' ? 'Suspended' : 'Closed'}:{' '}
+                    {primary.status_reason}
+                  </p>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                  <Label className="text-xs text-muted-foreground">Status</Label>
+                  <Select
+                    value={primary.status}
+                    onValueChange={(v) => handleStatusChange(primary, v as BillingAccountStatus)}
+                  >
+                    <SelectTrigger className="h-8 w-[150px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="live">Live (contracted)</SelectItem>
+                      <SelectItem value="suspended">Suspended (hold)</SelectItem>
+                      <SelectItem value="dead">Closed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <RecurringChargesManager account={primary} />
+                </div>
+              </section>
+            )}
+
+            {/* Additional linked billing accounts */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium">Additional billing accounts</h3>
+                <span className="text-xs text-muted-foreground">
+                  {additional.length} linked
+                </span>
+              </div>
+              {additional.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-6 text-center">
+                  <Building2 className="h-6 w-6 text-muted-foreground/50" />
+                  <p className="text-sm text-muted-foreground">
+                    No additional accounts. Add one for a separate billing entity.
+                  </p>
+                </div>
+              ) : (
+                <ul className="space-y-2">{additional.map(renderAdditionalRow)}</ul>
+              )}
+
+              {editing === null && (
+                <Button onClick={startAdd} variant="outline" className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Add billing account
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Add / edit form */}
         {editing !== null && (
@@ -524,5 +655,23 @@ export function BillingAccountsDialog({ client, open, onOpenChange }: BillingAcc
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// A labelled read-only field in the primary account's settings grid.
+function Detail({
+  label,
+  children,
+  className,
+}: {
+  label: string
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div className={className}>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="text-foreground">{children}</dd>
+    </div>
   )
 }

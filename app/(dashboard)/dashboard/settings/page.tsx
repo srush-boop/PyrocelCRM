@@ -64,8 +64,9 @@ export default async function SettingsPage() {
   let internalTaskUsers: Pick<Profile, 'id' | 'full_name' | 'role'>[] = []
   let internalTaskDepartments = (departmentsResult.data as Department[]) || []
   let internalTaskRoles = (rolesResult.data as Role[]) || []
+  let internalTaskDocuments: { id: string; name: string }[] = []
   if (canManageInternalTasks) {
-    const [tplRes, usersRes] = await Promise.all([
+    const [tplRes, usersRes, docsRes] = await Promise.all([
       supabase
         .from('internal_task_templates')
         .select('*')
@@ -76,10 +77,17 @@ export default async function SettingsPage() {
         .select('id, full_name, role')
         .eq('status', 'active')
         .order('full_name', { ascending: true }),
+      // Company-wide reference documents that can be linked from a task form.
+      supabase
+        .from('documents')
+        .select('id, name')
+        .eq('owner_type', 'system_reference')
+        .order('name', { ascending: true }),
     ])
     internalTaskTemplates = (tplRes.data as InternalTaskTemplate[]) || []
     internalTaskUsers =
       (usersRes.data as Pick<Profile, 'id' | 'full_name' | 'role'>[]) || []
+    internalTaskDocuments = (docsRes.data as { id: string; name: string }[]) || []
     // Office isn't an admin, so departments/roles weren't loaded above.
     if (!isAdmin) {
       const [deptRes, rolesRes] = await Promise.all([

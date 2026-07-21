@@ -40,6 +40,10 @@ import {
   CornerDownRight,
   GripVertical,
   BellRing,
+  Heading,
+  FileText,
+  Link2,
+  Table as TableIcon,
 } from 'lucide-react'
 import type {
   Department,
@@ -47,6 +51,8 @@ import type {
   Profile,
   InternalTaskTemplate,
   InternalTaskFrequency,
+  InternalTaskItem,
+  InternalTaskTableColumn,
   ChecklistItem,
   ChecklistCondition,
 } from '@/lib/types/database'
@@ -60,6 +66,22 @@ interface Props {
   departments: Department[]
   roles: Role[]
   users: Pick<Profile, 'id' | 'full_name' | 'role'>[]
+  // Company-wide reference documents that can be linked from a doc_link block.
+  documents: { id: string; name: string }[]
+}
+
+// Question types the user actually answers (support conditional rules).
+type QuestionType = 'pass_fail' | 'checkbox' | 'text' | 'number'
+const QUESTION_TYPES: readonly QuestionType[] = [
+  'pass_fail',
+  'checkbox',
+  'text',
+  'number',
+]
+
+// Whether a block is a question the user answers (vs a display/content block).
+function isQuestionType(type: InternalTaskItem['type']): type is QuestionType {
+  return (QUESTION_TYPES as readonly string[]).includes(type)
 }
 
 const FREQUENCY_LABELS: Record<InternalTaskFrequency, string> = {
@@ -119,7 +141,13 @@ function blankTemplate(): InternalTaskTemplate {
   }
 }
 
-export function InternalTasksSettings({ templates, departments, roles, users }: Props) {
+export function InternalTasksSettings({
+  templates,
+  departments,
+  roles,
+  users,
+  documents,
+}: Props) {
   const router = useRouter()
   const [editing, setEditing] = useState<InternalTaskTemplate | null>(null)
   const [open, setOpen] = useState(false)
@@ -207,6 +235,7 @@ export function InternalTasksSettings({ templates, departments, roles, users }: 
           departments={departments}
           roles={roles}
           users={users}
+          documents={documents}
           onSaved={() => {
             setOpen(false)
             setEditing(null)
@@ -270,6 +299,7 @@ function TemplateEditorDialog({
   departments,
   roles,
   users,
+  documents,
   onSaved,
 }: {
   open: boolean
@@ -278,6 +308,7 @@ function TemplateEditorDialog({
   departments: Department[]
   roles: Role[]
   users: Pick<Profile, 'id' | 'full_name' | 'role'>[]
+  documents: { id: string; name: string }[]
   onSaved: () => void
 }) {
   const [draft, setDraft] = useState<InternalTaskTemplate>(template)
@@ -288,9 +319,9 @@ function TemplateEditorDialog({
     setDraft((d) => ({ ...d, ...updates }))
   }
 
-  // --- Question helpers ------------------------------------------------------
+  // --- Question / block helpers ----------------------------------------------
   function addQuestion() {
-    const q: ChecklistItem = {
+    const q: InternalTaskItem = {
       id: crypto.randomUUID(),
       label: '',
       type: 'pass_fail',
@@ -298,13 +329,52 @@ function TemplateEditorDialog({
     }
     patch({ questions: [...draft.questions, q] })
   }
-  function updateQuestion(id: string, updates: Partial<ChecklistItem>) {
+  // Adds a display/content block (section heading, document link, URL link or
+  // fillable table). These carry no answer and no conditional rules.
+  function addBlock(type: 'section' | 'doc_link' | 'url_link' | 'table') {
+    const base: InternalTaskItem = {
+      id: crypto.randomUUID(),
+      label: '',
+      type,
+      required: false,
+    }
+    if (type === 'section') base.description = ''
+    if (type === 'doc_link') {
+      base.documentId = null
+      base.documentName = null
+    }
+    if (type === 'url_link') base.url = ''
+    if (type === 'table') {
+      base.columns = [{ id: crypto.randomUUID(), label: '', type: 'text' }]
+    }
+    patch({ questions: [...draft.questions, base] })
+  }
+  function updateQuestion(id: string, updates: Partial<InternalTaskItem>) {
     patch({
       questions: draft.questions.map((q) => (q.id === id ? { ...q, ...updates } : q)),
     })
   }
   function removeQuestion(id: string) {
     patch({ questions: draft.questions.filter((q) => q.id !== id) })
+  }
+  // Table column helpers (table blocks only).
+  function addColumn(qId: string) {
+    updateQuestion(qId, {
+      columns: [
+        ...(draft.questions.find((q) => q.id === qId)?.columns ?? []),
+        { id: crypto.randomUUID(), label: '', type: 'text' },
+      ],
+    })
+  }
+  function updateColumn(qId: string, colId: string, updates: Partial<InternalTaskTableColumn>) {
+    const cols = draft.questions.find((q) => q.id === qId)?.columns ?? []
+    updateQuestion(qId, {
+      columns: cols.map((c) => (c.id === colId ? { ...c, ...updates } : c)),
+    })
+  }
+  function removeColumn(qId: string, colId: string) {
+    const cols = draft.questions.find((q) => q.id === qId)?.columns ?? []
+    updateQuestion(qId, { columns: cols.filter((c) => c.id !== colId) })
   }
   function addCondition(qId: string) {
     patch({
@@ -613,22 +683,53 @@ function TemplateEditorDialog({
             ) : null}
           </div>
 
-          {/* Questions */}
+          {/* Questions & content blocks */}
           <div className="rounded-lg border p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-medium">Questions</h3>
-              <Button variant="outline" size="sm" onClick={addQuestion}>
-                <Plus className="size-4" />
-                Add question
-              </Button>
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <h3 className="text-sm font-medium">Questions &amp; content</h3>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Button variant="outline" size="sm" onClick={addQuestion}>
+                  <Plus className="size-4" />
+                  Question
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => addBlock('section')}>
+                  <Heading className="size-4" />
+                  Section
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => addBlock('doc_link')}>
+                  <FileText className="size-4" />
+                  Document
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => addBlock('url_link')}>
+                  <Link2 className="size-4" />
+                  Link
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => addBlock('table')}>
+                  <TableIcon className="size-4" />
+                  Table
+                </Button>
+              </div>
             </div>
             {draft.questions.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No questions — the user just confirms completion.
+                No content yet — add questions, section headings, document/URL links or
+                tables. With none, the user just confirms completion.
               </p>
             ) : (
               <div className="flex flex-col gap-4">
-                {draft.questions.map((q) => (
+                {draft.questions.map((q) =>
+                  !isQuestionType(q.type) ? (
+                    <BlockEditor
+                      key={q.id}
+                      block={q}
+                      documents={documents}
+                      onChange={(u) => updateQuestion(q.id, u)}
+                      onRemove={() => removeQuestion(q.id)}
+                      onAddColumn={() => addColumn(q.id)}
+                      onUpdateColumn={(colId, u) => updateColumn(q.id, colId, u)}
+                      onRemoveColumn={(colId) => removeColumn(q.id, colId)}
+                    />
+                  ) : (
                   <div key={q.id} className="rounded-md border bg-muted/30 p-3">
                     <div className="flex items-start gap-2">
                       <GripVertical className="mt-2 size-4 shrink-0 text-muted-foreground" />
@@ -788,6 +889,13 @@ function TemplateEditorDialog({
                                 Follow-up question
                               </Button>
                             </div>
+                            <ConditionNotifyPicker
+                              users={users}
+                              selected={c.notifyUserIds ?? []}
+                              onChange={(ids) =>
+                                updateCondition(q.id, c.id, { notifyUserIds: ids })
+                              }
+                            />
                             {(c.items ?? []).map((f) => (
                               <div key={f.id} className="mt-2 flex items-center gap-2 pl-6">
                                 <CornerDownRight className="size-3.5 text-muted-foreground" />
@@ -842,7 +950,8 @@ function TemplateEditorDialog({
                       </div>
                     ) : null}
                   </div>
-                ))}
+                  ),
+                )}
               </div>
             )}
           </div>
@@ -983,5 +1092,239 @@ function TemplateEditorDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// Editor for a display/content block: section heading, document link, external
+// URL link, or a fillable table (author defines columns). These carry no answer
+// and no conditional rules.
+function BlockEditor({
+  block,
+  documents,
+  onChange,
+  onRemove,
+  onAddColumn,
+  onUpdateColumn,
+  onRemoveColumn,
+}: {
+  block: InternalTaskItem
+  documents: { id: string; name: string }[]
+  onChange: (updates: Partial<InternalTaskItem>) => void
+  onRemove: () => void
+  onAddColumn: () => void
+  onUpdateColumn: (colId: string, updates: Partial<InternalTaskTableColumn>) => void
+  onRemoveColumn: (colId: string) => void
+}) {
+  const meta =
+    block.type === 'section'
+      ? { icon: Heading, label: 'Section heading' }
+      : block.type === 'doc_link'
+        ? { icon: FileText, label: 'Document link' }
+        : block.type === 'url_link'
+          ? { icon: Link2, label: 'External link' }
+          : { icon: TableIcon, label: 'Fillable table' }
+  const Icon = meta.icon
+
+  return (
+    <div className="rounded-md border border-dashed bg-muted/20 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <Icon className="size-3.5" />
+          {meta.label}
+        </span>
+        <Button variant="ghost" size="icon" className="size-7" onClick={onRemove}>
+          <Trash2 className="size-4 text-destructive" />
+          <span className="sr-only">Remove block</span>
+        </Button>
+      </div>
+
+      {block.type === 'section' && (
+        <div className="space-y-2">
+          <Input
+            value={block.label}
+            onChange={(e) => onChange({ label: e.target.value })}
+            placeholder="Section title (e.g. Expense details)"
+          />
+          <Textarea
+            value={block.description ?? ''}
+            onChange={(e) => onChange({ description: e.target.value })}
+            placeholder="Optional supporting text shown under the heading"
+            rows={2}
+          />
+        </div>
+      )}
+
+      {block.type === 'doc_link' && (
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div>
+            <Label className="text-xs">Document</Label>
+            <Select
+              value={block.documentId ?? ''}
+              onValueChange={(v) =>
+                onChange({
+                  documentId: v,
+                  documentName: documents.find((d) => d.id === v)?.name ?? null,
+                })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Choose a document" />
+              </SelectTrigger>
+              <SelectContent>
+                {documents.length === 0 ? (
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                    No reference documents uploaded yet.
+                  </div>
+                ) : (
+                  documents.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.name}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Link label (optional)</Label>
+            <Input
+              value={block.label}
+              onChange={(e) => onChange({ label: e.target.value })}
+              placeholder={block.documentName ?? 'Shown to the user'}
+            />
+          </div>
+        </div>
+      )}
+
+      {block.type === 'url_link' && (
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div>
+            <Label className="text-xs">Link label</Label>
+            <Input
+              value={block.label}
+              onChange={(e) => onChange({ label: e.target.value })}
+              placeholder="e.g. Expenses policy"
+            />
+          </div>
+          <div>
+            <Label className="text-xs">URL</Label>
+            <Input
+              type="url"
+              value={block.url ?? ''}
+              onChange={(e) => onChange({ url: e.target.value })}
+              placeholder="https://…"
+            />
+          </div>
+        </div>
+      )}
+
+      {block.type === 'table' && (
+        <div className="space-y-2">
+          <Input
+            value={block.label}
+            onChange={(e) => onChange({ label: e.target.value })}
+            placeholder="Table title (e.g. Line items)"
+          />
+          <div className="rounded-md border p-2">
+            <p className="mb-2 text-xs font-medium text-muted-foreground">
+              Columns — the user adds rows when completing the task
+            </p>
+            <div className="flex flex-col gap-1.5">
+              {(block.columns ?? []).map((col) => (
+                <div key={col.id} className="flex items-center gap-2">
+                  <Input
+                    className="h-8"
+                    value={col.label}
+                    onChange={(e) => onUpdateColumn(col.id, { label: e.target.value })}
+                    placeholder="Column name"
+                  />
+                  <Select
+                    value={col.type}
+                    onValueChange={(v) =>
+                      onUpdateColumn(col.id, {
+                        type: v as InternalTaskTableColumn['type'],
+                      })
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-28">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="text">Text</SelectItem>
+                      <SelectItem value="number">Number</SelectItem>
+                      <SelectItem value="date">Date</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    onClick={() => onRemoveColumn(col.id)}
+                    disabled={(block.columns ?? []).length <= 1}
+                  >
+                    <Trash2 className="size-3.5 text-destructive" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <Button variant="ghost" size="sm" className="mt-2 h-7" onClick={onAddColumn}>
+              <Plus className="size-3.5" />
+              Add column
+            </Button>
+          </div>
+          <label className="flex items-center gap-2 text-xs">
+            <Checkbox
+              checked={block.required === true}
+              onCheckedChange={(v) => onChange({ required: v === true })}
+            />
+            Require at least one row
+          </label>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Compact multi-select of users to notify when a condition fires on submit.
+// Collapsed by default so the condition editor stays tidy.
+function ConditionNotifyPicker({
+  users,
+  selected,
+  onChange,
+}: {
+  users: Pick<Profile, 'id' | 'full_name' | 'role'>[]
+  selected: string[]
+  onChange: (ids: string[]) => void
+}) {
+  function toggle(id: string) {
+    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id])
+  }
+  return (
+    <details className="mt-2 pl-6 text-xs">
+      <summary className="flex cursor-pointer items-center gap-1 text-muted-foreground">
+        <BellRing className="size-3.5" />
+        Notify users when triggered
+        {selected.length > 0 ? (
+          <Badge variant="secondary" className="ml-1">
+            {selected.length}
+          </Badge>
+        ) : null}
+      </summary>
+      <div className="mt-2 flex max-h-40 flex-col gap-1 overflow-y-auto rounded-md border p-2">
+        {users.length === 0 ? (
+          <span className="text-muted-foreground">No users available.</span>
+        ) : (
+          users.map((u) => (
+            <label key={u.id} className="flex items-center gap-2">
+              <Checkbox
+                checked={selected.includes(u.id)}
+                onCheckedChange={() => toggle(u.id)}
+              />
+              {u.full_name ?? 'Unnamed'}
+            </label>
+          ))
+        )}
+      </div>
+    </details>
   )
 }

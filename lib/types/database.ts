@@ -726,6 +726,9 @@ export interface ChecklistCondition {
   // Extra follow-up questions revealed while active. One level deep — a follow-up
   // item cannot itself carry conditions.
   items?: ChecklistItem[]
+  // Internal Tasks only: profile ids to notify when this rule fires on submit.
+  // Ignored by service/damper/extinguisher checklists (they use notify_on_issue).
+  notifyUserIds?: string[]
 }
 
 export interface ChecklistItem {
@@ -804,8 +807,63 @@ export type InternalTaskFrequency =
 
 export type InternalTaskStatus = 'pending' | 'completed' | 'overdue'
 
-// A recurring internal task definition. `questions` reuses the conditional
-// checklist item schema (ChecklistItem[] incl. ChecklistCondition follow-ups).
+// A user-defined column of a fillable table block on an internal task form.
+export interface InternalTaskTableColumn {
+  id: string
+  label: string
+  type: 'text' | 'number' | 'date'
+}
+
+// A form block on an internal task. This is a SUPERSET of ChecklistItem: it
+// keeps every ChecklistItem field (so basic question types + conditions behave
+// identically) and adds internal-tasks-only block types. It is intentionally
+// separate from ChecklistItem so the shared service/damper/extinguisher
+// checklist schema is never polluted with these blocks.
+//   - section  : a heading/divider between questions (display only, no answer)
+//   - doc_link : a link to a file in the company document library (display only)
+//   - url_link : an external URL link (display only)
+//   - table    : a fillable table; author defines columns, user adds rows
+export interface InternalTaskItem {
+  id: string
+  label: string
+  type:
+    | 'pass_fail'
+    | 'text'
+    | 'number'
+    | 'checkbox'
+    | 'section'
+    | 'doc_link'
+    | 'url_link'
+    | 'table'
+  required: boolean
+  conditions?: ChecklistCondition[]
+  // section: optional supporting copy shown beneath the heading.
+  description?: string
+  // doc_link: the linked company document (documents.id) + cached display name.
+  documentId?: string | null
+  documentName?: string | null
+  // url_link: the external URL to open.
+  url?: string
+  // table: the column definitions the user fills row-by-row at completion.
+  columns?: InternalTaskTableColumn[]
+}
+
+// One filled row of a table block: maps a column id to its cell text.
+export type InternalTaskTableRow = Record<string, string>
+
+// A user's answer to one internal task block. Superset of ChecklistResult that
+// widens `type` to the internal-task block types and lets a table block's value
+// be an array of row objects. Section/doc/url blocks are display-only and never
+// produce an answer. Kept separate from ChecklistResult so the shared checklist
+// result schema is not polluted.
+export interface InternalTaskAnswer
+  extends Omit<ChecklistResult, 'type' | 'value'> {
+  type: InternalTaskItem['type']
+  value: boolean | string | number | InternalTaskTableRow[]
+}
+
+// A recurring internal task definition. `questions` uses InternalTaskItem[] (a
+// superset of ChecklistItem) so it also supports section/doc/url/table blocks.
 export interface InternalTaskTemplate {
   id: string
   name: string
@@ -824,7 +882,7 @@ export interface InternalTaskTemplate {
   reminder_days_before: number[]
   warn_overdue: boolean
   // Content
-  questions: ChecklistItem[]
+  questions: InternalTaskItem[]
   requires_reference: boolean
   reference_label: string | null
   // Targeting (union / combine-all)
@@ -852,7 +910,7 @@ export interface InternalTaskInstance {
   status: InternalTaskStatus
   completed_at: string | null
   reference_number: string | null
-  answers: ChecklistResult[]
+  answers: InternalTaskAnswer[]
   created_at: string
   updated_at: string
   // Optional embeds

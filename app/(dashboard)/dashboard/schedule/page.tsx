@@ -86,19 +86,23 @@ export default async function SchedulePage({
   // from their direct site/service/system relations so the list renders them.
   const normalizedTasks = normalizeTasks((tasksData || []) as TaskWithDetails[])
 
-  // Scope tasks to the active branch (by the task's site branch). Engineers are
-  // already limited to their own tasks; this further narrows admin/office views.
-  const branchScoped = scope.activeBranchId
-    ? normalizedTasks.filter((t) => t.site_service?.site?.branch_id === scope.activeBranchId)
-    : normalizedTasks
+  // Scope tasks to the active branch (by the task's site branch) — for
+  // admin/office only. Engineers and sub-contractors must see EVERY call issued
+  // to them regardless of branch, so branch scope is not applied to their views
+  // (they are already limited to their own tasks above).
+  const isFieldRole = role === 'engineer' || role === 'subcontractor'
+  const branchScoped =
+    scope.activeBranchId && !isFieldRole
+      ? normalizedTasks.filter((t) => t.site_service?.site?.branch_id === scope.activeBranchId)
+      : normalizedTasks
 
-  // CDO isolation + hide sub-contracted work for internal engineers. CDO
-  // engineers see only CDO work; non-CDO engineers never see CDO work; no
-  // internal engineer sees sub-contracted work. (Sub-contractor logins are
-  // already scoped to their own allocated tasks above, so they are exempt.)
+  // Only hide sub-contracted work from an internal engineer's schedule.
+  // Discipline suitability (e.g. CDO vs fire) is enforced at ASSIGNMENT time
+  // with an overridable warning, so any call actually assigned to an engineer
+  // is now shown to them. Sub-contractor logins are already scoped above.
   const tasks =
     role === 'engineer'
-      ? branchScoped.filter((t) => isTaskVisibleToEngineer(t, (profile as Profile).discipline))
+      ? branchScoped.filter((t) => isTaskVisibleToEngineer(t))
       : branchScoped
 
   // Booking data. Loaded for admin/office (full scheduled + reactive) and for

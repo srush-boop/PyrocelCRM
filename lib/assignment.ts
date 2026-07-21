@@ -4,7 +4,14 @@
 // (e.g. dampers); an engineer is assigned by area; a sub-contractor is external
 // and never resolves to an internal engineer.
 
-import type { WorkerType, SiteService, Route, Area, Subcontractor } from '@/lib/types/database'
+import type {
+  WorkerType,
+  SiteService,
+  Route,
+  Area,
+  Subcontractor,
+  Discipline,
+} from '@/lib/types/database'
 
 export const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
   cdo: 'CDO',
@@ -87,6 +94,35 @@ export function resolveAssignedEngineerId(svc: AssignmentInput): string | null {
   // Engineer (and CDO non-route) work flows from the area's worker.
   if (svc.area_id && svc.area) return svc.area.assigned_engineer_id ?? null
 
+  return null
+}
+
+/**
+ * Warn when a call's delivery worker type does not match an engineer's
+ * discipline — e.g. issuing a CDO (route-planned) call to a fire engineer, or a
+ * standard engineer call to a CDO engineer. Returns a human-readable warning
+ * string when there is a mismatch, or null when the assignment is fine. The
+ * warning is advisory only: the issuer may override it.
+ *
+ * Rules:
+ *  - CDO work should go to a CDO engineer (discipline === 'cdo').
+ *  - Non-CDO (engineer) work should NOT go to a CDO engineer.
+ *  - Sub-contract work never resolves to an internal engineer, so no warning.
+ *  - Unknown discipline (null) can't be validated → no warning.
+ */
+export function disciplineAssignmentWarning(
+  workerType: WorkerType,
+  discipline: Discipline | null | undefined,
+): string | null {
+  if (workerType === 'subcontractor') return null
+  if (!discipline) return null
+
+  if (workerType === 'cdo' && discipline !== 'cdo') {
+    return 'This is a CDO (route-planned) call, but the selected engineer is not a CDO engineer. CDO calls are normally delivered by CDO engineers.'
+  }
+  if (workerType === 'engineer' && discipline === 'cdo') {
+    return 'This is a standard engineer call, but the selected engineer is a CDO engineer. CDO engineers normally only deliver CDO route work.'
+  }
   return null
 }
 

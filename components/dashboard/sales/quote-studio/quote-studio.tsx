@@ -49,6 +49,7 @@ import { WORK_TYPES } from '@/lib/sales'
 import { buildAssembly } from '@/lib/sales/quote-studio-assembly'
 import {
   draftBrief,
+  redraftBrief,
   buildStudioSpec,
   saveStudioQuote,
   draftDisciplineSection,
@@ -187,6 +188,7 @@ export function QuoteStudio({
   // Async flags
   const [extracting, setExtracting] = useState(false)
   const [drafting, setDrafting] = useState(false)
+  const [redrafting, setRedrafting] = useState(false)
   const [buildingSpec, setBuildingSpec] = useState(false)
   const [saving, setSaving] = useState(false)
   const [spec, setSpec] = useState<StudioSpecPayload | null>(null)
@@ -384,6 +386,69 @@ export function QuoteStudio({
       toast.error('Could not draft from the brief. Please try again.')
     } finally {
       setDrafting(false)
+    }
+  }
+
+  // Re-run the AI with the designer's current edits + a free-text steer, so the
+  // interpretation and device quantities can be corrected mid-process. Designer-
+  // owned (manual) rows are locked and preserved; the AI re-reasons the rest.
+  async function handleRedraft(steer: string) {
+    if (!understanding) return
+    if (!steer.trim()) {
+      toast.error('Add a correction or instruction for the AI first.')
+      return
+    }
+    setRedrafting(true)
+    try {
+      const res = await redraftBrief({
+        brief,
+        steer,
+        understanding,
+        requirements,
+        devices: rows.map((r) => ({
+          device_key: r.device_key,
+          label: r.label,
+          zone: r.zone,
+          quantity: r.quantity,
+          locked: r.confidence === 'manual',
+        })),
+      })
+      if (!res.ok || !res.draft) {
+        toast.error(res.error ?? 'Could not re-draft.')
+        return
+      }
+      const d = res.draft
+      setUnderstanding(d.understanding)
+      setRequirements(d.requirements)
+      setDesignReasoning(d.design ?? null)
+      setDesignCategory(parseCategory(d.understanding.category))
+      // Merge: keep designer-owned (manual) rows at their quantities; refresh
+      // the AI-derived remainder from the new schedule.
+      setRows((prev) => {
+        const manual = prev.filter((r) => r.confidence === 'manual')
+        const manualKeys = new Set(manual.map((r) => r.device_key))
+        const aiRows = d.devices
+          .filter((dev) => dev.quantity > 0 && !manualKeys.has(dev.device_key))
+          .map((dev) => {
+            const dt = config.deviceTypes.find((t) => t.device_key === dev.device_key)
+            return {
+              uid: nextUid(),
+              device_key: dev.device_key,
+              label: dt?.label ?? dev.device_key,
+              zone: dev.zone || 'Z1',
+              quantity: dev.quantity,
+              confidence: 'low' as const,
+              evidence: null,
+              rationale: dev.rationale,
+            }
+          })
+        return [...manual, ...aiRows]
+      })
+      toast.success('Re-drafted with your corrections.')
+    } catch {
+      toast.error('Could not re-draft. Please try again.')
+    } finally {
+      setRedrafting(false)
     }
   }
 
@@ -646,6 +711,8 @@ export function QuoteStudio({
           onRequirements={setRequirements}
           designCategory={designCategory}
           onCategory={setDesignCategory}
+          onRedraft={handleRedraft}
+          redrafting={redrafting}
           onBack={() => setPhase('brief')}
           onNext={() => setPhase(designReasoning ? 'design' : 'takeoff')}
         />
@@ -654,6 +721,8 @@ export function QuoteStudio({
       {phase === 'design' && (
         <DesignStep
           design={designReasoning}
+          onRedraft={handleRedraft}
+          redrafting={redrafting}
           onBack={() => setPhase('review')}
           onNext={() => setPhase('takeoff')}
         />
@@ -1037,6 +1106,8 @@ function ReviewStep({
   onRequirements,
   designCategory,
   onCategory,
+  onRedraft,
+  redrafting,
   onBack,
   onNext,
 }: {
@@ -1046,6 +1117,8 @@ function ReviewStep({
   onRequirements: (r: StudioRequirement[]) => void
   designCategory: string
   onCategory: (v: string) => void
+  onRedraft: (steer: string) => void
+  redrafting: boolean
   onBack: () => void
   onNext: () => void
 }) {
@@ -1134,8 +1207,72 @@ function ReviewStep({
         </CardContent>
       </Card>
 
+      <SteerBox
+        onRedraft={onRedraft}
+        redrafting={redrafting}
+        hint="e.g. “It’s 4 storeys not 3, 14 bedrooms, add a sprinkler interface, and treat the plant room as a separate zone.”"
+      />
+
       <StepNav onBack={onBack} backLabel="Brief" onNext={onNext} nextLabel="Devices & price" />
     </div>
+  )
+}
+
+// ---- Correct-the-AI steer box (re-draft with a designer instruction) ----
+
+function SteerBox({
+  onRedraft,
+  redrafting,
+  hint,
+}: {
+  onRedraft: (steer: string) => void
+  redrafting: boolean
+  hint: string
+}) {
+  const [steer, setSteer] = useState('')
+  const submit = () => {
+    if (!steer.trim() || redrafting) return
+    onRedraft(steer.trim())
+  }
+  return (
+    <Card className="border-primary/30 bg-primary/5">
+      <CardContent className="flex flex-col gap-3 p-4">
+        <div className="flex items-center gap-2">
+          <Wand2 className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-bold uppercase tracking-wide">Correct the AI</h3>
+        </div>
+        <p className="text-xs text-muted-foreground text-pretty">
+          Not quite right? Tell the AI what to change — quantities, interpretation, category, zoning
+          — and it will re-draft using your edits above. Devices you added or edited by hand are kept.
+        </p>
+        <Textarea
+          value={steer}
+          onChange={(e) => setSteer(e.target.value)}
+          rows={3}
+          placeholder={hint}
+          disabled={redrafting}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit()
+          }}
+        />
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-muted-foreground">Tip: press ⌘/Ctrl + Enter to re-draft.</span>
+          <Button className="gap-1.5" onClick={submit} disabled={redrafting || !steer.trim()}>
+            {redrafting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Re-drafting…
+              </>
+            ) : (
+              <>
+                <Wand2 className="h-4 w-4" />
+                Re-draft with these changes
+              </>
+            )}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -1143,10 +1280,14 @@ function ReviewStep({
 
 function DesignStep({
   design,
+  onRedraft,
+  redrafting,
   onBack,
   onNext,
 }: {
   design: StudioDesignReasoning | null
+  onRedraft: (steer: string) => void
+  redrafting: boolean
   onBack: () => void
   onNext: () => void
 }) {
@@ -1310,6 +1451,12 @@ function DesignStep({
           </CardContent>
         </Card>
       )}
+
+      <SteerBox
+        onRedraft={onRedraft}
+        redrafting={redrafting}
+        hint="e.g. “Ground-floor plant room needs heat not smoke, use point spacing at 7.5m, and the reasoning should assume 2.7m ceilings.”"
+      />
 
       <StepNav
         onBack={onBack}

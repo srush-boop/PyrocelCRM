@@ -34,6 +34,9 @@ import { format } from 'date-fns'
 import type { Profile, SiteService, Site, ServiceType, SystemType } from '@/lib/types/database'
 import { cn } from '@/lib/utils'
 import { bookCall } from '@/app/(dashboard)/dashboard/schedule/book-call-actions'
+import { resolveWorkerType } from '@/lib/engineer-visibility'
+import { disciplineAssignmentWarning } from '@/lib/assignment'
+import { AlertTriangle } from 'lucide-react'
 
 interface CreateTaskDialogProps {
   siteServices: (SiteService & { site: Site; service_type: ServiceType })[]
@@ -125,6 +128,8 @@ export function CreateTaskDialog({
   const [timeError, setTimeError] = useState<string | null>(null)
   // Complimentary booking confirmation email to the client/site (opt-out).
   const [sendConfirmation, setSendConfirmation] = useState(true)
+  // Discipline-mismatch override: once the issuer confirms, booking proceeds.
+  const [overrideConfirmed, setOverrideConfirmed] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -144,6 +149,21 @@ export function CreateTaskDialog({
   const selectedRecurringSite = recurringSites.find((s) => s.id === siteId)
   const selectedReactiveSite = reactiveSites.find((s) => s.id === siteId)
   const lockSite = Boolean(defaultSiteId)
+
+  // Warn (overridably) when the chosen engineer's discipline doesn't match the
+  // call's delivery worker type — e.g. a CDO route call issued to a fire
+  // engineer. Reactive/emergency calls are always worker_type 'engineer'.
+  const selectedService =
+    mode === 'recurring'
+      ? schedulableServices.find((ss) => ss.id === formData.site_service_id)
+      : undefined
+  const callWorkerType =
+    mode === 'recurring' && selectedService ? resolveWorkerType(selectedService) : 'engineer'
+  const assignedEngineer = engineers.find((e) => e.id === formData.assigned_engineer_id)
+  const disciplineWarning =
+    formData.assigned_engineer_id && assignedEngineer
+      ? disciplineAssignmentWarning(callWorkerType, assignedEngineer.discipline)
+      : null
 
   const systemsForSite = siteId
     ? Array.from(
@@ -272,6 +292,7 @@ export function CreateTaskDialog({
     })
     setVisitTypes([])
     setVisitTypeId(ALL_VISITS)
+    setOverrideConfirmed(false)
     setMode(lockReactive ? 'reactive' : reactiveEnabled ? defaultMode : 'recurring')
   }
 
@@ -374,9 +395,11 @@ export function CreateTaskDialog({
   }
 
   const canSubmit =
-    mode === 'recurring'
+    (mode === 'recurring'
       ? Boolean(formData.site_service_id)
-      : Boolean(siteId && reactiveTypeId && description.trim())
+      : Boolean(siteId && reactiveTypeId && description.trim())) &&
+    // A discipline mismatch must be explicitly overridden before booking.
+    (!disciplineWarning || overrideConfirmed)
 
   return (
     <Dialog
@@ -673,7 +696,10 @@ export function CreateTaskDialog({
                 <Label>Assign Engineer</Label>
                 <Select
                   value={formData.assigned_engineer_id}
-                  onValueChange={(value) => setFormData({ ...formData, assigned_engineer_id: value })}
+                  onValueChange={(value) => {
+                    setFormData({ ...formData, assigned_engineer_id: value })
+                    setOverrideConfirmed(false)
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select an engineer (optional)" />
@@ -686,6 +712,24 @@ export function CreateTaskDialog({
                     ))}
                   </SelectContent>
                 </Select>
+
+                {disciplineWarning && (
+                  <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                      <div className="space-y-2">
+                        <p className="text-sm text-pretty">{disciplineWarning}</p>
+                        <label className="flex items-center gap-2 text-sm font-medium">
+                          <Checkbox
+                            checked={overrideConfirmed}
+                            onCheckedChange={(v) => setOverrideConfirmed(v === true)}
+                          />
+                          Assign anyway — the engineer will still see this call.
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

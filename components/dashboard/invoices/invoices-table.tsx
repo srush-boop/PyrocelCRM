@@ -26,7 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { ReceiptText, FileCheck2, Send, Loader2, X } from 'lucide-react'
+import { ReceiptText, FileCheck2, Send, Loader2, X, FileSpreadsheet } from 'lucide-react'
 import type { InvoiceStatus } from '@/lib/types/database'
 import { formatPence, INVOICE_STATUS_LABELS } from '@/lib/billing/invoices'
 import type { InvoiceRow } from '@/app/(dashboard)/dashboard/invoices/page'
@@ -285,6 +285,15 @@ export function InvoicesTable({
                           className="border-emerald-200 bg-emerald-50 text-emerald-700"
                         >
                           Sent
+                        </Badge>
+                      )}
+                      {inv.sage_exported_at && (
+                        <Badge
+                          variant="outline"
+                          className="gap-1 border-teal-200 bg-teal-50 text-teal-700"
+                        >
+                          <FileSpreadsheet className="h-3 w-3" />
+                          Sent to Sage
                         </Badge>
                       )}
                     </div>

@@ -246,6 +246,9 @@ export interface Invoice {
   bill_to_address: string | null
   bill_to_email: string | null
   sage_account_ref: string | null
+  // Sage 50 CSV export milestone. sage_exported_at IS NOT NULL => "Sent to Sage".
+  sage_exported_at: string | null
+  sage_exported_by: string | null
   issue_date: string | null
   due_date: string | null
   payment_terms_days: number

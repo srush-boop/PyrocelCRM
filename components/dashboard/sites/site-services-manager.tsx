@@ -36,7 +36,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Plus, Trash2, Wrench, Loader2, Calendar as CalendarIcon, Edit2, Clock, X, MapPin, MapPinned, User, HardHat, Power, PowerOff, ShieldCheck, Coins } from 'lucide-react'
+import { Plus, Trash2, Wrench, Loader2, Calendar as CalendarIcon, Edit2, Clock, X, MapPin, MapPinned, User, HardHat, Power, PowerOff, ShieldCheck, Coins, AlertTriangle } from 'lucide-react'
 import { ServiceChargeDialog } from './service-charge-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -51,8 +51,10 @@ import {
   WORKER_TYPE_LABELS,
   allowedMethodsForWorker,
   resolveAssignedEngineerId,
+  disciplineAssignmentWarning,
   type AssignmentMethod,
 } from '@/lib/assignment'
+import { resolveWorkerType } from '@/lib/engineer-visibility'
 
 const NONE_VALUE = '__none__'
 
@@ -140,6 +142,9 @@ export function SiteServicesManager({
   const [scheduleDate, setScheduleDate] = useState<Date>(new Date())
   const [scheduleEngineerId, setScheduleEngineerId] = useState<string>('')
   const [scheduling, setScheduling] = useState(false)
+  // Discipline-mismatch override for the Book-now dialog and the edit form.
+  const [scheduleOverride, setScheduleOverride] = useState(false)
+  const [editAssignOverride, setEditAssignOverride] = useState(false)
   // Which service is mid-toggle (active <-> inactive), for a spinner/disabled state.
   const [togglingId, setTogglingId] = useState<string | null>(null)
 
@@ -491,6 +496,22 @@ export function SiteServicesManager({
   const getServiceTaskCount = (serviceId: string) => {
     return tasks.filter(t => t.site_service_id === serviceId && t.status === 'pending').length
   }
+
+  // Overridable discipline-mismatch warnings for the two direct-assign surfaces.
+  const bookingService = scheduleServiceId
+    ? siteServices.find((s) => s.id === scheduleServiceId)
+    : undefined
+  const bookingEngineer = engineers.find((e) => e.id === scheduleEngineerId)
+  const scheduleWarning =
+    scheduleEngineerId && bookingEngineer && bookingService
+      ? disciplineAssignmentWarning(resolveWorkerType(bookingService), bookingEngineer.discipline)
+      : null
+
+  const editAssignEngineer = engineers.find((e) => e.id === editEngineerId)
+  const editAssignWarning =
+    editMethod === 'direct' && editEngineerId !== NONE_VALUE && editAssignEngineer
+      ? disciplineAssignmentWarning(editWorkerType, editAssignEngineer.discipline)
+      : null
 
   return (
     <>
@@ -878,7 +899,13 @@ export function SiteServicesManager({
             {engineers.length > 0 && (
               <div className="grid gap-2">
                 <Label>Assign Engineer</Label>
-                <Select value={scheduleEngineerId} onValueChange={setScheduleEngineerId}>
+                <Select
+                  value={scheduleEngineerId}
+                  onValueChange={(v) => {
+                    setScheduleEngineerId(v)
+                    setScheduleOverride(false)
+                  }}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select an engineer (optional)" />
                   </SelectTrigger>
@@ -890,6 +917,24 @@ export function SiteServicesManager({
                     ))}
                   </SelectContent>
                 </Select>
+
+                {scheduleWarning && (
+                  <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                      <div className="space-y-2">
+                        <p className="text-sm text-pretty">{scheduleWarning}</p>
+                        <label className="flex items-center gap-2 text-sm font-medium">
+                          <Checkbox
+                            checked={scheduleOverride}
+                            onCheckedChange={(v) => setScheduleOverride(v === true)}
+                          />
+                          Assign anyway — the engineer will still see this call.
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -898,12 +943,16 @@ export function SiteServicesManager({
               variant="outline"
               onClick={() => {
                 setScheduleServiceId(null)
+                setScheduleOverride(false)
                 if (dialogsOnly) stripDialogParams('bookService')
               }}
             >
               Cancel
             </Button>
-            <Button onClick={handleScheduleTask} disabled={scheduling}>
+            <Button
+              onClick={handleScheduleTask}
+              disabled={scheduling || (!!scheduleWarning && !scheduleOverride)}
+            >
               {scheduling ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1298,7 +1347,13 @@ export function SiteServicesManager({
               {editWorkerType !== 'subcontractor' && editMethod === 'direct' && (
                 <div className="grid gap-2 pt-1">
                   <Label>Person</Label>
-                  <Select value={editEngineerId} onValueChange={setEditEngineerId}>
+                  <Select
+                    value={editEngineerId}
+                    onValueChange={(v) => {
+                      setEditEngineerId(v)
+                      setEditAssignOverride(false)
+                    }}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select a person" />
                     </SelectTrigger>
@@ -1311,6 +1366,24 @@ export function SiteServicesManager({
                       ))}
                     </SelectContent>
                   </Select>
+
+                  {editAssignWarning && (
+                    <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <div className="space-y-2">
+                          <p className="text-sm text-pretty">{editAssignWarning}</p>
+                          <label className="flex items-center gap-2 text-sm font-medium">
+                            <Checkbox
+                              checked={editAssignOverride}
+                              onCheckedChange={(v) => setEditAssignOverride(v === true)}
+                            />
+                            Assign anyway — the engineer will still see these calls.
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1472,7 +1545,10 @@ export function SiteServicesManager({
             <Button variant="outline" onClick={() => setEditingId(null)}>
               Cancel
             </Button>
-            <Button onClick={handleSaveEdit} disabled={savingEdit}>
+            <Button
+              onClick={handleSaveEdit}
+              disabled={savingEdit || (!!editAssignWarning && !editAssignOverride)}
+            >
               {savingEdit ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

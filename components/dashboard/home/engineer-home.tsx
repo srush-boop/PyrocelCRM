@@ -104,9 +104,10 @@ export async function EngineerHome({
       .gt('scheduled_date', todayStr),
   ])
 
-  // CDO isolation + hide sub-contracted work (matches the Calls list rules).
+  // Hide only sub-contracted work (matches the Calls list rules); every other
+  // call assigned to the engineer is theirs to see.
   const todayTasks = ((todayRows as unknown as EngineerTask[]) ?? []).filter((t) =>
-    isTaskVisibleToEngineer(t, profile.discipline),
+    isTaskVisibleToEngineer(t),
   )
   const remaining = todayTasks.filter((t) => t.status !== 'completed')
   const doneToday = todayTasks.length - remaining.length

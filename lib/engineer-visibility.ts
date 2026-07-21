@@ -36,25 +36,28 @@ export function resolveWorkerType(service: WorkerScopedService | null | undefine
 }
 
 /**
- * Whether a task should be visible to an INTERNAL engineer with the given
- * discipline. Reactive/emergency calls (synthesised worker_type 'engineer')
- * remain visible to non-CDO engineers.
+ * Whether a task ALREADY ASSIGNED to an internal engineer should be visible to
+ * them. An engineer must see every call they have been issued, regardless of
+ * discipline or branch — discipline suitability is now enforced at ASSIGNMENT
+ * time (with an overridable warning), not hidden after the fact.
+ *
+ * The only remaining hide is sub-contracted work, which is delivered through
+ * the separate sub-contractor login flow rather than an internal engineer's
+ * schedule.
+ *
+ * `discipline` is retained in the signature for call-site compatibility but no
+ * longer changes the result.
  */
 export function isTaskVisibleToEngineer(
   task: WorkerScopedTask,
-  discipline: Discipline | null | undefined,
+  _discipline?: Discipline | null | undefined,
 ): boolean {
   const wt = resolveWorkerType(task.site_service)
 
-  // Sub-contracted work is never shown to internal engineers.
+  // Sub-contracted work is never shown on an internal engineer's schedule.
   if (wt === 'subcontractor') return false
 
-  // CDO engineers see only CDO work.
-  if (discipline === 'cdo') return wt === 'cdo'
-
-  // Non-CDO engineers never see CDO (route-planned) work.
-  if (wt === 'cdo') return false
-
+  // Everything else assigned to the engineer is theirs to see (incl. CDO).
   return true
 }
 

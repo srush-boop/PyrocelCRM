@@ -23,12 +23,17 @@ import {
   X,
   Check,
   AlertCircle,
+  FileText,
+  ExternalLink,
+  Plus,
+  Trash2,
 } from 'lucide-react'
 import type {
   InternalTaskInstance,
-  ChecklistItem,
+  InternalTaskItem,
+  InternalTaskAnswer,
+  InternalTaskTableRow,
   ChecklistCondition,
-  ChecklistResult,
 } from '@/lib/types/database'
 import { submitInternalTask } from '@/lib/actions/internal-tasks'
 
@@ -40,29 +45,46 @@ interface Props {
 
 type RowPhoto = { id: string; name: string; url: string }
 
-// A working row mirrors ChecklistResult with an optional photos list. Top-level
-// rows carry their conditions; follow-up rows carry parent_item_id/condition_id.
-type Row = ChecklistResult & { photos?: RowPhoto[] }
+// A working row mirrors an answer with an optional photos list. Top-level rows
+// carry their conditions; follow-up rows carry parent_item_id/condition_id.
+// Table rows also carry their column definitions for rendering the grid.
+type Row = InternalTaskAnswer & {
+  photos?: RowPhoto[]
+  columns?: InternalTaskItem['columns']
+}
+
+// Question block types the user actually answers (produce a Row + can block
+// submit). Display-only blocks (section/doc_link/url_link) are skipped here.
+const ANSWERABLE = new Set(['pass_fail', 'text', 'number', 'checkbox', 'table'])
+function isAnswerable(type: InternalTaskItem['type']): boolean {
+  return ANSWERABLE.has(type)
+}
 
 // Builds the flat working row list from the template questions: each top-level
-// question, immediately followed by its conditions' follow-up questions (hidden
-// until the parent's answer activates them). Rehydrates from saved answers.
-function buildRows(questions: ChecklistItem[], saved: ChecklistResult[]): Row[] {
+// answerable question, immediately followed by its conditions' follow-up
+// questions (hidden until the parent's answer activates them). Display-only
+// blocks (sections, doc/url links) are excluded — they render straight from the
+// template. Rehydrates from saved answers.
+function buildRows(questions: InternalTaskItem[], saved: InternalTaskAnswer[]): Row[] {
   const savedById = new Map(saved.map((r) => [r.item_id, r]))
   const rows: Row[] = []
   for (const q of questions) {
+    if (!isAnswerable(q.type)) continue
     const prev = savedById.get(q.id)
     rows.push({
       item_id: q.id,
       label: q.label,
       type: q.type,
-      value: prev?.value ?? (q.type === 'checkbox' ? false : ''),
+      value:
+        prev?.value ??
+        (q.type === 'checkbox' ? false : q.type === 'table' ? [] : ''),
       passed: prev?.passed ?? null,
       advisory: prev?.advisory,
       na: prev?.na,
       notes: prev?.notes ?? '',
       photos: (prev as Row | undefined)?.photos ?? [],
       conditions: q.conditions,
+      columns: q.columns,
     })
     for (const cond of q.conditions ?? []) {
       for (const child of cond.items ?? []) {
@@ -125,7 +147,7 @@ function isConditionActive(row: Row, cond: ChecklistCondition): boolean {
 export function InternalTaskSheet({ instance, open, onOpenChange }: Props) {
   const router = useRouter()
   const template = instance.template
-  const questions = useMemo<ChecklistItem[]>(() => template?.questions ?? [], [template])
+  const questions = useMemo<InternalTaskItem[]>(() => template?.questions ?? [], [template])
   const readOnly = instance.status === 'completed'
 
   const [rows, setRows] = useState<Row[]>(() => buildRows(questions, instance.answers ?? []))
@@ -136,6 +158,22 @@ export function InternalTaskSheet({ instance, open, onOpenChange }: Props) {
 
   const update = (itemId: string, patch: Partial<Row>) => {
     setRows((rs) => rs.map((r) => (r.item_id === itemId ? { ...r, ...patch } : r)))
+  }
+
+  // Table helpers: the user adds/edits/removes rows in a table block's value.
+  const tableRows = (row: Row): InternalTaskTableRow[] =>
+    Array.isArray(row.value) ? (row.value as InternalTaskTableRow[]) : []
+  const addTableRow = (row: Row) => {
+    const empty: InternalTaskTableRow = {}
+    for (const c of row.columns ?? []) empty[c.id] = ''
+    update(row.item_id, { value: [...tableRows(row), empty] })
+  }
+  const updateTableCell = (row: Row, idx: number, colId: string, v: string) => {
+    const next = tableRows(row).map((r, i) => (i === idx ? { ...r, [colId]: v } : r))
+    update(row.item_id, { value: next })
+  }
+  const removeTableRow = (row: Row, idx: number) => {
+    update(row.item_id, { value: tableRows(row).filter((_, i) => i !== idx) })
   }
 
   // A follow-up row is only visible when its owning condition is active.
@@ -194,6 +232,8 @@ export function InternalTaskSheet({ instance, open, onOpenChange }: Props) {
           String(row.value ?? '').trim() === ''
         ) {
           out.push(`${row.label}: enter a value`)
+        } else if (row.type === 'table' && tableRows(row).length === 0) {
+          out.push(`${row.label}: add at least one row`)
         }
       }
       // Conditional requirements on visible top-level rows.
@@ -232,7 +272,7 @@ export function InternalTaskSheet({ instance, open, onOpenChange }: Props) {
     }
     setSaving(true)
     // Persist only visible rows (hidden follow-ups are dropped).
-    const answers: ChecklistResult[] = rows
+    const answers: InternalTaskAnswer[] = rows
       .filter((r) => isRowVisible(r))
       .map((r) => ({
         item_id: r.item_id,
@@ -248,7 +288,7 @@ export function InternalTaskSheet({ instance, open, onOpenChange }: Props) {
         parent_item_id: r.parent_item_id,
         condition_id: r.condition_id,
         required: r.required,
-      })) as ChecklistResult[]
+      })) as InternalTaskAnswer[]
 
     const result = await submitInternalTask({
       instanceId: instance.id,
@@ -275,10 +315,76 @@ export function InternalTaskSheet({ instance, open, onOpenChange }: Props) {
         </SheetHeader>
 
         <div className="mt-6 space-y-5">
-          {rows.map((row) => {
-            if (!isRowVisible(row)) return null
-            const isFollowUp = !!row.parent_item_id
+          {/* Display-only blocks render straight from the template, interleaved
+              with their answerable questions (matched by item_id below). */}
+          {questions.map((q) => {
+            if (q.type === 'section') {
+              return (
+                <div key={q.id} className="pt-2">
+                  <h3 className="text-sm font-semibold text-foreground text-balance">
+                    {q.label || 'Section'}
+                  </h3>
+                  {q.description && (
+                    <p className="mt-1 text-xs text-muted-foreground text-pretty">
+                      {q.description}
+                    </p>
+                  )}
+                  <div className="mt-2 border-b" />
+                </div>
+              )
+            }
+            if (q.type === 'doc_link') {
+              return q.documentId ? (
+                <a
+                  key={q.id}
+                  href={`/api/documents/file?id=${q.documentId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm text-primary hover:bg-muted/60"
+                >
+                  <FileText className="h-4 w-4 shrink-0" />
+                  <span className="text-pretty">
+                    {q.label || q.documentName || 'View document'}
+                  </span>
+                </a>
+              ) : null
+            }
+            if (q.type === 'url_link') {
+              return q.url ? (
+                <a
+                  key={q.id}
+                  href={q.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm text-primary hover:bg-muted/60"
+                >
+                  <ExternalLink className="h-4 w-4 shrink-0" />
+                  <span className="text-pretty">{q.label || q.url}</span>
+                </a>
+              ) : null
+            }
+            // Answerable question: render its row (plus any visible follow-ups).
+            const own = rows.filter(
+              (r) => r.item_id === q.id || r.parent_item_id === q.id,
+            )
             return (
+              <div key={q.id} className="space-y-5">
+                {own.map((row) => renderRow(row))}
+              </div>
+            )
+          })}
+        </div>
+
+        {renderTrailing()}
+      </SheetContent>
+    </Sheet>
+  )
+
+  // Renders one answerable row (top-level question or visible follow-up).
+  function renderRow(row: Row) {
+    if (!isRowVisible(row)) return null
+    const isFollowUp = !!row.parent_item_id
+    return (
               <div
                 key={row.item_id}
                 className={
@@ -384,6 +490,85 @@ export function InternalTaskSheet({ instance, open, onOpenChange }: Props) {
                       />
                     )}
 
+                    {row.type === 'table' && (
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse text-sm">
+                          <thead>
+                            <tr className="border-b">
+                              {(row.columns ?? []).map((c) => (
+                                <th
+                                  key={c.id}
+                                  className="px-2 py-1.5 text-left font-medium text-muted-foreground"
+                                >
+                                  {c.label || 'Column'}
+                                </th>
+                              ))}
+                              {!readOnly && <th className="w-8" />}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {tableRows(row).length === 0 ? (
+                              <tr>
+                                <td
+                                  colSpan={(row.columns ?? []).length + (readOnly ? 0 : 1)}
+                                  className="px-2 py-2 text-xs text-muted-foreground"
+                                >
+                                  No rows yet.
+                                </td>
+                              </tr>
+                            ) : (
+                              tableRows(row).map((r, idx) => (
+                                <tr key={idx} className="border-b last:border-0">
+                                  {(row.columns ?? []).map((c) => (
+                                    <td key={c.id} className="px-1 py-1">
+                                      <Input
+                                        type={
+                                          c.type === 'number'
+                                            ? 'number'
+                                            : c.type === 'date'
+                                              ? 'date'
+                                              : 'text'
+                                        }
+                                        value={r[c.id] ?? ''}
+                                        disabled={readOnly}
+                                        onChange={(e) =>
+                                          updateTableCell(row, idx, c.id, e.target.value)
+                                        }
+                                        className="h-8"
+                                      />
+                                    </td>
+                                  ))}
+                                  {!readOnly && (
+                                    <td className="px-1 py-1 align-middle">
+                                      <button
+                                        type="button"
+                                        onClick={() => removeTableRow(row, idx)}
+                                        aria-label="Remove row"
+                                        className="text-muted-foreground hover:text-destructive"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </button>
+                                    </td>
+                                  )}
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                        {!readOnly && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="mt-1.5 h-7"
+                            onClick={() => addTableRow(row)}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            Add row
+                          </Button>
+                        )}
+                      </div>
+                    )}
+
                     {/* Notes + photos for top-level rows with an active condition
                         requiring them, or always available as optional notes. */}
                     {!isFollowUp && <RowExtras row={row} update={update} />}
@@ -453,60 +638,63 @@ export function InternalTaskSheet({ instance, open, onOpenChange }: Props) {
                   </div>
                 )}
               </div>
-            )
-          })}
+    )
+  }
 
-          {template?.requires_reference && (
-            <div className="space-y-1.5 rounded-lg border p-3">
-              <Label htmlFor="reference">
-                {template.reference_label || 'Reference number'}
-              </Label>
-              <Input
-                id="reference"
-                value={reference}
-                disabled={readOnly}
-                onChange={(e) => setReference(e.target.value)}
-                placeholder="Enter reference"
-              />
-            </div>
-          )}
+  // Renders the reference field, error, and submit/completed footer.
+  function renderTrailing() {
+    return (
+      <>
+        {template?.requires_reference && (
+          <div className="mt-5 space-y-1.5 rounded-lg border p-3">
+            <Label htmlFor="reference">
+              {template.reference_label || 'Reference number'}
+            </Label>
+            <Input
+              id="reference"
+              value={reference}
+              disabled={readOnly}
+              onChange={(e) => setReference(e.target.value)}
+              placeholder="Enter reference"
+            />
+          </div>
+        )}
 
-          {error && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+        {error && (
+          <Alert variant="destructive" className="mt-5">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-          {readOnly ? (
-            <Badge className="bg-green-600 text-white hover:bg-green-600/90">
-              <Check className="mr-1 h-3.5 w-3.5" />
-              Completed
-            </Badge>
-          ) : (
-            <div className="sticky bottom-0 -mx-6 border-t bg-background px-6 py-4">
-              {blockers.length > 0 && (
-                <p className="mb-2 text-xs text-muted-foreground">
-                  {blockers.length} item{blockers.length === 1 ? '' : 's'} still need
-                  {blockers.length === 1 ? 's' : ''} attention.
-                </p>
+        {readOnly ? (
+          <Badge className="mt-5 bg-green-600 text-white hover:bg-green-600/90">
+            <Check className="mr-1 h-3.5 w-3.5" />
+            Completed
+          </Badge>
+        ) : (
+          <div className="sticky bottom-0 -mx-6 mt-5 border-t bg-background px-6 py-4">
+            {blockers.length > 0 && (
+              <p className="mb-2 text-xs text-muted-foreground">
+                {blockers.length} item{blockers.length === 1 ? '' : 's'} still need
+                {blockers.length === 1 ? 's' : ''} attention.
+              </p>
+            )}
+            <Button onClick={handleSubmit} disabled={saving} className="w-full">
+              {saving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Submitting…
+                </>
+              ) : (
+                'Complete task'
               )}
-              <Button onClick={handleSubmit} disabled={saving} className="w-full">
-                {saving ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Submitting…
-                  </>
-                ) : (
-                  'Complete task'
-                )}
-              </Button>
-            </div>
-          )}
-        </div>
-      </SheetContent>
-    </Sheet>
-  )
+            </Button>
+          </div>
+        )}
+      </>
+    )
+  }
 }
 
 // Optional note field, always available on top-level rows.

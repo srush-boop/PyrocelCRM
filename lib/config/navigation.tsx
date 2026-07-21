@@ -513,9 +513,43 @@ export function getMenuForRole(role: UserRole): NavItem[] {
   }
 }
 
-// The default set of enabled top-level keys for a role.
+// Collects every leaf page href beneath a top-level group's children,
+// recursing through nested sub-menus (e.g. Sales → Configure). Used for
+// page-level (granular) permissioning where each page is keyed by its href.
+export function collectChildHrefs(item: NavItem): string[] {
+  const out: string[] = []
+  const walk = (children?: NavChild[]) => {
+    if (!children) return
+    for (const child of children) {
+      if (child.children && child.children.length) {
+        for (const sub of child.children) if (sub.href) out.push(sub.href)
+      } else if (child.href) {
+        out.push(child.href)
+      }
+    }
+  }
+  walk(item.children)
+  return out
+}
+
+// Every toggleable identifier for a role: leaf top-level items are keyed by
+// their `key`; grouped items contribute their `key` plus every descendant page
+// href. This is the full "everything on" set used for role defaults.
+export function getAllMenuIdentifiers(role: UserRole): string[] {
+  const ids: string[] = []
+  for (const item of getMenuForRole(role)) {
+    if (item.children && item.children.length) {
+      ids.push(item.key, ...collectChildHrefs(item))
+    } else {
+      ids.push(item.key)
+    }
+  }
+  return Array.from(new Set(ids))
+}
+
+// The default set of enabled identifiers for a role (all groups + all pages).
 export function getDefaultMenuKeys(role: UserRole): string[] {
-  return getMenuForRole(role).map((item) => item.key)
+  return getAllMenuIdentifiers(role)
 }
 
 // Menu items were regrouped (leave/HR items merged into `people`, RAMS merged
@@ -548,24 +582,85 @@ export function migratePermissionKeys(keys: string[]): string[] {
   return Array.from(new Set(keys.map((k) => PERMISSION_KEY_MIGRATION[k] ?? k)))
 }
 
-// Applies a per-user permission override to a role's menu. `menuPermissions` is
-// either null/undefined (use role defaults) or an array of enabled keys.
-// Locked items are always kept regardless of the override.
+// Resolves a per-user permission override into the concrete set of enabled
+// identifiers (top-level keys + individual page hrefs). Shared by the sidebar
+// resolver and the Menu Access configurator so both agree exactly.
+//
+// Backward compatibility: older overrides stored ONLY top-level group keys
+// (e.g. `calls`, `sales`). When a group key is enabled but the override carries
+// no explicit page hrefs for that group, every page in the group is granted —
+// so nobody loses access when the model becomes page-level. New overrides that
+// list specific page hrefs are respected exactly.
+export function resolveEnabledSet(
+  role: UserRole,
+  menuPermissions: string[] | null | undefined,
+): Set<string> {
+  if (!menuPermissions) return new Set(getAllMenuIdentifiers(role))
+
+  const menu = getMenuForRole(role)
+  const enabled = new Set(migratePermissionKeys(menuPermissions))
+  // Requests/Invoicing were promoted out of the Service (`calls`) group into
+  // top-level items; existing overrides only stored `calls`, so inherit from it.
+  if (enabled.has('calls')) {
+    enabled.add('requests')
+    enabled.add('invoices')
+  }
+
+  for (const item of menu) {
+    if (!(item.children && item.children.length)) {
+      if (item.locked) enabled.add(item.key)
+      continue
+    }
+    const hrefs = collectChildHrefs(item)
+    const hasAnyHref = hrefs.some((h) => enabled.has(h))
+    // Legacy group-level override (group on, no page hrefs) OR a locked group
+    // → grant every page in the group.
+    if ((item.locked || enabled.has(item.key)) && !hasAnyHref) {
+      for (const h of hrefs) enabled.add(h)
+    }
+    if (item.locked) enabled.add(item.key)
+  }
+  return enabled
+}
+
+// Applies a per-user permission override to a role's menu, filtering BOTH the
+// top-level groups and the individual pages inside them. `menuPermissions` is
+// either null/undefined (use role defaults = show everything) or an array of
+// enabled identifiers. A group stays visible as long as at least one of its
+// pages is enabled; only unchecked pages disappear. Locked items are always
+// kept in full regardless of the override.
 export function getVisibleMenu(
   role: UserRole,
   menuPermissions: string[] | null | undefined,
 ): NavItem[] {
   const menu = getMenuForRole(role)
   if (!menuPermissions) return menu
-  const enabled = new Set(migratePermissionKeys(menuPermissions))
-  // Requests was promoted out of the Service (`calls`) group into a top-level
-  // item. Existing per-user overrides only stored `calls`, so inherit visibility
-  // from it — anyone who could see the Service group keeps access to Requests
-  // without a data migration.
-  if (enabled.has('calls')) enabled.add('requests')
-  // Invoicing was likewise promoted out of the Service (`calls`) group into a
-  // top-level item, so anyone who could see Service keeps access to Invoicing
-  // without a data migration.
-  if (enabled.has('calls')) enabled.add('invoices')
-  return menu.filter((item) => item.locked || enabled.has(item.key))
+  const enabled = resolveEnabledSet(role, menuPermissions)
+
+  const filterChildren = (children: NavChild[]): NavChild[] =>
+    children.reduce<NavChild[]>((acc, child) => {
+      if (child.children && child.children.length) {
+        const subs = child.children.filter((sub) => enabled.has(sub.href))
+        if (subs.length) acc.push({ ...child, children: subs })
+      } else if (child.href && enabled.has(child.href)) {
+        acc.push(child)
+      }
+      return acc
+    }, [])
+
+  const result: NavItem[] = []
+  for (const item of menu) {
+    if (item.children && item.children.length) {
+      // Locked groups are always shown in full (prevents lockout).
+      if (item.locked) {
+        result.push(item)
+        continue
+      }
+      const children = filterChildren(item.children)
+      if (children.length) result.push({ ...item, children })
+    } else if (item.locked || enabled.has(item.key)) {
+      result.push(item)
+    }
+  }
+  return result
 }

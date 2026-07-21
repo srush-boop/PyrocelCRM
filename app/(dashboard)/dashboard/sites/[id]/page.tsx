@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { DeferredMount } from '@/components/ui/deferred-mount'
+import { Skeleton } from '@/components/ui/skeleton'
 import { ArrowLeft, MapPin, Phone, Mail, Building2, Radio, Building, User, ExternalLink } from 'lucide-react'
 import { EditSiteButton } from '@/components/dashboard/sites/edit-site-button'
 import { CreateTaskDialog } from '@/components/dashboard/schedule/create-task-dialog'
@@ -957,6 +959,15 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
         </TabsContent>
 
         <TabsContent value="systems" className="mt-0 space-y-4">
+              <DeferredMount
+                fallback={
+                  <div className="space-y-4" aria-hidden="true">
+                    <Skeleton className="h-10 w-48" />
+                    <Skeleton className="h-40 w-full" />
+                    <Skeleton className="h-40 w-full" />
+                  </div>
+                }
+              >
               <SiteSystemsManager
                 siteId={id}
                 siteSystems={siteSystems}
@@ -984,6 +995,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             two_engineers_required: Boolean((site as Site).two_engineers_required),
           }}
           />
+              </DeferredMount>
           {/* Dialogs-only mount: the Systems service rows drive setup / charge /
               book / delete dialogs via URL params (editService, chargeService,
               bookService, deleteService). No visible list is rendered here. */}

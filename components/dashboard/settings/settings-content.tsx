@@ -65,11 +65,12 @@ interface SettingsContentProps {
   internalTaskUsers: Pick<Profile, 'id' | 'full_name' | 'role'>[]
   internalTaskDepartments: Department[]
   internalTaskRoles: Role[]
+  internalTaskDocuments: { id: string; name: string }[]
   mfaFactors: { id: string; friendlyName: string | null; createdAt: string }[]
   mfaRequired: boolean
 }
 
-export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards, chargeTemplates, nominalCodes, canManageTags, documentTags, openingHours, canManageInternalTasks, internalTaskTemplates, internalTaskUsers, internalTaskDepartments, internalTaskRoles, mfaFactors, mfaRequired }: SettingsContentProps) {
+export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards, chargeTemplates, nominalCodes, canManageTags, documentTags, openingHours, canManageInternalTasks, internalTaskTemplates, internalTaskUsers, internalTaskDepartments, internalTaskRoles, internalTaskDocuments, mfaFactors, mfaRequired }: SettingsContentProps) {
   const isAdmin = profile.role === 'admin'
   // Templates are managed by office/admin (mail-merge letters for client correspondence).
   const canManageTemplates = profile.role === 'admin' || profile.role === 'office'
@@ -508,6 +509,7 @@ export function SettingsContent({ user, profile, company, branches, departments,
             departments={internalTaskDepartments}
             roles={internalTaskRoles}
             users={internalTaskUsers}
+            documents={internalTaskDocuments}
           />
         </TabsContent>
       )}

@@ -69,6 +69,22 @@ export function LoneWorkerPrompt() {
     return installAlarmUnlockOnGesture()
   }, [data?.session])
 
+  // While a shift is active, warn before the tab is closed or navigated away so
+  // the worker is reminded to press "Finish shift" first. Closing anyway does
+  // NOT end the shift — the server keeps escalating — but this cuts down on the
+  // accidental "closed the app without finishing" case that caused false alarms.
+  useEffect(() => {
+    if (!data?.session || data.session.status !== 'active') return
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Custom text is ignored by modern browsers; the native prompt still shows.
+      e.preventDefault()
+      e.returnValue = ''
+      return ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [data?.session])
+
   const effectiveNow = now + offset
 
   const { display, msToNextPrompt, msToAmber, msToRed } = useMemo(() => {

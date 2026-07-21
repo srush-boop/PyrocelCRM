@@ -1,6 +1,6 @@
 'use client'
 
-import { useTransition } from 'react'
+import { useOptimistic, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -47,9 +47,12 @@ export function JobProgressTracker({
 }: JobProgressTrackerProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  // Reflect the chosen stage instantly on click so the interaction paints
+  // immediately (avoids a long INP while the server action + refresh resolve).
+  const [optimisticStage, setOptimisticStage] = useOptimistic(stage)
 
-  const currentOrder = jobStageMeta(stage).order
-  const gated = stage === 'contract_review' && !contractReviewedAt
+  const currentOrder = jobStageMeta(optimisticStage).order
+  const gated = optimisticStage === 'contract_review' && !contractReviewedAt
 
   // Suggested stage = the first stage in the pipeline that still has outstanding
   // work. If everything is done we suggest the final stage.
@@ -58,8 +61,9 @@ export function JobProgressTracker({
   const showSuggestion = !gated && suggested.order > currentOrder
 
   function changeStage(target: JobStage) {
-    if (target === stage) return
+    if (target === optimisticStage) return
     startTransition(async () => {
+      setOptimisticStage(target)
       const res = await setJobStage(jobId, target)
       if (res.ok) {
         toast.success(`Moved to ${jobStageMeta(target).label}`)
@@ -157,7 +161,9 @@ export function JobProgressTracker({
           })}
         </div>
 
-        <p className="text-sm text-muted-foreground text-pretty">{jobStageMeta(stage).description}</p>
+        <p className="text-sm text-muted-foreground text-pretty">
+          {jobStageMeta(optimisticStage).description}
+        </p>
 
         {showSuggestion && (
           <div className="flex flex-col gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 sm:flex-row sm:items-center sm:justify-between">

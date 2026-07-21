@@ -1,10 +1,13 @@
 import 'server-only'
 import webpush from 'web-push'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getVapidPublicKey } from '@/lib/push-vapid'
 
 // Web push is optional: it only activates when VAPID keys are configured.
 // In-app notifications always work regardless.
-const VAPID_PUBLIC = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+// Public key is resolved (validated env value, else baked-in fallback) so a
+// corrupted env value can't silently disable push. Private key must stay in env.
+const VAPID_PUBLIC = getVapidPublicKey()
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:notifications@example.com'
 

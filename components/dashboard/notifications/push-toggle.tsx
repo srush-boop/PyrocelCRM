@@ -8,17 +8,10 @@ import {
   savePushSubscription,
   removePushSubscription,
 } from '@/app/(dashboard)/dashboard/notifications/actions'
+import { getVapidPublicKey, vapidPublicKeyToBytes } from '@/lib/push-vapid'
 
-const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
-
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
-  const raw = atob(base64)
-  const output = new Uint8Array(raw.length)
-  for (let i = 0; i < raw.length; i++) output[i] = raw.charCodeAt(i)
-  return output
-}
+// Always resolves to a valid key (env value if sound, else baked-in fallback).
+const VAPID_PUBLIC_KEY = getVapidPublicKey()
 
 export function PushToggle() {
   const [supported, setSupported] = useState(false)
@@ -81,7 +74,7 @@ export function PushToggle() {
       let sub = await reg.pushManager.getSubscription()
       if (sub) {
         const existingKey = sub.options?.applicationServerKey
-        const wantKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY as string)
+        const wantKey = vapidPublicKeyToBytes()
         const sameKey =
           existingKey &&
           new Uint8Array(existingKey).length === wantKey.length &&
@@ -94,7 +87,7 @@ export function PushToggle() {
       if (!sub) {
         sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY as string),
+          applicationServerKey: vapidPublicKeyToBytes(),
         })
       }
 

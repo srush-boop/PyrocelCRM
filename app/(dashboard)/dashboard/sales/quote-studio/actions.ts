@@ -18,12 +18,14 @@ import {
 } from '@/lib/sales/quote-studio-spec'
 import {
   draftFromBrief,
+  redraftFromBrief,
   draftDisciplineDevices,
   generateSpecSections,
   type StudioUnderstanding,
   type StudioRequirement,
   type StudioDesignReasoning,
   type StudioDisciplineDraft,
+  type RedraftDevice,
 } from '@/lib/ai/studio-draft'
 
 const FA_CODE = 'FA'
@@ -338,6 +340,25 @@ export async function draftBrief(brief: string) {
   const { config } = await loadConfig(supabase)
   const keys = (config?.deviceTypes ?? []).map((d) => ({ key: d.device_key, label: d.label }))
   return draftFromBrief(brief, keys)
+}
+
+export async function redraftBrief(input: {
+  brief: string
+  steer: string
+  understanding: StudioUnderstanding
+  requirements: StudioRequirement[]
+  devices: RedraftDevice[]
+}) {
+  const { supabase, user, error } = await requireStaff()
+  if (error || !user) return { ok: false as const, error: error ?? 'Not authorised.' }
+  const { config } = await loadConfig(supabase)
+  const keys = (config?.deviceTypes ?? []).map((d) => ({ key: d.device_key, label: d.label }))
+  return redraftFromBrief(input.brief, keys, {
+    steer: input.steer,
+    understanding: input.understanding,
+    requirements: input.requirements,
+    devices: input.devices,
+  })
 }
 
 // ---- Build the design specification (maths + AI narrative) -----------

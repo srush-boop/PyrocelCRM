@@ -234,6 +234,119 @@ export async function draftFromBrief(
   }
 }
 
+// ---- Re-draft with designer steer (interactive correction) ------------
+
+export interface RedraftDevice {
+  device_key: string
+  label: string
+  zone: string
+  quantity: number
+  /** Designer-owned rows: keep at this exact quantity, do not re-reason away. */
+  locked: boolean
+}
+
+export interface RedraftContext {
+  /** The designer's free-text correction / steer for this pass. */
+  steer: string
+  understanding: StudioUnderstanding
+  requirements: StudioRequirement[]
+  devices: RedraftDevice[]
+}
+
+const REDRAFT_SYSTEM = [
+  DRAFT_SYSTEM,
+  'This is a RE-DRAFT. A designer has already reviewed your first pass, made edits, and given you corrections.',
+  'Treat the CURRENT WORKING DRAFT as designer-confirmed fact: preserve their understanding, requirements and device quantities UNLESS the DESIGNER CORRECTIONS say otherwise or they are logically inconsistent with the corrections.',
+  'Any device marked [LOCKED] was set by the designer — keep it in the schedule at exactly that quantity and reconcile the rest of the design around it.',
+  'Apply the DESIGNER CORRECTIONS precisely: adjust quantities, zones, category, assumptions and reasoning as instructed, and re-reason the design breakdown so it stays consistent. Do not discard detail the designer added.',
+].join(' ')
+
+export async function redraftFromBrief(
+  brief: string,
+  allowedDeviceKeys: { key: string; label: string }[],
+  context: RedraftContext,
+): Promise<StudioDraftResult> {
+  const text = clamp(brief)
+  const steer = (context.steer ?? '').trim()
+  if (!steer) return { ok: false, error: 'Add a correction or instruction for the AI first.' }
+
+  const keyList = allowedDeviceKeys.map((d) => `- ${d.key} (${d.label})`).join('\n')
+  const u = context.understanding
+  const currentDraft = [
+    'UNDERSTANDING:',
+    `- Client: ${u.clientName || '(unknown)'}`,
+    `- Site: ${u.siteName || '(unknown)'} — ${u.siteAddress || '(address tbc)'}`,
+    `- Building type: ${u.buildingType}`,
+    `- Standard: ${u.standard}`,
+    `- Category: ${u.category}`,
+    `- Work type: ${u.workType}`,
+    `- Summary: ${u.summary}`,
+    '',
+    'REQUIREMENTS:',
+    ...(context.requirements.length
+      ? context.requirements.map((r) => `- [${r.priority}] (${r.system}) ${r.text}`)
+      : ['- (none captured yet)']),
+    '',
+    'DEVICE SCHEDULE:',
+    ...(context.devices.length
+      ? context.devices.map(
+          (d) =>
+            `- ${d.device_key} (${d.label}) × ${d.quantity} in ${d.zone || 'Z1'}${d.locked ? ' [LOCKED]' : ''}`,
+        )
+      : ['- (none yet)']),
+  ].join('\n')
+
+  const prompt = [
+    'KNOWLEDGE BASE:',
+    fireAlarmKbText(),
+    '',
+    'ALLOWED DEVICE KEYS (use the key exactly, left of the bracket):',
+    keyList,
+    '',
+    'ORIGINAL CLIENT BRIEF:',
+    text || '(no brief text was provided)',
+    '',
+    'CURRENT WORKING DRAFT (designer-confirmed — preserve unless the corrections change it):',
+    currentDraft,
+    '',
+    'DESIGNER CORRECTIONS / STEER (apply these precisely):',
+    steer,
+    '',
+    'Return the corrected understanding, requirements, first-pass device schedule and design reasoning now.',
+  ].join('\n')
+
+  try {
+    const { object } = await generateObject({
+      model: DRAFT_MODEL,
+      schema: draftSchema,
+      system: REDRAFT_SYSTEM,
+      prompt,
+    })
+    const allowed = new Set(allowedDeviceKeys.map((d) => d.key))
+    return {
+      ok: true,
+      draft: {
+        understanding: object.understanding,
+        requirements: object.requirements,
+        devices: object.devices.filter((d) => allowed.has(d.device_key)),
+        design: {
+          areas: object.design.areas.map((a) => ({
+            name: a.name,
+            description: a.description,
+            devices: a.devices.filter((d) => allowed.has(d.deviceKey)),
+          })),
+          assumptions: object.design.assumptions,
+          openQuestions: object.design.openQuestions,
+          otherDisciplines: object.design.otherDisciplines,
+        },
+      },
+    }
+  } catch (err) {
+    console.error('[v0] redraftFromBrief failed:', err)
+    return { ok: false, error: 'Could not re-draft. Please try again.' }
+  }
+}
+
 // ---- Secondary discipline device draft (Phase 3 multi-discipline) -----
 
 const disciplineSchema = z.object({

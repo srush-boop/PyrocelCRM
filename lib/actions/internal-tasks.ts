@@ -6,7 +6,9 @@ import type {
   Profile,
   InternalTaskTemplate,
   InternalTaskInstance,
-  ChecklistResult,
+  InternalTaskItem,
+  InternalTaskAnswer,
+  ChecklistCondition,
 } from '@/lib/types/database'
 import { computePeriod, resolveAssigneeIds } from '@/lib/internal-tasks/schedule'
 
@@ -166,7 +168,7 @@ export async function getOutstandingTasks(): Promise<{
  */
 export async function submitInternalTask(input: {
   instanceId: string
-  answers: ChecklistResult[]
+  answers: InternalTaskAnswer[]
   referenceNumber?: string | null
 }): Promise<{ ok: boolean; error?: string }> {
   const auth = await getAuth()
@@ -176,7 +178,7 @@ export async function submitInternalTask(input: {
   const { data: instance } = await supabase
     .from('internal_task_instances')
     .select(
-      'id, user_id, template:internal_task_templates(id, name, requires_reference, notify_on_issue_user_ids, notify_on_issue_email)',
+      'id, user_id, template:internal_task_templates(id, name, questions, requires_reference, notify_on_issue_user_ids, notify_on_issue_email)',
     )
     .eq('id', input.instanceId)
     .single()
@@ -190,6 +192,7 @@ export async function submitInternalTask(input: {
   ) as {
     id?: string
     name?: string
+    questions?: InternalTaskItem[]
     requires_reference?: boolean
     notify_on_issue_user_ids?: string[] | null
     notify_on_issue_email?: string | null
@@ -236,8 +239,116 @@ export async function submitInternalTask(input: {
     }
   }
 
+  // Conditional notifications: any condition on a question that fired AND carries
+  // notifyUserIds alerts those users in-app. Best-effort, never blocks completion.
+  try {
+    await dispatchConditionalNotifications({
+      supabase,
+      submitterId: userId,
+      templateName: template?.name ?? 'Internal task',
+      questions: template?.questions ?? [],
+      answers: input.answers ?? [],
+    })
+  } catch (err) {
+    console.log('[v0] internal-task conditional notify failed:', (err as Error).message)
+  }
+
   revalidatePath(MY_TASKS_PATH)
   return { ok: true }
+}
+
+// Evaluates each question's conditions against the submitted answers and, for
+// every fired condition carrying notifyUserIds, notifies those users in-app.
+// Mirrors the client's isConditionActive so builder + runtime agree.
+async function dispatchConditionalNotifications(args: {
+  supabase: Awaited<ReturnType<typeof createClient>>
+  submitterId: string
+  templateName: string
+  questions: InternalTaskItem[]
+  answers: InternalTaskAnswer[]
+}): Promise<void> {
+  const { supabase, submitterId, templateName, questions, answers } = args
+  const byItem = new Map(answers.map((a) => [a.item_id, a]))
+
+  // Collect (userId -> triggering question labels) across all fired conditions.
+  const targets = new Map<string, Set<string>>()
+  for (const q of questions) {
+    const ans = byItem.get(q.id)
+    if (!ans) continue
+    for (const cond of q.conditions ?? []) {
+      const ids = cond.notifyUserIds ?? []
+      if (ids.length === 0) continue
+      if (!conditionFired(ans, cond)) continue
+      for (const uid of ids) {
+        if (!targets.has(uid)) targets.set(uid, new Set())
+        targets.get(uid)!.add(q.label || 'a question')
+      }
+    }
+  }
+  if (targets.size === 0) return
+
+  const { data: submitter } = await supabase
+    .from('profiles')
+    .select('full_name')
+    .eq('id', submitterId)
+    .single()
+  const submitterName =
+    (submitter as { full_name?: string } | null)?.full_name ?? 'A team member'
+
+  const { notifyUsers } = await import('@/lib/notifications')
+  // One notification per user, listing the questions that triggered it.
+  await Promise.all(
+    Array.from(targets.entries()).map(([uid, labels]) =>
+      notifyUsers({
+        userIds: [uid],
+        title: `Follow-up on "${templateName}"`,
+        body: `${submitterName} completed "${templateName}" — your attention is needed on: ${Array.from(
+          labels,
+        ).join(', ')}.`,
+        url: MY_TASKS_PATH,
+        category: 'internal_task_issue',
+        createdBy: submitterId,
+        data: { template_name: templateName },
+      }),
+    ),
+  )
+}
+
+// Server-side mirror of the client isConditionActive check.
+function conditionFired(ans: InternalTaskAnswer, cond: ChecklistCondition): boolean {
+  if (ans.na) return false
+  switch (cond.when) {
+    case 'fail':
+      return ans.passed === false && !ans.advisory
+    case 'pass':
+      return ans.passed === true
+    case 'advisory':
+      return ans.advisory === true
+    case 'checked':
+      return ans.value === true
+    case 'unchecked':
+      return ans.value === false
+    case 'number': {
+      const n = Number(ans.value)
+      if (Number.isNaN(n) || cond.threshold == null) return false
+      switch (cond.comparator) {
+        case 'gt':
+          return n > cond.threshold
+        case 'lt':
+          return n < cond.threshold
+        case 'gte':
+          return n >= cond.threshold
+        case 'lte':
+          return n <= cond.threshold
+        case 'eq':
+          return n === cond.threshold
+        default:
+          return false
+      }
+    }
+    default:
+      return false
+  }
 }
 
 /**
@@ -251,7 +362,7 @@ async function dispatchIssueAlerts(args: {
   notifyUserIds: string[]
   notifyEmail: string | null
   referenceNumber: string | null
-  issues: ChecklistResult[]
+  issues: InternalTaskAnswer[]
 }): Promise<void> {
   const { supabase, submitterId, templateName, notifyUserIds, notifyEmail, issues } = args
 

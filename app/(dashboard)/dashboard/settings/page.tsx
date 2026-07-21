@@ -169,6 +169,7 @@ export default async function SettingsPage() {
         internalTaskUsers={internalTaskUsers}
         internalTaskDepartments={internalTaskDepartments}
         internalTaskRoles={internalTaskRoles}
+        internalTaskDocuments={internalTaskDocuments}
         mfaFactors={mfaFactors}
         mfaRequired={mfaRequired}
       />

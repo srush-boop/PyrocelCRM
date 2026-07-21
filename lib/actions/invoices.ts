@@ -14,6 +14,7 @@ import type {
 import { resolveBillingAccount } from '@/lib/billing/resolve-billing-account'
 import { renderInvoicePdfBuffer } from '@/lib/pdf/invoice-pdf'
 import { resolveInvoiceLineSites } from '@/lib/billing/invoice-line-sites'
+import { buildSageCsv, type SageExportInvoice } from '@/lib/billing/sage-export'
 import { sendEmail } from '@/lib/email/send-email'
 import {
   billingDueHint,
@@ -1051,6 +1052,99 @@ export async function bulkSendInvoices(invoiceIds: string[]): Promise<BulkInvoic
     else ok++
   }
   return { ok, failures }
+}
+
+// ---- Sage 50 CSV export ---------------------------------------------------
+
+export interface SageExportResult {
+  error: string | null
+  /** CSV text (only present on success with >0 invoices). */
+  csv?: string
+  filename?: string
+  /** Number of invoices written into the CSV. */
+  count?: number
+}
+
+/**
+ * Push issued invoices to Sage by generating a Sage 50 audit-trail CSV and
+ * stamping the exported invoices as "Sent to Sage". First-pass integration: no
+ * live Sage connection, just a spreadsheet the Sage import wizard can read.
+ *
+ * With no ids, exports every eligible (issued/paid, non-void) invoice that has
+ * not yet been exported. With ids, exports exactly those (allowing re-export).
+ */
+export async function exportInvoicesToSage(invoiceIds?: string[]): Promise<SageExportResult> {
+  const ctx = await requireInvoiceEditor()
+  if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
+  const { supabase, userId } = ctx
+
+  let query = supabase
+    .from('invoices')
+    .select(
+      'id, invoice_number, document_type, sage_account_ref, issue_date, tax_rate, status, sage_exported_at, line_items:invoice_line_items(description, amount_pence, nominal_code, sort_order)',
+    )
+    .in('status', ['issued', 'paid'])
+    .order('issue_date', { ascending: true })
+
+  if (invoiceIds && invoiceIds.length > 0) {
+    query = query.in('id', invoiceIds)
+  } else {
+    // Batch mode: only invoices not yet pushed to Sage.
+    query = query.is('sage_exported_at', null)
+  }
+
+  const { data, error } = await query
+  if (error) return { error: error.message }
+
+  type Row = Pick<
+    Invoice,
+    'id' | 'invoice_number' | 'document_type' | 'sage_account_ref' | 'issue_date' | 'tax_rate'
+  > & {
+    line_items: Pick<InvoiceLineItem, 'description' | 'amount_pence' | 'nominal_code' | 'sort_order'>[]
+  }
+  const rows = (data ?? []) as unknown as Row[]
+
+  const exportable = rows.filter((r) => (r.line_items ?? []).length > 0)
+  if (exportable.length === 0) {
+    return { error: 'No issued invoices are waiting to be sent to Sage.' }
+  }
+
+  const payload: SageExportInvoice[] = exportable.map((r) => ({
+    invoiceNumber: r.invoice_number,
+    documentType: r.document_type === 'credit_note' ? 'credit_note' : 'invoice',
+    sageAccountRef: r.sage_account_ref,
+    issueDate: r.issue_date,
+    taxRate: r.tax_rate ?? DEFAULT_TAX_RATE,
+    lines: [...r.line_items]
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+      .map((l) => ({
+        description: l.description,
+        amountPence: l.amount_pence,
+        nominalCode: l.nominal_code,
+      })),
+  }))
+
+  const csv = buildSageCsv(payload)
+
+  // Stamp the exported invoices so they show as "Sent to Sage".
+  const { error: stampError } = await supabase
+    .from('invoices')
+    .update({ sage_exported_at: new Date().toISOString(), sage_exported_by: userId })
+    .in(
+      'id',
+      exportable.map((r) => r.id),
+    )
+  if (stampError) return { error: stampError.message }
+
+  revalidatePath('/dashboard/invoices')
+
+  const stamp = new Date().toISOString().slice(0, 10)
+  return {
+    error: null,
+    csv,
+    filename: `sage-export-${stamp}.csv`,
+    count: exportable.length,
+  }
 }
 
 // ---- Status transitions --------------------------------------------------

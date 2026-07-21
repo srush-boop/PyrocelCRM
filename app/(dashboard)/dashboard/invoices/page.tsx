@@ -8,6 +8,7 @@ import type { Invoice, Profile } from '@/lib/types/database'
 import { getReadyToInvoiceGroups } from '@/lib/actions/invoices'
 import { profileCanEditInvoices } from '@/lib/auth/invoices'
 import { InvoicesTable } from '@/components/dashboard/invoices/invoices-table'
+import { PushToSageButton } from '@/components/dashboard/invoices/push-to-sage-button'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +33,7 @@ export default async function InvoicesPage() {
     supabase
       .from('invoices')
       .select(
-        'id, invoice_number, status, financial_year, total_pence, issue_date, due_date, created_at, bill_to_name, bill_to_email, document_type, sent_at, site:sites(name), billing_account:billing_accounts(name), client:clients(name)',
+        'id, invoice_number, status, financial_year, total_pence, issue_date, due_date, created_at, bill_to_name, bill_to_email, document_type, sent_at, sage_exported_at, site:sites(name), billing_account:billing_accounts(name), client:clients(name)',
       )
       .order('created_at', { ascending: false })
       .limit(500),
@@ -41,6 +42,11 @@ export default async function InvoicesPage() {
 
   const readyCount = readyGroups.reduce((s, g) => s + g.tasks.length, 0)
   const canEdit = profileCanEditInvoices(profile as Profile)
+
+  // Issued/paid invoices not yet pushed to Sage — drives the "Push to Sage" badge.
+  const sagePending = ((invoices ?? []) as unknown as InvoiceRow[]).filter(
+    (i) => (i.status === 'issued' || i.status === 'paid') && !i.sage_exported_at,
+  ).length
 
   return (
     <div className="space-y-6">
@@ -52,6 +58,7 @@ export default async function InvoicesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {canEdit && <PushToSageButton pendingCount={sagePending} />}
           <Button asChild variant="outline">
             <Link href="/dashboard/invoices/projected-revenue">
               <TrendingUp className="mr-2 h-4 w-4" />
@@ -124,6 +131,7 @@ export interface InvoiceRow
     | 'bill_to_email'
     | 'document_type'
     | 'sent_at'
+    | 'sage_exported_at'
   > {
   site: { name: string } | null
   billing_account: { name: string } | null

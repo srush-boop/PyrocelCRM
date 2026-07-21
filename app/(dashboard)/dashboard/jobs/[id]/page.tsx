@@ -29,6 +29,8 @@ import { JobProgressTracker } from '@/components/dashboard/jobs/job-progress-tra
 import { JobInvoicesCard, type JobInvoiceRow } from '@/components/dashboard/jobs/job-invoices-card'
 import { JobCallsCard, type JobCallRow } from '@/components/dashboard/jobs/job-calls-card'
 import { JobPurchasing } from '@/components/dashboard/jobs/job-purchasing'
+import { JobDocuments } from '@/components/dashboard/jobs/job-documents'
+import { getAllDocumentTags, getOwnerDocuments } from '@/lib/documents/data'
 import { jobStageMeta, jobStatusMeta } from '@/lib/jobs/stages'
 import { jobFinance } from '@/lib/jobs/finance'
 import { getJobCommittedCost, getJobPurchaseOrders, getJobOrderingProgress } from '@/lib/jobs/purchasing'
@@ -110,6 +112,13 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   const suppliers = (suppliersResult.data ?? []) as { id: string; name: string }[]
   const invoices = (invoicesResult.data ?? []) as JobInvoiceRow[]
   const calls = (callsResult.data ?? []) as JobCallRow[]
+
+  // Document store for this job (uploads, folders + generated letters). This
+  // page is already gated to admin/office, so document management is allowed.
+  const [jobDocuments, allDocumentTags] = await Promise.all([
+    getOwnerDocuments('job', typedJob.id),
+    getAllDocumentTags(),
+  ])
 
   const remainingBudgetPence = finance.quotedCostPence - committedCostPence
   const overCommitted = committedCostPence > finance.quotedCostPence
@@ -330,6 +339,15 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
             invoices={invoices}
             quotedNetPence={finance.valuePence}
             invoicedNetPence={invoicedNetPence}
+          />
+
+          <JobDocuments
+            jobId={typedJob.id}
+            folders={jobDocuments.folders}
+            files={jobDocuments.files}
+            canManage
+            allTags={allDocumentTags}
+            usedTags={jobDocuments.usedTags}
           />
         </div>
 

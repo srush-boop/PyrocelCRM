@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getDocumentAuth } from '@/lib/documents/auth'
 import type { DocumentOwnerType } from '@/lib/types/database'
 
-const OWNER_TYPES: DocumentOwnerType[] = ['client', 'site', 'site_service', 'site_engineer']
+const OWNER_TYPES: DocumentOwnerType[] = ['client', 'site', 'site_service', 'site_engineer', 'job']
 
 // Create a folder
 export async function POST(request: NextRequest) {

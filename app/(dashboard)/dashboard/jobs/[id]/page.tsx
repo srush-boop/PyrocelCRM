@@ -340,15 +340,6 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
             quotedNetPence={finance.valuePence}
             invoicedNetPence={invoicedNetPence}
           />
-
-          <JobDocuments
-            jobId={typedJob.id}
-            folders={jobDocuments.folders}
-            files={jobDocuments.files}
-            canManage
-            allTags={allDocumentTags}
-            usedTags={jobDocuments.usedTags}
-          />
         </div>
 
         {/* Sidebar */}
@@ -430,6 +421,16 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
           <EntityRequestsCard entityType="job" entityId={typedJob.id} />
         </div>
       </div>
+
+      {/* Documents — full width so the file browser has room to breathe */}
+      <JobDocuments
+        jobId={typedJob.id}
+        folders={jobDocuments.folders}
+        files={jobDocuments.files}
+        canManage
+        allTags={allDocumentTags}
+        usedTags={jobDocuments.usedTags}
+      />
     </div>
   )
 }

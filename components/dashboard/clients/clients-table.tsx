@@ -34,6 +34,7 @@ import {
 import { MoreHorizontal, Pencil, Trash2, Search, Building, Plus, ChevronRight, ChevronDown, MapPin, ExternalLink, ListChecks, Link2, FileText, Wallet } from 'lucide-react'
 import { PrintButton } from '@/components/ui/print-button'
 import type { Client, Site, SystemType, ServiceType } from '@/lib/types/database'
+import { StatusBadge, effectiveStatus } from '@/lib/entity-status'
 import { AddClientDialog } from './add-client-dialog'
 import { EditClientDialog } from './edit-client-dialog'
 import { ClientChecklistDialog } from './client-checklist-dialog'
@@ -120,6 +121,7 @@ export function ClientsTable({
             <TableRow>
               <TableHead className="w-[40px]"></TableHead>
               <TableHead>Name</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead>Contact</TableHead>
               <TableHead className="hidden md:table-cell">Email</TableHead>
               <TableHead className="hidden md:table-cell">Phone</TableHead>
@@ -130,7 +132,7 @@ export function ClientsTable({
           <TableBody>
             {filteredClients.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center">
+                <TableCell colSpan={8} className="h-24 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <Building className="h-8 w-8 text-muted-foreground/50" />
                     <p className="text-muted-foreground">No clients found</p>
@@ -171,6 +173,9 @@ export function ClientsTable({
                         </Button>
                       </TableCell>
                       <TableCell className="font-medium">{client.name}</TableCell>
+                      <TableCell>
+                        <StatusBadge status={client.status} />
+                      </TableCell>
                       <TableCell>{client.contact_name || '-'}</TableCell>
                       <TableCell className="hidden md:table-cell">{client.contact_email || '-'}</TableCell>
                       <TableCell className="hidden md:table-cell">{client.contact_phone || '-'}</TableCell>
@@ -220,7 +225,7 @@ export function ClientsTable({
                     </TableRow>
                     {isExpanded && (
                       <TableRow className="hover:bg-transparent">
-                        <TableCell colSpan={7} className="bg-muted/30 p-0">
+                        <TableCell colSpan={8} className="bg-muted/30 p-0">
                           <div className="p-4">
                             <p className="text-xs font-medium text-muted-foreground mb-2">
                               Sites for {client.name}
@@ -245,12 +250,11 @@ export function ClientsTable({
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
-                                      <Badge
-                                        variant={site.status === 'dead' ? 'destructive' : 'default'}
-                                        className="text-xs"
-                                      >
-                                        {site.status === 'dead' ? 'Dead' : 'Live'}
-                                      </Badge>
+                                      <StatusBadge
+                                        status={site.status}
+                                        effective={effectiveStatus(client.status, site.status)}
+                                        effectiveSource="client"
+                                      />
                                       <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
                                     </div>
                                   </Link>

@@ -374,12 +374,13 @@ function RateCardBlock({
         band,
         {
           feePounds: poundsFromPence(b?.attendance_fee_pence ?? 0),
-          includedHours: String(b?.attendance_included_hours ?? 0),
+          // Stored in hours; edited in whole minutes for finer control (e.g. 10 min).
+          includedMinutes: String(Math.round((b?.attendance_included_hours ?? 0) * 60)),
           ratePounds: poundsFromPence(b?.hourly_rate_pence ?? 0),
         },
       ]
     }),
-  ) as Record<RateBand, { feePounds: string; includedHours: string; ratePounds: string }>
+  ) as Record<RateBand, { feePounds: string; includedMinutes: string; ratePounds: string }>
 
   const [draft, setDraft] = useState(initial)
 
@@ -388,7 +389,8 @@ function RateCardBlock({
     startTransition(async () => {
       const res = await updateRateCardBand(card.id, band, {
         attendanceFeePence: penceFromPounds(row.feePounds),
-        attendanceIncludedHours: Number.parseFloat(row.includedHours) || 0,
+        // Minutes entered in the UI, stored back as fractional hours.
+        attendanceIncludedHours: (Number.parseFloat(row.includedMinutes) || 0) / 60,
         hourlyRatePence: penceFromPounds(row.ratePounds),
       })
       if (!res.error) {
@@ -447,7 +449,7 @@ function RateCardBlock({
             <TableRow>
               <TableHead>Band</TableHead>
               <TableHead>Attendance fee (£)</TableHead>
-              <TableHead>Included hours</TableHead>
+              <TableHead>Included minutes</TableHead>
               <TableHead>Hourly labour (£)</TableHead>
               <TableHead className="w-20" />
             </TableRow>
@@ -474,17 +476,17 @@ function RateCardBlock({
                   <Input
                     type="number"
                     min={0}
-                    step={0.5}
-                    inputMode="decimal"
-                    value={draft[band].includedHours}
+                    step={5}
+                    inputMode="numeric"
+                    value={draft[band].includedMinutes}
                     onChange={(e) =>
                       setDraft({
                         ...draft,
-                        [band]: { ...draft[band], includedHours: e.target.value },
+                        [band]: { ...draft[band], includedMinutes: e.target.value },
                       })
                     }
                     className="h-8 w-24"
-                    aria-label={`${RATE_BAND_LABELS[band]} included hours`}
+                    aria-label={`${RATE_BAND_LABELS[band]} included minutes`}
                   />
                 </TableCell>
                 <TableCell>

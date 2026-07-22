@@ -42,6 +42,7 @@ import {
 import { resolveNominalCode, nominalSourceLabel } from '@/lib/billing/nominal-codes'
 import { NominalCodeSelect } from '@/components/dashboard/billing/nominal-code-select'
 import type {
+  ChargeTemplate,
   RecurringCharge,
   RecurringFrequency,
   RecurringPriceBasis,
@@ -66,6 +67,21 @@ const formatPence = (pence: number) =>
 
 const FREQUENCIES = Object.keys(RECURRING_FREQUENCY_LABELS) as RecurringFrequency[]
 const TIMINGS = Object.keys(RECURRING_TIMING_LABELS) as RecurringTiming[]
+
+// Best-guess "annual maintenance" catalog charge to preselect when adding a
+// recurring charge to a site/system service. Matches on name, most specific
+// first, so these contracts default to the right preconfigured charge.
+function findAnnualMaintenanceTemplate(templates: ChargeTemplate[]): ChargeTemplate | null {
+  const has = (t: ChargeTemplate, ...words: string[]) => {
+    const n = t.name.toLowerCase()
+    return words.every((w) => n.includes(w))
+  }
+  return (
+    templates.find((t) => has(t, 'annual', 'maintenance')) ??
+    templates.find((t) => has(t, 'maintenance')) ??
+    null
+  )
+}
 
 // Whole numbers that divide `n` exactly, ascending. These are the only valid
 // "visits per cycle" values for a service with `n` visits a year — anything
@@ -112,7 +128,6 @@ export function ServiceChargeDialog({
   const [visitsPerCycle, setVisitsPerCycle] = useState<string>('')
   const [renewalMonth, setRenewalMonth] = useState<string>('')
   const [billingAccountId, setBillingAccountId] = useState<string>('')
-  const [taxCode, setTaxCode] = useState('')
   // Managed nominal code. `nominalManual` tracks whether the user overrode the
   // auto-resolved value, so switching templates doesn't clobber a manual pick.
   const [nominalCodeId, setNominalCodeId] = useState<string | null>(null)
@@ -123,19 +138,23 @@ export function ServiceChargeDialog({
 
   const resetForm = useCallback((c: ServiceChargeContext | null) => {
     setEditingCharge(null)
-    setTemplateId(NO_TEMPLATE)
-    setDescription('')
+    // Preselect an "annual maintenance" catalog charge when one exists, so
+    // recurring site/system services default to it (description + nominal).
+    const defaultTemplate = c ? findAnnualMaintenanceTemplate(c.chargeTemplates) : null
+    setTemplateId(defaultTemplate?.id ?? NO_TEMPLATE)
+    setDescription(defaultTemplate?.name ?? '')
     setPricePounds('')
-    setPriceBasis('per_period')
+    // These are annual maintenance contracts, so default entry to the annual
+    // total (the user types the whole-year value, not a per-period amount).
+    setPriceBasis('annual')
     setQuantity('1')
     setFrequency('annual')
     setTiming('advance')
     setVisitsPerCycle('')
     setRenewalMonth('')
     setBillingAccountId(c?.defaultBillingAccountId ?? '')
-    setTaxCode('')
-    // Auto-resolve to the service type's nominal code (no dept context here).
-    setNominalCodeId(c?.serviceTypeNominalCodeId ?? null)
+    // Prefer the preselected template's nominal, else the service type's.
+    setNominalCodeId(defaultTemplate?.nominal_code_id ?? c?.serviceTypeNominalCodeId ?? null)
     setNominalManual(false)
     setIndividualInvoice(false)
   }, [])
@@ -164,7 +183,6 @@ export function ServiceChargeDialog({
     setVisitsPerCycle(charge.visits_per_cycle ? String(charge.visits_per_cycle) : '')
     setRenewalMonth(charge.renewal_month ? String(charge.renewal_month) : '')
     setBillingAccountId(charge.billing_account_id)
-    setTaxCode(charge.tax_code ?? '')
     setNominalCodeId(charge.nominal_code_id ?? null)
     // Treat as a manual pick so template switching logic never clobbers it.
     setNominalManual(true)
@@ -227,7 +245,6 @@ export function ServiceChargeDialog({
     // Catalog prices are per-period amounts.
     setPriceBasis('per_period')
     setPricePounds(poundsFromPence(t.default_unit_price_pence))
-    setTaxCode(t.default_tax_code ?? '')
     // Only auto-move the nominal if the user hasn't manually overridden it.
     // The template's own code wins, else fall back to the service type's.
     if (!nominalManual) {
@@ -269,9 +286,10 @@ export function ServiceChargeDialog({
         unit_price_pence:
           priceBasis === 'annual' ? perPeriodFromAnnual(enteredPence, frequency) : enteredPence,
         price_basis: priceBasis,
-        quantity: Number.parseInt(quantity, 10) || 1,
-        tax_code: taxCode || null,
-        nominal_code_id: nominalCodeId,
+      quantity: Number.parseInt(quantity, 10) || 1,
+      // VAT/tax code is now set at company level; no per-charge override.
+      tax_code: null,
+      nominal_code_id: nominalCodeId,
         timing,
         frequency,
         // Only meaningful for per_visit. Store null for the "every visit" default
@@ -767,15 +785,6 @@ export function ServiceChargeDialog({
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="grid gap-1.5">
-                <Label htmlFor="sc-tax">Tax code</Label>
-                <Input
-                  id="sc-tax"
-                  value={taxCode}
-                  onChange={(e) => setTaxCode(e.target.value)}
-                  placeholder="Account default"
-                />
-              </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="sc-nominal">Nominal code</Label>
                 <NominalCodeSelect

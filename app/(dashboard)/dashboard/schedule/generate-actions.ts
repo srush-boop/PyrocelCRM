@@ -42,8 +42,10 @@ interface ServiceRow {
   frequency_unit: 'weeks' | 'months'
   next_service_date: string | null
   active: boolean | null
+  status: string | null
   site: { status: string | null; name: string | null } | null
   service_type: { status: string | null; is_recurring: boolean | null; name: string | null } | null
+  site_system: { status: string | null; system_type: { requires_recurring_visits: boolean | null } | null } | null
 }
 
 interface TaskRow {
@@ -128,9 +130,10 @@ async function planMonthlyCalls(year: number, month: number): Promise<MonthPlan>
   const { data: serviceData, error: svcError } = await supabase
     .from('site_services')
     .select(
-      `id, service_type_id, frequency_value, frequency_unit, next_service_date, active,
+      `id, service_type_id, frequency_value, frequency_unit, next_service_date, active, status,
        site:sites(status, name),
-       service_type:service_types(status, is_recurring, name)`,
+       service_type:service_types(status, is_recurring, name),
+       site_system:site_systems(status, system_type:system_types(requires_recurring_visits))`,
     )
   if (svcError) {
     return { ...base, ok: false, error: 'Could not load services.' }
@@ -138,9 +141,19 @@ async function planMonthlyCalls(year: number, month: number): Promise<MonthPlan>
 
   const services = ((serviceData || []) as unknown as ServiceRow[]).filter(
     (s) =>
+      // active mirrors status==='live' (trigger-synced), so Engaged (new) and
+      // Dormant (dead) services are excluded here automatically.
       s.active !== false &&
+      s.status !== 'new' &&
+      s.status !== 'dead' &&
       s.site?.status !== 'dead' &&
       s.service_type?.status !== 'dead' &&
+      // A parent system that is Engaged/Dormant, or a charge-only system type
+      // (requires_recurring_visits === false, e.g. Remote Monitoring), never
+      // auto-generates PPM calls.
+      s.site_system?.status !== 'new' &&
+      s.site_system?.status !== 'dead' &&
+      s.site_system?.system_type?.requires_recurring_visits !== false &&
       // Reactive / emergency (non-recurring) call types never auto-generate PPM
       // calls — they are logged ad-hoc via "Book Call".
       s.service_type?.is_recurring !== false,

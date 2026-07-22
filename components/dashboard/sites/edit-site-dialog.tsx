@@ -28,6 +28,11 @@ import { Badge } from '@/components/ui/badge'
 import { PostcodeLookup } from '@/components/dashboard/shared/postcode-lookup'
 import { SiteClassificationFields } from '@/components/dashboard/sites/site-classification-fields'
 import { ensureRemoteMonitoringSystem } from '@/lib/sites/provision-systems'
+import {
+  ENTITY_STATUS_OPTIONS,
+  ENTITY_STATUS_LABELS,
+  ENTITY_STATUS_HINTS,
+} from '@/lib/entity-status'
 import type {
   Site,
   Route,
@@ -297,19 +302,22 @@ export function EditSiteDialog({
               <Select
                 value={formData.status}
                 onValueChange={(value) =>
-                  setFormData({ ...formData, status: value as 'live' | 'dead' })
+                  setFormData({ ...formData, status: value as 'live' | 'new' | 'dead' })
                 }
               >
                 <SelectTrigger id="status">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="live">Live</SelectItem>
-                  <SelectItem value="dead">Dead</SelectItem>
+                  {ENTITY_STATUS_OPTIONS.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {ENTITY_STATUS_LABELS[s]}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Dead sites are paused and will not generate any new tasks.
+                {ENTITY_STATUS_HINTS[formData.status as 'live' | 'new' | 'dead']}
               </p>
             </div>
             <div className="grid gap-2">

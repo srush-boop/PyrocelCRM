@@ -20,6 +20,15 @@ export function CallCostCard({ profit }: { profit: CallProfitResult }) {
   const revenueKnown = revenueSource !== 'none'
   const inProfit = profitPence >= 0
 
+  // Show the working behind a recurring-visit revenue figure, e.g.
+  // "£18,000/yr ÷ 52 visits" (even split) or "Weighted share of £18,000/yr".
+  const revenueSub =
+    revenueSource === 'recurring_visit' && profit.revenueBasis
+      ? profit.revenueBasis.weighted
+        ? `Weighted share of ${formatPence(profit.revenueBasis.annualNetPence)}/yr`
+        : `${formatPence(profit.revenueBasis.annualNetPence)}/yr ÷ ${profit.revenueBasis.visitsPerYear} visits`
+      : REVENUE_SOURCE_LABEL[revenueSource]
+
   const hoursLabel =
     profit.onSiteHours > 0
       ? `${profit.onSiteHours.toFixed(2)} hrs on site`
@@ -42,6 +51,11 @@ export function CallCostCard({ profit }: { profit: CallProfitResult }) {
         <CardTitle className="flex items-center gap-2 text-sm">
           <Lock className="h-4 w-4 text-amber-600" />
           Call profitability
+          {profit.referenceNumber && (
+            <span className="font-mono text-xs font-normal text-muted-foreground">
+              {profit.referenceNumber}
+            </span>
+          )}
           <span className="ml-auto text-xs font-normal text-muted-foreground">
             Restricted &middot; not shown to the client
           </span>
@@ -53,7 +67,7 @@ export function CallCostCard({ profit }: { profit: CallProfitResult }) {
           <Metric
             label="Revenue"
             value={revenueKnown ? formatPence(revenuePence) : '\u2014'}
-            sub={REVENUE_SOURCE_LABEL[revenueSource]}
+            sub={revenueSub}
           />
           <Metric
             label="Profit"

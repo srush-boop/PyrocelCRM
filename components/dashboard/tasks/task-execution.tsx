@@ -982,6 +982,24 @@ export function TaskExecution({
         referenceNumber={existingResult?.reference_number ?? null}
       />
 
+      {/* Start Task — the primary action, placed directly under the header
+          (title / address / complete-by) so engineers can begin in one tap. */}
+      {status === 'pending' && canEdit && (
+        <Button
+          onClick={handleStartTask}
+          disabled={checkingShift}
+          size="lg"
+          className="h-14 w-full text-base font-bold"
+        >
+          {checkingShift ? (
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+          ) : (
+            <Play className="mr-2 h-5 w-5" />
+          )}
+          Start Inspection
+        </Button>
+      )}
+
       <PauseResumeControls task={task} status={status} onStatusChange={setStatus} />
 
       {preAttendance}
@@ -1095,24 +1113,6 @@ export function TaskExecution({
             ))}
           </div>
         </CollapsibleCard>
-      )}
-
-      {/* Start Task — the primary action, kept prominent and above the
-          optional booking panel so engineers can begin in one tap. */}
-      {status === 'pending' && canEdit && (
-        <Button
-          onClick={handleStartTask}
-          disabled={checkingShift}
-          size="lg"
-          className="h-14 w-full text-base font-bold"
-        >
-          {checkingShift ? (
-            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-          ) : (
-            <Play className="mr-2 h-5 w-5" />
-          )}
-          Start Inspection
-        </Button>
       )}
 
       {/* Book Visit (collapsed by default — only needed when rescheduling) */}

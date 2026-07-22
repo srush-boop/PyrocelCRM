@@ -35,7 +35,9 @@ export function PushToSageButton({ pendingCount }: { pendingCount: number }) {
         return
       }
       // Trigger a client-side download of the CSV the action returned.
-      const blob = new Blob([res.csv], { type: 'text/csv;charset=utf-8;' })
+      // Prepend a UTF-8 BOM so Excel/Sage on Windows detect the encoding and
+      // don't mangle any remaining non-ASCII characters.
+      const blob = new Blob(['\uFEFF' + res.csv], { type: 'text/csv;charset=utf-8;' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url

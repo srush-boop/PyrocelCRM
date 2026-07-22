@@ -14,6 +14,8 @@ export interface SageExportInvoice {
   sageAccountRef: string | null
   issueDate: string | null // ISO date
   taxRate: number // percentage, e.g. 20
+  /** Company-level Sage tax code (e.g. "T1"). Falls back to rate-derived code. */
+  taxCode?: string | null
   lines: {
     description: string
     amountPence: number // net (ex VAT)
@@ -33,6 +35,23 @@ const HEADER = [
   'Tax Code',
   'Tax Amount',
 ] as const
+
+/**
+ * Normalise "smart"/Unicode punctuation to plain ASCII so Sage 50 (which reads
+ * imports as Windows-1252/ASCII) doesn't render mojibake like "â€”" for an
+ * em-dash. Covers the characters that show up in generated line descriptions.
+ */
+function sanitizeText(value: string): string {
+  return (value ?? '')
+    .replace(/[\u2012\u2013\u2014\u2015]/g, '-') // figure/en/em dash, horizontal bar -> hyphen
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'") // curly single quotes -> '
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"') // curly double quotes -> "
+    .replace(/[\u2022\u00B7]/g, '-') // bullet / middle dot -> hyphen
+    .replace(/\u2026/g, '...') // ellipsis
+    .replace(/\u00A0/g, ' ') // non-breaking space -> space
+    .replace(/[^\x20-\x7E]/g, '') // strip any remaining non-ASCII
+    .trim()
+}
 
 /** Escape a single CSV field per RFC 4180 (quote if it contains , " or newline). */
 function csvField(value: string | number): string {
@@ -71,7 +90,8 @@ export function buildSageCsv(invoices: SageExportInvoice[]): string {
     const type = inv.documentType === 'credit_note' ? 'SC' : 'SI'
     const account = inv.sageAccountRef ?? ''
     const date = sageDate(inv.issueDate)
-    const taxCode = taxCodeFor(inv.taxRate)
+    // Prefer the company-configured tax code; fall back to the rate-derived one.
+    const taxCode = inv.taxCode?.trim() || taxCodeFor(inv.taxRate)
 
     for (const line of inv.lines) {
       const netPence = Math.abs(line.amountPence)
@@ -84,7 +104,7 @@ export function buildSageCsv(invoices: SageExportInvoice[]): string {
           '', // Department Code — unused in first pass
           date,
           inv.invoiceNumber,
-          line.description,
+          sanitizeText(line.description),
           poundsFromPence(netPence),
           taxCode,
           poundsFromPence(taxPence),

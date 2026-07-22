@@ -79,7 +79,6 @@ interface FormState {
   groupKey: string
   isSubcontracted: boolean
   poundsSubcontract: string
-  taxCode: string
   nominalCodeId: string | null
   siteServiceId: string // '' = standalone (no service link)
   siteId: string
@@ -96,7 +95,6 @@ const EMPTY_FORM: FormState = {
   groupKey: '',
   isSubcontracted: false,
   poundsSubcontract: '',
-  taxCode: '',
   nominalCodeId: null,
   siteServiceId: '',
   siteId: '',
@@ -151,7 +149,7 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
   }
 
   function startAdd() {
-    setForm({ ...EMPTY_FORM, taxCode: account.default_tax_code, nominalCodeId: null })
+    setForm({ ...EMPTY_FORM, nominalCodeId: null })
     setEditing('new')
   }
 
@@ -174,7 +172,6 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
       groupKey: charge.group_key ?? '',
       isSubcontracted: charge.is_subcontracted,
       poundsSubcontract: penceToPounds(charge.subcontract_price_pence),
-      taxCode: charge.tax_code ?? '',
       nominalCodeId: charge.nominal_code_id ?? null,
       siteServiceId: charge.site_service_id ?? '',
       siteId: charge.site_id ?? '',
@@ -217,7 +214,8 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
       unit_price_pence: perPeriodPence,
       price_basis: form.priceBasis,
       quantity: Number.parseFloat(form.quantity) || 1,
-      tax_code: form.taxCode || null,
+      // VAT/tax code is set at company level; no per-charge override.
+      tax_code: null,
       nominal_code_id: form.nominalCodeId,
       timing: form.timing,
       frequency: form.frequency,
@@ -673,17 +671,6 @@ export function RecurringChargesManager({ account }: RecurringChargesManagerProp
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="grid gap-2">
-                  <Label htmlFor="rc-tax">
-                    Tax code <span className="text-muted-foreground">(optional)</span>
-                  </Label>
-                  <Input
-                    id="rc-tax"
-                    value={form.taxCode}
-                    onChange={(e) => set('taxCode', e.target.value)}
-                    placeholder={account.default_tax_code}
-                  />
-                </div>
                 <div className="grid gap-2">
                   <Label htmlFor="rc-nominal">
                     Nominal code <span className="text-muted-foreground">(optional)</span>

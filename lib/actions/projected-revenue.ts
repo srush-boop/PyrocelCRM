@@ -26,14 +26,21 @@ interface ChargeRow {
   frequency: RecurringFrequency
   is_subcontracted: boolean
   subcontract_price_pence: number | null
-  site: { branch: { id: string; name: string } | null } | { branch: { id: string; name: string } | null }[] | null
+  site:
+    | { status: string | null; branch: { id: string; name: string } | null }
+    | { status: string | null; branch: { id: string; name: string } | null }[]
+    | null
   site_service:
     | {
-        site: { branch: { id: string; name: string } | null } | null
+        status: string | null
+        site:
+          | { status: string | null; branch: { id: string; name: string } | null; client: { status: string | null } | { status: string | null }[] | null }
+          | null
         service_type:
           | {
               id: string
               name: string
+              status: string | null
               system_type: { id: string; name: string } | { id: string; name: string }[] | null
             }
           | null
@@ -61,10 +68,11 @@ export async function getProjectedRevenue(
     .from('recurring_charges')
     .select(
       `unit_price_pence, quantity, frequency, is_subcontracted, subcontract_price_pence,
-       site:sites(branch:branches(id, name)),
+       site:sites(status, branch:branches(id, name)),
        site_service:site_services(
-         site:sites(branch:branches(id, name)),
-         service_type:service_types(id, name, system_type:system_types(id, name))
+         status,
+         site:sites(status, branch:branches(id, name), client:clients(status)),
+         service_type:service_types(id, name, status, system_type:system_types(id, name))
        )`,
     )
     .eq('active', true)
@@ -73,7 +81,21 @@ export async function getProjectedRevenue(
   // below, so cast through unknown to our tolerant ChargeRow shape.
   const rows = (data ?? []) as unknown as ChargeRow[]
 
-  const flattened: ProjectionInput[] = rows.map((r) => {
+  const flattened: ProjectionInput[] = rows
+    // Only live revenue counts: drop charges whose service, its site, its
+    // client or the service type has been paused (Engaged) or ended (Dormant).
+    // A charge's own `active` flag doesn't reflect this lifecycle cascade.
+    .filter((r) => {
+      const svc = first(r.site_service)
+      const svcSite = first(svc?.site) ?? first(r.site)
+      const client = first(svcSite?.client)
+      const serviceType = first(svc?.service_type)
+      const anyNonLive = [svc?.status, svcSite?.status, client?.status, serviceType?.status].some(
+        (s) => s != null && s !== 'live',
+      )
+      return !anyNonLive
+    })
+    .map((r) => {
     const svc = first(r.site_service)
     const serviceType = first(svc?.service_type)
     const systemType = first(serviceType?.system_type)

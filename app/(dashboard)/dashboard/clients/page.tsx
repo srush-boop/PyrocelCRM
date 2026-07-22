@@ -38,7 +38,7 @@ export default async function ClientsPage() {
   // counts shown against each client.
   const [{ data: systemTypes }, { data: serviceTypes }, { data: checklistItems }, { data: linkItems }, { data: billingItems }] =
     await Promise.all([
-      supabase.from('system_types').select('id, name').order('name'),
+      supabase.from('system_types').select('id, name, requires_recurring_visits').order('name'),
       supabase.from('service_types').select('id, name').order('name'),
       supabase.from('client_checklist_items').select('client_id'),
       supabase.from('client_links').select('client_id'),

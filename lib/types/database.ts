@@ -127,6 +127,8 @@ export interface Client {
   invoice_calls_individually: boolean
   /** Default customer PO, bottom of the charge->system->site->client fallback chain. */
   po_number: string | null
+  /** Lifecycle status (see lib/entity-status): live=Active, new=Engaged, dead=Dormant. */
+  status: 'live' | 'new' | 'dead'
   created_at: string
   updated_at: string
 }
@@ -619,6 +621,10 @@ export interface SystemType {
   color: string | null
   status: 'live' | 'dead'
   active: boolean
+  // When false, services under this system type are charge-only and NEVER
+  // generate recurring PPM visits (e.g. Remote Monitoring). Effective recurrence
+  // of a service = service_type.is_recurring AND this flag.
+  requires_recurring_visits: boolean
   position: number
   created_at: string
   updated_at: string
@@ -691,6 +697,10 @@ export interface ServiceType {
   // Relative share of a cycle's revenue this visit carries when a cycle mixes
   // differently valued visit types. Defaults to 1 (equal split).
   revenue_weight: number
+  // How many times per year a visit of this type occurs (e.g. weekly fire
+  // alarm = 1 Annual + 51 Periodic). Revenue is apportioned as
+  // annual_net * weight / Σ(occurrences_per_year * weight). 0 = not configured.
+  occurrences_per_year: number
   created_at: string
   updated_at: string
   }
@@ -1151,12 +1161,14 @@ export interface Site {
     description: string | null
     location: string | null
     install_date: string | null
-    /** URL to the Nimbus fire alarm monitoring portal for this system. */
-    nimbus_url: string | null
-    active: boolean
-    position: number
-    /** Default sub-contractor for sub-contracted services under this system. */
-    default_subcontractor_id: string | null
+  /** URL to the Nimbus fire alarm monitoring portal for this system. */
+  nimbus_url: string | null
+  /** Lifecycle status (see lib/entity-status). `active` is kept in sync = status==='live'. */
+  status: 'live' | 'new' | 'dead'
+  active: boolean
+  position: number
+  /** Default sub-contractor for sub-contracted services under this system. */
+  default_subcontractor_id: string | null
     // Per-system attendance overrides. `null` inherits the site default; an
     // explicit boolean overrides it (and is itself overridden per service).
     booking_required: boolean | null
@@ -1326,6 +1338,10 @@ export interface Site {
   // When true (default) the next recurring task anchors to the original
   // scheduled date (fixed cadence); when false it anchors to completion date.
   anchor_next_to_schedule: boolean
+  // Lifecycle status (see lib/entity-status). `active` is kept in sync via DB
+  // trigger = status==='live', so all existing active-filtered visit/billing
+  // queries treat Engaged (new) and Dormant (dead) as off automatically.
+  status: 'live' | 'new' | 'dead'
   // When false, the service is inactive: no new calls are generated for it
   // (recurrence, bulk generation, manual scheduling all suppressed).
   active: boolean
@@ -1915,6 +1931,11 @@ export interface CompanyInfo {
   logo_url: string | null
   // Default gross margin % pre-filled on new quote systems/lines.
   default_margin_percent: number
+  // Company-level VAT: the numeric rate (%) drives invoice totals, the Sage tax
+  // code (e.g. T1) drives the Sage export Tax Code column. Applied to all new
+  // invoices; there are no per-charge overrides.
+  default_vat_rate: number
+  default_tax_code: string
   // Editable maintenance pricing rate tables (seeded from the Excel calculator).
   // NULL = use the built-in DEFAULT_MAINTENANCE_RATES. Typed as MaintenanceRates.
   maintenance_rates: Record<string, unknown> | null
@@ -3175,7 +3196,7 @@ export interface AssetAssignment {
   assigner?: Pick<Profile, 'id' | 'full_name'> | null
 }
 
-// ── Inbound request inbox ────────────────────────────────────────────────────
+// ── Inbound request inbox ──────────────────���─────────────────────────────────
 // A request that arrived by email (forwarded to the system address) or was added
 // manually by a staff member. AI triages it, matching it to an existing
 // client/site/service and proposing actions that a human approves.

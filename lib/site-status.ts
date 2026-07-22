@@ -1,29 +1,24 @@
 /**
  * Site lifecycle status.
  *
- * The stored database values are kept as `live` / `new` / `dead` for backwards
- * compatibility with existing rows, queries and integrations. The UI, however,
- * presents them with friendlier terminology:
- *
- *   live  → Active   (contracted / in service — calls may be logged)
- *   new   → Engaged  (created from a job, not yet live — logging warns)
- *   dead  → Dormant  (out of service — logging is blocked)
- *
- * Always render site statuses through {@link siteStatusLabel} so the wording
- * stays consistent everywhere.
+ * Sites share the app-wide entity lifecycle model (see `lib/entity-status`).
+ * The stored DB values are `live` / `new` / `dead`; the UI presents them as
+ * Active / Engaged / Dormant. This module re-exports the shared helpers and
+ * keeps the site-specific `isSiteLoggable` convenience.
  */
-export type SiteStatus = 'live' | 'new' | 'dead'
+import {
+  ENTITY_STATUS_LABELS,
+  type EntityStatus,
+  entityStatusLabel,
+} from '@/lib/entity-status'
 
-export const SITE_STATUS_LABELS: Record<SiteStatus, string> = {
-  live: 'Active',
-  new: 'Engaged',
-  dead: 'Dormant',
-}
+export type SiteStatus = EntityStatus
+
+export const SITE_STATUS_LABELS: Record<SiteStatus, string> = ENTITY_STATUS_LABELS
 
 /** Human-friendly label for a site status. Unknown/empty falls back to Active. */
 export function siteStatusLabel(status?: string | null): string {
-  if (!status) return SITE_STATUS_LABELS.live
-  return SITE_STATUS_LABELS[status as SiteStatus] ?? status
+  return entityStatusLabel(status)
 }
 
 /** Whether calls may be logged against a site of this status without a warning. */

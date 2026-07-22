@@ -16,9 +16,17 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Loader2 } from 'lucide-react'
 import { PostcodeLookup } from '@/components/dashboard/shared/postcode-lookup'
 import type { Client } from '@/lib/types/database'
+import { ENTITY_STATUS_OPTIONS, ENTITY_STATUS_LABELS, ENTITY_STATUS_HINTS } from '@/lib/entity-status'
 
 interface EditClientDialogProps {
   client: Client
@@ -38,6 +46,7 @@ export function EditClientDialog({ client, open, onOpenChange }: EditClientDialo
     po_number: client.po_number || '',
     requires_po: client.requires_po ?? false,
     invoice_calls_individually: client.invoice_calls_individually ?? false,
+    status: (client.status ?? 'live') as 'live' | 'new' | 'dead',
   })
   const router = useRouter()
   const supabase = createClient()
@@ -71,6 +80,7 @@ export function EditClientDialog({ client, open, onOpenChange }: EditClientDialo
         po_number: formData.po_number.trim() || null,
         requires_po: formData.requires_po,
         invoice_calls_individually: formData.invoice_calls_individually,
+        status: formData.status,
         updated_at: new Date().toISOString(),
       })
       .eq('id', client.id)
@@ -105,6 +115,29 @@ export function EditClientDialog({ client, open, onOpenChange }: EditClientDialo
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
               />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="client-status">Status</Label>
+              <Select
+                value={formData.status}
+                onValueChange={(v) =>
+                  setFormData({ ...formData, status: v as 'live' | 'new' | 'dead' })
+                }
+              >
+                <SelectTrigger id="client-status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ENTITY_STATUS_OPTIONS.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {ENTITY_STATUS_LABELS[s]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {ENTITY_STATUS_HINTS[formData.status]}
+              </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">

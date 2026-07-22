@@ -53,7 +53,6 @@ interface FormState {
   name: string
   description: string
   pricePounds: string
-  taxCode: string
   nominalCodeId: string | null
   active: boolean
 }
@@ -63,7 +62,6 @@ function emptyForm(): FormState {
     name: '',
     description: '',
     pricePounds: '',
-    taxCode: '',
     nominalCodeId: null,
     active: true,
   }
@@ -102,7 +100,6 @@ export function ChargeTemplatesSettings({
       name: t.name,
       description: t.description ?? '',
       pricePounds: poundsFromPence(t.default_unit_price_pence),
-      taxCode: t.default_tax_code ?? '',
       nominalCodeId: t.nominal_code_id ?? null,
       active: t.active,
     })
@@ -119,7 +116,6 @@ export function ChargeTemplatesSettings({
       name: form.name,
       description: form.description,
       defaultUnitPricePence: penceFromPounds(form.pricePounds),
-      defaultTaxCode: form.taxCode,
       nominalCodeId: form.nominalCodeId,
       active: form.active,
     }
@@ -187,7 +183,6 @@ export function ChargeTemplatesSettings({
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Default price</TableHead>
-                  <TableHead>Tax</TableHead>
                   <TableHead>Nominal</TableHead>
                   <TableHead className="w-24" />
                 </TableRow>
@@ -205,9 +200,6 @@ export function ChargeTemplatesSettings({
                       )}
                     </TableCell>
                     <TableCell>{formatPence(t.default_unit_price_pence)}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {t.default_tax_code || '—'}
-                    </TableCell>
                     <TableCell className="text-muted-foreground">
                       {codeLabel(t.nominal_code_id) || t.default_nominal_code || '—'}
                     </TableCell>
@@ -279,15 +271,6 @@ export function ChargeTemplatesSettings({
                   inputMode="decimal"
                   value={form.pricePounds}
                   onChange={(e) => setForm({ ...form, pricePounds: e.target.value })}
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="ct-tax">Tax code</Label>
-                <Input
-                  id="ct-tax"
-                  value={form.taxCode}
-                  onChange={(e) => setForm({ ...form, taxCode: e.target.value })}
-                  placeholder="e.g. T1"
                 />
               </div>
               <div className="grid gap-1.5">

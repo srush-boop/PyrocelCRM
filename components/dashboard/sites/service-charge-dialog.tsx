@@ -112,7 +112,6 @@ export function ServiceChargeDialog({
   const [visitsPerCycle, setVisitsPerCycle] = useState<string>('')
   const [renewalMonth, setRenewalMonth] = useState<string>('')
   const [billingAccountId, setBillingAccountId] = useState<string>('')
-  const [taxCode, setTaxCode] = useState('')
   // Managed nominal code. `nominalManual` tracks whether the user overrode the
   // auto-resolved value, so switching templates doesn't clobber a manual pick.
   const [nominalCodeId, setNominalCodeId] = useState<string | null>(null)
@@ -133,7 +132,6 @@ export function ServiceChargeDialog({
     setVisitsPerCycle('')
     setRenewalMonth('')
     setBillingAccountId(c?.defaultBillingAccountId ?? '')
-    setTaxCode('')
     // Auto-resolve to the service type's nominal code (no dept context here).
     setNominalCodeId(c?.serviceTypeNominalCodeId ?? null)
     setNominalManual(false)
@@ -164,7 +162,6 @@ export function ServiceChargeDialog({
     setVisitsPerCycle(charge.visits_per_cycle ? String(charge.visits_per_cycle) : '')
     setRenewalMonth(charge.renewal_month ? String(charge.renewal_month) : '')
     setBillingAccountId(charge.billing_account_id)
-    setTaxCode(charge.tax_code ?? '')
     setNominalCodeId(charge.nominal_code_id ?? null)
     // Treat as a manual pick so template switching logic never clobbers it.
     setNominalManual(true)
@@ -227,7 +224,6 @@ export function ServiceChargeDialog({
     // Catalog prices are per-period amounts.
     setPriceBasis('per_period')
     setPricePounds(poundsFromPence(t.default_unit_price_pence))
-    setTaxCode(t.default_tax_code ?? '')
     // Only auto-move the nominal if the user hasn't manually overridden it.
     // The template's own code wins, else fall back to the service type's.
     if (!nominalManual) {
@@ -269,9 +265,10 @@ export function ServiceChargeDialog({
         unit_price_pence:
           priceBasis === 'annual' ? perPeriodFromAnnual(enteredPence, frequency) : enteredPence,
         price_basis: priceBasis,
-        quantity: Number.parseInt(quantity, 10) || 1,
-        tax_code: taxCode || null,
-        nominal_code_id: nominalCodeId,
+      quantity: Number.parseInt(quantity, 10) || 1,
+      // VAT/tax code is now set at company level; no per-charge override.
+      tax_code: null,
+      nominal_code_id: nominalCodeId,
         timing,
         frequency,
         // Only meaningful for per_visit. Store null for the "every visit" default
@@ -767,15 +764,6 @@ export function ServiceChargeDialog({
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="grid gap-1.5">
-                <Label htmlFor="sc-tax">Tax code</Label>
-                <Input
-                  id="sc-tax"
-                  value={taxCode}
-                  onChange={(e) => setTaxCode(e.target.value)}
-                  placeholder="Account default"
-                />
-              </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="sc-nominal">Nominal code</Label>
                 <NominalCodeSelect

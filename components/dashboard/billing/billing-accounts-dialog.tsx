@@ -235,9 +235,7 @@ export function BillingAccountsDialog({ client, open, onOpenChange }: BillingAcc
                 )}
               </span>
               <span>{account.payment_terms_days} day terms</span>
-              <span>
-                {account.default_tax_code} · {account.default_nominal_code}
-              </span>
+              <span>Nominal {account.default_nominal_code}</span>
             </div>
             {account.invoice_address && (
               <p className="text-xs text-muted-foreground">
@@ -354,9 +352,7 @@ export function BillingAccountsDialog({ client, open, onOpenChange }: BillingAcc
                   <Detail label="Payment terms">
                     {primary.payment_terms_days} days
                   </Detail>
-                  <Detail label="Tax / nominal">
-                    {primary.default_tax_code} · {primary.default_nominal_code}
-                  </Detail>
+                  <Detail label="Nominal code">{primary.default_nominal_code}</Detail>
                   <Detail label="Rate card">{rateCardLabel(primary.rate_card_id)}</Detail>
                   <Detail label="Billing frequency">
                     {BILLING_FREQUENCY_LABELS[primary.billing_frequency ?? 'on_demand']}
@@ -544,7 +540,7 @@ export function BillingAccountsDialog({ client, open, onOpenChange }: BillingAcc
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label htmlFor="ba-terms">Payment terms (days)</Label>
                 <Input
@@ -553,15 +549,6 @@ export function BillingAccountsDialog({ client, open, onOpenChange }: BillingAcc
                   min={0}
                   value={form.payment_terms_days ?? 30}
                   onChange={(e) => set('payment_terms_days', Number(e.target.value))}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="ba-tax">Tax code</Label>
-                <Input
-                  id="ba-tax"
-                  value={form.default_tax_code ?? 'T1'}
-                  onChange={(e) => set('default_tax_code', e.target.value)}
-                  placeholder="T1"
                 />
               </div>
               <div className="grid gap-2">

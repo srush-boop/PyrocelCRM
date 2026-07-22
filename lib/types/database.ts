@@ -691,6 +691,10 @@ export interface ServiceType {
   // Relative share of a cycle's revenue this visit carries when a cycle mixes
   // differently valued visit types. Defaults to 1 (equal split).
   revenue_weight: number
+  // How many times per year a visit of this type occurs (e.g. weekly fire
+  // alarm = 1 Annual + 51 Periodic). Revenue is apportioned as
+  // annual_net * weight / Σ(occurrences_per_year * weight). 0 = not configured.
+  occurrences_per_year: number
   created_at: string
   updated_at: string
   }

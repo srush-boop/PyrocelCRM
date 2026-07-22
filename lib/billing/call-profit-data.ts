@@ -8,8 +8,9 @@ import {
   onSiteHours,
   resolveCostPerHourPence,
   stripComprehensiveUpliftPence,
-  weightedVisitRevenuePence,
+  occurrenceWeightedVisitRevenuePence,
   type CallProfit,
+  type VisitTypeWeighting,
 } from '@/lib/billing/labour-profit'
 import { visitsPerYearFromMonths } from '@/lib/billing/recurring'
 import type { RecurringFrequency } from '@/lib/types/database'
@@ -223,28 +224,16 @@ async function recurringVisitRevenue(
       : null
   const visitsPerYear = visitsPerYearFromMonths(freqMonths)
 
-  // Visit-type weights for this service (to apportion across differing visits).
+  // Visit-type cadence + weight for this service (to apportion across visits).
   const { data: visitTypes } = await supabase
     .from('service_visit_types')
-    .select('id, revenue_weight')
+    .select('id, revenue_weight, occurrences_per_year')
     .eq('service_type_id', (siteService as any).service_type_id)
 
-  const weights = (visitTypes ?? []) as { id: string; revenue_weight: number | null }[]
-  const totalWeight = weights.reduce((s, w) => s + (w.revenue_weight ?? 1), 0)
-  const thisWeight =
-    (visitTypeId && weights.find((w) => w.id === visitTypeId)?.revenue_weight) || 1
-
-  // Visit-type weights only apportion the cycle correctly when each defined type
-  // occurs exactly once in the year (distinct types === visits/year). When a
-  // type recurs we lack per-cycle occurrence counts, so summing distinct weights
-  // would over-attribute — fall back to an even split in that ambiguous case.
-  const weightsAreUnambiguous =
-    weights.length > 1 && visitsPerYear > 0 && weights.length === visitsPerYear
-
-  const revenuePence = weightedVisitRevenuePence({
+  const { revenuePence, weighted } = occurrenceWeightedVisitRevenuePence({
     actualAnnualPence: netAnnual,
-    thisVisitWeight: weightsAreUnambiguous ? thisWeight : 0,
-    totalAnnualWeight: weightsAreUnambiguous && totalWeight > 0 ? totalWeight : 0,
+    visitTypeId,
+    visitTypes: (visitTypes ?? []) as VisitTypeWeighting[],
     visitsPerYear,
   })
 
@@ -252,6 +241,6 @@ async function recurringVisitRevenue(
     revenuePence,
     annualNetPence: netAnnual,
     visitsPerYear,
-    weighted: weightsAreUnambiguous,
+    weighted,
   }
 }

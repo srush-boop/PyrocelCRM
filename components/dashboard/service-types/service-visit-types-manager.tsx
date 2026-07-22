@@ -167,8 +167,34 @@ export function ServiceVisitTypesManager({
       .eq('id', id)
   }
 
-  // Sum of weights, used to show each visit's share of the cycle revenue.
+  // How many times a year a visit of this type happens (e.g. weekly fire alarm
+  // = 1 Annual + 51 Periodic). Combined with the weight it apportions revenue.
+  const persistOccurrences = async (id: string, raw: string) => {
+    const n = Number.parseFloat(raw)
+    const occ = Number.isFinite(n) && n >= 0 ? n : 0
+    setVisits((prev) =>
+      prev.map((v) => (v.id === id ? { ...v, occurrences_per_year: occ } : v)),
+    )
+    await supabase
+      .from('service_visit_types')
+      .update({ occurrences_per_year: occ, updated_at: new Date().toISOString() })
+      .eq('id', id)
+  }
+
+  // Denominator for the revenue split: Σ(occurrences × weight). When occurrences
+  // aren't configured (0), fall back to summing weights so the hint still works.
+  const totalWeightedOccurrences = visits.reduce(
+    (sum, v) => sum + (v.occurrences_per_year ?? 0) * (v.revenue_weight ?? 1),
+    0,
+  )
+  const occurrencesConfigured = totalWeightedOccurrences > 0
   const totalWeight = visits.reduce((sum, v) => sum + (v.revenue_weight ?? 1), 0) || 1
+  const totalOccurrences = visits.reduce((sum, v) => sum + (v.occurrences_per_year ?? 0), 0)
+  // How many times this service runs per year, from its whole-cycle frequency,
+  // so we can hint whether the configured times/year reconcile.
+  const cycleMonths = frequencyUnit === 'weeks' ? (frequencyValue * 7) / 30.44 : frequencyValue
+  const expectedVisitsPerYear =
+    cycleMonths > 0 ? Math.round(12 / cycleMonths) : 0
 
   const removeVisit = async (id: string) => {
     setBusy(true)
@@ -224,6 +250,19 @@ export function ServiceVisitTypesManager({
             ? ` — ${describeSpacing(frequencyValue, frequencyUnit, visits.length)}.`
             : '. With one visit (or none) this behaves as a single recurring service.'}
         </p>
+        {visits.length > 1 && occurrencesConfigured && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Set{' '}
+            <span className="font-medium text-foreground">
+              {totalOccurrences} visit{totalOccurrences === 1 ? '' : 's'}/year
+            </span>{' '}
+            across all types
+            {expectedVisitsPerYear
+              ? ` (this service runs ~${expectedVisitsPerYear}/year).`
+              : '.'}{' '}
+            Revenue is split by times/year × weight.
+          </p>
+        )}
       </div>
 
       {loading ? (
@@ -283,28 +322,53 @@ export function ServiceVisitTypesManager({
                   </div>
                 </div>
 
-                {/* Revenue weight: how much of the cycle's value this visit carries,
-                    relative to the others. Only meaningful with 2+ visits. */}
+                {/* Revenue split: how many times a year this visit happens and how
+                    much it's worth relative to the others. Only meaningful with 2+
+                    visits. Each visit's share = weight / Σ(times/yr × weight). */}
                 {visits.length > 1 && (
-                  <div className="flex flex-wrap items-center gap-2 pl-7">
-                    <Label
-                      htmlFor={`weight-${visit.id}`}
-                      className="text-xs text-muted-foreground"
-                    >
-                      Revenue weight
-                    </Label>
-                    <Input
-                      id={`weight-${visit.id}`}
-                      type="number"
-                      min={0.1}
-                      step="0.1"
-                      defaultValue={visit.revenue_weight ?? 1}
-                      onBlur={(e) => persistWeight(visit.id, e.target.value)}
-                      className="h-8 w-20 bg-background"
-                    />
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pl-7">
+                    <div className="flex items-center gap-1.5">
+                      <Label
+                        htmlFor={`occ-${visit.id}`}
+                        className="text-xs text-muted-foreground"
+                      >
+                        Times / year
+                      </Label>
+                      <Input
+                        id={`occ-${visit.id}`}
+                        type="number"
+                        min={0}
+                        step="1"
+                        defaultValue={visit.occurrences_per_year ?? 0}
+                        onBlur={(e) => persistOccurrences(visit.id, e.target.value)}
+                        className="h-8 w-20 bg-background"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Label
+                        htmlFor={`weight-${visit.id}`}
+                        className="text-xs text-muted-foreground"
+                      >
+                        Revenue weight
+                      </Label>
+                      <Input
+                        id={`weight-${visit.id}`}
+                        type="number"
+                        min={0.1}
+                        step="0.1"
+                        defaultValue={visit.revenue_weight ?? 1}
+                        onBlur={(e) => persistWeight(visit.id, e.target.value)}
+                        className="h-8 w-20 bg-background"
+                      />
+                    </div>
                     <span className="text-xs text-muted-foreground">
-                      ≈ {Math.round(((visit.revenue_weight ?? 1) / totalWeight) * 100)}% of cycle
-                      revenue
+                      {occurrencesConfigured
+                        ? `each visit ≈ ${Math.round(
+                            ((visit.revenue_weight ?? 1) / totalWeightedOccurrences) * 100,
+                          )}% of annual value`
+                        : `≈ ${Math.round(
+                            ((visit.revenue_weight ?? 1) / totalWeight) * 100,
+                          )}% (set times/year for exact split)`}
                     </span>
                   </div>
                 )}

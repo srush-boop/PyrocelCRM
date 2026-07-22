@@ -8,7 +8,8 @@ import {
   onSiteHours,
   resolveCostPerHourPence,
   stripComprehensiveUpliftPence,
-  weightedVisitRevenuePence,
+  occurrenceWeightedVisitRevenuePence,
+  type VisitTypeWeighting,
 } from '@/lib/billing/labour-profit'
 import { visitsPerYearFromMonths } from '@/lib/billing/recurring'
 import type { RecurringFrequency } from '@/lib/types/database'
@@ -167,7 +168,7 @@ export async function getLabourDashboard(
     serviceTypeIds.length
       ? supabase
           .from('service_visit_types')
-          .select('id, service_type_id, revenue_weight')
+          .select('id, service_type_id, revenue_weight, occurrences_per_year')
           .in('service_type_id', serviceTypeIds)
       : Promise.resolve({ data: [] as any[] }),
     invoicedTaskIds.length
@@ -191,7 +192,7 @@ export async function getLabourDashboard(
     arr.push(c)
     chargesBySvc.set(c.site_service_id, arr)
   }
-  const weightsByType = new Map<string, { id: string; revenue_weight: number | null }[]>()
+  const weightsByType = new Map<string, VisitTypeWeighting[]>()
   for (const w of (weightRes.data ?? []) as any[]) {
     const arr = weightsByType.get(w.service_type_id) ?? []
     arr.push(w)
@@ -316,7 +317,7 @@ export async function getLabourDashboard(
 function recurringVisitRevenue(
   task: any,
   chargesBySvc: Map<string, any[]>,
-  weightsByType: Map<string, { id: string; revenue_weight: number | null }[]>,
+  weightsByType: Map<string, VisitTypeWeighting[]>,
 ): number | null {
   const svc = task.site_service
   if (!svc) return null
@@ -349,26 +350,14 @@ function recurringVisitRevenue(
       : null
   const visitsPerYear = visitsPerYearFromMonths(freqMonths)
 
-  const weights = weightsByType.get(svc.service_type_id) ?? []
-  const totalWeight = weights.reduce((s, w) => s + (w.revenue_weight ?? 1), 0)
-  const thisWeight =
-    (task.visit_type_id && weights.find((w) => w.id === task.visit_type_id)?.revenue_weight) || 1
-
-  // Visit-type weights only apportion the cycle correctly when each defined
-  // visit type occurs exactly once in the year — i.e. the number of distinct
-  // types equals the visits/year. When a type recurs (e.g. 11 monthly Periodic
-  // + 1 Annual) we don't store per-cycle occurrence counts, so summing distinct
-  // weights would over-attribute. In that ambiguous case we fall back to an even
-  // split (weights ignored) rather than produce misleading shares.
-  const weightsAreUnambiguous =
-    weights.length > 1 && visitsPerYear > 0 && weights.length === visitsPerYear
-
-  return weightedVisitRevenuePence({
+  // Split annual net across visits by the occurrences × weight model (falls
+  // back to an even split when occurrences aren't configured).
+  return occurrenceWeightedVisitRevenuePence({
     actualAnnualPence: netAnnual,
-    thisVisitWeight: weightsAreUnambiguous ? thisWeight : 0,
-    totalAnnualWeight: weightsAreUnambiguous && totalWeight > 0 ? totalWeight : 0,
+    visitTypeId: task.visit_type_id ?? null,
+    visitTypes: weightsByType.get(svc.service_type_id) ?? [],
     visitsPerYear,
-  })
+  }).revenuePence
 }
 
 interface Accum {

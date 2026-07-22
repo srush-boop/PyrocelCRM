@@ -134,6 +134,53 @@ export function weightedVisitRevenuePence(args: {
   return actualAnnualPence
 }
 
+/** A visit type's configured yearly cadence and relative value. */
+export interface VisitTypeWeighting {
+  id: string
+  revenue_weight: number | null
+  occurrences_per_year: number | null
+}
+
+/**
+ * Revenue for a single visit using the occurrences × weight model. Each visit
+ * type declares how many times per year it happens and its relative value, so
+ * one visit of type T is worth:
+ *
+ *   annual_net × weight_T / Σ_over_types( occurrences × weight )
+ *
+ * This correctly handles high-frequency cycles (e.g. weekly fire alarm =
+ * 1 Annual + 51 Periodic). When occurrences aren't configured for the service
+ * (total weighted occurrences is 0) it falls back to an even split across
+ * `visitsPerYear`. Returns `{ revenuePence, weighted }` so the UI can show
+ * whether a real weighting was applied.
+ */
+export function occurrenceWeightedVisitRevenuePence(args: {
+  actualAnnualPence: number
+  visitTypeId: string | null
+  visitTypes: VisitTypeWeighting[]
+  visitsPerYear: number
+}): { revenuePence: number; weighted: boolean } {
+  const { actualAnnualPence, visitTypeId, visitTypes, visitsPerYear } = args
+
+  const totalWeightedOccurrences = visitTypes.reduce(
+    (sum, v) => sum + (v.occurrences_per_year ?? 0) * (v.revenue_weight ?? 1),
+    0,
+  )
+  const thisWeight =
+    (visitTypeId && visitTypes.find((v) => v.id === visitTypeId)?.revenue_weight) || 1
+
+  if (totalWeightedOccurrences > 0 && visitTypeId) {
+    return {
+      revenuePence: Math.round(actualAnnualPence * (thisWeight / totalWeightedOccurrences)),
+      weighted: true,
+    }
+  }
+  // Even split fallback.
+  const revenuePence =
+    visitsPerYear > 0 ? Math.round(actualAnnualPence / visitsPerYear) : actualAnnualPence
+  return { revenuePence, weighted: false }
+}
+
 /** Annual net value (pence) of a recurring charge at a given frequency. */
 export function chargeAnnualPence(
   unitPricePence: number,

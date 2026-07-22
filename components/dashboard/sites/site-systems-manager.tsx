@@ -62,8 +62,18 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  StatusBadge,
+  effectiveStatus,
+  ENTITY_STATUS_OPTIONS,
+  ENTITY_STATUS_LABELS,
+  type EntityStatus,
+} from '@/lib/entity-status'
 import { formatPence } from '@/lib/billing/invoices'
 import { CreateDocumentDialog } from '@/components/documents/create-document-dialog'
 import { Badge } from '@/components/ui/badge'
@@ -339,20 +349,37 @@ export function SiteSystemsManager({
   const openServiceBook = (serviceId: string) => openServiceParam('bookService', serviceId)
   const openServiceDelete = (serviceId: string) => openServiceParam('deleteService', serviceId)
 
-  // Activate/deactivate a service in place. Deactivating stops all future call
-  // generation; existing pending calls are left untouched.
-  async function toggleServiceActive(serviceId: string, nextActive: boolean) {
+  // Set a service's lifecycle status (live/new/dead). The DB trigger keeps the
+  // `active` boolean in sync (= status==='live'), so Engaged/Dormant stop all
+  // future call generation; existing pending calls are left untouched.
+  async function setServiceStatus(serviceId: string, next: EntityStatus) {
     setTogglingServiceId(serviceId)
     const { error } = await supabase
       .from('site_services')
-      .update({ active: nextActive })
+      .update({ status: next })
       .eq('id', serviceId)
     setTogglingServiceId(null)
     if (error) {
       toast.error(error.message)
       return
     }
-    toast.success(nextActive ? 'Service activated' : 'Service deactivated')
+    toast.success(`Service set to ${ENTITY_STATUS_LABELS[next]}`)
+    router.refresh()
+  }
+
+  // (toggleServiceActive removed — replaced by the 3-state setServiceStatus)
+
+  // Set a system's lifecycle status. Cascades to its services' effective status.
+  async function setSystemStatus(systemId: string, next: EntityStatus) {
+    const { error } = await supabase
+      .from('site_systems')
+      .update({ status: next })
+      .eq('id', systemId)
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+    toast.success(`System set to ${ENTITY_STATUS_LABELS[next]}`)
     router.refresh()
   }
 
@@ -677,6 +704,11 @@ export function SiteSystemsManager({
                       {typeLabel && system.system_type_id && st?.code && (
                         <SystemBadge system={st} codeOnly />
                       )}
+                      <StatusBadge
+                        status={system.status}
+                        effective={effectiveStatus(siteStatus, system.status)}
+                        effectiveSource="site"
+                      />
                     </CardTitle>
                     {system.description && (
                       <CardDescription>{system.description}</CardDescription>
@@ -783,6 +815,30 @@ export function SiteSystemsManager({
                         }
                       />
                     )}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          title="System status"
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                          <span className="sr-only">System status</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44">
+                        {ENTITY_STATUS_OPTIONS.map((s) => (
+                          <DropdownMenuItem
+                            key={s}
+                            disabled={(system.status ?? 'live') === s}
+                            onSelect={() => setSystemStatus(system.id, s)}
+                          >
+                            Set {ENTITY_STATUS_LABELS[s]}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(system)}>
                       <Pencil className="h-4 w-4" />
                       <span className="sr-only">Edit system</span>
@@ -842,14 +898,12 @@ export function SiteSystemsManager({
                               <span className="truncate group-hover:underline">
                                 {svc.service_type?.name ?? 'Service'}
                               </span>
-                              {inactive && (
-                                <Badge
-                                  variant="outline"
-                                  className="shrink-0 text-[10px] font-normal text-muted-foreground"
-                                >
-                                  Inactive
-                                </Badge>
-                              )}
+                              <StatusBadge
+                                status={svc.status}
+                                effective={effectiveStatus(siteStatus, system.status, svc.status)}
+                                effectiveSource={system.status !== 'live' ? 'system' : 'site'}
+                                className="shrink-0"
+                              />
                               <Settings2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                             </button>
                             <div className="flex shrink-0 items-center gap-2">
@@ -904,22 +958,32 @@ export function SiteSystemsManager({
                                     <Clock className="mr-2 h-4 w-4" />
                                     Book call
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    disabled={togglingServiceId === svc.id}
-                                    onSelect={(e) => {
-                                      e.preventDefault()
-                                      toggleServiceActive(svc.id, inactive)
-                                    }}
-                                  >
-                                    {togglingServiceId === svc.id ? (
-                                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    ) : inactive ? (
-                                      <Power className="mr-2 h-4 w-4" />
-                                    ) : (
-                                      <PowerOff className="mr-2 h-4 w-4" />
-                                    )}
-                                    {inactive ? 'Activate' : 'Deactivate'}
-                                  </DropdownMenuItem>
+                                  <DropdownMenuSub>
+                                    <DropdownMenuSubTrigger>
+                                      {togglingServiceId === svc.id ? (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                      ) : (svc.status ?? 'live') === 'live' ? (
+                                        <Power className="mr-2 h-4 w-4" />
+                                      ) : (
+                                        <PowerOff className="mr-2 h-4 w-4" />
+                                      )}
+                                      Status
+                                    </DropdownMenuSubTrigger>
+                                    <DropdownMenuSubContent>
+                                      {ENTITY_STATUS_OPTIONS.map((s) => (
+                                        <DropdownMenuItem
+                                          key={s}
+                                          disabled={(svc.status ?? 'live') === s}
+                                          onSelect={(e) => {
+                                            e.preventDefault()
+                                            setServiceStatus(svc.id, s)
+                                          }}
+                                        >
+                                          Set {ENTITY_STATUS_LABELS[s]}
+                                        </DropdownMenuItem>
+                                      ))}
+                                    </DropdownMenuSubContent>
+                                  </DropdownMenuSub>
                                   <DropdownMenuItem onSelect={() => setDocServiceId(svc.id)}>
                                     <FolderOpen className="mr-2 h-4 w-4" />
                                     Documents
@@ -1057,6 +1121,12 @@ export function SiteSystemsManager({
                   <span className="flex min-w-0 items-center gap-2 text-sm">
                     <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     <span className="truncate">{svc.service_type?.name ?? 'Service'}</span>
+                    <StatusBadge
+                      status={svc.status}
+                      effective={effectiveStatus(siteStatus, svc.status)}
+                      effectiveSource="site"
+                      className="shrink-0"
+                    />
                     {svc.route?.name && (
                       <Badge
                         variant="secondary"

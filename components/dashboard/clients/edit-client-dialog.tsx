@@ -80,6 +80,7 @@ export function EditClientDialog({ client, open, onOpenChange }: EditClientDialo
         po_number: formData.po_number.trim() || null,
         requires_po: formData.requires_po,
         invoice_calls_individually: formData.invoice_calls_individually,
+        status: formData.status,
         updated_at: new Date().toISOString(),
       })
       .eq('id', client.id)
@@ -114,6 +115,29 @@ export function EditClientDialog({ client, open, onOpenChange }: EditClientDialo
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
               />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="client-status">Status</Label>
+              <Select
+                value={formData.status}
+                onValueChange={(v) =>
+                  setFormData({ ...formData, status: v as 'live' | 'new' | 'dead' })
+                }
+              >
+                <SelectTrigger id="client-status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ENTITY_STATUS_OPTIONS.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {ENTITY_STATUS_LABELS[s]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {ENTITY_STATUS_HINTS[formData.status]}
+              </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">

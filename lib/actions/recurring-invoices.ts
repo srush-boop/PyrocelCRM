@@ -96,9 +96,12 @@ interface ChargeRow {
     client: { name: string } | null
   } | null
   site_service: {
-    service_type: { name: string } | null
+    status: string | null
+    service_type: { name: string; status: string | null } | null
+    site: { status: string | null; client: { status: string | null } | null } | null
     site_system: {
       name: string | null
+      status: string | null
       system_type: { name: string } | null
     } | null
   } | null
@@ -121,15 +124,35 @@ export async function getRecurringDue(): Promise<RecurringDueGroup[]> {
       quantity, frequency, timing, visits_per_cycle, group_key, active, start_date, last_invoiced_date,
       billing_account:billing_accounts(id, name, status, client_id, client:clients(name)),
       site_service:site_services(
-        service_type:service_types(name),
-        site_system:site_systems(name, system_type:system_types(name))
+        status,
+        service_type:service_types(name, status),
+        site:sites(status, client:clients(status)),
+        site_system:site_systems(name, status, system_type:system_types(name))
       )
     `,
     )
     .eq('active', true)
     .order('description', { ascending: true })
 
-  const rows = (data ?? []) as unknown as ChargeRow[]
+  const allRows = (data ?? []) as unknown as ChargeRow[]
+
+  // Lifecycle gate: never auto-invoice a charge whose linked service, its
+  // system, its site or the client has been paused (Engaged) or ended
+  // (Dormant). Charges NOT linked to a service (site_service null) are kept —
+  // the billing account is the authority there. `active` is the charge's own
+  // toggle and is separate from this cascade.
+  const rows = allRows.filter((r) => {
+    const svc = r.site_service
+    if (!svc) return true
+    const statuses = [
+      svc.status,
+      svc.service_type?.status,
+      svc.site_system?.status,
+      svc.site?.status,
+      svc.site?.client?.status,
+    ]
+    return !statuses.some((s) => s != null && s !== 'live')
+  })
 
   // Resolve on_completion eligibility in one query: any completed task on the
   // charge's site_service after its last_invoiced_date makes it due.
@@ -359,10 +382,10 @@ export async function createInvoiceFromRecurringCharges(
        site:sites(po_number, client:clients(po_number)),
        client:clients(po_number),
        site_service:site_services(
-         po_number,
-         service_type:service_types(name),
-         site_system:site_systems(name, po_number, system_type:system_types(name)),
-         site:sites(po_number, client:clients(po_number))
+         po_number, status,
+         service_type:service_types(name, status),
+         site_system:site_systems(name, po_number, status, system_type:system_types(name)),
+         site:sites(po_number, status, client:clients(po_number, status))
        )`,
     )
     .in('id', chargeIds)
@@ -384,16 +407,43 @@ export async function createInvoiceFromRecurringCharges(
     client: { po_number: string | null } | null
     site_service: {
       po_number: string | null
-      service_type: { name: string } | null
+      status: string | null
+      service_type: { name: string; status: string | null } | null
       site_system: {
         name: string | null
         po_number: string | null
+        status: string | null
         system_type: { name: string } | null
       } | null
-      site: { po_number: string | null; client: { po_number: string | null } | null } | null
+      site: {
+        po_number: string | null
+        status: string | null
+        client: { po_number: string | null; status: string | null } | null
+      } | null
     } | null
   }[]
   if (allRows.length === 0) return { error: 'These charges are no longer available to invoice' }
+
+  // Lifecycle gate (matches getRecurringDue): refuse to raise a service-linked
+  // charge if its service/system/site/client is no longer live. Non-service
+  // charges (billing-account driven) are unaffected.
+  const nonLive = allRows.filter((r) => {
+    const svc = r.site_service
+    if (!svc) return false
+    return [
+      svc.status,
+      svc.service_type?.status,
+      svc.site_system?.status,
+      svc.site?.status,
+      svc.site?.client?.status,
+    ].some((s) => s != null && s !== 'live')
+  })
+  if (nonLive.length > 0) {
+    return {
+      error:
+        'One or more selected charges belong to a paused or ended service, site or client and cannot be invoiced.',
+    }
+  }
 
   // Per-visit charges are billed through the completion engine (correct split +
   // idempotency ledger), never via the flat full-amount path below. Raise them

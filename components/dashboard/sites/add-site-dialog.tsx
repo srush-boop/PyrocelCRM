@@ -40,6 +40,11 @@ import {
   findRemoteMonitoringTypeId,
   type ProvisionSystemSelection,
 } from '@/lib/sites/provision-systems'
+import {
+  ENTITY_STATUS_OPTIONS,
+  ENTITY_STATUS_LABELS,
+  ENTITY_STATUS_HINTS,
+} from '@/lib/entity-status'
 import { createSetupCharges } from '@/lib/actions/recurring-charges'
 import {
   RECURRING_FREQUENCY_LABELS,
@@ -92,7 +97,7 @@ export function AddSiteDialog({
     property_type_id: '',
     site_id_cash: '',
     uprn: '',
-    status: 'live' as 'live' | 'dead',
+    status: 'live' as 'live' | 'new' | 'dead',
     notes: '',
     po_number: '',
     authorised_works_limit: '',
@@ -271,7 +276,8 @@ export function AddSiteDialog({
         siteId: inserted.id,
         selections,
         serviceTypes,
-        isDead: formData.status === 'dead',
+        // Any non-live status (Engaged or Dormant) seeds no visits.
+        isDead: formData.status !== 'live',
         startDate: new Date().toISOString().slice(0, 10),
         chargeOnlySystemTypeIds: systemTypes
           .filter((t) => t.requires_recurring_visits === false)
@@ -478,16 +484,24 @@ export function AddSiteDialog({
               <Label htmlFor="status">Status</Label>
               <Select
                 value={formData.status}
-                onValueChange={(value) => setFormData({ ...formData, status: value as 'live' | 'dead' })}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, status: value as 'live' | 'new' | 'dead' })
+                }
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="live">Live</SelectItem>
-                  <SelectItem value="dead">Dead</SelectItem>
+                  {ENTITY_STATUS_OPTIONS.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {ENTITY_STATUS_LABELS[s]}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                {ENTITY_STATUS_HINTS[formData.status]}
+              </p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="reporting_email">Reporting Email Addresses</Label>

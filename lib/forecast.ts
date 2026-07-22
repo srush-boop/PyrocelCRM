@@ -38,7 +38,7 @@ interface ServiceRow {
     name: string | null
     status: string | null
     branch_id: string | null
-    client: { name: string | null } | null
+    client: { name: string | null; status: string | null } | null
   } | null
   route: { name: string | null } | null
   service_type: {
@@ -91,15 +91,18 @@ export async function forecastCalls(
 
   const { data: serviceData } = await supabase.from('site_services').select(
     `id, service_type_id, frequency_value, frequency_unit, next_service_date, active,
-       site:sites(id, name, status, branch_id, client:clients(name)),
+       site:sites(id, name, status, branch_id, client:clients(name, status)),
        route:routes(name),
        service_type:service_types(name, status, system_type:system_types(name, color, code))`,
   )
 
   let services = ((serviceData || []) as unknown as ServiceRow[]).filter(
     (s) =>
+      // active mirrors status==='live' (trigger-synced), so Engaged/Dormant
+      // services drop out here. Also exclude dead sites and dead clients.
       s.active !== false &&
       s.site?.status !== 'dead' &&
+      s.site?.client?.status !== 'dead' &&
       s.service_type?.status !== 'dead' &&
       s.frequency_value > 0,
   )

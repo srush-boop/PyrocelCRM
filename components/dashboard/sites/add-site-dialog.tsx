@@ -273,6 +273,9 @@ export function AddSiteDialog({
         serviceTypes,
         isDead: formData.status === 'dead',
         startDate: new Date().toISOString().slice(0, 10),
+        chargeOnlySystemTypeIds: systemTypes
+          .filter((t) => t.requires_recurring_visits === false)
+          .map((t) => t.id),
       })
       if (provError) {
         // The site itself was created; log the provisioning issue rather than

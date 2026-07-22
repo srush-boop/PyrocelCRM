@@ -13,7 +13,7 @@ export type SystemServiceSelection = Record<string, string[]>
 export type ServiceValueMap = Record<string, string>
 
 interface SystemServicePickerProps {
-  systemTypes: Pick<SystemType, 'id' | 'name'>[]
+  systemTypes: Pick<SystemType, 'id' | 'name' | 'requires_recurring_visits'>[]
   serviceTypes: Pick<ServiceType, 'id' | 'name' | 'system_type_id'>[]
   value: SystemServiceSelection
   onChange: (next: SystemServiceSelection) => void
@@ -107,6 +107,11 @@ export function SystemServicePicker({
                 <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
               )}
               <span className="text-sm font-medium">{system.name}</span>
+              {system.requires_recurring_visits === false && (
+                <span className="rounded-full border border-zinc-500/25 bg-zinc-500/12 px-1.5 py-0.5 text-[10px] font-normal text-zinc-600 dark:text-zinc-300">
+                  Charge-only
+                </span>
+              )}
               {isLocked && (
                 <span className="ml-auto text-xs text-muted-foreground">Auto-added</span>
               )}

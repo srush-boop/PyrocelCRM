@@ -34,6 +34,7 @@ export async function saveSystemType(input: {
   code: string
   description: string
   color: string
+  requiresRecurringVisits?: boolean
 }): Promise<Result> {
   const { supabase, error } = await requireStaff()
   if (!supabase) return { ok: false, error }
@@ -43,6 +44,7 @@ export async function saveSystemType(input: {
     code: input.code.trim().toUpperCase() || null,
     description: input.description || null,
     color: input.color || null,
+    requires_recurring_visits: input.requiresRecurringVisits ?? true,
   }
 
   const query = input.id

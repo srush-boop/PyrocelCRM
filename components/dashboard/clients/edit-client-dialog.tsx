@@ -16,9 +16,17 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Loader2 } from 'lucide-react'
 import { PostcodeLookup } from '@/components/dashboard/shared/postcode-lookup'
 import type { Client } from '@/lib/types/database'
+import { ENTITY_STATUS_OPTIONS, ENTITY_STATUS_LABELS, ENTITY_STATUS_HINTS } from '@/lib/entity-status'
 
 interface EditClientDialogProps {
   client: Client
@@ -38,6 +46,7 @@ export function EditClientDialog({ client, open, onOpenChange }: EditClientDialo
     po_number: client.po_number || '',
     requires_po: client.requires_po ?? false,
     invoice_calls_individually: client.invoice_calls_individually ?? false,
+    status: (client.status ?? 'live') as 'live' | 'new' | 'dead',
   })
   const router = useRouter()
   const supabase = createClient()

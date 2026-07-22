@@ -395,11 +395,18 @@ export function SiteSystemsManager({
     setAddingServices(true)
     const visitDateStr = serviceVisitDate || new Date().toISOString().slice(0, 10)
 
+    // Effective recurrence also depends on the parent system type: a charge-only
+    // system type (requires_recurring_visits === false, e.g. Remote Monitoring)
+    // never schedules visits regardless of the service type's own recurrence.
+    const parentSystem = siteSystems.find((s) => s.id === serviceSystemId)
+    const parentSystemType = systemTypes.find((t) => t.id === parentSystem?.system_type_id)
+    const systemRequiresVisits = parentSystemType?.requires_recurring_visits !== false
+
     const insertData = serviceSelection.map((serviceTypeId) => {
       const st = availableServiceTypes.find((s) => s.id === serviceTypeId)
       // Non-recurring / reactive services (e.g. Remote Monitoring) are booked on
       // demand — no scheduled date and no seeded task below.
-      const isRecurring = st?.is_recurring !== false
+      const isRecurring = st?.is_recurring !== false && systemRequiresVisits
       return {
         site_id: siteId,
         service_type_id: serviceTypeId,
@@ -432,7 +439,8 @@ export function SiteSystemsManager({
       }[]).map((r) => ({
         ...r,
         is_recurring:
-          availableServiceTypes.find((s) => s.id === r.service_type_id)?.is_recurring !== false,
+          availableServiceTypes.find((s) => s.id === r.service_type_id)?.is_recurring !== false &&
+          systemRequiresVisits,
       }))
       const visitsByServiceType = await fetchVisitsByServiceType(
         supabase,

@@ -45,10 +45,25 @@ export async function provisionSiteSystems(
     serviceTypes: ServiceTypeDefaults[]
     isDead: boolean
     startDate: string
+    /**
+     * System type ids that DON'T require recurring visits (charge-only, e.g.
+     * Remote Monitoring). Services under these seed no cadence/tasks even if the
+     * service type is otherwise recurring.
+     */
+    chargeOnlySystemTypeIds?: string[]
   },
 ): Promise<{ error?: string; services: ProvisionedService[] }> {
   const { siteId, selections, serviceTypes, isDead, startDate } = opts
+  const chargeOnly = new Set(opts.chargeOnlySystemTypeIds ?? [])
   if (selections.length === 0) return { services: [] }
+  // Map each service-type id to whether its parent system is charge-only, so
+  // effective recurrence = service_type.is_recurring AND system requires visits.
+  const chargeOnlyServiceTypeIds = new Set<string>()
+  for (const sel of selections) {
+    if (chargeOnly.has(sel.systemTypeId)) {
+      for (const id of sel.serviceTypeIds) chargeOnlyServiceTypeIds.add(id)
+    }
+  }
 
   // 1. Insert the systems and get their ids back (keyed to preserve the link
   //    between each system and the services chosen for it).
@@ -71,9 +86,11 @@ export async function provisionSiteSystems(
     if (!system) return []
     return sel.serviceTypeIds.map((serviceTypeId) => {
       const st = serviceTypes.find((s) => s.id === serviceTypeId)
-      // Non-recurring / reactive services aren't on a cadence, so they get no
-      // scheduled next-service date (and no seeded task below).
-      const isRecurring = st?.is_recurring !== false
+      // Effective recurrence: non-recurring/reactive service types, OR any
+      // service under a charge-only system type, aren't on a cadence, so they
+      // get no scheduled next-service date (and no seeded task below).
+      const isRecurring =
+        st?.is_recurring !== false && !chargeOnlyServiceTypeIds.has(serviceTypeId)
       return {
         site_id: siteId,
         service_type_id: serviceTypeId,
@@ -104,7 +121,9 @@ export async function provisionSiteSystems(
     }[]).map((r) => ({
       ...r,
       // buildSeedTaskRows skips non-recurring services so REM-MON etc. never seed.
-      is_recurring: serviceTypes.find((s) => s.id === r.service_type_id)?.is_recurring !== false,
+      is_recurring:
+        serviceTypes.find((s) => s.id === r.service_type_id)?.is_recurring !== false &&
+        !chargeOnlyServiceTypeIds.has(r.service_type_id),
     }))
     const visitsByServiceType = await fetchVisitsByServiceType(
       supabase,

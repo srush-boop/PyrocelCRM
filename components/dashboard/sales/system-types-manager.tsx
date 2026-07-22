@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { Plus, Pencil, Trash2, Layers } from 'lucide-react'
 import { toast } from 'sonner'
@@ -55,6 +56,7 @@ export function SystemTypesManager({
   const [code, setCode] = useState('')
   const [description, setDescription] = useState('')
   const [color, setColor] = useState('#b91c1c')
+  const [requiresRecurringVisits, setRequiresRecurringVisits] = useState(true)
 
   function openNew() {
     setEditing(null)
@@ -62,6 +64,7 @@ export function SystemTypesManager({
     setCode('')
     setDescription('')
     setColor('#b91c1c')
+    setRequiresRecurringVisits(true)
     setOpen(true)
   }
 
@@ -71,6 +74,7 @@ export function SystemTypesManager({
     setCode(st.code ?? '')
     setDescription(st.description ?? '')
     setColor(st.color ?? '#b91c1c')
+    setRequiresRecurringVisits(st.requires_recurring_visits ?? true)
     setOpen(true)
   }
 
@@ -86,6 +90,7 @@ export function SystemTypesManager({
         code,
         description,
         color,
+        requiresRecurringVisits,
       })
       if (res.ok) {
         toast.success(editing ? 'System type updated' : 'System type added')
@@ -153,6 +158,11 @@ export function SystemTypesManager({
                     <span className="flex items-center gap-2">
                       <SystemIcon system={st} />
                       {st.name}
+                      {st.requires_recurring_visits === false && (
+                        <span className="rounded-full border border-zinc-500/25 bg-zinc-500/12 px-2 py-0.5 text-xs font-normal text-zinc-600 dark:text-zinc-300">
+                          Charge-only
+                        </span>
+                      )}
                     </span>
                   </TableCell>
                   <TableCell className="max-w-md truncate text-muted-foreground">
@@ -230,6 +240,22 @@ export function SystemTypesManager({
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}
                 placeholder="Optional description of this system type"
+              />
+            </div>
+            <div className="flex items-start justify-between gap-4 rounded-md border p-3">
+              <div className="grid gap-0.5">
+                <Label htmlFor="st-recurring" className="cursor-pointer">
+                  Requires recurring service visits
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  When off, services under this system are charge-only and never generate PPM
+                  visits (e.g. Remote Monitoring).
+                </p>
+              </div>
+              <Switch
+                id="st-recurring"
+                checked={requiresRecurringVisits}
+                onCheckedChange={setRequiresRecurringVisits}
               />
             </div>
           </div>

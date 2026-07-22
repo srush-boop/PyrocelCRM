@@ -41,6 +41,19 @@ export interface CallProfitResult extends CallProfit {
   revenueSource: 'invoice' | 'recurring_visit' | 'none'
   /** True when we have enough to show anything (a cost/hour was resolved). */
   costKnown: boolean
+  /** The call's human reference (PYR-YYYY-NNNNNN), for display. */
+  referenceNumber: string | null
+  /**
+   * How a recurring-visit revenue figure was apportioned, so the UI can show
+   * the working (e.g. "£18,000/yr ÷ 52 visits"). Null unless the revenue came
+   * from a recurring visit share.
+   */
+  revenueBasis: {
+    annualNetPence: number
+    visitsPerYear: number
+    /** True when a per-visit-type weight was applied; false for an even split. */
+    weighted: boolean
+  } | null
 }
 
 export async function getCallProfit(taskId: string): Promise<CallProfitResult | null> {
@@ -49,7 +62,7 @@ export async function getCallProfit(taskId: string): Promise<CallProfitResult | 
   const { data: task } = await supabase
     .from('tasks')
     .select(
-      `id, status, started_at, completed_at, paused_at, total_paused_seconds,
+      `id, reference_number, status, started_at, completed_at, paused_at, total_paused_seconds,
        assigned_engineer_id, site_service_id, visit_type_id, invoice_id,
        engineer:profiles!tasks_assigned_engineer_id_fkey(
          cost_per_hour_pence, role_ref:roles(cost_per_hour_pence)
@@ -96,6 +109,7 @@ export async function getCallProfit(taskId: string): Promise<CallProfitResult | 
   // --- Revenue --------------------------------------------------------------
   let revenuePence = 0
   let revenueSource: CallProfitResult['revenueSource'] = 'none'
+  let revenueBasis: CallProfitResult['revenueBasis'] = null
 
   // 1. Invoiced amount (net of VAT) if the call is on an invoice.
   if ((task as any).invoice_id) {
@@ -121,8 +135,13 @@ export async function getCallProfit(taskId: string): Promise<CallProfitResult | 
       (task as any).visit_type_id,
     )
     if (revenue != null) {
-      revenuePence = revenue
+      revenuePence = revenue.revenuePence
       revenueSource = 'recurring_visit'
+      revenueBasis = {
+        annualNetPence: revenue.annualNetPence,
+        visitsPerYear: revenue.visitsPerYear,
+        weighted: revenue.weighted,
+      }
     }
   }
 
@@ -138,6 +157,8 @@ export async function getCallProfit(taskId: string): Promise<CallProfitResult | 
     partsCostPence,
     revenueSource,
     costKnown: costPerHourPence != null,
+    referenceNumber: (task as any).reference_number ?? null,
+    revenueBasis: revenueSource === 'recurring_visit' ? revenueBasis : null,
   }
 }
 
@@ -150,7 +171,12 @@ async function recurringVisitRevenue(
   supabase: Awaited<ReturnType<typeof createClient>>,
   siteServiceId: string,
   visitTypeId: string | null,
-): Promise<number | null> {
+): Promise<{
+  revenuePence: number
+  annualNetPence: number
+  visitsPerYear: number
+  weighted: boolean
+} | null> {
   const { data: siteService } = await supabase
     .from('site_services')
     .select(
@@ -215,10 +241,17 @@ async function recurringVisitRevenue(
   const weightsAreUnambiguous =
     weights.length > 1 && visitsPerYear > 0 && weights.length === visitsPerYear
 
-  return weightedVisitRevenuePence({
+  const revenuePence = weightedVisitRevenuePence({
     actualAnnualPence: netAnnual,
     thisVisitWeight: weightsAreUnambiguous ? thisWeight : 0,
     totalAnnualWeight: weightsAreUnambiguous && totalWeight > 0 ? totalWeight : 0,
     visitsPerYear,
   })
+
+  return {
+    revenuePence,
+    annualNetPence: netAnnual,
+    visitsPerYear,
+    weighted: weightsAreUnambiguous,
+  }
 }

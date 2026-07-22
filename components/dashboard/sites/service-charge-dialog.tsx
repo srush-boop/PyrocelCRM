@@ -42,6 +42,7 @@ import {
 import { resolveNominalCode, nominalSourceLabel } from '@/lib/billing/nominal-codes'
 import { NominalCodeSelect } from '@/components/dashboard/billing/nominal-code-select'
 import type {
+  ChargeTemplate,
   RecurringCharge,
   RecurringFrequency,
   RecurringPriceBasis,
@@ -66,6 +67,21 @@ const formatPence = (pence: number) =>
 
 const FREQUENCIES = Object.keys(RECURRING_FREQUENCY_LABELS) as RecurringFrequency[]
 const TIMINGS = Object.keys(RECURRING_TIMING_LABELS) as RecurringTiming[]
+
+// Best-guess "annual maintenance" catalog charge to preselect when adding a
+// recurring charge to a site/system service. Matches on name, most specific
+// first, so these contracts default to the right preconfigured charge.
+function findAnnualMaintenanceTemplate(templates: ChargeTemplate[]): ChargeTemplate | null {
+  const has = (t: ChargeTemplate, ...words: string[]) => {
+    const n = t.name.toLowerCase()
+    return words.every((w) => n.includes(w))
+  }
+  return (
+    templates.find((t) => has(t, 'annual', 'maintenance')) ??
+    templates.find((t) => has(t, 'maintenance')) ??
+    null
+  )
+}
 
 // Whole numbers that divide `n` exactly, ascending. These are the only valid
 // "visits per cycle" values for a service with `n` visits a year — anything
@@ -122,18 +138,23 @@ export function ServiceChargeDialog({
 
   const resetForm = useCallback((c: ServiceChargeContext | null) => {
     setEditingCharge(null)
-    setTemplateId(NO_TEMPLATE)
-    setDescription('')
+    // Preselect an "annual maintenance" catalog charge when one exists, so
+    // recurring site/system services default to it (description + nominal).
+    const defaultTemplate = c ? findAnnualMaintenanceTemplate(c.chargeTemplates) : null
+    setTemplateId(defaultTemplate?.id ?? NO_TEMPLATE)
+    setDescription(defaultTemplate?.name ?? '')
     setPricePounds('')
-    setPriceBasis('per_period')
+    // These are annual maintenance contracts, so default entry to the annual
+    // total (the user types the whole-year value, not a per-period amount).
+    setPriceBasis('annual')
     setQuantity('1')
     setFrequency('annual')
     setTiming('advance')
     setVisitsPerCycle('')
     setRenewalMonth('')
     setBillingAccountId(c?.defaultBillingAccountId ?? '')
-    // Auto-resolve to the service type's nominal code (no dept context here).
-    setNominalCodeId(c?.serviceTypeNominalCodeId ?? null)
+    // Prefer the preselected template's nominal, else the service type's.
+    setNominalCodeId(defaultTemplate?.nominal_code_id ?? c?.serviceTypeNominalCodeId ?? null)
     setNominalManual(false)
     setIndividualInvoice(false)
   }, [])

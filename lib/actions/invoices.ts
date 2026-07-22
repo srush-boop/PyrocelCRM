@@ -1081,7 +1081,7 @@ export async function exportInvoicesToSage(invoiceIds?: string[]): Promise<SageE
   let query = supabase
     .from('invoices')
     .select(
-      'id, invoice_number, document_type, sage_account_ref, issue_date, tax_rate, status, sage_exported_at, line_items:invoice_line_items(description, amount_pence, nominal_code, sort_order)',
+      'id, invoice_number, document_type, sage_account_ref, issue_date, tax_rate, status, sage_exported_at, billing_account:billing_accounts(sage_account_ref), line_items:invoice_line_items(description, amount_pence, nominal_code, sort_order)',
     )
     .in('status', ['issued', 'paid'])
     .order('issue_date', { ascending: true })
@@ -1100,6 +1100,8 @@ export async function exportInvoicesToSage(invoiceIds?: string[]): Promise<SageE
     Invoice,
     'id' | 'invoice_number' | 'document_type' | 'sage_account_ref' | 'issue_date' | 'tax_rate'
   > & {
+    // Supabase returns an embedded one-to-one as an object (or null).
+    billing_account: { sage_account_ref: string | null } | null
     line_items: Pick<InvoiceLineItem, 'description' | 'amount_pence' | 'nominal_code' | 'sort_order'>[]
   }
   const rows = (data ?? []) as unknown as Row[]
@@ -1112,7 +1114,9 @@ export async function exportInvoicesToSage(invoiceIds?: string[]): Promise<SageE
   const payload: SageExportInvoice[] = exportable.map((r) => ({
     invoiceNumber: r.invoice_number,
     documentType: r.document_type === 'credit_note' ? 'credit_note' : 'invoice',
-    sageAccountRef: r.sage_account_ref,
+    // Sage customer account number: the billing account's Sage ref is the
+    // authoritative source; fall back to any ref stamped on the invoice.
+    sageAccountRef: r.billing_account?.sage_account_ref ?? r.sage_account_ref ?? null,
     issueDate: r.issue_date,
     taxRate: r.tax_rate ?? DEFAULT_TAX_RATE,
     lines: [...r.line_items]

@@ -5,11 +5,11 @@ import { revalidatePath } from 'next/cache'
 import type { BillingAccount, Profile } from '@/lib/types/database'
 import {
   computeInvoiceTotals,
-  DEFAULT_TAX_RATE,
   financialYearOf,
   formatInvoiceNumber,
   lineAmountPence,
 } from '@/lib/billing/invoices'
+import { getCompanyTaxConfig } from '@/lib/billing/company-tax'
 import {
   isDueNow,
   nextDueDate,
@@ -461,6 +461,9 @@ export async function createInvoiceFromRecurringCharges(
   }
   const invoiceNumber = formatInvoiceNumber(fy, seq)
 
+  // Company-level VAT rate applied to this invoice.
+  const { rate: taxRate } = await getCompanyTaxConfig()
+
   const billToAddress = [account.invoice_address, account.invoice_postcode]
     .filter(Boolean)
     .join('\n')
@@ -480,7 +483,7 @@ export async function createInvoiceFromRecurringCharges(
       bill_to_email: account.invoice_email,
       sage_account_ref: account.sage_account_ref,
       payment_terms_days: account.payment_terms_days ?? 30,
-      tax_rate: DEFAULT_TAX_RATE,
+      tax_rate: taxRate,
       created_by: userId,
     })
     .select('id')
@@ -540,7 +543,7 @@ export async function createInvoiceFromRecurringCharges(
 
   // Persist totals. When every line resolved to the same customer PO, also set
   // it as the invoice header PO (a mix of POs stays per-line only).
-  const { subtotalPence, taxPence, totalPence } = computeInvoiceTotals(lines, DEFAULT_TAX_RATE)
+  const { subtotalPence, taxPence, totalPence } = computeInvoiceTotals(lines, taxRate)
   const distinctPos = Array.from(new Set(lines.map((l) => l.customer_po).filter(Boolean)))
   const headerPo = distinctPos.length === 1 ? distinctPos[0] : null
   await supabase

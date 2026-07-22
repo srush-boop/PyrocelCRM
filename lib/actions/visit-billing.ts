@@ -4,11 +4,11 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
   computeInvoiceTotals,
-  DEFAULT_TAX_RATE,
   financialYearOf,
   formatInvoiceNumber,
 } from '@/lib/billing/invoices'
 import { perVisitAmountPence } from '@/lib/billing/recurring'
+import { getCompanyTaxConfig } from '@/lib/billing/company-tax'
 import type { RecurringCharge } from '@/lib/types/database'
 
 // Per-visit "invoice on completion" engine.
@@ -66,6 +66,8 @@ export async function generateVisitCompletionInvoice(
   if (!user) return { error: 'Not signed in' }
 
   const db = createAdminClient()
+  // Company-level VAT rate applied to every invoice this creates.
+  const { rate: taxRate } = await getCompanyTaxConfig()
 
   // The visit must be a genuine, completed PPM service visit. Remedials,
   // emergencies, commissioning and follow-ups are not part of the recurring
@@ -235,7 +237,7 @@ export async function generateVisitCompletionInvoice(
         bill_to_email: account.invoice_email,
         sage_account_ref: account.sage_account_ref,
         payment_terms_days: account.payment_terms_days ?? 30,
-        tax_rate: DEFAULT_TAX_RATE,
+        tax_rate: taxRate,
         created_by: user.id,
       })
       .select('id')
@@ -294,7 +296,7 @@ export async function generateVisitCompletionInvoice(
     }
 
     // Persist invoice totals.
-    const { subtotalPence, taxPence, totalPence } = computeInvoiceTotals(lines, DEFAULT_TAX_RATE)
+    const { subtotalPence, taxPence, totalPence } = computeInvoiceTotals(lines, taxRate)
     await db
       .from('invoices')
       .update({ subtotal_pence: subtotalPence, tax_pence: taxPence, total_pence: totalPence })

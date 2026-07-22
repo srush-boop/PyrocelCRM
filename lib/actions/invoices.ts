@@ -33,6 +33,7 @@ import {
   toLocalISODate,
   type RateCard,
 } from '@/lib/billing/rate-cards'
+import { getCompanyTaxConfig } from '@/lib/billing/company-tax'
 
 // Server actions for Phase 3 invoicing: build CRM invoices from reviewed
 // chargeable calls (grouped by billing account), edit line items, and move
@@ -644,9 +645,10 @@ export async function previewInvoiceFromTasks(
   const built = await buildInvoiceLineData(supabase, account, taskIds)
   if ('error' in built) return { error: built.error }
 
+  const { rate: taxRate } = await getCompanyTaxConfig()
   const { subtotalPence, taxPence, totalPence } = computeInvoiceTotals(
     built.lines.map((l) => ({ amount_pence: l.amount_pence })),
-    DEFAULT_TAX_RATE,
+    taxRate,
   )
   const billToAddress =
     [account.invoice_address, account.invoice_postcode].filter(Boolean).join('\n') || null
@@ -658,7 +660,7 @@ export async function previewInvoiceFromTasks(
       billToEmail: account.invoice_email,
       billToAddress,
       poNumber: built.commonPo,
-      taxRate: DEFAULT_TAX_RATE,
+      taxRate,
       lines: built.lines.map((l) => ({
         kind: l.kind,
         description: l.description,
@@ -720,6 +722,8 @@ export async function createInvoiceFromTasks(
     .filter(Boolean)
     .join('\n')
 
+  const { rate: taxRate } = await getCompanyTaxConfig()
+
   const { data: invoice, error: invError } = await supabase
     .from('invoices')
     .insert({
@@ -738,7 +742,7 @@ export async function createInvoiceFromTasks(
       bill_to_email: account.invoice_email,
       sage_account_ref: account.sage_account_ref,
       payment_terms_days: account.payment_terms_days ?? 30,
-      tax_rate: DEFAULT_TAX_RATE,
+      tax_rate: taxRate,
       created_by: userId,
     })
     .select('id')
@@ -1111,6 +1115,9 @@ export async function exportInvoicesToSage(invoiceIds?: string[]): Promise<SageE
     return { error: 'No issued invoices are waiting to be sent to Sage.' }
   }
 
+  // Company-level Sage tax code (e.g. T1) applied to every exported line.
+  const { taxCode: companyTaxCode } = await getCompanyTaxConfig()
+
   const payload: SageExportInvoice[] = exportable.map((r) => ({
     invoiceNumber: r.invoice_number,
     documentType: r.document_type === 'credit_note' ? 'credit_note' : 'invoice',
@@ -1119,6 +1126,8 @@ export async function exportInvoicesToSage(invoiceIds?: string[]): Promise<SageE
     sageAccountRef: r.billing_account?.sage_account_ref ?? r.sage_account_ref ?? null,
     issueDate: r.issue_date,
     taxRate: r.tax_rate ?? DEFAULT_TAX_RATE,
+    // Zero-rated invoices still use the zero code regardless of the company code.
+    taxCode: (r.tax_rate ?? DEFAULT_TAX_RATE) > 0 ? companyTaxCode : 'T0',
     lines: [...r.line_items]
       .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
       .map((l) => ({

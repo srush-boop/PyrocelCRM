@@ -1915,6 +1915,11 @@ export interface CompanyInfo {
   logo_url: string | null
   // Default gross margin % pre-filled on new quote systems/lines.
   default_margin_percent: number
+  // Company-level VAT: the numeric rate (%) drives invoice totals, the Sage tax
+  // code (e.g. T1) drives the Sage export Tax Code column. Applied to all new
+  // invoices; there are no per-charge overrides.
+  default_vat_rate: number
+  default_tax_code: string
   // Editable maintenance pricing rate tables (seeded from the Excel calculator).
   // NULL = use the built-in DEFAULT_MAINTENANCE_RATES. Typed as MaintenanceRates.
   maintenance_rates: Record<string, unknown> | null
@@ -3175,7 +3180,7 @@ export interface AssetAssignment {
   assigner?: Pick<Profile, 'id' | 'full_name'> | null
 }
 
-// ── Inbound request inbox ────────────────────────────────────────────────────
+// ── Inbound request inbox ──────────────────���─────────────────────────────────
 // A request that arrived by email (forwarded to the system address) or was added
 // manually by a staff member. AI triages it, matching it to an existing
 // client/site/service and proposing actions that a human approves.

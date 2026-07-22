@@ -14,6 +14,8 @@ export interface SageExportInvoice {
   sageAccountRef: string | null
   issueDate: string | null // ISO date
   taxRate: number // percentage, e.g. 20
+  /** Company-level Sage tax code (e.g. "T1"). Falls back to rate-derived code. */
+  taxCode?: string | null
   lines: {
     description: string
     amountPence: number // net (ex VAT)
@@ -88,7 +90,8 @@ export function buildSageCsv(invoices: SageExportInvoice[]): string {
     const type = inv.documentType === 'credit_note' ? 'SC' : 'SI'
     const account = inv.sageAccountRef ?? ''
     const date = sageDate(inv.issueDate)
-    const taxCode = taxCodeFor(inv.taxRate)
+    // Prefer the company-configured tax code; fall back to the rate-derived one.
+    const taxCode = inv.taxCode?.trim() || taxCodeFor(inv.taxRate)
 
     for (const line of inv.lines) {
       const netPence = Math.abs(line.amountPence)

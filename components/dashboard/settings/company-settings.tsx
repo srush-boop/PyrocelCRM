@@ -42,6 +42,8 @@ export function CompanySettings({ company, branches }: CompanySettingsProps) {
     vat_number: company?.vat_number || '',
     logo_url: company?.logo_url || '',
     default_margin_percent: String(company?.default_margin_percent ?? 0),
+    default_vat_rate: String(company?.default_vat_rate ?? 20),
+    default_tax_code: company?.default_tax_code || 'T1',
   })
   const [savingCompany, setSavingCompany] = useState(false)
   const [companyMessage, setCompanyMessage] = useState<Feedback>(null)
@@ -69,6 +71,8 @@ export function CompanySettings({ company, branches }: CompanySettingsProps) {
       vat_number: form.vat_number.trim() || null,
       logo_url: form.logo_url.trim() || null,
       default_margin_percent: Number.parseFloat(form.default_margin_percent) || 0,
+      default_vat_rate: Number.parseFloat(form.default_vat_rate) || 0,
+      default_tax_code: form.default_tax_code.trim() || 'T1',
       updated_at: new Date().toISOString(),
     }
 
@@ -247,6 +251,31 @@ export function CompanySettings({ company, branches }: CompanySettingsProps) {
                 />
                 <p className="text-xs text-muted-foreground">
                   Pre-filled on new quote systems and lines. Sell price = cost / (1 − margin%).
+                </p>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="company_vat_rate">VAT rate %</Label>
+                <Input
+                  id="company_vat_rate"
+                  inputMode="decimal"
+                  value={form.default_vat_rate}
+                  onChange={(e) => setForm({ ...form, default_vat_rate: e.target.value })}
+                  placeholder="20"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Applied to all new invoices. Set to 0 for zero-rated.
+                </p>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="company_tax_code">Sage tax code</Label>
+                <Input
+                  id="company_tax_code"
+                  value={form.default_tax_code}
+                  onChange={(e) => setForm({ ...form, default_tax_code: e.target.value })}
+                  placeholder="T1"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Used in the Sage CSV export for every invoice line.
                 </p>
               </div>
             </div>

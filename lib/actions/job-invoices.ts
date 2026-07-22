@@ -10,6 +10,7 @@ import {
   formatInvoiceNumber,
   lineAmountPence,
 } from '@/lib/billing/invoices'
+import { getCompanyTaxConfig } from '@/lib/billing/company-tax'
 
 // Server actions for raising invoices from a job. Three billing modes:
 //  - claim:     works-completed-to-date (percent of quoted net, or an amount)
@@ -420,6 +421,9 @@ export async function createJobInvoice(
   }
   const invoiceNumber = formatInvoiceNumber(fy, seq)
 
+  // Company-level VAT rate applied to this job invoice.
+  const { rate: jobTaxRate } = await getCompanyTaxConfig()
+
   const billToAddress = [acc.invoice_address, acc.invoice_postcode].filter(Boolean).join('\n')
 
   const { data: invoice, error: invError } = await supabase
@@ -440,7 +444,7 @@ export async function createJobInvoice(
       bill_to_email: acc.invoice_email,
       sage_account_ref: acc.sage_account_ref,
       payment_terms_days: acc.payment_terms_days ?? 30,
-      tax_rate: DEFAULT_TAX_RATE,
+      tax_rate: jobTaxRate,
       created_by: userId,
     })
     .select('id')

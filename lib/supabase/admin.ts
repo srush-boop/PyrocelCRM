@@ -1,5 +1,4 @@
 import { createClient } from '@supabase/supabase-js'
-import { SUPABASE_URL } from './env'
 
 /**
  * Service-role client — bypasses RLS.
@@ -8,7 +7,7 @@ import { SUPABASE_URL } from './env'
  */
 export function createAdminClient() {
   return createClient(
-    SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_URL || '',
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {
       auth: {

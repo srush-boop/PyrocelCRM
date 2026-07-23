@@ -102,6 +102,9 @@ export async function POST(request: NextRequest) {
       console.warn('[v0] Unable to determine base URL — "Open report" link omitted from email.')
     }
 
+    // Public link to the site's fire safety log book (included on client emails).
+    const logbookUrl = baseUrl && site?.id ? `${baseUrl}/logbook/${site.id}` : undefined
+
     // Configurable footer for the staff member sending this report (falls back
     // to the company-wide default). The sender is the authenticated user.
     const footer = await resolveEmailFooter(user.id)
@@ -230,6 +233,7 @@ export async function POST(request: NextRequest) {
       engineerName: engineer?.full_name || engineer?.email || 'Engineer',
       engineerNotes: taskResult.engineer_notes || undefined,
       reportUrl,
+      logbookUrl,
       footer,
       followUpLogged,
       poRequired,

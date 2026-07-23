@@ -36,6 +36,8 @@ export interface EmailData {
   engineerName: string
   engineerNotes?: string
   reportUrl?: string
+  // Public link to the site's fire safety log book (included on every client report).
+  logbookUrl?: string
   // Configurable footer for the staff member who sent this report.
   footer?: EmailFooter
   // ─── "What happens next" facts (optional; computed at send time) ──────────
@@ -91,6 +93,17 @@ const ctaButton = (url: string | undefined, label: string, color: string = BRAND
       <a href="${url}" style="display:inline-block;background:${color};color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 28px;border-radius:6px;">${label}</a>
     </div>`
 }
+
+// Highlights the site's public digital fire safety log book. Included on
+// every client report so occupiers always have one place to find their records.
+const logbookLink = (data: EmailData): string =>
+  data.logbookUrl
+    ? `<div style="border:1px solid ${BRAND.border};background:#f9fafb;border-radius:8px;padding:14px 16px;margin:12px 0;">
+         <div style="font-size:14px;font-weight:700;color:${BRAND.ink};margin-bottom:4px;">Site fire safety log book</div>
+         <div style="font-size:14px;color:${BRAND.slate};line-height:1.5;">View this site&rsquo;s digital fire safety log book &mdash; every service report and routine check for the premises in one place.</div>
+         ${ctaButton(data.logbookUrl, 'View site log book', BRAND.charcoal)}
+       </div>`
+    : ''
 
 // Renders the configurable per-sender footer block (message / image / links).
 // Returns an empty string when there is nothing to show.
@@ -323,6 +336,7 @@ export const generateClientPassEmail = (data: EmailData): { subject: string; htm
     <div>${data.checklist.map(checklistItemHtml).join('')}</div>
     ${engineerNotesHtml(data)}
     ${ctaButton(data.reportUrl, 'Open Full Report')}
+    ${logbookLink(data)}
     <h3 style="${H3}">What happens next</h3>
     ${
       nextCards ||
@@ -350,6 +364,7 @@ export const generateClientFailEmail = (data: EmailData): { subject: string; htm
     <div>${data.checklist.map(checklistItemHtml).join('')}</div>
     ${engineerNotesHtml(data)}
     ${ctaButton(data.reportUrl, 'Open Full Report')}
+    ${logbookLink(data)}
     <h3 style="${H3}">What happens next</h3>
     ${
       nextCards ||
@@ -376,6 +391,7 @@ export const generateClientNoAccessEmail = (data: EmailData): { subject: string;
     ${detailsPanel(data, 'Attended')}
     ${engineerNotesHtml(data)}
     ${ctaButton(data.reportUrl, 'Open Full Report')}
+    ${logbookLink(data)}
     <h3 style="${H3}">What happens next</h3>
     <p style="margin:0 0 10px;font-size:14px;color:${BRAND.slate};">
       Please contact our service desk to arrange access so we can re-attend and complete the service.

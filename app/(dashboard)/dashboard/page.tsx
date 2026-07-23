@@ -31,6 +31,8 @@ import { LoneWorkerDashboardTiles } from '@/components/dashboard/lone-worker/lon
 import { TileColorPicker } from '@/components/dashboard/home/tile-color-picker'
 import { DashboardTileGrid, type DashboardTile } from '@/components/dashboard/home/dashboard-tile-grid'
 import { DashboardShortcuts } from '@/components/dashboard/home/dashboard-shortcuts'
+import { DashboardBackgroundPicker } from '@/components/dashboard/home/dashboard-background-picker'
+import { resolveDashboardBackground } from '@/lib/dashboard/backgrounds'
 import { tileIconStyle, tileAccentStyle, tileCardStyle } from '@/lib/dashboard-tile-colors'
 import { getVisibleLeaveRequests } from '@/lib/leave-approvals'
 import { EngineerHome } from '@/components/dashboard/home/engineer-home'
@@ -199,6 +201,10 @@ export default async function DashboardPage() {
   // Per-user pinned quick-shortcut destinations (max 3). Empty = all unset.
   const savedShortcuts = (profile as Profile).dashboard_shortcuts ?? []
 
+  // Per-user dashboard background preset (subtle technical pattern). Null = clean.
+  const savedBackground = (profile as Profile).dashboard_background ?? null
+  const background = resolveDashboardBackground(savedBackground)
+
   // Rotating daily system fact, shared with the engineer home.
   const dailyFact = getDailyFact(today)
 
@@ -364,7 +370,16 @@ export default async function DashboardPage() {
   const firstName = ((profile as Profile).full_name || 'there').split(' ')[0]
 
   return (
-    <div className="space-y-6">
+    <div className="relative space-y-6">
+      {/* Full-bleed background layer for the user's chosen pattern. Bleeds into
+          the main content padding and sits behind everything (pointer-events
+          disabled). Repainted optimistically by the background picker. */}
+      <div
+        data-dashboard-bg
+        aria-hidden="true"
+        className={`pointer-events-none absolute -inset-4 -z-10 md:-inset-6 ${background.className}`}
+      />
+
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
           <h1 className="text-3xl font-bold tracking-tight text-balance">
@@ -373,6 +388,7 @@ export default async function DashboardPage() {
           <p className="text-muted-foreground">{format(today, 'EEEE, d MMMM yyyy')}</p>
         </div>
         <div className="flex items-center gap-2">
+          <DashboardBackgroundPicker current={savedBackground} />
           <AddRequestDialog triggerVariant="outline" />
         </div>
       </div>

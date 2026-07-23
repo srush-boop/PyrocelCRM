@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { MAX_SHORTCUTS } from '@/lib/dashboard/shortcuts'
+import { DASHBOARD_BACKGROUND_KEYS } from '@/lib/dashboard/backgrounds'
 
 /**
  * Persist a single dashboard tile's colour for the signed-in user. Passing a
@@ -73,6 +74,34 @@ export async function setTileOrder(order: string[]) {
   const { error } = await supabase
     .from('profiles')
     .update({ dashboard_tile_positions: clean })
+    .eq('id', user.id)
+
+  if (error) return { ok: false as const, error: error.message }
+
+  revalidatePath('/dashboard')
+  return { ok: true as const }
+}
+
+/**
+ * Persist the signed-in user's dashboard background preset. `key` is a preset
+ * key from the background catalogue; null (or "none") clears the preference back
+ * to the default clean background. Stored on the profile (RLS
+ * `profiles_update_own`).
+ */
+export async function setDashboardBackground(key: string | null) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false as const, error: 'Not signed in' }
+
+  // Validate against the known catalogue; anything else clears the preference.
+  const value = key && key !== 'none' && DASHBOARD_BACKGROUND_KEYS.has(key) ? key : null
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ dashboard_background: value })
     .eq('id', user.id)
 
   if (error) return { ok: false as const, error: error.message }

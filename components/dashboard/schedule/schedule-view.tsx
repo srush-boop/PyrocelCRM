@@ -27,6 +27,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import { SearchSelect } from '@/components/dashboard/schedule/search-select'
 import {
   Dialog,
   DialogContent,
@@ -1003,11 +1004,39 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
     </div>
   )
 
+  // Shared Upcoming / Overdue / Completed switcher. Rendered centred in the
+  // filter row (normal mode) or standalone above the rich Completed table.
+  const tabTriggers = (
+    <TabsList>
+      <TabsTrigger value="upcoming" className="gap-1.5">
+        Upcoming
+        <span className="rounded-full bg-background/60 px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums">
+          {upcomingTasks.length}
+        </span>
+      </TabsTrigger>
+      {overdueTasks.length > 0 && (
+        <TabsTrigger value="overdue" className="gap-1.5 text-destructive data-[state=active]:text-destructive">
+          Overdue
+          <span className="rounded-full bg-destructive/20 px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums text-destructive">
+            {overdueTasks.length}
+          </span>
+        </TabsTrigger>
+      )}
+      <TabsTrigger value="completed" className="gap-1.5">
+        Completed
+        <span className="rounded-full bg-background/60 px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums">
+          {completedTasks.length}
+        </span>
+      </TabsTrigger>
+    </TabsList>
+  )
+
   return (
     <div className="space-y-2">
       {/* The shared schedule toolbar is hidden on the rich Completed table,
           which carries its own search + filters. */}
-      {!showRichCompleted && (
+      <Tabs value={effectiveTab} onValueChange={setActiveTab}>
+      {!showRichCompleted ? (
         <>
       {/* Row 1: search | quick-filter pill buttons | engineer select | dates | clear */}
       <div className="flex items-center gap-2 overflow-x-auto scrollbar-none [-webkit-overflow-scrolling:touch] [scrollbar-width:none]">
@@ -1132,47 +1161,46 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
       {/* Row 2: system/service selects | → sort + view toggle */}
       <div className="flex items-center gap-2 overflow-x-auto scrollbar-none [-webkit-overflow-scrolling:touch] [scrollbar-width:none]">
         {systemOptions.length > 0 && (
-          <Select
-            value={selectedSystem}
-            onValueChange={(v) => {
-              setSelectedSystem(v)
-              setSelectedService('all')
-            }}
-          >
-            <SelectTrigger className="w-[148px] shrink-0">
-              <SelectValue placeholder="All Systems" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Systems</SelectItem>
-              {systemOptions.map((sys) => (
-                <SelectItem key={sys.id} value={sys.id}>
-                  <span className="flex items-center gap-2">
-                    <SystemIcon system={sys} className="h-3.5 w-3.5" />
-                    {sys.name}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="w-[160px] shrink-0">
+            <SearchSelect
+              value={selectedSystem}
+              onChange={(v) => {
+                setSelectedSystem(v)
+                setSelectedService('all')
+              }}
+              options={[
+                { value: 'all', label: 'All Systems' },
+                ...systemOptions.map((sys) => ({ value: sys.id, label: sys.name })),
+              ]}
+              placeholder="All Systems"
+              searchPlaceholder="Search systems…"
+              emptyText="No systems found."
+            />
+          </div>
         )}
 
         {serviceOptions.length > 1 && (
-          <Select value={selectedService} onValueChange={setSelectedService}>
-            <SelectTrigger className="w-[148px] shrink-0">
-              <SelectValue placeholder="All Services" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Services</SelectItem>
-              {serviceOptions.map((svc) => (
-                <SelectItem key={svc.id} value={svc.id}>
-                  {svc.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="w-[160px] shrink-0">
+            <SearchSelect
+              value={selectedService}
+              onChange={setSelectedService}
+              options={[
+                { value: 'all', label: 'All Services' },
+                ...serviceOptions.map((svc) => ({ value: svc.id, label: svc.name })),
+              ]}
+              placeholder="All Services"
+              searchPlaceholder="Search services…"
+              emptyText="No services found."
+            />
+          </div>
         )}
 
-        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+        {/* Centre: Upcoming / Overdue / Completed switcher, in line with filters */}
+        <div className="mx-auto flex shrink-0 items-center justify-center">
+          {tabTriggers}
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
           <Select value={sortBy} onValueChange={(v) => handleSortChange(v as SortKey)}>
             <SelectTrigger className="w-[140px]">
               {locating ? (
@@ -1197,38 +1225,17 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
         </div>
       </div>
         </>
+      ) : (
+        // Rich Completed table hides the toolbar; keep the tab switcher so the
+        // user can navigate back to Upcoming / Overdue.
+        <div className="mb-3">{tabTriggers}</div>
       )}
 
-      <Tabs
-        value={effectiveTab}
-        onValueChange={setActiveTab}
+      <div
         className={
           isSwitchingView ? 'opacity-60 transition-opacity duration-150' : 'transition-opacity'
         }
       >
-        <TabsList>
-          <TabsTrigger value="upcoming" className="gap-1.5">
-            Upcoming
-            <span className="rounded-full bg-background/60 px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums">
-              {upcomingTasks.length}
-            </span>
-          </TabsTrigger>
-          {overdueTasks.length > 0 && (
-            <TabsTrigger value="overdue" className="gap-1.5 text-destructive data-[state=active]:text-destructive">
-              Overdue
-              <span className="rounded-full bg-destructive/20 px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums text-destructive">
-                {overdueTasks.length}
-              </span>
-            </TabsTrigger>
-          )}
-          <TabsTrigger value="completed" className="gap-1.5">
-            Completed
-            <span className="rounded-full bg-background/60 px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums">
-              {completedTasks.length}
-            </span>
-          </TabsTrigger>
-        </TabsList>
-
         <TabsContent value="upcoming" className="mt-4">
           {renderTasks(upcomingTasks, 'No upcoming calls')}
         </TabsContent>
@@ -1244,6 +1251,7 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
             renderTasks(completedTasks, 'No completed calls')
           )}
         </TabsContent>
+      </div>
       </Tabs>
 
       {canAssign && selectedIds.size > 0 && (

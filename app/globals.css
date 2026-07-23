@@ -321,3 +321,85 @@
     opacity: 0.35;
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Dashboard background presets                                               */
+/* Subtle, on-brand "technical" patterns for the home dashboard. Built from   */
+/* theme tokens via color-mix so they adapt to light/dark automatically. Kept */
+/* low-contrast so tiles and text stay perfectly readable on top. Applied to  */
+/* a full-bleed, pointer-events-none layer behind the dashboard content.      */
+/* -------------------------------------------------------------------------- */
+
+/* Fine engineering graph grid. */
+.dash-bg-grid {
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in oklab, var(--foreground) 7%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--foreground) 7%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 28px 28px;
+}
+
+/* Evenly spaced dot matrix. */
+.dash-bg-dots {
+  background-image: radial-gradient(
+    color-mix(in oklab, var(--foreground) 14%, transparent) 1.25px,
+    transparent 1.25px
+  );
+  background-size: 22px 22px;
+}
+
+/* Brand-tinted blueprint plan grid with a faint red wash. */
+.dash-bg-blueprint {
+  background-color: color-mix(in oklab, var(--primary) 4%, transparent);
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in oklab, var(--primary) 13%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--primary) 13%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 32px 32px;
+}
+
+/* Soft aurora-style brand glows in the corners. */
+.dash-bg-glow {
+  background-image:
+    radial-gradient(
+      55% 45% at 12% 0%,
+      color-mix(in oklab, var(--primary) 16%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      50% 45% at 100% 8%,
+      color-mix(in oklab, var(--chart-3) 14%, transparent),
+      transparent 70%
+    );
+}
+
+/* Circuit look: dot matrix layered under a soft brand glow. */
+.dash-bg-mesh {
+  background-image:
+    radial-gradient(
+      50% 40% at 100% 0%,
+      color-mix(in oklab, var(--primary) 14%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      color-mix(in oklab, var(--foreground) 12%, transparent) 1.25px,
+      transparent 1.25px
+    );
+  background-size:
+    auto,
+    24px 24px;
+}

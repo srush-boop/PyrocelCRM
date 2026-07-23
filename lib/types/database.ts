@@ -470,6 +470,9 @@ export interface Profile {
   // Per-user dashboard quick-shortcut destination keys (max 3), e.g.
   // ["calendar","invoices","sites"]. Missing entries = unset slot.
   dashboard_shortcuts: string[] | null
+  // Per-user dashboard background preset key (e.g. "grid", "dots", "blueprint",
+  // "glow"). NULL/empty = the default clean background.
+  dashboard_background: string | null
   // Nominated line manager for this user (self-referencing). Recorded for HR /
   // future approvals wiring. NULL = no manager set.
   manager_id: string | null

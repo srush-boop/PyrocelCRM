@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { CheckCircle, Loader2, FileText } from 'lucide-react'
+import { CheckCircle, Loader2, FileText, AlertCircle } from 'lucide-react'
 import { authorisePoRequest, type PoAuthorisationStatus } from '@/lib/actions/po-requests'
 
 interface PoAuthoriseClientProps {
@@ -60,7 +60,23 @@ export function PoAuthoriseClient({ token, companyName, status }: PoAuthoriseCli
         </div>
 
         <div className="px-8 py-8">
-          {status.state === 'already_provided' && !done ? (
+          {(status.state === 'expired' || status.state === 'not_found') && !done ? (
+            <div className="flex flex-col items-center gap-4 py-2 text-center">
+              <div className="h-14 w-14 rounded-full bg-amber-100 flex items-center justify-center">
+                <AlertCircle className="h-8 w-8 text-amber-600" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold">
+                  {status.state === 'expired' ? 'Link expired' : 'Link not found'}
+                </h2>
+                <p className="text-muted-foreground text-sm mt-1 text-pretty">
+                  {status.state === 'expired'
+                    ? `This purchase order authorisation link has expired. Please contact ${companyName} and we'll send you a fresh link.`
+                    : `This authorisation link isn't valid. Please check the link or contact ${companyName} for assistance.`}
+                </p>
+              </div>
+            </div>
+          ) : status.state === 'already_provided' && !done ? (
             <div className="flex flex-col items-center gap-4 py-2 text-center">
               <div className="h-14 w-14 rounded-full bg-emerald-100 flex items-center justify-center">
                 <CheckCircle className="h-8 w-8 text-emerald-600" />

@@ -13,6 +13,15 @@ type Result = { ok: boolean; error?: string }
 
 const MAX_QUERY_LENGTH = 4000
 
+// A share link is expired once we're past its token_expires_at. A null expiry
+// is treated as never-expiring (defensive — the column is backfilled + defaulted
+// in the DB, so this only affects rows predating the migration).
+function isShareTokenExpired(expiresAt: string | null | undefined): boolean {
+  if (!expiresAt) return false
+  const ts = Date.parse(expiresAt)
+  return Number.isFinite(ts) && ts < Date.now()
+}
+
 // Fetch the client<->staff query thread for a quote by its public token. The
 // token is the authorisation, so we resolve the quote id from it server-side.
 export async function getPublicQuoteMessages(token: string): Promise<QuoteMessage[]> {
@@ -22,10 +31,13 @@ export async function getPublicQuoteMessages(token: string): Promise<QuoteMessag
   const supabase = createAdminClient()
   const { data: quote } = await supabase
     .from('quotes')
-    .select('id')
+    .select('id, token_expires_at')
     .eq('share_token', trimmed)
     .maybeSingle()
   if (!quote) return []
+  if (isShareTokenExpired((quote as { token_expires_at: string | null }).token_expires_at)) {
+    return []
+  }
 
   const { data: messages } = await supabase
     .from('quote_messages')
@@ -55,10 +67,13 @@ export async function postQuoteQuery(args: {
   const supabase = createAdminClient()
   const { data: quote, error } = await supabase
     .from('quotes')
-    .select('id')
+    .select('id, token_expires_at')
     .eq('share_token', token)
     .maybeSingle()
   if (error || !quote) return { ok: false, error: 'Quote not found.' }
+  if (isShareTokenExpired((quote as { token_expires_at: string | null }).token_expires_at)) {
+    return { ok: false, error: 'This quote link has expired. Please contact us for an up-to-date link.' }
+  }
 
   const { error: insertError } = await supabase.from('quote_messages').insert({
     quote_id: quote.id,
@@ -99,11 +114,15 @@ export async function respondToPublicQuote(args: {
 
   const { data: quote, error } = await supabase
     .from('quotes')
-    .select('id, status, require_signature')
+    .select('id, status, require_signature, token_expires_at')
     .eq('share_token', token)
     .maybeSingle()
 
   if (error || !quote) return { ok: false, error: 'Quote not found.' }
+
+  if (isShareTokenExpired((quote as { token_expires_at: string | null }).token_expires_at)) {
+    return { ok: false, error: 'This quote link has expired. Please contact us for an up-to-date quote.' }
+  }
 
   if (quote.status === 'accepted' || quote.status === 'rejected') {
     return { ok: false, error: 'This quote has already been responded to.' }
@@ -196,10 +215,14 @@ export async function updatePublicQuoteOptions(args: {
 
   const { data: quote, error } = await supabase
     .from('quotes')
-    .select('id, status, vat_rate, discount_pence')
+    .select('id, status, vat_rate, discount_pence, token_expires_at')
     .eq('share_token', token)
     .maybeSingle()
   if (error || !quote) return { ok: false, error: 'Quote not found.' }
+
+  if (isShareTokenExpired((quote as { token_expires_at: string | null }).token_expires_at)) {
+    return { ok: false, error: 'This quote link has expired. Please contact us for an up-to-date quote.' }
+  }
 
   if (quote.status === 'accepted' || quote.status === 'rejected') {
     return { ok: false, error: 'This quote has already been responded to and can no longer be changed.' }
@@ -300,6 +323,18 @@ export async function getPublicQuote(token: string) {
     .eq('share_token', token)
     .maybeSingle()
   if (!quote) return null
+
+  // Once the link has expired, only keep it viewable if the client already
+  // acted on it (so their confirmation stays accessible). An expired link on a
+  // still-open quote resolves to 404.
+  const q = quote as { status?: string; token_expires_at?: string | null }
+  if (
+    isShareTokenExpired(q.token_expires_at) &&
+    q.status !== 'accepted' &&
+    q.status !== 'rejected'
+  ) {
+    return null
+  }
 
   const [
     { data: systems },

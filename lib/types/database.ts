@@ -1717,6 +1717,8 @@ export interface PurchaseOrderRequest {
   authorised_by_name: string | null
   authorised_at: string | null
   authorisation_token: string | null
+  // When the public authorisation link stops working (30-day window).
+  token_expires_at: string | null
   created_at: string
   updated_at: string
   // Joined fields
@@ -2251,6 +2253,8 @@ export interface Quote {
   decision_note: string | null
   // Public client-approval link + signature/PO capture.
   share_token: string | null
+  // When the public share link stops working (90-day window, renewed on re-share).
+  token_expires_at: string | null
   require_signature: boolean
   po_number: string | null
   signature_name: string | null

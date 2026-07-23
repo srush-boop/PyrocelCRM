@@ -1163,9 +1163,12 @@ export async function sendQuote(args: {
   }
 
   // Mark as sent. Don't downgrade a quote that was already accepted/rejected.
+  // Renew the public link's 90-day validity window each time the quote is sent,
+  // so re-sending an old quote produces a fresh, working link.
   const patch: Record<string, unknown> = {
     sent_at: new Date().toISOString(),
     share_token: shareToken,
+    token_expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
     require_signature: !!args.requireSignature,
   }
   if (typedQuote.status === 'draft' || typedQuote.status === 'sent') {

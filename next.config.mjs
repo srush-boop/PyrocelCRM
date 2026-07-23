@@ -1,10 +1,51 @@
 const isProd = process.env.NODE_ENV === 'production'
 
+// Derive the Supabase origins so the browser is allowed to talk to the REST
+// API (https) and Realtime (wss) endpoints, but nothing else off-origin.
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+const supabaseHttp = supabaseUrl || ''
+const supabaseWss = supabaseUrl ? supabaseUrl.replace(/^https:\/\//, 'wss://') : ''
+
+// Content-Security-Policy. This is intentionally a "reasonable" policy rather
+// than a strict nonce-based one: Next.js injects inline bootstrap/hydration
+// scripts and some UI (e.g. the shadcn chart) injects an inline <style>, and a
+// per-request nonce would force every page into dynamic rendering. So we keep
+// 'unsafe-inline' for script/style but lock down everything else — object-src,
+// base-uri, form-action, frame-ancestors and scoped connect/img sources — which
+// still removes the most common injection vectors.
+const cspDirectives = [
+  ["default-src", ["'self'"]],
+  // 'unsafe-eval' is only needed by the dev server (React Refresh); never in prod.
+  ["script-src", ["'self'", "'unsafe-inline'", ...(isProd ? [] : ["'unsafe-eval'"])]],
+  ["style-src", ["'self'", "'unsafe-inline'"]],
+  // Same-origin images plus data/blob URIs (canvas, signatures) and OSM map tiles.
+  [
+    "img-src",
+    ["'self'", 'data:', 'blob:', 'https://*.tile.openstreetmap.org', supabaseHttp].filter(Boolean),
+  ],
+  ["font-src", ["'self'", 'data:']],
+  // XHR/fetch/websocket targets: our own origin + Supabase REST and Realtime.
+  ["connect-src", ["'self'", supabaseHttp, supabaseWss].filter(Boolean)],
+  ["media-src", ["'self'", 'blob:', 'data:']],
+  ["worker-src", ["'self'", 'blob:']],
+  ["manifest-src", ["'self'"]],
+  ["object-src", ["'none'"]],
+  ["base-uri", ["'self'"]],
+  ["form-action", ["'self'"]],
+  // Anti-clickjacking. In dev the v0 preview renders us inside an iframe, so we
+  // must not restrict framing there or the preview goes blank.
+  ...(isProd ? [["frame-ancestors", ["'self'"]]] : []),
+  ...(isProd ? [["upgrade-insecure-requests", []]] : []),
+]
+
+const contentSecurityPolicy = cspDirectives
+  .map(([directive, values]) => (values.length ? `${directive} ${values.join(' ')}` : directive))
+  .join('; ')
+
 // Security headers applied to every response. These are safe defaults that
-// don't change app behaviour. Note: the anti-framing header is only sent in
-// production, because the v0/dev preview renders the app inside an iframe and
-// would be blocked by it otherwise.
+// don't change app behaviour.
 const securityHeaders = [
+  { key: 'Content-Security-Policy', value: contentSecurityPolicy },
   // Stop browsers MIME-sniffing responses away from the declared content-type.
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   // Don't leak full URLs (which can contain ids) to other origins.
@@ -20,7 +61,6 @@ const securityHeaders = [
     ? [
         // Clickjacking protection — only in production so the dev preview iframe still works.
         { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
-        { key: 'Content-Security-Policy', value: "frame-ancestors 'self'" },
         // Force HTTPS for two years, including subdomains.
         {
           key: 'Strict-Transport-Security',
@@ -32,9 +72,6 @@ const securityHeaders = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   images: {
     unoptimized: true,
   },

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -46,6 +47,11 @@ export function LoginForm({
 
   // Resolve where to land (portal for clients, dashboard for staff) and go.
   const finishLogin = async (userId?: string) => {
+    // Record the successful login in the app audit trail (best-effort; never
+    // blocks the redirect). The session cookie is set by now so the server
+    // route can resolve the user and capture IP + user-agent.
+    void fetch('/api/audit/login', { method: 'POST' }).catch(() => {})
+
     let destination = '/dashboard'
     if (userId) {
       const { data: profile } = await supabase
@@ -128,7 +134,15 @@ export function LoginForm({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password">Password</Label>
+              <Link
+                href="/auth/forgot-password"
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                Forgot password?
+              </Link>
+            </div>
             <Input
               id="password"
               type="password"

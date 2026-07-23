@@ -310,50 +310,70 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
   // filter by the site's own client here — the client name is embedded for the
   // dropdown, and the client default is resolved by client_id in the card.
   const siteClientId = (site as Site).client_id
-  const { data: billingAccountsData } = await supabase
-    .from('billing_accounts')
-    .select('*, client:clients(id, name)')
-    .order('name', { ascending: true })
-  const billingAccounts = (billingAccountsData || []) as (BillingAccount & {
-    client?: { id: string; name: string } | null
-  })[]
-
-  // Rate cards for the per-site / per-service override selectors. The customer
-  // (billing account) level is resolved in the card from these accounts so the
-  // effective-card preview reflects service -> site -> customer -> default.
-  const rateCards = await getRateCards()
 
   // Get tasks for this site's services
   const siteServiceIds = siteServices.map(ss => ss.id)
-  const { data: tasksData } = siteServiceIds.length > 0 
-    ? await supabase
-        .from('tasks')
-        .select('*')
-        .in('site_service_id', siteServiceIds)
-    : { data: [] }
-  
-  const tasks = (tasksData || []) as Task[]
 
-  // Get completed tasks with their results for reporting. Match both tasks
-  // linked via one of this site's services AND ad-hoc/reactive calls booked
-  // directly against the site (site_id set, no site_service_id) — otherwise
-  // those completed reports never appear in the site's Reports grid.
+  // Match both tasks linked via one of this site's services AND ad-hoc/reactive
+  // calls booked directly against the site (site_id set, no site_service_id) —
+  // otherwise those completed reports never appear in the site's Reports grid.
   const completedFilter =
     siteServiceIds.length > 0
       ? `site_id.eq.${id},site_service_id.in.(${siteServiceIds.join(',')})`
       : `site_id.eq.${id}`
-  const { data: completedTasksData } = await supabase
-    .from('tasks')
-    .select(`
-      *,
-      site_service:site_services(*, service_type:service_types(*)),
-      assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(*),
-      task_result:task_results(*)
-    `)
-    .or(completedFilter)
-    .eq('status', 'completed')
-    .order('completed_at', { ascending: false })
-  
+
+  // Billing accounts (all clients), rate cards, this site's tasks, completed
+  // reports and the full calls list are independent of one another, so run them
+  // concurrently in a single wave rather than five sequential round-trips.
+  const [billingAccountsResult, rateCards, tasksResult, completedTasksResult, allCallsResult] =
+    await Promise.all([
+      supabase
+        .from('billing_accounts')
+        .select('*, client:clients(id, name)')
+        .order('name', { ascending: true }),
+      getRateCards(),
+      siteServiceIds.length > 0
+        ? supabase.from('tasks').select('*').in('site_service_id', siteServiceIds)
+        : Promise.resolve({ data: [] as Task[] }),
+      supabase
+        .from('tasks')
+        .select(`
+          *,
+          site_service:site_services(*, service_type:service_types(*)),
+          assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(*),
+          task_result:task_results(*)
+        `)
+        .or(completedFilter)
+        .eq('status', 'completed')
+        .order('completed_at', { ascending: false }),
+      supabase
+        .from('tasks')
+        .select(`
+          *,
+          site_service:site_services(*, service_type:service_types(*, system_type:system_types(id, name, code, color))),
+          service_type:service_types(id, name, system_type:system_types(id, name, code, color)),
+          system_type:system_types(id, name, code, color),
+          assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(*),
+          task_result:task_results(reference_number, overall_status, email_sent_at),
+          call_parts(unit_cost_pence, quantity),
+          follow_up_to:tasks!follow_up_to_id(id, is_emergency, task_result:task_results(reference_number))
+        `)
+        .or(completedFilter)
+        .order('scheduled_date', { ascending: false }),
+    ])
+
+  // ALL billing accounts (across every client), used by the Billing card to
+  // show/override which account each service is billed to. Sites can be billed
+  // to another client's account (e.g. a central "Pyrocel" entity), so we don't
+  // filter by the site's own client here — the client name is embedded for the
+  // dropdown, and the client default is resolved by client_id in the card.
+  const billingAccounts = (billingAccountsResult.data || []) as (BillingAccount & {
+    client?: { id: string; name: string } | null
+  })[]
+
+  const tasks = (tasksResult.data || []) as Task[]
+
+  const completedTasksData = completedTasksResult.data
   const completedTasks = (completedTasksData || []).map((task: Record<string, unknown>) => ({
     ...task,
     task_result: Array.isArray(task.task_result) ? task.task_result[0] : task.task_result
@@ -506,24 +526,44 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
     (st) => st.is_recurring === false && (st.status || 'live') !== 'dead'
   )
 
-  // Damper register: shown when the site has the damper service or any dampers
+  // Asset registers + log book + building info are all independent of each
+  // other and only keyed on this site, so fetch them concurrently in a single
+  // round-trip wave instead of six sequential queries.
   const hasDamperService = siteServices.some((ss) => isDamperService(ss.service_type?.name))
-  const { data: dampersData } = await supabase
-    .from('dampers')
-    .select('*')
-    .eq('site_id', id)
-    .order('reference', { ascending: true })
-  const dampers = (dampersData || []) as Damper[]
+  const hasFireAlarmService = siteServices.some((ss) => isFireAlarmService(ss.service_type?.name))
+  const hasEmergencyLightService = siteServices.some((ss) => isEmergencyLightService(ss.service_type?.name))
+  const hasExtinguisherService = siteServices.some((ss) => isExtinguisherService(ss.service_type?.name))
+
+  const [
+    dampersResult,
+    mcpsResult,
+    lightsResult,
+    extinguishersResult,
+    logbookResult,
+    buildingInfoResult,
+  ] = await Promise.all([
+    supabase.from('dampers').select('*').eq('site_id', id).order('reference', { ascending: true }),
+    supabase
+      .from('mcps')
+      .select('*, inspections:mcp_inspections(result, inspection_date)')
+      .eq('site_id', id)
+      .order('map_reference', { ascending: true }),
+    supabase
+      .from('emergency_lights')
+      .select('*, inspections:emergency_light_inspections(result, inspection_date)')
+      .eq('site_id', id)
+      .order('map_reference', { ascending: true }),
+    supabase.from('extinguishers').select('*').eq('site_id', id).order('reference', { ascending: true }),
+    supabase.from('logbook_entries').select('*').eq('site_id', id).order('entry_date', { ascending: false }),
+    supabase.from('site_building_info').select('*').eq('site_id', id).maybeSingle(),
+  ])
+
+  // Damper register: shown when the site has the damper service or any dampers
+  const dampers = (dampersResult.data || []) as Damper[]
   const showDamperRegister = hasDamperService || dampers.length > 0
 
   // MCP register: shown when the site has the fire alarm service or any MCPs
-  const hasFireAlarmService = siteServices.some((ss) => isFireAlarmService(ss.service_type?.name))
-  const { data: mcpsData } = await supabase
-    .from('mcps')
-    .select('*, inspections:mcp_inspections(result, inspection_date)')
-    .eq('site_id', id)
-    .order('map_reference', { ascending: true })
-  const mcps = ((mcpsData || []) as (Mcp & { inspections: Pick<McpInspection, 'result' | 'inspection_date'>[] })[]).map(
+  const mcps = ((mcpsResult.data || []) as (Mcp & { inspections: Pick<McpInspection, 'result' | 'inspection_date'>[] })[]).map(
     (mcp) => {
       const sorted = [...(mcp.inspections || [])].sort((a, b) =>
         b.inspection_date.localeCompare(a.inspection_date),
@@ -539,14 +579,8 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
   const showMcpRegister = hasFireAlarmService || mcps.length > 0
 
   // Emergency lighting register: shown when the site has the emergency lighting service or any fittings
-  const hasEmergencyLightService = siteServices.some((ss) => isEmergencyLightService(ss.service_type?.name))
-  const { data: lightsData } = await supabase
-    .from('emergency_lights')
-    .select('*, inspections:emergency_light_inspections(result, inspection_date)')
-    .eq('site_id', id)
-    .order('map_reference', { ascending: true })
   const emergencyLights = (
-    (lightsData || []) as (EmergencyLight & {
+    (lightsResult.data || []) as (EmergencyLight & {
       inspections: Pick<EmergencyLightInspection, 'result' | 'inspection_date'>[]
     })[]
   ).map((light) => {
@@ -563,30 +597,14 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
   const showEmergencyLightRegister = hasEmergencyLightService || emergencyLights.length > 0
 
   // Extinguisher register: shown when the site has the extinguisher service or any extinguishers
-  const hasExtinguisherService = siteServices.some((ss) => isExtinguisherService(ss.service_type?.name))
-  const { data: extinguishersData } = await supabase
-    .from('extinguishers')
-    .select('*')
-    .eq('site_id', id)
-    .order('reference', { ascending: true })
-  const extinguishers = (extinguishersData || []) as Extinguisher[]
+  const extinguishers = (extinguishersResult.data || []) as Extinguisher[]
   const showExtinguisherRegister = hasExtinguisherService || extinguishers.length > 0
 
   // Log book: manual entries + professional service reports merged into one timeline.
-  const { data: logbookData } = await supabase
-    .from('logbook_entries')
-    .select('*')
-    .eq('site_id', id)
-    .order('entry_date', { ascending: false })
-  const logbookEntries = (logbookData || []) as LogbookEntry[]
+  const logbookEntries = (logbookResult.data || []) as LogbookEntry[]
 
   // General building information (responsible persons, FRA, emergency contacts).
-  const { data: buildingInfoData } = await supabase
-    .from('site_building_info')
-    .select('*')
-    .eq('site_id', id)
-    .maybeSingle()
-  const buildingInfo = (buildingInfoData as SiteBuildingInfo | null) ?? null
+  const buildingInfo = (buildingInfoResult.data as SiteBuildingInfo | null) ?? null
 
   const logbookReports: ReportTimelineItem[] = completedTasks.map((task) => {
     const serviceName = task.site_service?.service_type?.name || 'Service'
@@ -605,20 +623,21 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
     }
   })
 
-  // Documents stored against this site.
-  const siteDocuments = await getOwnerDocuments('site', id)
+  // Documents (site + engineer stores), the shared tag vocabulary, and the
+  // engineer-info internal notes are mutually independent — fetch concurrently.
+  const [siteDocuments, allDocumentTags, engineerDocuments, internalNotesResult] =
+    await Promise.all([
+      getOwnerDocuments('site', id),
+      getAllDocumentTags(),
+      getOwnerDocuments('site_engineer', id),
+      supabase
+        .from('site_internal_notes')
+        .select('*, author:profiles!site_internal_notes_author_id_fkey(id, full_name, role)')
+        .eq('site_id', id)
+        .order('created_at', { ascending: false }),
+    ])
+  const internalNotesData = internalNotesResult.data
   const canManageDocuments = ['admin', 'office'].includes((profile as Profile).role)
-
-  // Shared document tag vocabulary (for the tag picker + Type filter).
-  const allDocumentTags = await getAllDocumentTags()
-
-  // Engineer Info tab: shared engineer file store + communal internal notes.
-  const engineerDocuments = await getOwnerDocuments('site_engineer', id)
-  const { data: internalNotesData } = await supabase
-    .from('site_internal_notes')
-    .select('*, author:profiles!site_internal_notes_author_id_fkey(id, full_name, role)')
-    .eq('site_id', id)
-    .order('created_at', { ascending: false })
   const canModerateNotes = ['admin', 'office'].includes((profile as Profile).role)
 
   // The client this site belongs to (joined above), if any.

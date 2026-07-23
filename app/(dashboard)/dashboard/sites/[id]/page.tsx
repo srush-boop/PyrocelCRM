@@ -383,21 +383,9 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
     task_result: TaskResult | null 
   })[]
 
-  // All calls (open + completed) with full joins for the unified Calls tab.
-  const { data: allCallsData } = await supabase
-    .from('tasks')
-    .select(`
-      *,
-      site_service:site_services(*, service_type:service_types(*, system_type:system_types(id, name, code, color))),
-      service_type:service_types(id, name, system_type:system_types(id, name, code, color)),
-      system_type:system_types(id, name, code, color),
-      assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(*),
-      task_result:task_results(reference_number, overall_status, email_sent_at),
-      call_parts(unit_cost_pence, quantity),
-      follow_up_to:tasks!follow_up_to_id(id, is_emergency, task_result:task_results(reference_number))
-    `)
-    .or(completedFilter)
-    .order('scheduled_date', { ascending: false })
+  // All calls (open + completed) with full joins for the unified Calls tab —
+  // fetched above in the same concurrent wave as the completed reports.
+  const allCallsData = allCallsResult.data
 
   const allCalls = ((allCallsData || []) as any[]).map((t) => {
     const followUpToRaw = Array.isArray(t.follow_up_to) ? t.follow_up_to[0] ?? null : t.follow_up_to

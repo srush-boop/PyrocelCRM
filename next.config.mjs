@@ -83,6 +83,17 @@ const nextConfig = {
       },
     ]
   },
+  // Friendly aliases: the real login route lives at /auth/login, but /login and
+  // similar are common paths people (and old bookmarks) hit — forward them so
+  // they never 404. Public sign-up is intentionally disabled, so sign-up style
+  // paths also land on the login page.
+  async redirects() {
+    return [
+      { source: '/login', destination: '/auth/login', permanent: true },
+      { source: '/signin', destination: '/auth/login', permanent: true },
+      { source: '/sign-in', destination: '/auth/login', permanent: true },
+    ]
+  },
 }
 
 export default nextConfig

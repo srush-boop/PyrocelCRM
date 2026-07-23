@@ -29,23 +29,25 @@ export function HelpContent({ role }: HelpContentProps) {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
+      <section className="overflow-hidden rounded-xl border bg-card text-card-foreground">
+        <div className="border-l-4 border-primary p-6">
           <div className="flex items-center gap-2">
-            <BookOpen className="h-5 w-5 text-muted-foreground" />
-            <CardTitle>You are signed in as: {roleLabel}</CardTitle>
+            <BookOpen className="h-5 w-5 text-primary" />
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+              User manual
+            </p>
           </div>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm leading-relaxed text-muted-foreground">
+          <h2 className="mt-2 text-lg font-semibold">
+            You are signed in as {roleLabel}
+          </h2>
+          <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted-foreground text-pretty">
             This guide is tailored to your role. The{' '}
             <span className="font-medium text-foreground">Key concepts</span> below apply to
-            everyone; the{' '}
-            <span className="font-medium text-foreground">{roleLabel}</span> section explains
-            your day-to-day workflow.
+            everyone; the <span className="font-medium text-foreground">{roleLabel}</span> section
+            explains your day-to-day workflow.
           </p>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       <KeyConcepts />
 

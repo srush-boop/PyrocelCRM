@@ -56,6 +56,7 @@ import {
   Loader2,
   MoreHorizontal,
   Route,
+  ChevronDown,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -180,6 +181,17 @@ export function SiteSystemsManager({
   const [togglingServiceId, setTogglingServiceId] = useState<string | null>(null)
   // Lets the user dismiss ("do later") the set-up-charges prompt for this visit.
   const [chargePromptDismissed, setChargePromptDismissed] = useState(false)
+  // System tiles are collapsible: the header overview stays visible, and the
+  // body (services, panels, REM-MON) can be shown/hidden. Set holds the ids of
+  // expanded systems; empty = all collapsed (compact overview by default).
+  const [expandedSystems, setExpandedSystems] = useState<Set<string>>(new Set())
+  const toggleSystemExpanded = (systemId: string) =>
+    setExpandedSystems((prev) => {
+      const next = new Set(prev)
+      if (next.has(systemId)) next.delete(systemId)
+      else next.add(systemId)
+      return next
+    })
 
   // Annualised recurring value (pence) for one service, and for a list of them.
   const serviceValue = (serviceId: string) => annualValueByServiceId[serviceId] ?? 0
@@ -565,6 +577,27 @@ export function SiteSystemsManager({
               </p>
             </div>
           )}
+          {siteSystems.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setExpandedSystems((prev) =>
+                  prev.size === siteSystems.length
+                    ? new Set()
+                    : new Set(siteSystems.map((s) => s.id)),
+                )
+              }
+            >
+              <ChevronDown
+                className={cn(
+                  'h-4 w-4 transition-transform',
+                  expandedSystems.size === siteSystems.length && 'rotate-180',
+                )}
+              />
+              {expandedSystems.size === siteSystems.length ? 'Collapse all' : 'Expand all'}
+            </Button>
+          )}
           <Button onClick={openAdd} size="sm">
             <Plus className="h-4 w-4" />
             Add system
@@ -686,6 +719,8 @@ export function SiteSystemsManager({
             // Active services with no recurring charge set up, so we can warn the
             // user (revenue would be missed when calls are completed/invoiced).
             const chargelessServices = activeServices.filter((s) => serviceValue(s.id) <= 0)
+            // Whether this tile's body (services/panels/REM-MON) is expanded.
+            const isExpanded = expandedSystems.has(system.id)
 
             return (
               <Card
@@ -848,9 +883,29 @@ export function SiteSystemsManager({
                       <Trash2 className="h-4 w-4" />
                       <span className="sr-only">Delete system</span>
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => toggleSystemExpanded(system.id)}
+                      aria-expanded={isExpanded}
+                      aria-controls={`system-body-${system.id}`}
+                      title={isExpanded ? 'Collapse system' : 'Expand system'}
+                    >
+                      <ChevronDown
+                        className={cn(
+                          'h-4 w-4 transition-transform',
+                          isExpanded && 'rotate-180',
+                        )}
+                      />
+                      <span className="sr-only">
+                        {isExpanded ? 'Collapse system' : 'Expand system'}
+                      </span>
+                    </Button>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-2 pb-2 pt-0">
+                {isExpanded && (
+                <CardContent id={`system-body-${system.id}`} className="space-y-2 pb-2 pt-0">
                   {chargelessServices.length > 0 && (
                     <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                       <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -1122,6 +1177,7 @@ export function SiteSystemsManager({
                     />
                   )}
                 </CardContent>
+                )}
               </Card>
             )
           })}

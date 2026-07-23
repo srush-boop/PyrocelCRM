@@ -54,6 +54,9 @@ export const SHORTCUT_CATALOGUE: ShortcutDef[] = [
   { key: 'nearby', label: 'Nearby', href: '/dashboard/nearby', icon: QrCode },
 ]
 
+// Maximum number of quick-shortcut slots a user can pin.
+export const MAX_SHORTCUTS = 6
+
 const BY_KEY = new Map(SHORTCUT_CATALOGUE.map((s) => [s.key, s]))
 
 export function resolveShortcut(key: string | null | undefined): ShortcutDef | null {
@@ -61,17 +64,17 @@ export function resolveShortcut(key: string | null | undefined): ShortcutDef | n
   return BY_KEY.get(key) ?? null
 }
 
-// Normalise a stored shortcut array to exactly 3 slots (padded with nulls),
-// dropping unknown keys and duplicates while preserving order.
+// Normalise a stored shortcut array to exactly MAX_SHORTCUTS slots (padded with
+// nulls), dropping unknown keys and duplicates while preserving order.
 export function normaliseShortcuts(stored: string[] | null | undefined): (string | null)[] {
   const seen = new Set<string>()
   const clean: (string | null)[] = []
   for (const k of stored ?? []) {
-    if (clean.length >= 3) break
+    if (clean.length >= MAX_SHORTCUTS) break
     if (typeof k !== 'string' || seen.has(k) || !BY_KEY.has(k)) continue
     seen.add(k)
     clean.push(k)
   }
-  while (clean.length < 3) clean.push(null)
+  while (clean.length < MAX_SHORTCUTS) clean.push(null)
   return clean
 }

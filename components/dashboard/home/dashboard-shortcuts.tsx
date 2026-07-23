@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { Plus, Pencil, Check, X } from 'lucide-react'
+import { Plus, Pencil, Check, X, ChevronRight } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import {
   Popover,
@@ -26,12 +26,13 @@ import {
 import { setShortcut } from '@/app/(dashboard)/dashboard/tile-color-actions'
 
 /**
- * Three user-configurable quick-shortcut slots that share the Lone Worker row.
- * Each slot links to its destination; the pencil opens a searchable picker to
- * change/clear it. Selections persist to the user's profile via `setShortcut`.
+ * User-configurable quick-shortcut cards in the dashboard "Quick links" row.
+ * Only pinned shortcuts render as cards; a single "Add shortcut" tile appears
+ * while below MAX_SHORTCUTS. Each card links to its destination and exposes a
+ * pencil to change/clear it. Selections persist via `setShortcut`.
  */
 export function DashboardShortcuts({ saved }: { saved: string[] | null }) {
-  // Local optimistic copy of the 3 slots so the UI updates instantly on pick.
+  // Local optimistic copy of the (padded) slots so the UI updates instantly.
   const [slots, setSlots] = useState<(string | null)[]>(() => normaliseShortcuts(saved))
   const [openSlot, setOpenSlot] = useState<number | null>(null)
   const [, startTransition] = useTransition()
@@ -52,58 +53,37 @@ export function DashboardShortcuts({ saved }: { saved: string[] | null }) {
     })
   }
 
+  // First empty slot index — where the "Add shortcut" tile writes to.
+  const firstEmpty = slots.findIndex((s) => s === null)
+
   return (
     <>
       {slots.map((key, slot) => {
         const def = resolveShortcut(key)
-        const Icon = def?.icon
+        if (!def) return null
+        const Icon = def.icon
         return (
           <Card
             key={slot}
-            className="group/shortcut relative flex items-center gap-2 px-3 py-2.5"
+            className="group/shortcut relative flex items-center gap-1 px-3 py-2.5 transition-colors hover:border-primary/50 hover:bg-accent/40"
           >
-            {def && Icon ? (
-              <Link
-                href={def.href}
-                className="flex min-w-0 flex-1 items-center gap-2.5 focus:outline-none"
-                aria-label={`Open ${def.label}`}
-              >
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <Icon className="size-4" />
+            <Link
+              href={def.href}
+              className="flex min-w-0 flex-1 items-center gap-2.5 focus:outline-none"
+              aria-label={`Open ${def.label}`}
+            >
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Icon className="size-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold leading-tight">
+                  {def.label}
                 </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold leading-tight">
-                    {def.label}
-                  </span>
-                  <span className="block text-xs text-muted-foreground">Shortcut</span>
-                </span>
-              </Link>
-            ) : (
-              <Popover
-                open={openSlot === slot}
-                onOpenChange={(o) => setOpenSlot(o ? slot : null)}
-              >
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className="flex min-w-0 flex-1 items-center gap-2.5 text-left text-muted-foreground transition-colors hover:text-foreground focus:outline-none"
-                  >
-                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-dashed">
-                      <Plus className="size-4" />
-                    </span>
-                    <span className="text-sm font-medium">Add shortcut</span>
-                  </button>
-                </PopoverTrigger>
-                <ShortcutPicker
-                  activeKeys={slots}
-                  onSelect={(k) => choose(slot, k)}
-                  onClear={() => choose(slot, null)}
-                  hasValue={false}
-                />
-              </Popover>
-            )}
+                <span className="block text-xs text-muted-foreground">Shortcut</span>
+              </span>
+            </Link>
 
-            {def && (
+            <div className="ml-auto flex shrink-0 items-center gap-0.5">
               <Popover
                 open={openSlot === slot}
                 onOpenChange={(o) => setOpenSlot(o ? slot : null)}
@@ -112,7 +92,7 @@ export function DashboardShortcuts({ saved }: { saved: string[] | null }) {
                   <button
                     type="button"
                     aria-label={`Change ${def.label} shortcut`}
-                    className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus:outline-none focus-visible:opacity-100 group-hover/shortcut:opacity-100"
+                    className="flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus:outline-none focus-visible:opacity-100 group-hover/shortcut:opacity-100"
                   >
                     <Pencil className="size-3.5" />
                   </button>
@@ -124,10 +104,36 @@ export function DashboardShortcuts({ saved }: { saved: string[] | null }) {
                   hasValue
                 />
               </Popover>
-            )}
+              <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover/shortcut:translate-x-0.5" />
+            </div>
           </Card>
         )
       })}
+
+      {firstEmpty !== -1 && (
+        <Popover
+          open={openSlot === firstEmpty}
+          onOpenChange={(o) => setOpenSlot(o ? firstEmpty : null)}
+        >
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="flex items-center gap-2.5 rounded-xl border border-dashed bg-transparent px-3 py-2.5 text-left text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-dashed">
+                <Plus className="size-4" />
+              </span>
+              <span className="text-sm font-medium">Add shortcut</span>
+            </button>
+          </PopoverTrigger>
+          <ShortcutPicker
+            activeKeys={slots}
+            onSelect={(k) => choose(firstEmpty, k)}
+            onClear={() => choose(firstEmpty, null)}
+            hasValue={false}
+          />
+        </Popover>
+      )}
     </>
   )
 }

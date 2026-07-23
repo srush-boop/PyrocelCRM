@@ -383,14 +383,20 @@ export default async function DashboardPage() {
         <ApprovalsWidget />
       </Suspense>
 
-      {/* Compact utility row shared by Your Tasks, live Lone Worker safety
-          status, and 3 user-configurable quick-shortcut slots. */}
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+      {/* Compact status row: Your Tasks + live Lone Worker safety monitoring. */}
+      <div className="grid gap-3 md:grid-cols-2">
         <Suspense fallback={null}>
           <YourTasksTile />
         </Suspense>
         <LoneWorkerDashboardTiles />
-        <DashboardShortcuts saved={savedShortcuts} />
+      </div>
+
+      {/* Quick links — user-configurable shortcut tiles in a uniform row. */}
+      <div className="space-y-2">
+        <h2 className="text-sm font-medium text-muted-foreground">Quick links</h2>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <DashboardShortcuts saved={savedShortcuts} />
+        </div>
       </div>
 
       {/* Company overview — one hub per module. Rendered through a client grid

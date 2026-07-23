@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { MAX_SHORTCUTS } from '@/lib/dashboard/shortcuts'
 
 /**
  * Persist a single dashboard tile's colour for the signed-in user. Passing a
@@ -81,14 +82,14 @@ export async function setTileOrder(order: string[]) {
 }
 
 /**
- * Set (or clear) one of the signed-in user's 3 dashboard quick-shortcut slots.
- * `slot` is 0-2; `key` is a catalogue key or null to clear the slot. Stored as a
- * 3-length array on the profile (RLS `profiles_update_own`). Selecting a key
- * already pinned to another slot moves it (clears the old slot) so there are no
- * duplicates.
+ * Set (or clear) one of the signed-in user's dashboard quick-shortcut slots.
+ * `slot` is 0..MAX_SHORTCUTS-1; `key` is a catalogue key or null to clear the
+ * slot. Stored as a compact array on the profile (RLS `profiles_update_own`).
+ * Selecting a key already pinned to another slot moves it (clears the old slot)
+ * so there are no duplicates.
  */
 export async function setShortcut(slot: number, key: string | null) {
-  if (!Number.isInteger(slot) || slot < 0 || slot > 2) {
+  if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_SHORTCUTS) {
     return { ok: false as const, error: 'Invalid slot' }
   }
   const supabase = await createClient()
@@ -104,8 +105,8 @@ export async function setShortcut(slot: number, key: string | null) {
     .eq('id', user.id)
     .single()
 
-  const current = ((profile?.dashboard_shortcuts as string[] | null) ?? []).slice(0, 3)
-  while (current.length < 3) current.push('')
+  const current = ((profile?.dashboard_shortcuts as string[] | null) ?? []).slice(0, MAX_SHORTCUTS)
+  while (current.length < MAX_SHORTCUTS) current.push('')
   // Clear the chosen key from any other slot to avoid duplicates.
   if (key) {
     for (let i = 0; i < current.length; i++) if (current[i] === key) current[i] = ''

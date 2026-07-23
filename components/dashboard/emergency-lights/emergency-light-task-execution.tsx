@@ -4,6 +4,8 @@ import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useShiftGate } from '@/components/dashboard/tasks/use-shift-gate'
 import { useCompletionExit } from '@/components/dashboard/tasks/use-completion-exit'
+import { RouteProgressBanner } from '@/components/dashboard/tasks/route-progress-banner'
+import type { RouteProgress } from '@/lib/routes/route-progress'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -61,6 +63,8 @@ interface EmergencyLightTaskExecutionProps {
   existingInspections: EmergencyLightInspection[]
   /** Shared "Before you attend" panel, rendered beneath the site/service header. */
   preAttendance?: ReactNode
+  /** CDO route context: "call X of Y" position + next call to jump to on completion. */
+  routeProgress?: RouteProgress | null
 }
 
 function blankState(): EmergencyLightInspectionState {
@@ -83,6 +87,7 @@ export function EmergencyLightTaskExecution({
   lights,
   existingInspections,
   preAttendance,
+  routeProgress,
 }: EmergencyLightTaskExecutionProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
@@ -357,8 +362,9 @@ export function EmergencyLightTaskExecution({
 
     setStatus('completed')
     setSubmitting(false)
-    // No success screen / confirm — return to Calls (via nearby-calls prompt).
-    await runExit(task.id)
+    // No success screen / confirm — return to Calls (via nearby-calls prompt),
+    // or jump straight to the next call when working a CDO route.
+    await runExit(task.id, routeProgress?.nextTaskId)
   }
 
   // CDO engineers run routine planned routes and want to begin in one tap, so
@@ -380,6 +386,8 @@ export function EmergencyLightTaskExecution({
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-44 lg:pb-6">
       <TaskHeader task={task} status={status} canCreateDocument={profile.role === 'admin' || profile.role === 'office'} />
+
+      <RouteProgressBanner progress={routeProgress} />
 
       {startAtTop && startButton}
 

@@ -33,6 +33,8 @@ import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-par
 import { CallPartsPicker } from '@/components/dashboard/tasks/call-parts-picker'
 import { FurtherWorksSheet } from '@/components/dashboard/tasks/further-works-sheet'
 import { NearbyCallsPrompt } from '@/components/dashboard/tasks/nearby-calls-prompt'
+import { RouteProgressBanner } from '@/components/dashboard/tasks/route-progress-banner'
+import type { RouteProgress } from '@/lib/routes/route-progress'
 import {
   findNearbyOverdueCalls,
   type NearbyOverdueCall,
@@ -112,6 +114,8 @@ interface TaskExecutionProps {
   panelChecklists?: Record<string, { template: ChecklistTemplate; level: string }>
   /** Shared "Before you attend" panel, rendered beneath the site/service header. */
   preAttendance?: ReactNode
+  /** CDO route context: "call X of Y" position + next call to jump to on completion. */
+  routeProgress?: RouteProgress | null
 }
 
 // Builds the initial checklist results for a template. When the task's system
@@ -338,6 +342,7 @@ export function TaskExecution({
   panels = [],
   panelChecklists = {},
   preAttendance,
+  routeProgress,
 }: TaskExecutionProps) {
   const [status, setStatus] = useState(task.status)
   // Local snapshot of the assigned engineer so the summary reflects quick
@@ -822,6 +827,14 @@ export function TaskExecution({
 
     setShowSubmitDialog(false)
 
+    // On a CDO route: skip the nearby prompt and go straight to the next pending
+    // call in route order so the engineer can work the route uninterrupted.
+    if (routeProgress?.nextTaskId) {
+      router.push(`/dashboard/tasks/${routeProgress.nextTaskId}`)
+      router.refresh()
+      return
+    }
+
     // Before leaving, check for overdue / due-soon calls at other nearby sites so
     // the engineer can take them on while they're in the area (avoids sending a
     // second engineer out later). Best-effort — never block completion on it.
@@ -982,6 +995,8 @@ export function TaskExecution({
         canCreateDocument={isAdminOrOffice}
         referenceNumber={existingResult?.reference_number ?? null}
       />
+
+      <RouteProgressBanner progress={routeProgress} />
 
       {/* Start Task — the primary action, placed directly under the header
           (title / address / complete-by) so engineers can begin in one tap. */}

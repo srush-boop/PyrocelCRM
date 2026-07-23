@@ -23,6 +23,7 @@ import { CallHistoryCard, type CallHistoryEntry } from '@/components/dashboard/t
 import { CallCostCard } from '@/components/dashboard/tasks/call-cost-card'
 import { getCallProfit } from '@/lib/billing/call-profit-data'
 import { profileCanViewLabourCosts } from '@/lib/auth/labour-costs'
+import { getRouteProgressForTask, type RouteProgress } from '@/lib/routes/route-progress'
 import { getGlobalConfig } from '@/lib/actions/global-config'
 import { getAllDocumentTags, getOwnerDocuments } from '@/lib/documents/data'
 import type { SiteInternalNote } from '@/lib/types/database'
@@ -117,6 +118,18 @@ export default async function TaskPage({ params }: PageProps) {
     (profile as Profile).role === 'engineer' || (profile as Profile).role === 'subcontractor'
   if (fieldRole && task.assigned_engineer_id !== user.id) {
     redirect('/dashboard')
+  }
+
+  // Route context for CDO engineers: where this call sits in the route's ordered
+  // day ("call X of Y") and the next call to jump to on completion. Only for the
+  // assigned CDO working an active call on a route; everyone else gets null.
+  let routeProgress: RouteProgress | null = null
+  if (
+    (profile as Profile).discipline === 'cdo' &&
+    task.assigned_engineer_id === user.id &&
+    task.status !== 'completed'
+  ) {
+    routeProgress = await getRouteProgressForTask(supabase, task as TaskWithDetails, user.id)
   }
 
   // Shared pre-attendance info (flags, communal notes, engineer file store) shown
@@ -471,6 +484,7 @@ export default async function TaskPage({ params }: PageProps) {
         dampers={(dampersData || []) as Damper[]}
         existingInspections={(inspectionsData || []) as DamperInspection[]}
         preAttendance={preAttendancePanel}
+        routeProgress={routeProgress}
       />
     )
   }
@@ -490,6 +504,7 @@ export default async function TaskPage({ params }: PageProps) {
         extinguishers={(extinguishersData || []) as Extinguisher[]}
         existingInspections={(inspectionsData || []) as ExtinguisherInspection[]}
         preAttendance={preAttendancePanel}
+        routeProgress={routeProgress}
       />
     )
   }
@@ -556,6 +571,7 @@ export default async function TaskPage({ params }: PageProps) {
         lastTestedDate={lastTestedDate}
         nimbusUrl={nimbusUrl}
         preAttendance={preAttendancePanel}
+        routeProgress={routeProgress}
       />
     )
   }
@@ -579,6 +595,7 @@ export default async function TaskPage({ params }: PageProps) {
         lights={(lightsData || []) as EmergencyLight[]}
         existingInspections={(inspectionsData || []) as EmergencyLightInspection[]}
         preAttendance={preAttendancePanel}
+        routeProgress={routeProgress}
       />
     )
   }
@@ -766,6 +783,7 @@ export default async function TaskPage({ params }: PageProps) {
       panels={panels}
       panelChecklists={panelChecklists}
       preAttendance={preAttendancePanel}
+      routeProgress={routeProgress}
     />
   )
 }

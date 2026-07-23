@@ -4,6 +4,8 @@ import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useShiftGate } from '@/components/dashboard/tasks/use-shift-gate'
 import { useCompletionExit } from '@/components/dashboard/tasks/use-completion-exit'
+import { RouteProgressBanner } from '@/components/dashboard/tasks/route-progress-banner'
+import type { RouteProgress } from '@/lib/routes/route-progress'
 import { useRouter } from 'next/navigation'
 import { TaskHeader } from '@/components/dashboard/tasks/task-header'
 import { PauseResumeControls } from '@/components/dashboard/tasks/pause-resume-controls'
@@ -71,6 +73,8 @@ interface McpTaskExecutionProps {
   nimbusUrl?: string | null
   /** Shared "Before you attend" panel, rendered beneath the site/service header. */
   preAttendance?: ReactNode
+  /** CDO route context: "call X of Y" position + next call to jump to on completion. */
+  routeProgress?: RouteProgress | null
 }
 
 function blankState(): McpInspectionState {
@@ -106,6 +110,7 @@ export function McpTaskExecution({
   lastTestedDate,
   nimbusUrl,
   preAttendance,
+  routeProgress,
 }: McpTaskExecutionProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
@@ -374,8 +379,9 @@ export function McpTaskExecution({
       console.log('[v0] Visit billing request error:', err)
     }
 
-    // No success screen / confirm — return to Calls (via nearby-calls prompt).
-    await runExit(task.id)
+    // No success screen / confirm — return to Calls (via nearby-calls prompt),
+    // or jump straight to the next call when working a CDO route.
+    await runExit(task.id, routeProgress?.nextTaskId)
   }
 
   const handleSubmit = async () => {
@@ -506,6 +512,8 @@ export function McpTaskExecution({
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-72 md:pb-6">
       <TaskHeader task={task} status={status} canCreateDocument={profile.role === 'admin' || profile.role === 'office'} />
+
+      <RouteProgressBanner progress={routeProgress} />
 
       {startAtTop && startButton}
 

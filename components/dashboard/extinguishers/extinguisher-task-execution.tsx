@@ -160,7 +160,7 @@ export function ExtinguisherTaskExecution({
   const router = useRouter()
   const supabase = createClient()
   const { ensureOnShift, checking: checkingShift, shiftGateDialog } = useShiftGate()
-  const { runExit, nearbyPrompt } = useCompletionExit(profile.role)
+  const { runExit, nearbyPrompt } = useCompletionExit(profile.role, profile.discipline)
 
   const [states, setStates] = useState<Record<string, InspectionState>>(() => {
     const map: Record<string, InspectionState> = {}

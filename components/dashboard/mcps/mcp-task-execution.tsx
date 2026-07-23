@@ -123,7 +123,7 @@ export function McpTaskExecution({
   const router = useRouter()
   const supabase = createClient()
   const { ensureOnShift, checking: checkingShift, shiftGateDialog } = useShiftGate()
-  const { runExit, nearbyPrompt } = useCompletionExit(profile.role)
+  const { runExit, nearbyPrompt } = useCompletionExit(profile.role, profile.discipline)
 
   // Engineers can register new call points during the test, so keep a local
   // copy of the register that we can append to without losing in-progress state.

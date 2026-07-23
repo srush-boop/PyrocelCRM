@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { enforceRateLimit, clientIp } from '@/lib/rate-limit'
+import { logAudit } from '@/lib/audit'
 
 export async function PATCH(
   req: NextRequest,
@@ -46,6 +47,14 @@ export async function PATCH(
     if (authError) {
       return NextResponse.json({ error: authError.message }, { status: 400 })
     }
+
+    await logAudit({
+      action: 'user.password_reset',
+      entityType: 'profile',
+      entityId: id,
+      actor: { id: user.id, email: user.email, role: callerProfile.role },
+      request: req,
+    })
 
     return NextResponse.json({ message: 'Password updated successfully.' })
   } catch (err) {
@@ -187,6 +196,16 @@ export async function PUT(
 
     const adminClient = createAdminClient()
 
+    // Snapshot the target's current security-relevant fields so we can record
+    // exactly what changed in the audit trail after the update succeeds.
+    const { data: beforeProfile } = await adminClient
+      .from('profiles')
+      .select(
+        'email, role, status, can_view_labour_costs, can_use_query_tools, can_edit_invoices',
+      )
+      .eq('id', id)
+      .single()
+
     // Update the auth email first (if changed); profile email mirrors it.
     if (trimmedEmail) {
       const { error: authError } = await adminClient.auth.admin.updateUserById(id, {
@@ -313,6 +332,45 @@ export async function PUT(
       return NextResponse.json({ error: profileError.message }, { status: 400 })
     }
 
+    // Record security-relevant changes. We emit a specific action for a role
+    // change (the highest-sensitivity edit) and a general update otherwise,
+    // always including a before/after diff of the sensitive fields.
+    const changed: Record<string, { from: unknown; to: unknown }> = {}
+    const track = (key: string, from: unknown, to: unknown) => {
+      if (to !== undefined && to !== from) changed[key] = { from, to }
+    }
+    track('email', beforeProfile?.email, profilePatch.email)
+    track('role', beforeProfile?.role, profilePatch.role)
+    track('status', beforeProfile?.status, profilePatch.status)
+    track('can_view_labour_costs', beforeProfile?.can_view_labour_costs, profilePatch.can_view_labour_costs)
+    track('can_use_query_tools', beforeProfile?.can_use_query_tools, profilePatch.can_use_query_tools)
+    track('can_edit_invoices', beforeProfile?.can_edit_invoices, profilePatch.can_edit_invoices)
+
+    if (Object.keys(changed).length > 0) {
+      const roleChanged = 'role' in changed
+      const statusChanged = 'status' in changed
+      const permsChanged =
+        'can_view_labour_costs' in changed ||
+        'can_use_query_tools' in changed ||
+        'can_edit_invoices' in changed
+      const action = roleChanged
+        ? 'user.role_change'
+        : statusChanged
+          ? 'user.status_change'
+          : permsChanged
+            ? 'user.permission_change'
+            : 'user.update'
+      await logAudit({
+        action,
+        entityType: 'profile',
+        entityId: id,
+        targetLabel: (profilePatch.email as string) ?? beforeProfile?.email ?? undefined,
+        metadata: { changes: changed },
+        actor: { id: user.id, email: user.email, role: callerProfile.role },
+        request: req,
+      })
+    }
+
     return NextResponse.json({ message: 'Profile updated successfully.' })
   } catch (err) {
     console.error('[v0] update-profile error:', err)
@@ -357,6 +415,13 @@ export async function DELETE(
 
     const adminClient = createAdminClient()
 
+    // Grab the target's email/role for the audit record before we remove it.
+    const { data: targetProfile } = await adminClient
+      .from('profiles')
+      .select('email, role')
+      .eq('id', id)
+      .single()
+
     // Delete from Supabase Auth — this cascades to the profiles row
     // via the on-delete trigger / FK, depending on schema setup.
     // We also explicitly delete the profile to be safe.
@@ -367,6 +432,16 @@ export async function DELETE(
     if (authError) {
       return NextResponse.json({ error: authError.message }, { status: 400 })
     }
+
+    await logAudit({
+      action: 'user.delete',
+      entityType: 'profile',
+      entityId: id,
+      targetLabel: targetProfile?.email ?? undefined,
+      metadata: { role: targetProfile?.role ?? null },
+      actor: { id: user.id, email: user.email },
+      request: _req,
+    })
 
     return NextResponse.json({ message: 'User deleted successfully.' })
   } catch (err) {

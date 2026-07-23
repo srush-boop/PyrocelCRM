@@ -90,6 +90,7 @@ import { toast } from 'sonner'
 import { buildSeedTaskRows, fetchVisitsByServiceType } from '@/lib/scheduling'
 import { SystemPanelsManager } from '@/components/dashboard/sites/system-panels-manager'
 import { RemMonSection } from '@/components/dashboard/sites/rem-mon-section'
+import { SubcontractorPopover } from '@/components/dashboard/suppliers/subcontractor-popover'
 import { CreateTaskDialog } from '@/components/dashboard/schedule/create-task-dialog'
 import type {
   SiteSystem,
@@ -677,8 +678,8 @@ export function SiteSystemsManager({
             const activeFlags = activeFlagKeys(systemFlags).filter(
               (k) => k !== 'remedial_required',
             )
-            const subName = system.default_subcontractor_id
-              ? subcontractors.find((s) => s.id === system.default_subcontractor_id)?.name ?? null
+            const subSupplier = system.default_subcontractor_id
+              ? subcontractors.find((s) => s.id === system.default_subcontractor_id) ?? null
               : null
             // Annualised recurring value across this system's services.
             const systemValue = sumServiceValue(services)
@@ -768,9 +769,9 @@ export function SiteSystemsManager({
                           {systemPanels.length} panel{systemPanels.length !== 1 ? 's' : ''}
                         </span>
                       )}
-                      {subName && (
+                      {subSupplier && (
                         <span className="inline-flex items-center gap-1">
-                          Sub-contractor: <span className="text-foreground">{subName}</span>
+                          Sub-contractor: <SubcontractorPopover supplier={subSupplier} />
                         </span>
                       )}
                     </div>
@@ -872,9 +873,12 @@ export function SiteSystemsManager({
                         // → joined relation → lookup) and the true margin vs the
                         // annualised revenue.
                         const isSub = svc.worker_type === 'subcontractor'
-                        const subName = isSub
-                          ? svc.subcontractor?.name ??
-                            subcontractors.find((s) => s.id === svc.subcontractor_id)?.name ??
+                        // Prefer the full supplier record from the list (has all
+                        // contact fields for the popover); fall back to the joined
+                        // relation. Either powers the clickable name.
+                        const subSupplier = isSub
+                          ? subcontractors.find((s) => s.id === svc.subcontractor_id) ??
+                            svc.subcontractor ??
                             null
                           : null
                         const subCostPence = svc.subcontractor_annual_cost_pence ?? null
@@ -1031,8 +1035,16 @@ export function SiteSystemsManager({
                                   className="gap-1 text-[10px] font-medium"
                                 >
                                   <HardHat className="h-3 w-3" />
-                                  Sub-contracted{subName ? ` · ${subName}` : ''}
+                                  Sub-contracted
                                 </Badge>
+                                {subSupplier ? (
+                                  <span className="text-[11px] text-muted-foreground">
+                                    <SubcontractorPopover
+                                      supplier={subSupplier}
+                                      className="text-[11px]"
+                                    />
+                                  </span>
+                                ) : null}
                                 {marginPence != null ? (
                                   <span
                                     className={cn(
@@ -1061,21 +1073,31 @@ export function SiteSystemsManager({
                       })}
                     </ul>
                   )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => openAddServices(system.id)}
-                    disabled={addableForSystem.length === 0}
-                    title={
-                      addableForSystem.length === 0
-                        ? 'No more service types available for this system type'
-                        : undefined
-                    }
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Add service
-                  </Button>
+                  {isRemMon ? (
+                    // Remote Monitoring is charge-only: its service is attached
+                    // automatically by expanding the Remote Monitoring panel
+                    // below (which then exposes the "Add charge" affordance), so
+                    // the recurring-service "Add service" button doesn't apply.
+                    <p className="text-xs text-muted-foreground">
+                      Expand the Remote Monitoring panel below to set up its service and charges.
+                    </p>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => openAddServices(system.id)}
+                      disabled={addableForSystem.length === 0}
+                      title={
+                        addableForSystem.length === 0
+                          ? 'No more service types available for this system type'
+                          : undefined
+                      }
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add service
+                    </Button>
+                  )}
                   {systemPanelDefs.length > 0 && (
                     <SystemPanelsManager
                       siteSystemId={system.id}

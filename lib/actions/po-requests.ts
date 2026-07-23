@@ -223,6 +223,8 @@ export async function sendPoRequestEmail(
       email_sent_at: new Date().toISOString(),
       email_sent_to: recipients,
       special_note: specialNote?.trim() || null,
+      // Renew the 30-day authorisation window each time the request is sent.
+      token_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       updated_at: new Date().toISOString(),
     })
     .eq('id', poRequestId)
@@ -273,8 +275,9 @@ export interface PoAuthorisationStatus {
    * - 'already_provided': a PO has already been provided AND the call is closed
    *   (invoiced) → show the client the existing PO number + provider, read-only.
    * - 'not_found': token doesn't match any request.
+   * - 'expired': the authorisation link is past its validity window.
    */
-  state?: 'open' | 'already_provided' | 'not_found'
+  state?: 'open' | 'already_provided' | 'not_found' | 'expired'
   poNumber?: string | null
   authorisedByName?: string | null
   authorisedAt?: string | null
@@ -297,14 +300,25 @@ export async function getPoAuthorisationStatus(
   // Resolve the token to its request + parent task.
   const { data: reqRow, error: reqError } = await supabase
     .from('po_requests')
-    .select('id, task_id')
+    .select('id, task_id, authorised_at, token_expires_at')
     .eq('authorisation_token', token)
     .maybeSingle()
 
   if (reqError) return { error: reqError.message }
   if (!reqRow) return { error: null, state: 'not_found' }
 
-  const taskId = (reqRow as { task_id: string }).task_id
+  // Expired link: block unless the client has already authorised (so an
+  // existing confirmation can still be shown by the checks further down).
+  const r = reqRow as {
+    task_id: string
+    authorised_at: string | null
+    token_expires_at: string | null
+  }
+  if (!r.authorised_at && r.token_expires_at && Date.parse(r.token_expires_at) < Date.now()) {
+    return { error: null, state: 'expired' }
+  }
+
+  const taskId = r.task_id
 
   // Is the call closed (invoiced)?
   const { data: task } = await supabase
@@ -369,6 +383,18 @@ export async function authorisePoRequest(
   // Public action — no auth required (client opens an email link)
   const { createClient: createServiceClient } = await import('@/lib/supabase/server')
   const supabase = await createServiceClient()
+
+  // Reject expired links (unless already authorised, which is idempotent-safe).
+  const { data: existing } = await supabase
+    .from('po_requests')
+    .select('authorised_at, token_expires_at')
+    .eq('authorisation_token', token)
+    .maybeSingle()
+  const ex = existing as { authorised_at: string | null; token_expires_at: string | null } | null
+  if (!ex) return { error: 'This authorisation link is not valid.' }
+  if (!ex.authorised_at && ex.token_expires_at && Date.parse(ex.token_expires_at) < Date.now()) {
+    return { error: 'This authorisation link has expired. Please contact us for a new one.' }
+  }
 
   const { error } = await supabase
     .from('po_requests')

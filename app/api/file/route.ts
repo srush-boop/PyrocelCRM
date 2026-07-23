@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { get } from '@vercel/blob'
 import { createClient } from '@/lib/supabase/server'
+import { authorizeBlobAccess } from '@/lib/blob-access'
 
 // Authenticated delivery route for PRIVATE Vercel Blob files (e.g. product
 // images). Private blob URLs are not publicly accessible, so the client always
@@ -17,6 +18,13 @@ export async function GET(request: NextRequest) {
   const pathname = request.nextUrl.searchParams.get('pathname')
   if (!pathname) {
     return NextResponse.json({ error: 'Missing pathname' }, { status: 400 })
+  }
+
+  // Per-object authorization: only serve the internal sales/product prefixes
+  // this proxy was built for, and never to portal clients.
+  const denied = await authorizeBlobAccess('file', pathname, supabase, user.id)
+  if (denied) {
+    return NextResponse.json({ error: denied.message }, { status: denied.status })
   }
 
   try {

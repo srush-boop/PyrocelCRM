@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { get } from '@vercel/blob'
 import { createClient } from '@/lib/supabase/server'
+import { authorizeBlobAccess } from '@/lib/blob-access'
 
 /**
  * Authenticated delivery route for private Blob objects (avatars, chat images).
@@ -23,6 +24,14 @@ export async function GET(request: NextRequest) {
   const pathname = request.nextUrl.searchParams.get('pathname')
   if (!pathname) {
     return NextResponse.json({ error: 'Missing pathname' }, { status: 400 })
+  }
+
+  // Per-object authorization: this generic proxy may only serve the prefixes it
+  // was built for (avatars/chat), and internal content is denied to portal
+  // clients. Everything else has its own authorization-checked route.
+  const denied = await authorizeBlobAccess('blob', pathname, supabase, user.id)
+  if (denied) {
+    return NextResponse.json({ error: denied.message }, { status: denied.status })
   }
 
   try {

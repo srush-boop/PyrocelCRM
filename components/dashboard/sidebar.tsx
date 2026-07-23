@@ -85,12 +85,23 @@ function NavChildren({ children }: { children: NavChild[] }) {
   )
 }
 
+// Top-level groups that carry the core commercial workflow. These are visually
+// promoted in the sidebar (accent colour, semibold label, tinted row + left
+// accent bar) so they stand out from the supporting modules.
+const FEATURED_KEYS = new Set(['calls', 'sales', 'invoices'])
+
+// Emphasis classes applied to a featured group's row. Kept subtle: a primary
+// left accent bar + tint, semibold label, and primary-tinted icon.
+const FEATURED_CLASS =
+  'font-semibold text-primary [&>svg]:text-primary border-l-2 border-primary rounded-l-none bg-primary/5 hover:bg-primary/10 data-[active=true]:bg-primary/10'
+
 // A top-level group item. When `item.href` is present it is a "clickable group":
 // clicking the label navigates to the href AND opens the group; the chevron
 // toggles open/closed independently.
 function NavGroupItem({ item }: { item: NavItem }) {
   const pathname = usePathname()
   const children = item.children!
+  const featured = FEATURED_KEYS.has(item.key)
   const containsActive = children.some(
     (child) =>
       pathname === child.href || child.children?.some((sub) => pathname === sub.href),
@@ -102,7 +113,12 @@ function NavGroupItem({ item }: { item: NavItem }) {
     return (
       <Collapsible open={open} onOpenChange={setOpen} asChild className="group/collapsible">
         <SidebarMenuItem>
-          <SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
+          <SidebarMenuButton
+            asChild
+            isActive={isActive}
+            tooltip={item.title}
+            className={featured ? FEATURED_CLASS : undefined}
+          >
             <Link href={item.href} onClick={() => setOpen(true)}>
               <item.icon className="h-4 w-4" />
               <span>{item.title}</span>
@@ -130,7 +146,10 @@ function NavGroupItem({ item }: { item: NavItem }) {
     <Collapsible asChild defaultOpen={containsActive} className="group/collapsible">
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
-          <SidebarMenuButton tooltip={item.title}>
+          <SidebarMenuButton
+            tooltip={item.title}
+            className={featured ? FEATURED_CLASS : undefined}
+          >
             <item.icon className="h-4 w-4" />
             <span>{item.title}</span>
             <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />

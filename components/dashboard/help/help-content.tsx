@@ -17,6 +17,8 @@ import {
   ShieldCheck,
   QrCode,
   BookOpen,
+  HardHat,
+  LayoutGrid,
 } from 'lucide-react'
 
 interface HelpContentProps {
@@ -25,7 +27,16 @@ interface HelpContentProps {
 
 export function HelpContent({ role }: HelpContentProps) {
   const roleLabel =
-    role === 'admin' ? 'Administrator' : role === 'office' ? 'Office' : 'Engineer'
+    role === 'admin'
+      ? 'Administrator'
+      : role === 'office'
+        ? 'Office'
+        : role === 'subcontractor'
+          ? 'Sub-contractor'
+          : role === 'client'
+            ? 'Client'
+            : 'Engineer'
+  const isStaff = role === 'admin' || role === 'office'
 
   return (
     <div className="space-y-6">
@@ -54,6 +65,9 @@ export function HelpContent({ role }: HelpContentProps) {
       {role === 'admin' && <AdminSection />}
       {role === 'office' && <OfficeSection />}
       {role === 'engineer' && <EngineerSection />}
+      {role === 'subcontractor' && <SubcontractorSection />}
+
+      {isStaff && <ModulesSection />}
 
       <QrLogBookSection />
       <Glossary />
@@ -111,6 +125,11 @@ function KeyConcepts() {
               <TableCell className="font-medium">Engineer</TableCell>
               <TableCell>Schedule</TableCell>
               <TableCell>Carries out and records on-site services.</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell className="font-medium">Sub-contractor</TableCell>
+              <TableCell>Schedule</TableCell>
+              <TableCell>External engineer with a restricted view — only their assigned work.</TableCell>
             </TableRow>
             <TableRow>
               <TableCell className="font-medium">Client</TableCell>
@@ -319,6 +338,119 @@ function EngineerSection() {
           receives a neutral &ldquo;visit could not be completed&rdquo; notice.
         </p>
       </div>
+
+      <div>
+        <h3 className="mb-2 font-semibold text-foreground">Further works &amp; follow-ups</h3>
+        <p className="text-muted-foreground">
+          If a call needs more work than you can do on the day, raise a{' '}
+          <span className="text-foreground">follow-up</span> from the task. Note what is required and
+          any parts needed; the office reviews it and books a linked follow-up call, reserving or
+          ordering parts as needed.
+        </p>
+      </div>
+
+      <div>
+        <h3 className="mb-2 font-semibold text-foreground">Your Tasks (internal &amp; quality)</h3>
+        <p className="text-muted-foreground">
+          Alongside site visits you may be assigned recurring internal tasks — toolbox talks, vehicle
+          checks and similar. These appear under <span className="text-foreground">My Tasks</span> and
+          on your home screen; complete them like a checklist by their due date.
+        </p>
+      </div>
+
+      <div>
+        <h3 className="mb-2 font-semibold text-foreground">Lone-worker safety check-ins</h3>
+        <p className="text-muted-foreground">
+          If lone working is enabled for you, use <span className="text-foreground">Start shift</span>{' '}
+          when you begin and <span className="text-foreground">Finish shift</span> when you are done.
+          If a check-in is missed the system escalates to the office (and, out of hours, the on-call
+          manager) so someone always knows you are safe.
+        </p>
+      </div>
+
+      <div>
+        <h3 className="mb-2 font-semibold text-foreground">Working offline</h3>
+        <p className="text-muted-foreground">
+          You can keep working with no signal — your progress is saved on the device and syncs
+          automatically once you are back online. A status badge shows when changes are pending. Final
+          submission requires a connection.
+        </p>
+      </div>
+    </SectionCard>
+  )
+}
+
+function SubcontractorSection() {
+  return (
+    <SectionCard icon={HardHat} title="Sub-contractor">
+      <p className="text-muted-foreground">
+        Sub-contractors are external engineers with a deliberately{' '}
+        <span className="text-foreground">restricted</span> view. You sign in to the{' '}
+        <span className="text-foreground">Schedule</span> and see only the work assigned to you —
+        internal-only tools, pricing, parts and reporting extras are hidden.
+      </p>
+
+      <div>
+        <h3 className="mb-2 font-semibold text-foreground">What you can do</h3>
+        <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+          <li>See your assigned calls in the Upcoming, Overdue and Completed tabs.</li>
+          <li>Open a call, work through its checklist and record each item&apos;s result.</li>
+          <li>Add photos where prompted, then Complete &amp; Submit.</li>
+          <li>Use &ldquo;No Access&rdquo; if you attend but cannot get in.</li>
+        </ul>
+      </div>
+
+      <div>
+        <h3 className="mb-2 font-semibold text-foreground">What you will not see</h3>
+        <p className="text-muted-foreground">
+          Internal features such as parts requests, further-works pricing, labour costs, other
+          engineers&apos; work and office reporting are not available to sub-contractor accounts.
+        </p>
+      </div>
+    </SectionCard>
+  )
+}
+
+function ModulesSection() {
+  const modules: [string, string][] = [
+    ['Requests inbox', 'Incoming client requests are triaged with AI, matched to a site/service and turned into booked calls.'],
+    ['Jobs', 'Larger installations and won quotes run as staged projects — contract review, ordering, delivery, commissioning and handover — with live cost and margin tracking.'],
+    ['Sales & quoting', 'Build quotes (including the AI Quote Studio), send them for authorisation, and on acceptance auto-create contracts or remedial calls.'],
+    ['Chargeable calls', 'Reactive and out-of-scope work is flagged for review, priced and invoiced, with a client reference / PO workflow.'],
+    ['Invoicing & billing', 'Recurring service charges, per-visit billing and remedial invoices, with a Sage-ready export and managed nominal codes.'],
+    ['Timesheets', 'Weekly timesheets for eligible staff, with overtime, night-shift and on-call calculation and a manager approval step.'],
+    ['Internal tasks / Quality', 'Recurring form-style tasks (toolbox talks, vehicle checks) assigned across roles, teams or individuals.'],
+    ['Lone worker & on-call', 'Field-safety shift monitoring with escalation, plus an out-of-hours on-call rota.'],
+    ['Team chat', 'Internal messaging between staff, kept separate from client communication.'],
+    ['Knowledge Centre', 'A shared library of reference documents and guidance for the team.'],
+  ]
+  return (
+    <SectionCard icon={LayoutGrid} title="More across the app">
+      <p className="text-muted-foreground">
+        Beyond scheduling and reporting, these modules appear in the sidebar (subject to your menu
+        permissions). Each has its own screen; here is what they are for.
+      </p>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-[210px]">Module</TableHead>
+            <TableHead>What it does</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {modules.map(([name, desc]) => (
+            <TableRow key={name}>
+              <TableCell className="font-medium">{name}</TableCell>
+              <TableCell className="text-muted-foreground">{desc}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <p className="text-muted-foreground">
+        Menu visibility is controlled per role and per page under{' '}
+        <span className="text-foreground">Settings → Menu access</span>, so your sidebar may show a
+        subset of the above.
+      </p>
     </SectionCard>
   )
 }
@@ -347,9 +479,17 @@ function Glossary() {
   const terms: [string, string][] = [
     ['Task / Call', 'A single scheduled service visit.'],
     ['Service', 'A recurring service on a site (with a frequency).'],
+    ['Job', 'A larger, staged piece of work (e.g. an installation) tracked from quote to handover.'],
     ['Route', 'A geographic round of sites/services, assigned to an engineer.'],
     ['Area', 'An alternative grouping of services, assigned to an engineer.'],
     ['Worker type', 'Who performs the work: CDO, Engineer, or Sub-contractor.'],
+    ['Defect', 'A fault found during a visit; can raise a priced remedial quote.'],
+    ['Follow-up', 'A linked return visit raised when a call needs further works.'],
+    ['Chargeable call', 'Reactive/out-of-scope work reviewed, priced and invoiced.'],
+    ['Remedial', 'Corrective work to fix a defect, usually from an approved quote.'],
+    ['Internal task', 'A recurring form/checklist for staff (e.g. toolbox talk, vehicle check).'],
+    ['Lone worker', 'Safety shift check-ins with escalation for staff working alone.'],
+    ['On-call', 'The out-of-hours rota covering emergencies.'],
     ['MCP', 'Manual Call Point (fire alarm call point).'],
     ['UPRN', 'Unique Property Reference Number (UK national property identifier).'],
     ['Regulatory KPI', 'The default/legal deadline tolerance for a service type.'],

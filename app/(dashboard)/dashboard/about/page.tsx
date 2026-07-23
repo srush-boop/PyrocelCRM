@@ -11,6 +11,12 @@ import {
   Boxes,
   ShieldCheck,
   Users,
+  Briefcase,
+  ShieldAlert,
+  Inbox,
+  Sparkles,
+  MessagesSquare,
+  Clock,
 } from 'lucide-react'
 
 export const metadata = {
@@ -43,12 +49,37 @@ const features: { icon: typeof Building2; title: string; body: string }[] = [
   {
     icon: CalendarRange,
     title: 'Scheduling & routes',
-    body: 'A shared calendar keeps field and office teams in sync. Recurring services generate automatically from each site’s frequencies, with bulk call generation to fill any gaps.',
+    body: 'A shared calendar keeps field and office teams in sync. Recurring services generate automatically from each site’s frequencies, with route and day-plan mapping to optimise travel.',
+  },
+  {
+    icon: Briefcase,
+    title: 'Jobs & project delivery',
+    body: 'Larger installations and won quotes run as Jobs — tracking stages from contract review through ordering, on-site delivery and commissioning to handover, with live cost and margin monitoring.',
+  },
+  {
+    icon: Sparkles,
+    title: 'AI-assisted quoting',
+    body: 'The Quote Studio turns a written brief into a first-pass device schedule, live catalogue pricing and a BS 5839-1 / BAFE-aligned specification, ready to review and send.',
+  },
+  {
+    icon: Inbox,
+    title: 'Smart requests inbox',
+    body: 'Incoming client requests are triaged with AI — matched to the right site and service and turned into booked calls — so nothing slips through email.',
   },
   {
     icon: Boxes,
     title: 'Stock & catalogue',
-    body: 'Parts and consumables are tracked and linked to the quoting catalogue, keeping pricing consistent across estimates, remedials and billing.',
+    body: 'Parts and consumables are tracked, reserved against jobs and linked to the quoting catalogue, keeping pricing consistent across estimates, remedials and billing.',
+  },
+  {
+    icon: ShieldAlert,
+    title: 'Field team safety',
+    body: 'Lone-worker shift check-ins with two-stage escalation, an out-of-hours on-call rota and location sharing keep engineers safe and supported while working alone.',
+  },
+  {
+    icon: Clock,
+    title: 'Workforce & compliance tasks',
+    body: 'Weekly timesheets, recurring internal quality tasks (toolbox talks, vehicle checks) and a team chat keep day-to-day operations, safety and communication in one place.',
   },
   {
     icon: Users,
@@ -58,7 +89,7 @@ const features: { icon: typeof Building2; title: string; body: string }[] = [
   {
     icon: ShieldCheck,
     title: 'Role-based access',
-    body: 'Admins, office staff, engineers and clients each see exactly the right level of information, backed by an employee vault of staff documents and equipment specifications.',
+    body: 'Admins, office, engineers, sub-contractors and clients each see exactly the right level of information, backed by page-level menu permissions and an employee document vault.',
   },
 ]
 
@@ -150,7 +181,12 @@ export default async function AboutPage() {
               regulatory standards.
             </p>
             <p>
-              Together with stock control, an employee document vault and role-based access,
+              Completed and remedial work flows through to billing — invoices, recurring service
+              charges, per-visit billing and a Sage-ready export — with projected-revenue and labour
+              profitability views for the office.
+            </p>
+            <p>
+              Together with stock control, jobs, an employee document vault and role-based access,
               PyrocelCRM is both an operational engine for running the business day-to-day and a
               compliance record that protects the client and demonstrates regulatory diligence.
             </p>

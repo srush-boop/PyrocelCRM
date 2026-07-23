@@ -19,7 +19,16 @@ export default async function HelpPage() {
   if (!profile) redirect('/auth/login')
 
   const role = (profile as Profile).role
-  const roleLabel = role === 'admin' ? 'Administrator' : role === 'office' ? 'Office' : 'Engineer'
+  const roleLabel =
+    role === 'admin'
+      ? 'Administrator'
+      : role === 'office'
+        ? 'Office'
+        : role === 'subcontractor'
+          ? 'Sub-contractor'
+          : role === 'client'
+            ? 'Client'
+            : 'Engineer'
 
   return (
     <div className="space-y-6">

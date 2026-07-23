@@ -361,9 +361,27 @@ export function EmergencyLightTaskExecution({
     await runExit(task.id)
   }
 
+  // CDO engineers run routine planned routes and want to begin in one tap, so
+  // for them the primary Start action sits directly beneath the overview header
+  // rather than below the pre-attendance information.
+  const startAtTop = profile.discipline === 'cdo'
+  const startButton =
+    status === 'pending' && canEdit ? (
+      <Button onClick={handleStart} disabled={checkingShift} size="lg" className="w-full">
+        {checkingShift ? (
+          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+        ) : (
+          <Play className="mr-2 h-5 w-5" />
+        )}
+        Start Inspection
+      </Button>
+    ) : null
+
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-44 lg:pb-6">
       <TaskHeader task={task} status={status} canCreateDocument={profile.role === 'admin' || profile.role === 'office'} />
+
+      {startAtTop && startButton}
 
       <PauseResumeControls task={task} status={status} onStatusChange={setStatus} />
 
@@ -386,16 +404,7 @@ export function EmergencyLightTaskExecution({
 
       {preAttendance}
 
-      {status === 'pending' && canEdit && (
-        <Button onClick={handleStart} disabled={checkingShift} size="lg" className="w-full">
-          {checkingShift ? (
-            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-          ) : (
-            <Play className="mr-2 h-5 w-5" />
-          )}
-          Start Inspection
-        </Button>
-      )}
+      {!startAtTop && startButton}
 
       {shiftGateDialog}
 

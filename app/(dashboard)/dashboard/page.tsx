@@ -370,14 +370,18 @@ export default async function DashboardPage() {
   const firstName = ((profile as Profile).full_name || 'there').split(' ')[0]
 
   return (
-    <div className="relative space-y-6">
+    // `isolate` creates a stacking context so the negative-z background layer
+    // below stays contained here instead of slipping behind the opaque app
+    // background (which made it invisible).
+    <div className="relative isolate space-y-6">
       {/* Full-bleed background layer for the user's chosen pattern. Bleeds into
-          the main content padding and sits behind everything (pointer-events
-          disabled). Repainted optimistically by the background picker. */}
+          the main content padding and sits behind the dashboard content
+          (pointer-events disabled). Repainted optimistically by the picker. */}
       <div
         data-dashboard-bg
         aria-hidden="true"
-        className={`pointer-events-none absolute -inset-4 -z-10 md:-inset-6 ${background.className}`}
+        className={`pointer-events-none absolute -inset-4 -z-10 rounded-xl bg-cover bg-center bg-no-repeat md:-inset-6 ${background.className}`}
+        style={background.imageUrl ? { backgroundImage: `url(${background.imageUrl})` } : undefined}
       />
 
       <div className="flex flex-wrap items-start justify-between gap-4">

@@ -36,18 +36,13 @@ import { getVisibleLeaveRequests } from '@/lib/leave-approvals'
 import { EngineerHome } from '@/components/dashboard/home/engineer-home'
 import { getDailyFact } from '@/lib/system-facts'
 import { YourTasksTile } from '@/components/dashboard/internal-tasks/your-tasks-tile'
-import { DashboardDateFilter } from '@/components/dashboard/home/dashboard-date-filter'
 import { Suspense, type ReactNode } from 'react'
 import { format, startOfMonth, endOfMonth, subDays, startOfDay, endOfDay } from 'date-fns'
 import { fetchKpiData } from '@/lib/kpi-data'
 import { buildKpiReport, type KpiTask } from '@/lib/kpi'
 import { formatGBP } from '@/lib/utils'
 
-export default async function DashboardPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ from?: string; to?: string }>
-}) {
+export default async function DashboardPage() {
   const supabase = await createClient()
 
   const {
@@ -129,28 +124,16 @@ export default async function DashboardPage({
   ])
 
   // ---------------------------------------------------------------------------
-  // Value + compliance metrics with an optional global date-range filter.
-  // When both `from` and `to` are supplied they override every card; otherwise
-  // PPM defaults to the current calendar month and values to the last 60 days.
+  // Value + compliance metrics over fixed default periods: PPM regulatory KPIs
+  // use the current calendar month, and Sales/Defects values use the last
+  // 60 days.
   // ---------------------------------------------------------------------------
-  const sp = await searchParams
-  const filterFrom = sp.from ? startOfDay(new Date(sp.from)) : null
-  const filterTo = sp.to ? endOfDay(new Date(sp.to)) : null
-  const hasFilter =
-    !!filterFrom &&
-    !!filterTo &&
-    !Number.isNaN(filterFrom.getTime()) &&
-    !Number.isNaN(filterTo.getTime())
-
-  // PPM regulatory KPI range (defaults to the current month).
-  const ppmFrom = hasFilter ? filterFrom! : startOfMonth(today)
-  const ppmTo = hasFilter ? filterTo! : endOfMonth(today)
-  // Sales/Defects value range (defaults to the last 60 days).
-  const valueFrom = hasFilter ? filterFrom! : startOfDay(subDays(today, 60))
-  const valueTo = hasFilter ? filterTo! : endOfDay(today)
-
-  const rangeLabel = (from: Date, to: Date) =>
-    `${format(from, 'd MMM')} – ${format(to, 'd MMM yyyy')}`
+  // PPM regulatory KPI range (current month).
+  const ppmFrom = startOfMonth(today)
+  const ppmTo = endOfMonth(today)
+  // Sales/Defects value range (last 60 days).
+  const valueFrom = startOfDay(subDays(today, 60))
+  const valueTo = endOfDay(today)
 
   // Regulatory PPM compliance rate for calls due within the PPM range.
   let ppmRate: number | null = null
@@ -198,8 +181,8 @@ export default async function DashboardPage({
 
   const quoted = sumValues(quotedRes.data as any)
   const won = sumValues(wonRes.data as any)
-  const valueRangeLabel = hasFilter ? rangeLabel(valueFrom, valueTo) : 'Last 60 days'
-  const ppmRangeLabel = hasFilter ? rangeLabel(ppmFrom, ppmTo) : format(today, 'MMMM yyyy')
+  const valueRangeLabel = 'Last 60 days'
+  const ppmRangeLabel = format(today, 'MMMM yyyy')
 
   // Leave requests awaiting this user's decision (RLS-scoped: managers see their
   // reports, accounts/admins see all). Surfaced as an always-visible card so the
@@ -394,24 +377,11 @@ export default async function DashboardPage({
         </div>
       </div>
 
-      {/* Top utility row: the global date-range filter (hugs its content) sits
-          beside the leave-approvals card so neither wastes a full-width band.
-          On narrow screens they stack. Approvals is capped in width and renders
-          nothing when there is nothing to action. */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-        {/* Global date-range filter — overrides every card's default period. */}
-        <Suspense fallback={null}>
-          <DashboardDateFilter
-            initialFrom={hasFilter ? format(ppmFrom, 'yyyy-MM-dd') : ''}
-            initialTo={hasFilter ? format(ppmTo, 'yyyy-MM-dd') : ''}
-          />
-        </Suspense>
-
-        {/* Leave approvals waiting on this user (managers/accounts/admins only) */}
-        <Suspense fallback={null}>
-          <ApprovalsWidget />
-        </Suspense>
-      </div>
+      {/* Leave approvals waiting on this user (managers/accounts/admins only).
+          Renders nothing when there is nothing to action. */}
+      <Suspense fallback={null}>
+        <ApprovalsWidget />
+      </Suspense>
 
       {/* Compact utility row shared by Your Tasks, live Lone Worker safety
           status, and 3 user-configurable quick-shortcut slots. */}

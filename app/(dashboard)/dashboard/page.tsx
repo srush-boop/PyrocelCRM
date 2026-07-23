@@ -380,8 +380,12 @@ export default async function DashboardPage() {
       <div
         data-dashboard-bg
         aria-hidden="true"
-        className={`pointer-events-none absolute -inset-4 -z-10 rounded-xl bg-cover bg-center bg-no-repeat md:-inset-6 ${background.className}`}
-        style={background.imageUrl ? { backgroundImage: `url(${background.imageUrl})` } : undefined}
+        className={`pointer-events-none absolute -inset-4 -z-10 rounded-xl md:-inset-6 ${background.className}`}
+        style={
+          background.imageUrl
+            ? ({ '--dash-bg-image': `url(${background.imageUrl})` } as React.CSSProperties)
+            : undefined
+        }
       />
 
       <div className="flex flex-wrap items-start justify-between gap-4">

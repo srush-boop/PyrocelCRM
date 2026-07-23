@@ -16,6 +16,12 @@ export type DashboardBackground = {
   description: string
   /** CSS class applied to the full-bleed background layer ("" for none). */
   className: string
+  /**
+   * For image presets: the public path to the background photo. The image is
+   * composited behind a theme-colored scrim (see `.dash-bg-image` in
+   * globals.css) so overlaid text stays readable in both light and dark mode.
+   */
+  imageUrl?: string
 }
 
 export const DASHBOARD_BACKGROUNDS: DashboardBackground[] = [
@@ -54,6 +60,34 @@ export const DASHBOARD_BACKGROUNDS: DashboardBackground[] = [
     label: 'Circuit',
     description: 'Dotted grid with glow',
     className: 'dash-bg-mesh',
+  },
+  {
+    key: 'carbon',
+    label: 'Carbon',
+    description: 'Brushed carbon fibre',
+    className: 'dash-bg-image',
+    imageUrl: '/images/dashboard-backgrounds/carbon.png',
+  },
+  {
+    key: 'embers',
+    label: 'Embers',
+    description: 'Warm ember glow',
+    className: 'dash-bg-image',
+    imageUrl: '/images/dashboard-backgrounds/embers.png',
+  },
+  {
+    key: 'blueprint-photo',
+    label: 'Schematic',
+    description: 'Fire system plan',
+    className: 'dash-bg-image',
+    imageUrl: '/images/dashboard-backgrounds/blueprint.png',
+  },
+  {
+    key: 'topo',
+    label: 'Contour',
+    description: 'Topographic lines',
+    className: 'dash-bg-image',
+    imageUrl: '/images/dashboard-backgrounds/topo.png',
   },
 ]
 

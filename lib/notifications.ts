@@ -76,6 +76,9 @@ export async function notifyUsers(input: NotifyInput): Promise<void> {
     body: input.body ?? '',
     url: input.url ?? '/dashboard',
     category: input.category ?? 'system',
+    // Forwarded so the service worker can tailor the notification (e.g. add the
+    // lone-worker "I'm safe" action button and tap-to-acknowledge behaviour).
+    data: input.data ?? {},
   })
 
   // Endpoints that are gone (404/410) should be pruned.

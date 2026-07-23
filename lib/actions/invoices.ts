@@ -1420,10 +1420,22 @@ export async function sendInvoiceToClient(
   }
 
   const safeNumber = String(fresh.invoice_number).replace(/[^a-zA-Z0-9-_]/g, '')
-  const companyName = (company as CompanyInfo | null)?.name ?? 'Pyrocel'
+  // Escape DB-sourced strings before interpolating into the outbound email body
+  // so a customer/company name or invoice number containing HTML can't break or
+  // inject markup.
+  const escapeHtml = (s: string) =>
+    s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+  const companyName = escapeHtml((company as CompanyInfo | null)?.name ?? 'Pyrocel')
+  const billToName = escapeHtml(fresh.bill_to_name ?? 'Customer')
+  const invoiceNumberHtml = escapeHtml(String(fresh.invoice_number))
   const html = `
-    <p>Dear ${fresh.bill_to_name ?? 'Customer'},</p>
-    <p>Please find attached invoice <strong>${fresh.invoice_number}</strong> from ${companyName}.</p>
+    <p>Dear ${billToName},</p>
+    <p>Please find attached invoice <strong>${invoiceNumberHtml}</strong> from ${companyName}.</p>
     <p>The invoice total is <strong>&pound;${(fresh.total_pence / 100).toFixed(2)}</strong>${
       fresh.due_date ? `, due by ${fresh.due_date}` : ''
     }.</p>
@@ -1431,7 +1443,9 @@ export async function sendInvoiceToClient(
     <p>Kind regards,<br/>${companyName}</p>
   `
 
-  const sent = await sendEmail(toEmail, `Invoice ${fresh.invoice_number} from ${companyName}`, html, {
+  // Subject is plain text (not HTML), so use the raw, un-escaped values here.
+  const rawCompanyName = (company as CompanyInfo | null)?.name ?? 'Pyrocel'
+  const sent = await sendEmail(toEmail, `Invoice ${fresh.invoice_number} from ${rawCompanyName}`, html, {
     attachments: [{ filename: `${safeNumber}.pdf`, content: pdf }],
   })
   if (!sent.success) {

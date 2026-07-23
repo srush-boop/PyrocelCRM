@@ -17,6 +17,17 @@ type ActionResult<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string }
 
+// Escape user/DB-sourced strings before interpolating into outbound email HTML
+// so a stray `<`, `&`, or `"` can't break the markup or inject content.
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 async function requireManage() {
   const auth = await getDocumentAuth()
   if (!auth.ok || !auth.canManage) {
@@ -259,10 +270,12 @@ export async function createDocument(
           'The document was saved, but no recipient email is set for this record. Add a contact email or enter one to send.',
       }
     }
-    const companyName = ctx.company?.name || 'Pyrocel Ltd'
-    const messageHtml = (args.message || '').trim()
+    const companyName = escapeHtml(ctx.company?.name || 'Pyrocel Ltd')
+    // Escape the free-text message first, THEN convert newlines to <br/> so the
+    // line breaks we introduce survive while any HTML in the message is inert.
+    const messageHtml = escapeHtml((args.message || '').trim()).replace(/\n/g, '<br/>')
     const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#0f172a;line-height:1.5">
-      ${messageHtml ? `<p>${messageHtml.replace(/\n/g, '<br/>')}</p>` : `<p>Please find the attached letter from ${companyName}.</p>`}
+      ${messageHtml ? `<p>${messageHtml}</p>` : `<p>Please find the attached letter from ${companyName}.</p>`}
       <p style="color:#64748b">${companyName}</p>
     </div>`
     const result = await sendEmail(to, (args.subject || title).trim(), html, {

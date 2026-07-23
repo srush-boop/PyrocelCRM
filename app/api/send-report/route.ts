@@ -23,6 +23,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Staff-only: sending a client-facing report (and creating a PO request /
+    // stamping email_sent_at as a side effect) must be restricted to staff.
+    // Portal clients and subcontractors can read certain tasks via RLS but must
+    // not be able to dispatch report emails on the company's behalf.
+    const { data: callerProfile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+    const callerRole = (callerProfile as { role?: string } | null)?.role
+    if (callerRole !== 'admin' && callerRole !== 'office' && callerRole !== 'engineer') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const body = await request.json()
     const { taskId, emails, resend } = body
 

@@ -61,9 +61,8 @@ export default async function DashboardLayout({
   const isEngineer = role === 'engineer' || role === 'subcontractor'
 
   return (
-    // Sidebar starts collapsed so the dashboard is the default landing surface —
-    // we want to encourage dashboard-first navigation over the menu.
-    <SidebarProvider defaultOpen={false}>
+    // Sidebar starts expanded by default so the full navigation is visible on load.
+    <SidebarProvider defaultOpen={true}>
       <DashboardSidebar profile={profile as Profile} />
       <SidebarInset className="h-svh overflow-hidden">
         <DashboardHeader profile={profile as Profile} />

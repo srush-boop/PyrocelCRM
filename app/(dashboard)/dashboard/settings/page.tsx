@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { SettingsContent } from '@/components/dashboard/settings/settings-content'
 import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType, DocumentTemplate, InternalTaskTemplate } from '@/lib/types/database'
 import { getGlobalConfigs } from '@/lib/actions/global-config'
+import { getMyEmailFooter, getGlobalEmailFooter } from '@/lib/actions/email-footer'
 import { getLoneWorkerAdminData } from '@/app/(dashboard)/dashboard/lone-worker/actions'
 import { getRateCards } from '@/lib/actions/rate-cards'
 import { getChargeTemplates } from '@/lib/actions/charge-templates'
@@ -133,6 +134,14 @@ export default async function SettingsPage() {
     }))
   const mfaRequired = mfaRequiredForRole(role)
 
+  // Email footers: every user manages their own; admin/office also manage the
+  // company-wide default used when a sender has no footer of their own.
+  const canManageGlobalFooter = role === 'admin' || role === 'office'
+  const [myEmailFooter, globalEmailFooter] = await Promise.all([
+    getMyEmailFooter(),
+    canManageGlobalFooter ? getGlobalEmailFooter() : Promise.resolve(null),
+  ])
+
   return (
     <div className="space-y-6">
       <div>
@@ -172,6 +181,9 @@ export default async function SettingsPage() {
         internalTaskDocuments={internalTaskDocuments}
         mfaFactors={mfaFactors}
         mfaRequired={mfaRequired}
+        myEmailFooter={myEmailFooter}
+        globalEmailFooter={globalEmailFooter}
+        canManageGlobalFooter={canManageGlobalFooter}
       />
     </div>
   )

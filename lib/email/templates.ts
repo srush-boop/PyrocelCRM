@@ -11,6 +11,19 @@ export interface ChecklistItem {
   notes?: string
 }
 
+/**
+ * A configurable email footer resolved per sending staff user (falling back to
+ * a global default). Rendered beneath the report body, above the standard
+ * company contact strip. Images must be public URLs so email clients can load
+ * them; the message is plain text (newlines preserved) and links are structured.
+ */
+export interface EmailFooter {
+  message?: string | null
+  imageUrl?: string | null
+  links?: { label: string; url: string }[]
+  enabled?: boolean
+}
+
 export interface EmailData {
   clientName: string
   clientEmail: string
@@ -23,6 +36,8 @@ export interface EmailData {
   engineerName: string
   engineerNotes?: string
   reportUrl?: string
+  // Configurable footer for the staff member who sent this report.
+  footer?: EmailFooter
   // ─── "What happens next" facts (optional; computed at send time) ──────────
   // A follow-up call/visit has been logged for the further works identified.
   followUpLogged?: boolean
@@ -77,9 +92,36 @@ const ctaButton = (url: string | undefined, label: string, color: string = BRAND
     </div>`
 }
 
+// Renders the configurable per-sender footer block (message / image / links).
+// Returns an empty string when there is nothing to show.
+const footerBlock = (footer?: EmailFooter): string => {
+  if (!footer) return ''
+  const links = (footer.links ?? [])
+    .filter((l) => l && l.url && l.label)
+    .map(
+      (l) =>
+        `<a href="${esc(l.url)}" style="color:${BRAND.red};text-decoration:none;font-weight:600;">${esc(l.label)}</a>`,
+    )
+    .join(' &middot; ')
+  const hasContent = footer.message || footer.imageUrl || links
+  if (!hasContent) return ''
+  return `
+    <tr><td style="background:#ffffff;border-top:1px solid ${BRAND.border};padding:16px 28px;">
+      ${footer.imageUrl ? `<img src="${esc(footer.imageUrl)}" alt="" style="max-width:100%;height:auto;display:block;margin:0 0 10px;border:0;" />` : ''}
+      ${footer.message ? `<p style="margin:0 0 8px;font-size:13px;color:${BRAND.slate};line-height:1.5;white-space:pre-line;">${esc(footer.message)}</p>` : ''}
+      ${links ? `<p style="margin:0;font-size:12px;color:${BRAND.muted};">${links}</p>` : ''}
+    </td></tr>`
+}
+
 // Wraps body content in the branded shell: charcoal header, coloured status
-// ribbon, white content card, and a footer with contact + out-of-hours details.
-const emailShell = (opts: { ribbonLabel: string; ribbonColor: string; body: string }): string => `<!DOCTYPE html>
+// ribbon, white content card, an optional configurable footer, and a footer
+// with contact + out-of-hours details.
+const emailShell = (opts: {
+  ribbonLabel: string
+  ribbonColor: string
+  body: string
+  footer?: EmailFooter
+}): string => `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -100,6 +142,7 @@ const emailShell = (opts: { ribbonLabel: string; ribbonColor: string; body: stri
         <tr><td style="padding:24px 28px;line-height:1.55;font-size:14px;color:${BRAND.slate};">
           ${opts.body}
         </td></tr>
+        ${footerBlock(opts.footer)}
         <tr><td style="background:#f9fafb;border-top:1px solid ${BRAND.border};padding:18px 28px;">
           <p style="margin:0 0 6px;font-size:12px;color:${BRAND.muted};">
             <strong style="color:${BRAND.slate};">${COMPANY.legalName}</strong> &middot; Fire &amp; Security Experts &middot; Newcastle &amp; Leeds
@@ -288,7 +331,7 @@ export const generateClientPassEmail = (data: EmailData): { subject: string; htm
     <p style="margin:18px 0 0;">Kind regards,<br/><strong>The Pyrocel Team</strong></p>`
   return {
     subject: `Service completed: ${data.serviceType} at ${data.siteName}${data.referenceNumber ? ` (Ref ${data.referenceNumber})` : ''}`,
-    html: emailShell({ ribbonLabel: 'Service completed successfully', ribbonColor: '#16a34a', body }),
+    html: emailShell({ ribbonLabel: 'Service completed successfully', ribbonColor: '#16a34a', body, footer: data.footer }),
   }
 }
 
@@ -315,7 +358,7 @@ export const generateClientFailEmail = (data: EmailData): { subject: string; htm
     <p style="margin:18px 0 0;">Kind regards,<br/><strong>The Pyrocel Team</strong></p>`
   return {
     subject: `Attention required: ${data.serviceType} at ${data.siteName}${data.referenceNumber ? ` (Ref ${data.referenceNumber})` : ''}`,
-    html: emailShell({ ribbonLabel: 'Service requires attention', ribbonColor: BRAND.red, body }),
+    html: emailShell({ ribbonLabel: 'Service requires attention', ribbonColor: BRAND.red, body, footer: data.footer }),
   }
 }
 
@@ -341,7 +384,7 @@ export const generateClientNoAccessEmail = (data: EmailData): { subject: string;
     <p style="margin:18px 0 0;">Kind regards,<br/><strong>The Pyrocel Team</strong></p>`
   return {
     subject: `No access: ${data.serviceType} at ${data.siteName}${data.referenceNumber ? ` (Ref ${data.referenceNumber})` : ''}`,
-    html: emailShell({ ribbonLabel: 'Visit could not be completed', ribbonColor: '#d97706', body }),
+    html: emailShell({ ribbonLabel: 'Visit could not be completed', ribbonColor: '#d97706', body, footer: data.footer }),
   }
 }
 

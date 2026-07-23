@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home, Wrench, HardHat, FileText, Database, PhoneCall, ShieldCheck, Receipt, Tags, Coins, Hash, ClipboardCheck } from 'lucide-react'
+import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home, Wrench, HardHat, FileText, Database, PhoneCall, ShieldCheck, Receipt, Tags, Coins, Hash, ClipboardCheck, Mail } from 'lucide-react'
 import type { User as AuthUser } from '@supabase/supabase-js'
 import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType, DocumentTemplate } from '@/lib/types/database'
 import type { LoneWorkerManagedUser } from '@/app/(dashboard)/dashboard/lone-worker/actions'
@@ -31,6 +31,8 @@ import { NominalCodesSettings } from './nominal-codes-settings'
 import { DocumentTagsSettings } from './document-tags-settings'
 import { InternalTasksSettings } from './internal-tasks-settings'
 import { SecuritySettings } from './security-settings'
+import { EmailFooterSettings } from './email-footer-settings'
+import type { EmailFooterValues } from '@/lib/actions/email-footer'
 import type { InternalTaskTemplate } from '@/lib/types/database'
 import type { RateCard } from '@/lib/billing/rate-cards'
 import type { ChargeTemplate, NominalCode } from '@/lib/types/database'
@@ -68,9 +70,12 @@ interface SettingsContentProps {
   internalTaskDocuments: { id: string; name: string }[]
   mfaFactors: { id: string; friendlyName: string | null; createdAt: string }[]
   mfaRequired: boolean
+  myEmailFooter: EmailFooterValues
+  globalEmailFooter: EmailFooterValues | null
+  canManageGlobalFooter: boolean
 }
 
-export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards, chargeTemplates, nominalCodes, canManageTags, documentTags, openingHours, canManageInternalTasks, internalTaskTemplates, internalTaskUsers, internalTaskDepartments, internalTaskRoles, internalTaskDocuments, mfaFactors, mfaRequired }: SettingsContentProps) {
+export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards, chargeTemplates, nominalCodes, canManageTags, documentTags, openingHours, canManageInternalTasks, internalTaskTemplates, internalTaskUsers, internalTaskDepartments, internalTaskRoles, internalTaskDocuments, mfaFactors, mfaRequired, myEmailFooter, globalEmailFooter, canManageGlobalFooter }: SettingsContentProps) {
   const isAdmin = profile.role === 'admin'
   // Templates are managed by office/admin (mail-merge letters for client correspondence).
   const canManageTemplates = profile.role === 'admin' || profile.role === 'office'
@@ -157,6 +162,10 @@ export function SettingsContent({ user, profile, company, branches, departments,
         <TabsTrigger value="security" className="gap-2">
           <ShieldCheck className="h-4 w-4" />
           Security
+        </TabsTrigger>
+        <TabsTrigger value="email-footer" className="gap-2">
+          <Mail className="h-4 w-4" />
+          Email Footer
         </TabsTrigger>
         {isAdmin && (
           <TabsTrigger value="company" className="gap-2">
@@ -409,6 +418,14 @@ export function SettingsContent({ user, profile, company, branches, departments,
 
       <TabsContent value="security" className="space-y-4">
         <SecuritySettings initialFactors={mfaFactors} required={mfaRequired} />
+      </TabsContent>
+
+      <TabsContent value="email-footer" className="space-y-4">
+        <EmailFooterSettings
+          myFooter={myEmailFooter}
+          globalFooter={globalEmailFooter ?? { message: '', imageUrl: '', links: [], enabled: true }}
+          canManageGlobal={canManageGlobalFooter}
+        />
       </TabsContent>
 
       {isAdmin && (

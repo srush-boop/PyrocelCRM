@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { enforceRateLimit, clientIp } from '@/lib/rate-limit'
+import { logAudit } from '@/lib/audit'
 
 /** Ensure the caller is an authenticated admin. Returns an error response or null. */
 async function requireAdmin() {
@@ -102,6 +103,18 @@ export async function PATCH(
       }
     }
 
+    await logAudit({
+      action: password ? 'user.password_reset' : 'client_user.update',
+      entityType: 'client_user',
+      entityId: id,
+      metadata: {
+        passwordReset: Boolean(password),
+        nameChanged: fullName !== undefined,
+        siteAccessChanged: siteIds !== undefined,
+      },
+      request: req,
+    })
+
     return NextResponse.json({ message: 'Client login updated successfully.' })
   } catch (err) {
     console.error('[v0] update-client-user error:', err)
@@ -120,6 +133,13 @@ export async function DELETE(
     const { id } = await params
     const adminClient = createAdminClient()
 
+    // Capture the target email/client for the audit record before removal.
+    const { data: targetProfile } = await adminClient
+      .from('profiles')
+      .select('email, client_id')
+      .eq('id', id)
+      .single()
+
     // Remove site grants and profile first, then the auth user
     await adminClient.from('client_site_access').delete().eq('profile_id', id)
     await adminClient.from('profiles').delete().eq('id', id)
@@ -128,6 +148,15 @@ export async function DELETE(
     if (authError) {
       return NextResponse.json({ error: authError.message }, { status: 400 })
     }
+
+    await logAudit({
+      action: 'client_user.delete',
+      entityType: 'client_user',
+      entityId: id,
+      targetLabel: targetProfile?.email ?? undefined,
+      metadata: { clientId: targetProfile?.client_id ?? null },
+      request: _req,
+    })
 
     return NextResponse.json({ message: 'Client login deleted successfully.' })
   } catch (err) {

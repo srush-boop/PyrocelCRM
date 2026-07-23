@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { enforceRateLimit, clientIp } from '@/lib/rate-limit'
+import { logAudit } from '@/lib/audit'
 
 /** Ensure the caller is an authenticated admin. Returns an error response or null. */
 async function requireAdmin() {
@@ -111,6 +112,15 @@ export async function POST(req: NextRequest) {
         { status: 500 },
       )
     }
+
+    await logAudit({
+      action: 'client_user.create',
+      entityType: 'client_user',
+      entityId: userId,
+      targetLabel: email,
+      metadata: { clientId, siteCount: (siteIds as string[]).length },
+      request: req,
+    })
 
     return NextResponse.json({ message: 'Client login created successfully.' }, { status: 201 })
   } catch (err) {

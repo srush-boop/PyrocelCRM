@@ -50,6 +50,7 @@ import {
   QrCode,
   LifeBuoy,
   Briefcase,
+  ScrollText,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { UserRole } from '@/lib/types/database'
@@ -393,6 +394,7 @@ const adminCompanyNavItem: NavItem = {
     { title: 'Users', href: '/dashboard/engineers', icon: Users },
     companyAssetsChild,
     { title: 'Notifications', href: '/dashboard/notifications', icon: Bell },
+    { title: 'Audit Log', href: '/dashboard/audit-log', icon: ScrollText },
   ],
 }
 

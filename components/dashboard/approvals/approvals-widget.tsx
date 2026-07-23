@@ -23,7 +23,7 @@ export async function ApprovalsWidget() {
   const top = pending.slice(0, 4)
 
   return (
-    <Card className="border-amber-300/60 dark:border-amber-900/60">
+    <Card className="w-full border-amber-300/60 dark:border-amber-900/60 lg:flex-1">
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <div>
           <CardTitle className="flex items-center gap-2">

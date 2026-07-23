@@ -394,18 +394,24 @@ export default async function DashboardPage({
         </div>
       </div>
 
-      {/* Global date-range filter — overrides every card's default period. */}
-      <Suspense fallback={null}>
-        <DashboardDateFilter
-          initialFrom={hasFilter ? format(ppmFrom, 'yyyy-MM-dd') : ''}
-          initialTo={hasFilter ? format(ppmTo, 'yyyy-MM-dd') : ''}
-        />
-      </Suspense>
+      {/* Top utility row: the global date-range filter (hugs its content) sits
+          beside the leave-approvals card so neither wastes a full-width band.
+          On narrow screens they stack. Approvals is capped in width and renders
+          nothing when there is nothing to action. */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+        {/* Global date-range filter — overrides every card's default period. */}
+        <Suspense fallback={null}>
+          <DashboardDateFilter
+            initialFrom={hasFilter ? format(ppmFrom, 'yyyy-MM-dd') : ''}
+            initialTo={hasFilter ? format(ppmTo, 'yyyy-MM-dd') : ''}
+          />
+        </Suspense>
 
-      {/* Leave approvals waiting on this user (managers/accounts/admins only) */}
-      <Suspense fallback={null}>
-        <ApprovalsWidget />
-      </Suspense>
+        {/* Leave approvals waiting on this user (managers/accounts/admins only) */}
+        <Suspense fallback={null}>
+          <ApprovalsWidget />
+        </Suspense>
+      </div>
 
       {/* Compact utility row shared by Your Tasks, live Lone Worker safety
           status, and 3 user-configurable quick-shortcut slots. */}

@@ -20,22 +20,25 @@ const CALLS_ROUTE = '/dashboard/schedule'
  * nearby sites so they can pick them up while in the area; if any exist we show
  * the shared NearbyCallsPrompt and only navigate to Calls once it is dismissed.
  * Sub-contractors are external and never offered other companies'/engineers'
- * nearby calls — they go straight back to their own Calls list.
+ * nearby calls — they go straight back to their own Calls list. CDO engineers
+ * (discipline 'cdo') run planned routes rather than opportunistic nearby work,
+ * so they are not offered nearby calls either.
  *
  * Usage:
- *   const { runExit, nearbyPrompt } = useCompletionExit(profile.role)
+ *   const { runExit, nearbyPrompt } = useCompletionExit(profile.role, profile.discipline)
  *   // ...at the end of handleSubmit, after all persistence:
  *   await runExit(task.id)
  *   // ...and render {nearbyPrompt} somewhere in the tree.
  */
-export function useCompletionExit(role: string) {
+export function useCompletionExit(role: string, discipline?: string | null) {
   const router = useRouter()
   const [nearbyCalls, setNearbyCalls] = useState<NearbyOverdueCall[]>([])
   const [showPrompt, setShowPrompt] = useState(false)
 
   // Only internal engineers are offered nearby overdue calls; sub-contractors
-  // return straight to their own Calls list.
-  const offerNearby = role === 'engineer'
+  // return straight to their own Calls list, and CDO engineers work planned
+  // routes so they are excluded too.
+  const offerNearby = role === 'engineer' && discipline !== 'cdo'
 
   const goToCalls = useCallback(() => {
     router.push(CALLS_ROUTE)

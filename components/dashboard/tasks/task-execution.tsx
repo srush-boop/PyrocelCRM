@@ -825,8 +825,9 @@ export function TaskExecution({
     // Before leaving, check for overdue / due-soon calls at other nearby sites so
     // the engineer can take them on while they're in the area (avoids sending a
     // second engineer out later). Best-effort — never block completion on it.
-    // Internal engineers only — sub-contractors go straight back to Calls.
-    if (profile.role === 'engineer') {
+    // Internal engineers only — sub-contractors go straight back to Calls, and
+    // CDO engineers work planned routes so they are excluded too.
+    if (profile.role === 'engineer' && profile.discipline !== 'cdo') {
       try {
         const res = await findNearbyOverdueCalls({ fromTaskId: task.id })
         if (res.ok && res.calls && res.calls.length > 0) {

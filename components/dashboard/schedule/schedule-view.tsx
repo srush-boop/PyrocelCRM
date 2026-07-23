@@ -69,7 +69,7 @@ import {
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
-import type { Profile, TaskWithDetails, Site, Route, Area } from '@/lib/types/database'
+import type { Profile, TaskWithDetails, Site, Area } from '@/lib/types/database'
 import { WORKER_TYPE_LABELS } from '@/lib/assignment'
 import { SystemIcon, SystemBadge, getSystemColors } from '@/lib/system-types'
 import { Building2 } from 'lucide-react'
@@ -77,6 +77,13 @@ import { SiteFlagBadges } from '@/components/dashboard/site-info/site-flag-badge
 import { resolveSiteFlags } from '@/lib/site-flags'
 import { CallTile } from '@/components/dashboard/calls/call-tile'
 import { GridSearch } from '@/components/dashboard/grid-header'
+import {
+  taskRoute,
+  orderRouteCalls,
+  dedupeSoonestPerService,
+  routeOptionsFromTasks,
+  defaultRouteForToday,
+} from '@/lib/routes/route-schedule'
 
 type ViewMode = 'grid' | 'list' | 'route' | 'area'
 type SortKey = 'date' | 'postcode' | 'nearby'
@@ -211,7 +218,14 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
   const router = useRouter()
   const supabase = createClient()
   const [search, setSearch] = useState('')
-  const [viewMode, setViewMode] = useState<ViewMode>('list')
+  // CDOs work planned routes, so open straight into the grouped "By route" view.
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    profile.discipline === 'cdo' ? 'route' : 'list',
+  )
+  // CDO route selector: which route's day is being worked ('all' = every route).
+  // Defaults to today's weekday route on first load (see the effect below).
+  const [selectedRouteId, setSelectedRouteId] = useState<string>('all')
+  const autoRouteRef = useRef(false)
   // Switching to the grouped "By route"/"By area" views does real grouping +
   // sorting work. Run it as a non-blocking transition so the toggle stays
   // responsive (no ~130ms click jank) and the heavier view paints when ready.
@@ -303,6 +317,21 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
   // CDOs perform route-based work, so they keep the "By route" grouping in their
   // engineer view; regular engineers do not.
   const isCdo = profile.discipline === 'cdo'
+
+  // Routes present across the CDO's current calls, ordered by soonest-due call
+  // so the "select route" list leads with the most pressing work.
+  const routeOptions = useMemo(
+    () => (isCdo ? routeOptionsFromTasks(tasks) : []),
+    [isCdo, tasks],
+  )
+  // On first load, pre-select the route named for today's weekday (falling back
+  // to the soonest-due route). The CDO can still switch route or pick "All".
+  useEffect(() => {
+    if (!isCdo || autoRouteRef.current || routeOptions.length === 0) return
+    autoRouteRef.current = true
+    const def = defaultRouteForToday(routeOptions)
+    if (def) setSelectedRouteId(def)
+  }, [isCdo, routeOptions])
   // Everyone who works the schedule (engineers, admins and office) can open the
   // read-only call preview — office needs it to review and assign a call.
   // Starting/continuing a call is no longer offered from the schedule; it lives
@@ -525,6 +554,10 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
       task.status === 'pending' && new Date(task.scheduled_date) < today
     )
 
+    // CDO route selector — narrow to the chosen route's calls ('all' = no limit).
+    const matchesRoute =
+      !isCdo || selectedRouteId === 'all' || taskRoute(task)?.id === selectedRouteId
+
     return (
       matchesSearch &&
       matchesEngineer &&
@@ -533,7 +566,8 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
       matchesDateFrom &&
       matchesDateTo &&
       matchesNeedsBooking &&
-      matchesOverdue
+      matchesOverdue &&
+      matchesRoute
     )
   })
 
@@ -829,28 +863,32 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
   // Group tasks by each service's own route (a site can have some services on
   // a route and others not), ordered by the site's planned position then name.
   const groupByRoute = (list: TaskWithDetails[]) => {
-    const groups = new Map<string, { name: string; tasks: TaskWithDetails[] }>()
-    for (const task of list) {
-      const route = (task.site_service as { route?: Route | null } | undefined)?.route
+    // The route lives on the site (sites.route_id), inherited by its calls — see
+    // taskRoute. For CDOs we also collapse recurring services to their soonest
+    // occurrence so a route day never shows the same site twice for different
+    // weeks; within a route, calls follow the site's planned visiting order.
+    const source = isCdo ? dedupeSoonestPerService(list) : list
+    const groups = new Map<string, { name: string; tasks: TaskWithDetails[]; due: number }>()
+    for (const task of source) {
+      const route = taskRoute(task)
       const key = route?.id ?? 'unassigned'
       const name = route?.name ?? 'No route assigned'
-      if (!groups.has(key)) groups.set(key, { name, tasks: [] })
+      if (!groups.has(key)) groups.set(key, { name, tasks: [], due: Number.MAX_SAFE_INTEGER })
       groups.get(key)!.tasks.push(task)
     }
-    // Sort tasks within each route by the site's planned position, then name
     for (const group of groups.values()) {
-      group.tasks.sort((a, b) => {
-        const sa = a.site_service?.site as Site | undefined
-        const sb = b.site_service?.site as Site | undefined
-        const pa = sa?.route_position ?? Number.MAX_SAFE_INTEGER
-        const pb = sb?.route_position ?? Number.MAX_SAFE_INTEGER
-        if (pa !== pb) return pa - pb
-        return (sa?.name ?? '').localeCompare(sb?.name ?? '')
-      })
+      group.tasks = orderRouteCalls(group.tasks)
+      // A route's "due" date is its soonest call, so routes always line up in
+      // the order they need working — never interleaving weeks.
+      group.due = group.tasks.reduce((min, t) => {
+        const time = new Date(t.scheduled_date).getTime()
+        return Number.isNaN(time) ? min : Math.min(min, time)
+      }, Number.MAX_SAFE_INTEGER)
     }
     return Array.from(groups.values()).sort((a, b) => {
       if (a.name === 'No route assigned') return 1
       if (b.name === 'No route assigned') return -1
+      if (a.due !== b.due) return a.due - b.due
       return a.name.localeCompare(b.name)
     })
   }
@@ -1055,6 +1093,25 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             Searching all calls...
           </span>
+        )}
+
+        {/* CDO route selector — defaults to today's weekday route, and narrows
+            the schedule to that route's calls in planned visiting order. */}
+        {isCdo && routeOptions.length > 0 && (
+          <Select value={selectedRouteId} onValueChange={setSelectedRouteId}>
+            <SelectTrigger className="w-[180px] shrink-0">
+              <RouteIcon className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+              <SelectValue placeholder="Select route" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All routes</SelectItem>
+              {routeOptions.map((route) => (
+                <SelectItem key={route.id} value={route.id}>
+                  {route.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
 
         {(needsBookingCount > 0 || needsBookingOnly) && (

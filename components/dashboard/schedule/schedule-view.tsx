@@ -27,7 +27,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { SearchSelect } from '@/components/dashboard/schedule/search-select'
+import { SearchMultiSelect } from '@/components/dashboard/schedule/search-multi-select'
 import {
   Dialog,
   DialogContent,
@@ -229,8 +229,9 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
   // Quick filter: only show overdue (past scheduled_date, still pending) calls.
   const [showOverdueOnly, setShowOverdueOnly] = useState(false)
   const [selectedEngineer, setSelectedEngineer] = useState<string>('all')
-  const [selectedSystem, setSelectedSystem] = useState<string>('all')
-  const [selectedService, setSelectedService] = useState<string>('all')
+  // Multi-select filters: empty array = "all" (no restriction).
+  const [selectedSystems, setSelectedSystems] = useState<string[]>([])
+  const [selectedServices, setSelectedServices] = useState<string[]>([])
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined)
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined)
   const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null)
@@ -329,9 +330,9 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
       const sysId = svc?.system_type?.id ?? null
       if (!svc?.id) return map
       if (map.has(svc.id)) return map
-      // When a system is selected, show only services belonging to that system.
+      // When systems are selected, show only services belonging to those systems.
       // Services with no system_type are always shown (they can't be narrowed by system).
-      if (selectedSystem !== 'all' && sysId !== null && sysId !== selectedSystem) return map
+      if (selectedSystems.length > 0 && sysId !== null && !selectedSystems.includes(sysId)) return map
       map.set(svc.id, { id: svc.id, name: svc.name, sysId })
       return map
     }, new Map<string, { id: string; name: string; sysId: string | null }>()).values()
@@ -476,13 +477,13 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
   }
 
   const hasActiveFilters =
-    search || selectedEngineer !== 'all' || selectedSystem !== 'all' || selectedService !== 'all' || dateFrom || dateTo || needsBookingOnly || showOverdueOnly
+    search || selectedEngineer !== 'all' || selectedSystems.length > 0 || selectedServices.length > 0 || dateFrom || dateTo || needsBookingOnly || showOverdueOnly
 
   const clearFilters = () => {
     setSearch('')
     setSelectedEngineer('all')
-    setSelectedSystem('all')
-    setSelectedService('all')
+    setSelectedSystems([])
+    setSelectedServices([])
     setDateFrom(undefined)
     setDateTo(undefined)
     setNeedsBookingOnly(false)
@@ -501,13 +502,15 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
     const matchesEngineer = selectedEngineer === 'all' || 
       (selectedEngineer === 'unassigned' ? !task.assigned_engineer_id : task.assigned_engineer_id === selectedEngineer)
 
-    // System type filter
-    const matchesSystem = selectedSystem === 'all' ||
-      task.site_service?.service_type?.system_type?.id === selectedSystem
+    // System type filter (multi-select; empty = all)
+    const taskSystemId = task.site_service?.service_type?.system_type?.id
+    const matchesSystem = selectedSystems.length === 0 ||
+      (!!taskSystemId && selectedSystems.includes(taskSystemId))
 
-    // Service type filter
-    const matchesService = selectedService === 'all' ||
-      task.site_service?.service_type?.id === selectedService
+    // Service type filter (multi-select; empty = all)
+    const taskServiceId = task.site_service?.service_type?.id
+    const matchesService = selectedServices.length === 0 ||
+      (!!taskServiceId && selectedServices.includes(taskServiceId))
     
     // Date range filter
     const taskDate = new Date(task.scheduled_date)
@@ -1162,16 +1165,22 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
       <div className="flex items-center gap-2 overflow-x-auto scrollbar-none [-webkit-overflow-scrolling:touch] [scrollbar-width:none]">
         {systemOptions.length > 0 && (
           <div className="w-[160px] shrink-0">
-            <SearchSelect
-              value={selectedSystem}
-              onChange={(v) => {
-                setSelectedSystem(v)
-                setSelectedService('all')
+            <SearchMultiSelect
+              values={selectedSystems}
+              onChange={(vals) => {
+                setSelectedSystems(vals)
+                // Drop any selected services that no longer belong to the chosen
+                // systems so the two filters stay consistent.
+                if (vals.length > 0) {
+                  setSelectedServices((prev) =>
+                    prev.filter((svcId) => {
+                      const opt = serviceOptions.find((s) => s.id === svcId)
+                      return !opt || opt.sysId === null || vals.includes(opt.sysId)
+                    }),
+                  )
+                }
               }}
-              options={[
-                { value: 'all', label: 'All Systems' },
-                ...systemOptions.map((sys) => ({ value: sys.id, label: sys.name })),
-              ]}
+              options={systemOptions.map((sys) => ({ value: sys.id, label: sys.name }))}
               placeholder="All Systems"
               searchPlaceholder="Search systems…"
               emptyText="No systems found."
@@ -1181,13 +1190,10 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
 
         {serviceOptions.length > 1 && (
           <div className="w-[160px] shrink-0">
-            <SearchSelect
-              value={selectedService}
-              onChange={setSelectedService}
-              options={[
-                { value: 'all', label: 'All Services' },
-                ...serviceOptions.map((svc) => ({ value: svc.id, label: svc.name })),
-              ]}
+            <SearchMultiSelect
+              values={selectedServices}
+              onChange={setSelectedServices}
+              options={serviceOptions.map((svc) => ({ value: svc.id, label: svc.name }))}
               placeholder="All Services"
               searchPlaceholder="Search services…"
               emptyText="No services found."

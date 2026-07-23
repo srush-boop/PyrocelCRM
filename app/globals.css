@@ -403,3 +403,27 @@
     auto,
     24px 24px;
 }
+
+/* Image presets: the chosen photo (via the --dash-bg-image custom property)   */
+/* composited UNDER a theme-colored scrim so it reads as a soft on-brand        */
+/* texture and keeps overlaid text readable in both light and dark mode. The    */
+/* scrim uses the theme --background, so dark images are lightened in light     */
+/* mode and light images are darkened in dark mode automatically.               */
+.dash-bg-image {
+  /* Solid theme base so any transparency in the source image reads as the app
+     background (not a checkerboard) and the scrim has something to sit on. */
+  background-color: var(--background);
+  background-image:
+    linear-gradient(
+      color-mix(in oklab, var(--background) 66%, transparent),
+      color-mix(in oklab, var(--background) 58%, transparent)
+    ),
+    var(--dash-bg-image, none);
+  background-repeat: no-repeat;
+  background-position:
+    center,
+    center;
+  background-size:
+    cover,
+    cover;
+}

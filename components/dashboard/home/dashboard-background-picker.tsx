@@ -31,8 +31,15 @@ export function DashboardBackgroundPicker({ current }: { current: string | null 
         for (const bg of DASHBOARD_BACKGROUNDS) {
           if (bg.className) layer.classList.remove(bg.className)
         }
-        const cls = resolveDashboardBackground(key).className
-        if (cls) layer.classList.add(cls)
+        const chosen = resolveDashboardBackground(key)
+        if (chosen.className) layer.classList.add(chosen.className)
+        // Image presets also need the photo set via the CSS custom property the
+        // `.dash-bg-image` scrim rule reads; clear it for non-image presets.
+        if (chosen.imageUrl) {
+          layer.style.setProperty('--dash-bg-image', `url(${chosen.imageUrl})`)
+        } else {
+          layer.style.removeProperty('--dash-bg-image')
+        }
       }
     }
 
@@ -55,13 +62,13 @@ export function DashboardBackgroundPicker({ current }: { current: string | null 
           Background
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-72 p-3">
+      <PopoverContent align="end" className="w-80 p-3">
         <p className="mb-1 text-sm font-medium">Dashboard background</p>
         <p className="mb-3 text-xs text-muted-foreground">
-          A subtle pattern behind your dashboard. Only you see this.
+          A subtle pattern or image behind your dashboard. Only you see this.
         </p>
         <div
-          className="grid grid-cols-3 gap-2"
+          className="grid max-h-[22rem] grid-cols-3 gap-2 overflow-y-auto pr-1"
           role="radiogroup"
           aria-label="Dashboard background"
         >
@@ -84,9 +91,17 @@ export function DashboardBackgroundPicker({ current }: { current: string | null 
               >
                 <span
                   className={cn(
-                    'relative flex h-12 w-full items-center justify-center overflow-hidden rounded-md border bg-card',
+                    'relative flex h-12 w-full items-center justify-center overflow-hidden rounded-md border bg-card bg-cover bg-center',
                     bg.className,
                   )}
+                  style={
+                    bg.imageUrl
+                      ? ({
+                          backgroundImage: `url(${bg.imageUrl})`,
+                          '--dash-bg-image': `url(${bg.imageUrl})`,
+                        } as React.CSSProperties)
+                      : undefined
+                  }
                   aria-hidden="true"
                 >
                   {isSelected && (

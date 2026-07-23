@@ -1061,21 +1061,31 @@ export function SiteSystemsManager({
                       })}
                     </ul>
                   )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => openAddServices(system.id)}
-                    disabled={addableForSystem.length === 0}
-                    title={
-                      addableForSystem.length === 0
-                        ? 'No more service types available for this system type'
-                        : undefined
-                    }
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Add service
-                  </Button>
+                  {isRemMon ? (
+                    // Remote Monitoring is charge-only: its service is attached
+                    // automatically by expanding the Remote Monitoring panel
+                    // below (which then exposes the "Add charge" affordance), so
+                    // the recurring-service "Add service" button doesn't apply.
+                    <p className="text-xs text-muted-foreground">
+                      Expand the Remote Monitoring panel below to set up its service and charges.
+                    </p>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => openAddServices(system.id)}
+                      disabled={addableForSystem.length === 0}
+                      title={
+                        addableForSystem.length === 0
+                          ? 'No more service types available for this system type'
+                          : undefined
+                      }
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add service
+                    </Button>
+                  )}
                   {systemPanelDefs.length > 0 && (
                     <SystemPanelsManager
                       siteSystemId={system.id}

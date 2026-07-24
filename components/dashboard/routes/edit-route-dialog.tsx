@@ -155,14 +155,14 @@ export function EditRouteDialog({ route, engineers, open, onOpenChange }: EditRo
               value={formData.color}
               onChange={(color) => setFormData({ ...formData, color })}
               label="Calendar colour"
-              description="Distinguishes this route on the master calendar. Name the route with a weekday (e.g. 'Friday 01') to recur weekly."
+              description="Distinguishes this route on the master calendar."
             />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || dayInvalid}>
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

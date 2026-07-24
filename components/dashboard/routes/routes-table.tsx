@@ -35,7 +35,15 @@ import { MoreHorizontal, Pencil, Trash2, Search, Route as RouteIcon, Building2, 
 import { PrintButton } from '@/components/ui/print-button'
 import { EditRouteDialog } from './edit-route-dialog'
 import { RoutePlannerDialog, type PlannerSite } from './route-planner-dialog'
+import { routeWeekday, WEEKDAY_NAMES } from '@/lib/routes/route-schedule'
 import type { Route, Profile } from '@/lib/types/database'
+
+function routeDayLabel(route: Route): string {
+  const day = routeWeekday(route)
+  if (day === null) return '-'
+  const name = WEEKDAY_NAMES[day]
+  return name.charAt(0).toUpperCase() + name.slice(1)
+}
 
 interface RoutesTableProps {
   routes: (Route & { assigned_engineer: Profile | null; siteCount: number })[]
@@ -85,6 +93,7 @@ export function RoutesTable({ routes, engineers, sites }: RoutesTableProps) {
           <TableHeader>
             <TableRow>
               <TableHead>Route Name</TableHead>
+              <TableHead>Day</TableHead>
               <TableHead>Description</TableHead>
               <TableHead>Assigned Engineer</TableHead>
               <TableHead>Sites</TableHead>
@@ -94,7 +103,7 @@ export function RoutesTable({ routes, engineers, sites }: RoutesTableProps) {
           <TableBody>
             {filteredRoutes.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center">
+                <TableCell colSpan={6} className="h-24 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <RouteIcon className="h-8 w-8 text-muted-foreground/50 mb-2" />
                     <p className="text-muted-foreground">No routes found</p>
@@ -112,6 +121,7 @@ export function RoutesTable({ routes, engineers, sites }: RoutesTableProps) {
                       {route.name}
                     </Link>
                   </TableCell>
+                  <TableCell>{routeDayLabel(route)}</TableCell>
                   <TableCell className="text-muted-foreground">
                     {route.description || '-'}
                   </TableCell>

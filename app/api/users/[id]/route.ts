@@ -422,10 +422,20 @@ export async function DELETE(
       .eq('id', id)
       .single()
 
-    // Delete from Supabase Auth — this cascades to the profiles row
-    // via the on-delete trigger / FK, depending on schema setup.
-    // We also explicitly delete the profile to be safe.
-    await adminClient.from('profiles').delete().eq('id', id)
+    // Delete the profile first. This is what triggers the FK cascade across the
+    // app tables (nulling assigned_engineer_id on completed calls, which our
+    // prevent_completed_task_reassignment trigger now permits while snapshotting
+    // the engineer's name onto tasks.completed_engineer_name for attribution).
+    // Surface any DB error here instead of swallowing it, so a future blocking
+    // constraint or trigger is diagnosable rather than a silent generic failure.
+    const { error: profileError } = await adminClient.from('profiles').delete().eq('id', id)
+
+    if (profileError) {
+      return NextResponse.json(
+        { error: `Could not remove this user's records: ${profileError.message}` },
+        { status: 400 },
+      )
+    }
 
     const { error: authError } = await adminClient.auth.admin.deleteUser(id)
 

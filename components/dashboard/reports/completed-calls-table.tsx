@@ -168,6 +168,7 @@ export function CompletedCallsTable({ embedded = false }: CompletedCallsTablePro
             id,
             completed_at,
             assigned_engineer_id,
+            completed_engineer_name,
             profiles:assigned_engineer_id(id, full_name, email),
             direct_site:sites!tasks_site_id_fkey(id, name, contact_email, client_id, clients(id, name)),
             site_services(
@@ -202,7 +203,11 @@ export function CompletedCallsTable({ embedded = false }: CompletedCallsTablePro
           serviceTypeId: serviceType?.id || '',
           systemTypeId: serviceType?.system_type_id || '',
           systemTypeName: serviceType?.system_types?.name || '',
-          engineerName: item.tasks?.profiles?.full_name || item.tasks?.profiles?.email || 'Unassigned',
+          engineerName:
+            item.tasks?.profiles?.full_name ||
+            item.tasks?.profiles?.email ||
+            item.tasks?.completed_engineer_name ||
+            'Unassigned',
           engineerId: item.tasks?.assigned_engineer_id || '',
           clientEmail: site?.contact_email || '',
           overallStatus: item.overall_status,

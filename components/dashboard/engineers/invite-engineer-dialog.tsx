@@ -22,9 +22,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader2, RefreshCw, Copy, Check, UserPlus } from 'lucide-react'
 import type { UserRole, Department, Branch } from '@/lib/types/database'
+import { DISCIPLINES } from '@/lib/disciplines'
 
 const NO_DEPARTMENT = '__none__'
 const NO_BRANCH = '__none__'
+const NO_DISCIPLINE = '__none__'
 
 interface InviteEngineerDialogProps {
   open: boolean
@@ -57,6 +59,7 @@ export function InviteEngineerDialog({
     email: '',
     full_name: '',
     role: 'engineer' as UserRole,
+    discipline: NO_DISCIPLINE as string,
     department_id: NO_DEPARTMENT,
     branch_id: NO_BRANCH,
     password: generatePassword(),
@@ -68,6 +71,7 @@ export function InviteEngineerDialog({
       email: '',
       full_name: '',
       role: 'engineer',
+      discipline: NO_DISCIPLINE,
       department_id: NO_DEPARTMENT,
       branch_id: NO_BRANCH,
       password: generatePassword(),
@@ -110,6 +114,7 @@ export function InviteEngineerDialog({
           password: formData.password,
           fullName: formData.full_name.trim() || null,
           role: formData.role,
+          discipline: formData.discipline === NO_DISCIPLINE ? null : formData.discipline,
           departmentId: formData.department_id === NO_DEPARTMENT ? null : formData.department_id,
           branchId: formData.branch_id === NO_BRANCH ? null : formData.branch_id,
         }),
@@ -261,6 +266,29 @@ export function InviteEngineerDialog({
                     <SelectItem value="admin">Admin</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="discipline">Discipline</Label>
+                <Select
+                  value={formData.discipline}
+                  onValueChange={(value) => setFormData({ ...formData, discipline: value })}
+                >
+                  <SelectTrigger id="discipline" disabled={loading}>
+                    <SelectValue placeholder="No discipline" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_DISCIPLINE}>No discipline</SelectItem>
+                    {DISCIPLINES.map((d) => (
+                      <SelectItem key={d.key} value={d.key}>
+                        {d.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Sets the trade. Choose CDO for route-based engineers.
+                </p>
               </div>
 
               <div className="grid gap-2">

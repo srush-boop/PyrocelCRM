@@ -11,7 +11,8 @@ const { Client } = pg
 
 // Supabase's pooled URL includes sslmode=require which node-postgres' verify-full
 // rejects against the self-signed chain; strip it and disable strict verify.
-const rawUrl = process.env.POSTGRES_URL || process.env.DATABASE_URL || ''
+const rawUrl =
+  process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_URL || process.env.DATABASE_URL || ''
 if (!rawUrl) {
   console.error('No POSTGRES_URL / DATABASE_URL in environment')
   process.exit(1)

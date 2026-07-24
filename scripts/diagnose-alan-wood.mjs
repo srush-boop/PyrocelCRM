@@ -80,8 +80,19 @@ async function main() {
           [p.id],
         )
         if (cnt[0].n > 0) {
+          // Contradiction check: a SET NULL rule against a NOT NULL column will
+          // abort the whole parent delete when Postgres tries to null it.
+          let flag = ''
+          if (fk.delete_rule === 'n') {
+            const { rows: col } = await client.query(
+              `SELECT is_nullable FROM information_schema.columns
+               WHERE table_schema = $1 AND table_name = $2 AND column_name = $3`,
+              [fk.table_schema, fk.table_name, fk.column_name],
+            )
+            if (col[0]?.is_nullable === 'NO') flag = '  <<< NOT NULL — BLOCKS DELETE'
+          }
           console.log(
-            `  ${tbl}.${fk.column_name} -> ${fk.ref_schema}.${fk.ref_table}  [ON DELETE ${DEL[fk.delete_rule] || fk.delete_rule}]  rows=${cnt[0].n}`,
+            `  ${tbl}.${fk.column_name} -> ${fk.ref_schema}.${fk.ref_table}  [ON DELETE ${DEL[fk.delete_rule] || fk.delete_rule}]  rows=${cnt[0].n}${flag}`,
           )
         }
       } catch (e) {
@@ -89,6 +100,21 @@ async function main() {
       }
     }
   }
+
+  // Also surface any triggers on auth.users / profiles that could abort a delete.
+  const { rows: triggers } = await client.query(`
+    SELECT event_object_schema AS schema, event_object_table AS tbl,
+           trigger_name, event_manipulation AS event, action_timing AS timing
+    FROM information_schema.triggers
+    WHERE (event_object_table = 'users' AND event_object_schema = 'auth')
+       OR (event_object_table = 'profiles' AND event_object_schema = 'public')
+    ORDER BY schema, tbl, trigger_name
+  `)
+  console.log('\n=== Triggers on auth.users / public.profiles ===')
+  for (const t of triggers) {
+    console.log(`  ${t.schema}.${t.tbl}  ${t.timing} ${t.event}  ${t.trigger_name}`)
+  }
+  if (triggers.length === 0) console.log('  (none)')
 
   await client.end()
 }

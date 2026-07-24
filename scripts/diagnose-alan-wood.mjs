@@ -41,27 +41,36 @@ async function main() {
   for (const p of profiles) {
     console.log(`\n=== References to profile ${p.email} (${p.id}) ===`)
 
-    // All FK columns pointing at profiles(id) or auth.users(id).
+    // All FK columns pointing at profiles(id) or auth.users(id), via pg_catalog
+    // so cross-schema (auth) references resolve correctly.
     const { rows: fks } = await client.query(`
       SELECT
-        tc.table_schema,
-        tc.table_name,
-        kcu.column_name,
-        ccu.table_schema AS ref_schema,
-        ccu.table_name   AS ref_table,
-        rc.delete_rule
-      FROM information_schema.table_constraints tc
-      JOIN information_schema.key_column_usage kcu
-        ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
-      JOIN information_schema.constraint_column_usage ccu
-        ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
-      JOIN information_schema.referential_constraints rc
-        ON rc.constraint_name = tc.constraint_name AND rc.constraint_schema = tc.table_schema
-      WHERE tc.constraint_type = 'FOREIGN KEY'
-        AND ((ccu.table_name = 'profiles' AND ccu.column_name = 'id')
-          OR (ccu.table_name = 'users' AND ccu.ref_schema = 'auth'))
-      ORDER BY tc.table_name, kcu.column_name
+        con.conname                      AS constraint_name,
+        src_ns.nspname                   AS table_schema,
+        src.relname                      AS table_name,
+        src_col.attname                  AS column_name,
+        tgt_ns.nspname                   AS ref_schema,
+        tgt.relname                      AS ref_table,
+        tgt_col.attname                  AS ref_column,
+        con.confdeltype                  AS delete_rule
+      FROM pg_constraint con
+      JOIN pg_class src        ON src.oid = con.conrelid
+      JOIN pg_namespace src_ns ON src_ns.oid = src.relnamespace
+      JOIN pg_class tgt        ON tgt.oid = con.confrelid
+      JOIN pg_namespace tgt_ns ON tgt_ns.oid = tgt.relnamespace
+      JOIN pg_attribute src_col ON src_col.attrelid = con.conrelid AND src_col.attnum = con.conkey[1]
+      JOIN pg_attribute tgt_col ON tgt_col.attrelid = con.confrelid AND tgt_col.attnum = con.confkey[1]
+      WHERE con.contype = 'f'
+        AND tgt_col.attname = 'id'
+        AND (
+          (tgt.relname = 'profiles')
+          OR (tgt.relname = 'users' AND tgt_ns.nspname = 'auth')
+        )
+      ORDER BY src_ns.nspname, src.relname, src_col.attname
     `)
+
+    // confdeltype codes → human labels.
+    const DEL = { a: 'NO ACTION', r: 'RESTRICT', c: 'CASCADE', n: 'SET NULL', d: 'SET DEFAULT' }
 
     for (const fk of fks) {
       const tbl = `${fk.table_schema}.${fk.table_name}`
@@ -72,7 +81,7 @@ async function main() {
         )
         if (cnt[0].n > 0) {
           console.log(
-            `  ${tbl}.${fk.column_name} -> ${fk.ref_table}  [ON DELETE ${fk.delete_rule}]  rows=${cnt[0].n}`,
+            `  ${tbl}.${fk.column_name} -> ${fk.ref_schema}.${fk.ref_table}  [ON DELETE ${DEL[fk.delete_rule] || fk.delete_rule}]  rows=${cnt[0].n}`,
           )
         }
       } catch (e) {

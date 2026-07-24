@@ -233,7 +233,7 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
   // --- Routes (recurring weekly). Engineers only see their own routes. ---
   let routeQuery = supabase
     .from('routes')
-    .select('id, name, color, assigned_engineer_id, assigned_engineer:profiles(id, full_name, email, branch_id)')
+    .select('id, name, color, day_of_week, assigned_engineer_id, assigned_engineer:profiles(id, full_name, email, branch_id)')
     .order('name', { ascending: true })
 
   if (isEngineer) {
@@ -305,12 +305,17 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
   }
   const scopedEntries = entries
 
-  // Build the recurring-route sources (weekday parsed from the name).
+  // Build the recurring-route sources. Prefer the route's explicit day_of_week
+  // (chosen at creation); fall back to parsing a weekday out of the name for
+  // legacy routes.
   const routes: RouteCalendarSource[] = routeRows.map((r) => ({
     id: r.id,
     name: r.name,
     color: r.color || TASK_COLOR,
-    weekday: parseRouteWeekday(r.name),
+    weekday:
+      typeof (r as { day_of_week?: number | null }).day_of_week === 'number'
+        ? (r as { day_of_week?: number | null }).day_of_week!
+        : parseRouteWeekday(r.name),
     engineerId: r.assigned_engineer_id,
     engineerName: r.assigned_engineer
       ? r.assigned_engineer.full_name || r.assigned_engineer.email

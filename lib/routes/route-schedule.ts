@@ -23,6 +23,22 @@ export const WEEKDAY_NAMES = [
   'saturday',
 ] as const
 
+/**
+ * The weekday (0 = Sunday … 6 = Saturday) a route is worked. Prefers the
+ * explicit `day_of_week` chosen when the route was created, falling back to
+ * parsing a weekday name out of the route name for legacy rows. Null when
+ * neither is available.
+ */
+export function routeWeekday(
+  route: { day_of_week?: number | null; name?: string | null } | null | undefined,
+): number | null {
+  if (!route) return null
+  if (typeof route.day_of_week === 'number') return route.day_of_week
+  const name = (route.name ?? '').toLowerCase()
+  const idx = WEEKDAY_NAMES.findIndex((day) => name.includes(day))
+  return idx >= 0 ? idx : null
+}
+
 /** The route embedded on a task (via its site). Reactive calls have no route. */
 export function taskRoute(task: TaskWithDetails): Route | null {
   const viaService = (task.site_service?.site as (Site & { route?: Route | null }) | undefined)?.route
@@ -103,38 +119,50 @@ export function buildRouteSequence(
   return orderRouteCalls(dedupeSoonestPerService(onRoute))
 }
 
+/** A route as offered in the CDO route selector. */
+export interface RouteOption {
+  id: string
+  name: string
+  /** Weekday the route is worked (0 = Sun … 6 = Sat), or null if unknown. */
+  dayOfWeek: number | null
+}
+
 /** Distinct routes present across a set of tasks, ordered by soonest due call. */
-export function routeOptionsFromTasks(
-  tasks: TaskWithDetails[],
-): { id: string; name: string }[] {
-  const soonest = new Map<string, { id: string; name: string; due: number }>()
+export function routeOptionsFromTasks(tasks: TaskWithDetails[]): RouteOption[] {
+  const soonest = new Map<string, RouteOption & { due: number }>()
   for (const task of tasks) {
     const route = taskRoute(task)
     if (!route) continue
     const due = scheduledTime(task)
     const existing = soonest.get(route.id)
     if (!existing || due < existing.due) {
-      soonest.set(route.id, { id: route.id, name: route.name, due })
+      soonest.set(route.id, {
+        id: route.id,
+        name: route.name,
+        dayOfWeek: routeWeekday(route),
+        due,
+      })
     }
   }
   return [...soonest.values()]
     .sort((a, b) => a.due - b.due || a.name.localeCompare(b.name))
-    .map(({ id, name }) => ({ id, name }))
+    .map(({ id, name, dayOfWeek }) => ({ id, name, dayOfWeek }))
 }
 
 /**
- * Pick the route whose name references today's weekday (e.g. a route named
- * "Monday" or "Leeds — Monday" on a Monday). Falls back to the route with the
- * soonest-due call so the CDO always lands on the most pressing work.
+ * Pick the route assigned to today's weekday (via each route's explicit
+ * `dayOfWeek`, falling back to a weekday in its name for legacy routes). Falls
+ * back to the route with the soonest-due call so the CDO always lands on the
+ * most pressing work.
  */
 export function defaultRouteForToday(
-  routes: { id: string; name: string }[],
+  routes: RouteOption[],
   now: Date = new Date(),
 ): string | null {
   if (routes.length === 0) return null
-  const weekday = WEEKDAY_NAMES[now.getDay()]
-  const byWeekday = routes.find((r) => r.name.toLowerCase().includes(weekday))
-  if (byWeekday) return byWeekday.id
+  const today = now.getDay()
+  const byDay = routes.find((r) => r.dayOfWeek === today)
+  if (byDay) return byDay.id
   // routeOptionsFromTasks already returns soonest-due first; callers pass that
   // order through, so the first entry is the most pressing route.
   return routes[0].id

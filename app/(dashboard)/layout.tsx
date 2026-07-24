@@ -5,6 +5,7 @@ import { DashboardHeader } from '@/components/dashboard/header'
 import { MobileBottomNav } from '@/components/dashboard/mobile-bottom-nav'
 import { OncallBanner } from '@/components/dashboard/oncall/oncall-banner'
 import { LoneWorkerPrompt } from '@/components/dashboard/lone-worker/lone-worker-prompt'
+import { OnboardingWizard } from '@/components/dashboard/onboarding/onboarding-wizard'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { getAalState, mfaRequiredForRole } from '@/lib/auth/mfa'
 import type { Profile } from '@/lib/types/database'
@@ -60,6 +61,12 @@ export default async function DashboardLayout({
   // nav, extra padding) but a heavily restricted navigation.
   const isEngineer = role === 'engineer' || role === 'subcontractor'
 
+  // First-login walkthrough: shown once for accounts that have never completed
+  // (or skipped) it. Office/admin additionally get the dashboard step since only
+  // they have a personalisable home dashboard.
+  const needsOnboarding = (profile as Profile).onboarded_at == null
+  const canPersonaliseDashboard = role === 'admin' || role === 'office'
+
   return (
     // Sidebar starts expanded by default so the full navigation is visible on load.
     <SidebarProvider defaultOpen={true}>
@@ -77,6 +84,12 @@ export default async function DashboardLayout({
         {isEngineer && <MobileBottomNav profile={profile as Profile} />}
       </SidebarInset>
       <LoneWorkerPrompt />
+      {needsOnboarding && (
+        <OnboardingWizard
+          profile={profile as Profile}
+          canPersonaliseDashboard={canPersonaliseDashboard}
+        />
+      )}
     </SidebarProvider>
   )
 }

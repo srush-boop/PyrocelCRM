@@ -63,7 +63,7 @@ interface DamperTaskExecutionProps {
   routeProgress?: RouteProgress | null
   /** Saved client sign-off (name + signature) for redisplay on a completed call. */
   existingSignature?: string | null
-  existingSignatureName?: string
+  existingSignatureName?: string | null
 }
 
 function blankState(): InspectionState {
@@ -139,7 +139,7 @@ export function DamperTaskExecution({
   preAttendance,
   routeProgress,
   existingSignature = null,
-  existingSignatureName = '',
+  existingSignatureName = null,
 }: DamperTaskExecutionProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
@@ -152,7 +152,7 @@ export function DamperTaskExecution({
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [clientSignature, setClientSignature] = useState<string | null>(existingSignature)
-  const [clientSignatureName, setClientSignatureName] = useState(existingSignatureName)
+  const [clientSignatureName, setClientSignatureName] = useState(existingSignatureName ?? '')
   const [dampers, setDampers] = useState<Damper[]>(initialDampers)
   const [addOpen, setAddOpen] = useState(false)
   const [addForm, setAddForm] = useState(emptyDamperForm)

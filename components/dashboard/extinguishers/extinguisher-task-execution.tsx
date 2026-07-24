@@ -70,7 +70,7 @@ interface ExtinguisherTaskExecutionProps {
   routeProgress?: RouteProgress | null
   /** Saved client sign-off (name + signature) for redisplay on a completed call. */
   existingSignature?: string | null
-  existingSignatureName?: string
+  existingSignatureName?: string | null
 }
 
 function blankState(): InspectionState {
@@ -153,7 +153,7 @@ export function ExtinguisherTaskExecution({
   preAttendance,
   routeProgress,
   existingSignature = null,
-  existingSignatureName = '',
+  existingSignatureName = null,
 }: ExtinguisherTaskExecutionProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
@@ -166,7 +166,7 @@ export function ExtinguisherTaskExecution({
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [clientSignature, setClientSignature] = useState<string | null>(existingSignature)
-  const [clientSignatureName, setClientSignatureName] = useState(existingSignatureName)
+  const [clientSignatureName, setClientSignatureName] = useState(existingSignatureName ?? '')
 
   const [extinguishers, setExtinguishers] = useState<Extinguisher[]>(initialExtinguishers)
   const [addOpen, setAddOpen] = useState(false)

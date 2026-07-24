@@ -79,7 +79,7 @@ interface McpTaskExecutionProps {
   routeProgress?: RouteProgress | null
   /** Saved client sign-off (name + signature) for redisplay on a completed call. */
   existingSignature?: string | null
-  existingSignatureName?: string
+  existingSignatureName?: string | null
 }
 
 function blankState(): McpInspectionState {
@@ -117,7 +117,7 @@ export function McpTaskExecution({
   preAttendance,
   routeProgress,
   existingSignature = null,
-  existingSignatureName = '',
+  existingSignatureName = null,
 }: McpTaskExecutionProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
@@ -130,7 +130,7 @@ export function McpTaskExecution({
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [clientSignature, setClientSignature] = useState<string | null>(existingSignature)
-  const [clientSignatureName, setClientSignatureName] = useState(existingSignatureName)
+  const [clientSignatureName, setClientSignatureName] = useState(existingSignatureName ?? '')
   const [showPassAll, setShowPassAll] = useState(false)
   // Quick weekly close-out: mark the call point due this week as all-OK and finish.
   const [showAllOk, setShowAllOk] = useState(false)
@@ -321,6 +321,8 @@ export function McpTaskExecution({
       overall_status: opts.overall,
       engineer_notes: opts.engineerNotes,
       photos: [] as string[],
+      client_signature: isNonRecurring ? clientSignature : null,
+      client_signature_name: isNonRecurring ? clientSignatureName.trim() || null : null,
       updated_at: new Date().toISOString(),
     }
     const { data: existing } = await supabase
@@ -726,6 +728,16 @@ export function McpTaskExecution({
         </>
       )}
 
+      {(status === 'in_progress' || status === 'completed') && isNonRecurring && (
+        <ClientSignOffCard
+          name={clientSignatureName}
+          onNameChange={setClientSignatureName}
+          signature={clientSignature}
+          onSignatureChange={setClientSignature}
+          canEdit={canEdit}
+        />
+      )}
+
       {status === 'in_progress' && canEdit && (
         <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-50 flex flex-col gap-2 border-t bg-background p-4 md:relative md:inset-x-auto md:bottom-auto md:z-auto md:flex-row md:border-0 md:p-0">
           {mcpList.length > 0 && (
@@ -755,7 +767,7 @@ export function McpTaskExecution({
                 ) : (
                   <Send className="mr-2 h-4 w-4" />
                 )}
-                {submitting ? 'Submitting…' : 'Complete & Submit'}
+                {submitting ? 'Submitting…' : 'Complete Inspection'}
               </Button>
               {!dueDone && (
                 <p className="text-center text-xs text-muted-foreground">

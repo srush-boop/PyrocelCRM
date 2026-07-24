@@ -158,6 +158,9 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
   const engineer = task.assigned_engineer
+  // Attribution: prefer the live assigned engineer, else the name snapshotted
+  // when the call was completed (survives the engineer's account being deleted).
+  const engineerName = engineer?.full_name || engineer?.email || task.completed_engineer_name || ''
   // Header colour is driven by the service type's own colour, falling back to
   // the template/brand default.
   const headerColor = serviceType?.color || template?.header_color || PYROCEL_RED
@@ -226,7 +229,7 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
         <ReportMetaGrid>
           <ReportMeta label="Inspection Reference" value={result?.reference_number} />
           <ReportMeta label="Site" value={site?.name} />
-          <ReportMeta label="Engineer" value={engineer?.full_name || engineer?.email} />
+          <ReportMeta label="Engineer" value={engineerName} />
           <ReportMeta label="Address" value={site?.address} />
           <ReportMeta label="Service" value={serviceType?.name} />
           {task.visit_type?.name && <ReportMeta label="Visit" value={task.visit_type.name} />}
@@ -454,7 +457,7 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
         {template?.include_signature !== false && (
           <SignatureBlock
             signatureUrl={engineer?.signature_url}
-            signatoryName={sections.signatory_name || engineer?.full_name || ''}
+            signatoryName={sections.signatory_name || engineerName}
             signatoryTitle={
               engineer?.role_ref?.name ||
               engineer?.job_title ||

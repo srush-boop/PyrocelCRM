@@ -1541,6 +1541,11 @@ export interface Task {
   // time but can be overridden.
   client_id: string | null
   assigned_engineer_id: string | null
+  // Attribution snapshot: the engineer's name captured when the call is
+  // completed, so the record survives even if that engineer's account is later
+  // deleted (which nulls assigned_engineer_id via ON DELETE SET NULL). Prefer
+  // the live assigned_engineer relation when present; fall back to this.
+  completed_engineer_name: string | null
   scheduled_date: string
   // Optional booked appointment slot on the scheduled date (24h "HH:MM[:SS]").
   booked_start_time: string | null

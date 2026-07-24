@@ -45,6 +45,9 @@ export function DamperReport({ task, inspections, template, referenceNumber, com
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
   const engineer = task.assigned_engineer
+  // Prefer the live engineer, else the name snapshotted at completion (survives
+  // the engineer's account being deleted).
+  const engineerName = engineer?.full_name || engineer?.email || task.completed_engineer_name || ''
   const headerColor = serviceType?.color || template?.header_color || PYROCEL_RED
   const companyName = companyInfo?.name || template?.company_name || 'Pyrocel Ltd'
   const sections = template?.sections || {}
@@ -148,7 +151,7 @@ export function DamperReport({ task, inspections, template, referenceNumber, com
         <ReportMetaGrid>
           <ReportMeta label="Inspection Reference" value={referenceNumber} />
           <ReportMeta label="Site" value={site?.name} />
-          <ReportMeta label="Inspected By" value={engineer?.full_name || engineer?.email} />
+          <ReportMeta label="Inspected By" value={engineerName} />
           <ReportMeta label="Address" value={site?.address} />
           <ReportMeta label="Service" value={serviceType?.name} />
           <ReportMeta label="Dampers Tested" value={String(stats.tested)} />
@@ -419,7 +422,7 @@ export function DamperReport({ task, inspections, template, referenceNumber, com
         {template?.include_signature !== false && (
           <SignatureBlock
             signatureUrl={engineer?.signature_url}
-            signatoryName={sections.signatory_name || engineer?.full_name || ''}
+            signatoryName={sections.signatory_name || engineerName}
             signatoryTitle={
               engineer?.role_ref?.name ||
               engineer?.job_title ||

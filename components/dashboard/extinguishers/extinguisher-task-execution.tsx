@@ -8,6 +8,8 @@ import { RouteProgressBanner } from '@/components/dashboard/tasks/route-progress
 import type { RouteProgress } from '@/lib/routes/route-progress'
 import { useRouter } from 'next/navigation'
 import { CompletedReportActions } from '@/components/dashboard/reports/completed-report-actions'
+import { ClientSignOffCard } from '@/components/dashboard/tasks/client-sign-off-card'
+import { resolveCallKind } from '@/lib/call-kinds'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FloorInput } from '@/components/ui/floor-input'
@@ -66,6 +68,9 @@ interface ExtinguisherTaskExecutionProps {
   preAttendance?: ReactNode
   /** CDO route context: "call X of Y" position + next call to jump to on completion. */
   routeProgress?: RouteProgress | null
+  /** Saved client sign-off (name + signature) for redisplay on a completed call. */
+  existingSignature?: string | null
+  existingSignatureName?: string
 }
 
 function blankState(): InspectionState {
@@ -147,14 +152,21 @@ export function ExtinguisherTaskExecution({
   existingInspections,
   preAttendance,
   routeProgress,
+  existingSignature = null,
+  existingSignatureName = '',
 }: ExtinguisherTaskExecutionProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
+  // Non-recurring calls (reactive / emergency / planned) capture an on-site
+  // client sign-off; recurring maintenance visits do not.
+  const isNonRecurring = serviceType ? resolveCallKind(serviceType) !== 'recurring' : true
 
   const [status, setStatus] = useState(task.status)
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [clientSignature, setClientSignature] = useState<string | null>(existingSignature)
+  const [clientSignatureName, setClientSignatureName] = useState(existingSignatureName)
 
   const [extinguishers, setExtinguishers] = useState<Extinguisher[]>(initialExtinguishers)
   const [addOpen, setAddOpen] = useState(false)
@@ -380,6 +392,8 @@ export function ExtinguisherTaskExecution({
       overall_status: overall,
       engineer_notes: `Extinguisher service: ${summary.tested}/${summary.total} serviced, ${summary.passed} pass, ${summary.remedial} remedial, ${summary.failed} fail.`,
       photos: [] as string[],
+      client_signature: isNonRecurring ? clientSignature : null,
+      client_signature_name: isNonRecurring ? clientSignatureName.trim() || null : null,
       updated_at: new Date().toISOString(),
     }
     const { data: existing } = await supabase
@@ -596,6 +610,16 @@ export function ExtinguisherTaskExecution({
             </div>
           )}
         </>
+      )}
+
+      {(status === 'in_progress' || status === 'completed') && isNonRecurring && (
+        <ClientSignOffCard
+          name={clientSignatureName}
+          onNameChange={setClientSignatureName}
+          signature={clientSignature}
+          onSignatureChange={setClientSignature}
+          canEdit={canEdit}
+        />
       )}
 
       {status === 'in_progress' && canEdit && extinguishers.length > 0 && (

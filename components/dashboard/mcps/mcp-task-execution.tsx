@@ -10,6 +10,8 @@ import { useRouter } from 'next/navigation'
 import { TaskHeader } from '@/components/dashboard/tasks/task-header'
 import { PauseResumeControls } from '@/components/dashboard/tasks/pause-resume-controls'
 import { CompletedReportActions } from '@/components/dashboard/reports/completed-report-actions'
+import { ClientSignOffCard } from '@/components/dashboard/tasks/client-sign-off-card'
+import { resolveCallKind } from '@/lib/call-kinds'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FloorInput } from '@/components/ui/floor-input'
@@ -75,6 +77,9 @@ interface McpTaskExecutionProps {
   preAttendance?: ReactNode
   /** CDO route context: "call X of Y" position + next call to jump to on completion. */
   routeProgress?: RouteProgress | null
+  /** Saved client sign-off (name + signature) for redisplay on a completed call. */
+  existingSignature?: string | null
+  existingSignatureName?: string
 }
 
 function blankState(): McpInspectionState {
@@ -111,14 +116,21 @@ export function McpTaskExecution({
   nimbusUrl,
   preAttendance,
   routeProgress,
+  existingSignature = null,
+  existingSignatureName = '',
 }: McpTaskExecutionProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
+  // Non-recurring calls (reactive / emergency / planned) capture an on-site
+  // client sign-off; recurring maintenance visits do not.
+  const isNonRecurring = serviceType ? resolveCallKind(serviceType) !== 'recurring' : true
 
   const [status, setStatus] = useState(task.status)
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [clientSignature, setClientSignature] = useState<string | null>(existingSignature)
+  const [clientSignatureName, setClientSignatureName] = useState(existingSignatureName)
   const [showPassAll, setShowPassAll] = useState(false)
   // Quick weekly close-out: mark the call point due this week as all-OK and finish.
   const [showAllOk, setShowAllOk] = useState(false)

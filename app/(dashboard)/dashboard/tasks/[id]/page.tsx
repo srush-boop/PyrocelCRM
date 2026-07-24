@@ -467,6 +467,19 @@ export default async function TaskPage({ params }: PageProps) {
     }
   }
 
+  // Existing client sign-off (name + signature) for the asset inspection flows,
+  // so the sign-off capture card can redisplay a saved signature on a completed
+  // call. Non-recurring calls only surface the card, but fetching is harmless.
+  const { data: signOffResult } = await supabase
+    .from('task_results')
+    .select('client_signature, client_signature_name')
+    .eq('task_id', id)
+    .maybeSingle()
+  const existingSignature =
+    (signOffResult as { client_signature?: string | null } | null)?.client_signature ?? null
+  const existingSignatureName =
+    (signOffResult as { client_signature_name?: string | null } | null)?.client_signature_name ?? null
+
   // The shared pre-attendance panel is passed into each execution flow so it can
   // render directly beneath the site/service header (rather than above it).
   // Damper inspection tasks use a dedicated per-asset flow
@@ -485,6 +498,8 @@ export default async function TaskPage({ params }: PageProps) {
         existingInspections={(inspectionsData || []) as DamperInspection[]}
         preAttendance={preAttendancePanel}
         routeProgress={routeProgress}
+        existingSignature={existingSignature}
+        existingSignatureName={existingSignatureName}
       />
     )
   }
@@ -505,6 +520,8 @@ export default async function TaskPage({ params }: PageProps) {
         existingInspections={(inspectionsData || []) as ExtinguisherInspection[]}
         preAttendance={preAttendancePanel}
         routeProgress={routeProgress}
+        existingSignature={existingSignature}
+        existingSignatureName={existingSignatureName}
       />
     )
   }
@@ -572,6 +589,8 @@ export default async function TaskPage({ params }: PageProps) {
         nimbusUrl={nimbusUrl}
         preAttendance={preAttendancePanel}
         routeProgress={routeProgress}
+        existingSignature={existingSignature}
+        existingSignatureName={existingSignatureName}
       />
     )
   }
@@ -596,6 +615,8 @@ export default async function TaskPage({ params }: PageProps) {
         existingInspections={(inspectionsData || []) as EmergencyLightInspection[]}
         preAttendance={preAttendancePanel}
         routeProgress={routeProgress}
+        existingSignature={existingSignature}
+        existingSignatureName={existingSignatureName}
       />
     )
   }

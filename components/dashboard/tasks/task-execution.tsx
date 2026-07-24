@@ -1910,7 +1910,7 @@ export function TaskExecution({
               ) : (
                 <>
                   <Send className="mr-2 h-4 w-4" />
-                  Complete &amp; Submit
+                  Complete Inspection
                 </>
               )}
             </Button>
@@ -1965,6 +1965,7 @@ export function TaskExecution({
                 invoiceId={(task as any).invoice?.id ?? (task as any).invoice_id ?? null}
                 invoiceNumber={(task as any).invoice?.invoice_number ?? null}
                 canReview={profile.role === 'admin' || profile.role === 'office'}
+                canSendReport={profile.role === 'admin' || profile.role === 'office'}
               />
             )}
           </CardContent>

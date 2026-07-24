@@ -8,6 +8,8 @@ import { RouteProgressBanner } from '@/components/dashboard/tasks/route-progress
 import type { RouteProgress } from '@/lib/routes/route-progress'
 import { useRouter } from 'next/navigation'
 import { CompletedReportActions } from '@/components/dashboard/reports/completed-report-actions'
+import { ClientSignOffCard } from '@/components/dashboard/tasks/client-sign-off-card'
+import { resolveCallKind } from '@/lib/call-kinds'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FloorInput } from '@/components/ui/floor-input'
@@ -59,6 +61,9 @@ interface DamperTaskExecutionProps {
   preAttendance?: ReactNode
   /** CDO route context: "call X of Y" position + next call to jump to on completion. */
   routeProgress?: RouteProgress | null
+  /** Saved client sign-off (name + signature) for redisplay on a completed call. */
+  existingSignature?: string | null
+  existingSignatureName?: string
 }
 
 function blankState(): InspectionState {
@@ -133,14 +138,21 @@ export function DamperTaskExecution({
   existingInspections,
   preAttendance,
   routeProgress,
+  existingSignature = null,
+  existingSignatureName = '',
 }: DamperTaskExecutionProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
+  // Non-recurring calls (reactive / emergency / planned) capture an on-site
+  // client sign-off; recurring maintenance visits do not.
+  const isNonRecurring = serviceType ? resolveCallKind(serviceType) !== 'recurring' : true
 
   const [status, setStatus] = useState(task.status)
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [clientSignature, setClientSignature] = useState<string | null>(existingSignature)
+  const [clientSignatureName, setClientSignatureName] = useState(existingSignatureName)
   const [dampers, setDampers] = useState<Damper[]>(initialDampers)
   const [addOpen, setAddOpen] = useState(false)
   const [addForm, setAddForm] = useState(emptyDamperForm)
@@ -360,6 +372,8 @@ export function DamperTaskExecution({
       overall_status: overall,
       engineer_notes: `Damper inspection: ${summary.tested}/${summary.total} tested, ${summary.passed} pass, ${summary.remedial} remedial, ${summary.failed} fail.`,
       photos: [] as string[],
+      client_signature: isNonRecurring ? clientSignature : null,
+      client_signature_name: isNonRecurring ? clientSignatureName.trim() || null : null,
       updated_at: new Date().toISOString(),
     }
     const { data: existing } = await supabase
@@ -475,6 +489,7 @@ export function DamperTaskExecution({
             invoiceId={(task as any).invoice?.id ?? (task as any).invoice_id ?? null}
             invoiceNumber={(task as any).invoice?.invoice_number ?? null}
             canReview={profile.role === 'admin' || profile.role === 'office'}
+            canSendReport={profile.role === 'admin' || profile.role === 'office'}
           />
         )}
         <ScanQrButton onScan={handleScanToDamper} />
@@ -579,6 +594,16 @@ export function DamperTaskExecution({
         </>
       )}
 
+      {(status === 'in_progress' || status === 'completed') && isNonRecurring && (
+        <ClientSignOffCard
+          name={clientSignatureName}
+          onNameChange={setClientSignatureName}
+          signature={clientSignature}
+          onSignatureChange={setClientSignature}
+          canEdit={canEdit}
+        />
+      )}
+
       {status === 'in_progress' && canEdit && dampers.length > 0 && (
         <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-50 flex gap-2 border-t bg-background p-4 lg:relative lg:inset-x-auto lg:bottom-auto lg:z-auto lg:border-0 lg:p-0">
           <Button variant="outline" onClick={handleSave} disabled={saving} className="flex-1">
@@ -596,7 +621,7 @@ export function DamperTaskExecution({
               ) : (
                 <Send className="mr-2 h-4 w-4" />
               )}
-              {submitting ? 'Submitting…' : 'Complete & Submit'}
+              {submitting ? 'Submitting…' : 'Complete Inspection'}
             </Button>
             {summary.tested < summary.total && (
               <p className="text-center text-xs text-muted-foreground">

@@ -49,6 +49,12 @@ interface CompletedReportActionsProps {
   invoiceNumber?: string | null
   /** True for office/admin, who may change the charge/review state. */
   canReview?: boolean
+  /**
+   * True for office/admin, who may manually (re)send the report to the client.
+   * Field staff (engineers, CDOs, sub-contractors) never see the send option —
+   * the report is emailed automatically on completion.
+   */
+  canSendReport?: boolean
 }
 
 const CHARGE_REASON_LABELS: Record<string, string> = {
@@ -74,6 +80,7 @@ export function CompletedReportActions({
   invoiceId = null,
   invoiceNumber = null,
   canReview = false,
+  canSendReport = false,
 }: CompletedReportActionsProps) {
   // Once a call is on an actual invoice its PO / Client Ref is locked — the
   // reference has been billed and must not drift from what the client received.
@@ -289,11 +296,13 @@ export function CompletedReportActions({
           Preview / Print
         </Link>
       </Button>
-      <Button size="sm" onClick={openDialog} className="gap-2">
-        <Send className="h-4 w-4" />
-        Send report
-      </Button>
-      {emailSentAt && (
+      {canSendReport && (
+        <Button size="sm" onClick={openDialog} className="gap-2">
+          <Send className="h-4 w-4" />
+          Send report
+        </Button>
+      )}
+      {canSendReport && emailSentAt && (
         <span className="flex items-center gap-1 text-xs text-muted-foreground">
           <Mail className="h-3.5 w-3.5" />
           Last sent {new Date(emailSentAt).toLocaleDateString('en-GB')}

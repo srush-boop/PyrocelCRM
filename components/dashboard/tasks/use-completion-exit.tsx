@@ -27,8 +27,13 @@ const CALLS_ROUTE = '/dashboard/schedule'
  * Usage:
  *   const { runExit, nearbyPrompt } = useCompletionExit(profile.role, profile.discipline)
  *   // ...at the end of handleSubmit, after all persistence:
- *   await runExit(task.id)
+ *   await runExit(task.id, nextRouteTaskId)
  *   // ...and render {nearbyPrompt} somewhere in the tree.
+ *
+ * When the completed call is part of a CDO route, pass the next call's id as
+ * `nextRouteTaskId`: the engineer is taken straight to that call so they can
+ * work the route without returning to the list. When there is no next call
+ * (last on the route) they fall back to Calls as normal.
  */
 export function useCompletionExit(role: string, discipline?: string | null) {
   const router = useRouter()
@@ -46,9 +51,16 @@ export function useCompletionExit(role: string, discipline?: string | null) {
   }, [router])
 
   // Run once completion persistence is done. Resolves after either navigating to
-  // Calls or opening the nearby prompt (which navigates on close).
+  // Calls, the next call on the route, or the nearby prompt (which navigates on
+  // close).
   const runExit = useCallback(
-    async (fromTaskId: string) => {
+    async (fromTaskId: string, nextRouteTaskId?: string | null) => {
+      // On a route: go straight to the next pending call in route order.
+      if (nextRouteTaskId) {
+        router.push(`/dashboard/tasks/${nextRouteTaskId}`)
+        router.refresh()
+        return
+      }
       if (offerNearby) {
         try {
           const res = await findNearbyOverdueCalls({ fromTaskId })
@@ -63,7 +75,7 @@ export function useCompletionExit(role: string, discipline?: string | null) {
       }
       goToCalls()
     },
-    [offerNearby, goToCalls],
+    [offerNearby, goToCalls, router],
   )
 
   const handleClose = useCallback(() => {

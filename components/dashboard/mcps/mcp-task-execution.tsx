@@ -4,10 +4,14 @@ import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useShiftGate } from '@/components/dashboard/tasks/use-shift-gate'
 import { useCompletionExit } from '@/components/dashboard/tasks/use-completion-exit'
+import { RouteProgressBanner } from '@/components/dashboard/tasks/route-progress-banner'
+import type { RouteProgress } from '@/lib/routes/route-progress'
 import { useRouter } from 'next/navigation'
 import { TaskHeader } from '@/components/dashboard/tasks/task-header'
 import { PauseResumeControls } from '@/components/dashboard/tasks/pause-resume-controls'
 import { CompletedReportActions } from '@/components/dashboard/reports/completed-report-actions'
+import { ClientSignOffCard } from '@/components/dashboard/tasks/client-sign-off-card'
+import { resolveCallKind } from '@/lib/call-kinds'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FloorInput } from '@/components/ui/floor-input'
@@ -71,6 +75,11 @@ interface McpTaskExecutionProps {
   nimbusUrl?: string | null
   /** Shared "Before you attend" panel, rendered beneath the site/service header. */
   preAttendance?: ReactNode
+  /** CDO route context: "call X of Y" position + next call to jump to on completion. */
+  routeProgress?: RouteProgress | null
+  /** Saved client sign-off (name + signature) for redisplay on a completed call. */
+  existingSignature?: string | null
+  existingSignatureName?: string | null
 }
 
 function blankState(): McpInspectionState {
@@ -106,14 +115,22 @@ export function McpTaskExecution({
   lastTestedDate,
   nimbusUrl,
   preAttendance,
+  routeProgress,
+  existingSignature = null,
+  existingSignatureName = null,
 }: McpTaskExecutionProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
+  // Non-recurring calls (reactive / emergency / planned) capture an on-site
+  // client sign-off; recurring maintenance visits do not.
+  const isNonRecurring = serviceType ? resolveCallKind(serviceType) !== 'recurring' : true
 
   const [status, setStatus] = useState(task.status)
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [clientSignature, setClientSignature] = useState<string | null>(existingSignature)
+  const [clientSignatureName, setClientSignatureName] = useState(existingSignatureName ?? '')
   const [showPassAll, setShowPassAll] = useState(false)
   // Quick weekly close-out: mark the call point due this week as all-OK and finish.
   const [showAllOk, setShowAllOk] = useState(false)
@@ -304,6 +321,8 @@ export function McpTaskExecution({
       overall_status: opts.overall,
       engineer_notes: opts.engineerNotes,
       photos: [] as string[],
+      client_signature: isNonRecurring ? clientSignature : null,
+      client_signature_name: isNonRecurring ? clientSignatureName.trim() || null : null,
       updated_at: new Date().toISOString(),
     }
     const { data: existing } = await supabase
@@ -374,8 +393,9 @@ export function McpTaskExecution({
       console.log('[v0] Visit billing request error:', err)
     }
 
-    // No success screen / confirm — return to Calls (via nearby-calls prompt).
-    await runExit(task.id)
+    // No success screen / confirm — return to Calls (via nearby-calls prompt),
+    // or jump straight to the next call when working a CDO route.
+    await runExit(task.id, routeProgress?.nextTaskId)
   }
 
   const handleSubmit = async () => {
@@ -506,6 +526,8 @@ export function McpTaskExecution({
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-72 md:pb-6">
       <TaskHeader task={task} status={status} canCreateDocument={profile.role === 'admin' || profile.role === 'office'} />
+
+      <RouteProgressBanner progress={routeProgress} />
 
       {startAtTop && startButton}
 
@@ -706,6 +728,16 @@ export function McpTaskExecution({
         </>
       )}
 
+      {(status === 'in_progress' || status === 'completed') && isNonRecurring && (
+        <ClientSignOffCard
+          name={clientSignatureName}
+          onNameChange={setClientSignatureName}
+          signature={clientSignature}
+          onSignatureChange={setClientSignature}
+          canEdit={canEdit}
+        />
+      )}
+
       {status === 'in_progress' && canEdit && (
         <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-50 flex flex-col gap-2 border-t bg-background p-4 md:relative md:inset-x-auto md:bottom-auto md:z-auto md:flex-row md:border-0 md:p-0">
           {mcpList.length > 0 && (
@@ -735,7 +767,7 @@ export function McpTaskExecution({
                 ) : (
                   <Send className="mr-2 h-4 w-4" />
                 )}
-                {submitting ? 'Submitting…' : 'Complete & Submit'}
+                {submitting ? 'Submitting…' : 'Complete Inspection'}
               </Button>
               {!dueDone && (
                 <p className="text-center text-xs text-muted-foreground">

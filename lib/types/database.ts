@@ -1025,6 +1025,9 @@ export interface Route {
   assigned_engineer_id: string | null
   // Colour used to render this route's recurring weekly band on the calendar.
   color: string
+  // The weekday this route is worked, JS convention (0 = Sunday … 6 = Saturday).
+  // Chosen when the route is created; null only for legacy rows.
+  day_of_week: number | null
   created_at: string
   updated_at: string
   assigned_engineer?: Profile | null

@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/select'
 import { Plus, Loader2 } from 'lucide-react'
 import { ServiceColorPicker } from '@/components/dashboard/service-types/service-color-picker'
+import { RouteDayField } from '@/components/dashboard/routes/route-day-field'
 import type { Profile } from '@/lib/types/database'
 
 const DEFAULT_ROUTE_COLOR = '#2563eb'
@@ -36,6 +37,8 @@ interface AddRouteDialogProps {
 export function AddRouteDialog({ engineers }: AddRouteDialogProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [dayOfWeek, setDayOfWeek] = useState<number | null>(null)
+  const [mondayAck, setMondayAck] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -45,19 +48,26 @@ export function AddRouteDialog({ engineers }: AddRouteDialogProps) {
   const router = useRouter()
   const supabase = createClient()
 
+  // A day must be chosen, and a Monday day needs the bank-holiday override.
+  const dayInvalid = dayOfWeek === null || (dayOfWeek === 1 && !mondayAck)
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (dayInvalid) return
     setLoading(true)
 
     const { error } = await supabase.from('routes').insert({
       ...formData,
       assigned_engineer_id: formData.assigned_engineer_id || null,
+      day_of_week: dayOfWeek,
     })
 
     setLoading(false)
 
     if (!error) {
       setOpen(false)
+      setDayOfWeek(null)
+      setMondayAck(false)
       setFormData({
         name: '',
         description: '',
@@ -95,6 +105,12 @@ export function AddRouteDialog({ engineers }: AddRouteDialogProps) {
                 required
               />
             </div>
+            <RouteDayField
+              value={dayOfWeek}
+              onChange={setDayOfWeek}
+              mondayAck={mondayAck}
+              onMondayAckChange={setMondayAck}
+            />
             <div className="grid gap-2">
               <Label htmlFor="description">Description</Label>
               <Textarea
@@ -126,14 +142,14 @@ export function AddRouteDialog({ engineers }: AddRouteDialogProps) {
               value={formData.color}
               onChange={(color) => setFormData({ ...formData, color })}
               label="Calendar colour"
-              description="Distinguishes this route on the master calendar. Name the route with a weekday (e.g. 'Friday 01') to recur weekly."
+              description="Distinguishes this route on the master calendar."
             />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || dayInvalid}>
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

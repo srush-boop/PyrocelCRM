@@ -4,6 +4,8 @@ import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useShiftGate } from '@/components/dashboard/tasks/use-shift-gate'
 import { useCompletionExit } from '@/components/dashboard/tasks/use-completion-exit'
+import { RouteProgressBanner } from '@/components/dashboard/tasks/route-progress-banner'
+import type { RouteProgress } from '@/lib/routes/route-progress'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,6 +14,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { TaskHeader } from '@/components/dashboard/tasks/task-header'
 import { PauseResumeControls } from '@/components/dashboard/tasks/pause-resume-controls'
 import { CompletedReportActions } from '@/components/dashboard/reports/completed-report-actions'
+import { ClientSignOffCard } from '@/components/dashboard/tasks/client-sign-off-card'
+import { resolveCallKind } from '@/lib/call-kinds'
 import { Progress } from '@/components/ui/progress'
 import {
   Dialog,
@@ -61,6 +65,11 @@ interface EmergencyLightTaskExecutionProps {
   existingInspections: EmergencyLightInspection[]
   /** Shared "Before you attend" panel, rendered beneath the site/service header. */
   preAttendance?: ReactNode
+  /** CDO route context: "call X of Y" position + next call to jump to on completion. */
+  routeProgress?: RouteProgress | null
+  /** Saved client sign-off (name + signature) for redisplay on a completed call. */
+  existingSignature?: string | null
+  existingSignatureName?: string | null
 }
 
 function blankState(): EmergencyLightInspectionState {
@@ -83,14 +92,22 @@ export function EmergencyLightTaskExecution({
   lights,
   existingInspections,
   preAttendance,
+  routeProgress,
+  existingSignature = null,
+  existingSignatureName = null,
 }: EmergencyLightTaskExecutionProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
+  // Non-recurring calls (reactive / emergency / planned) capture an on-site
+  // client sign-off; recurring maintenance visits do not.
+  const isNonRecurring = serviceType ? resolveCallKind(serviceType) !== 'recurring' : true
 
   const [status, setStatus] = useState(task.status)
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [clientSignature, setClientSignature] = useState<string | null>(existingSignature)
+  const [clientSignatureName, setClientSignatureName] = useState(existingSignatureName ?? '')
   const router = useRouter()
   const supabase = createClient()
   const { ensureOnShift, checking: checkingShift, shiftGateDialog } = useShiftGate()
@@ -283,6 +300,8 @@ export function EmergencyLightTaskExecution({
       overall_status: overall,
       engineer_notes: `Emergency lighting test: ${summary.tested}/${summary.total} fittings tested, ${summary.passed} pass, ${summary.remedial} remedial, ${summary.failed} fail.`,
       photos: [] as string[],
+      client_signature: isNonRecurring ? clientSignature : null,
+      client_signature_name: isNonRecurring ? clientSignatureName.trim() || null : null,
       updated_at: new Date().toISOString(),
     }
     const { data: existing } = await supabase
@@ -357,8 +376,9 @@ export function EmergencyLightTaskExecution({
 
     setStatus('completed')
     setSubmitting(false)
-    // No success screen / confirm — return to Calls (via nearby-calls prompt).
-    await runExit(task.id)
+    // No success screen / confirm — return to Calls (via nearby-calls prompt),
+    // or jump straight to the next call when working a CDO route.
+    await runExit(task.id, routeProgress?.nextTaskId)
   }
 
   // CDO engineers run routine planned routes and want to begin in one tap, so
@@ -380,6 +400,8 @@ export function EmergencyLightTaskExecution({
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-44 lg:pb-6">
       <TaskHeader task={task} status={status} canCreateDocument={profile.role === 'admin' || profile.role === 'office'} />
+
+      <RouteProgressBanner progress={routeProgress} />
 
       {startAtTop && startButton}
 
@@ -498,6 +520,16 @@ export function EmergencyLightTaskExecution({
         </>
       )}
 
+      {(status === 'in_progress' || status === 'completed') && isNonRecurring && (
+        <ClientSignOffCard
+          name={clientSignatureName}
+          onNameChange={setClientSignatureName}
+          signature={clientSignature}
+          onSignatureChange={setClientSignature}
+          canEdit={canEdit}
+        />
+      )}
+
       {status === 'in_progress' && canEdit && lightList.length > 0 && (
         <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-50 flex gap-2 border-t bg-background p-4 lg:relative lg:inset-x-auto lg:bottom-auto lg:z-auto lg:border-0 lg:p-0">
           <Button variant="outline" onClick={handleSave} disabled={saving} className="flex-1">
@@ -515,7 +547,7 @@ export function EmergencyLightTaskExecution({
               ) : (
                 <Send className="mr-2 h-4 w-4" />
               )}
-              {submitting ? 'Submitting…' : 'Complete & Submit'}
+              {submitting ? 'Submitting…' : 'Complete Inspection'}
             </Button>
             {summary.tested < summary.total && (
               <p className="text-center text-xs text-muted-foreground">

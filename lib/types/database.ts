@@ -546,6 +546,10 @@ export interface Profile {
   // Per-user grant to preview/edit/send invoices from the invoice lists. Admins
   // are implicitly allowed; office users require this grant (see lib/auth/invoices).
   can_edit_invoices: boolean
+  // Timestamp the user finished (or skipped) the first-login profile setup
+  // walkthrough. NULL = never seen it → the wizard is shown once. Backfilled to
+  // now() for all pre-existing users so it only ever surfaces for new accounts.
+  onboarded_at: string | null
   created_at: string
   updated_at: string
   department?: Department | null

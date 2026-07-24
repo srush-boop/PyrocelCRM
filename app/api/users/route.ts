@@ -43,11 +43,12 @@ export async function POST(req: NextRequest) {
     if (guard.error) return guard.error
 
     const body = await req.json()
-    const { email, password, fullName, role, departmentId, branchId } = body as {
+    const { email, password, fullName, role, discipline, departmentId, branchId } = body as {
       email?: string
       password?: string
       fullName?: string
       role?: string
+      discipline?: string | null
       departmentId?: string | null
       branchId?: string | null
     }
@@ -71,6 +72,14 @@ export async function POST(req: NextRequest) {
     }
     if (!STAFF_ROLES.includes(role)) {
       return NextResponse.json({ error: 'Invalid role.' }, { status: 400 })
+    }
+    // Discipline (trade) is optional at creation; when supplied it must be valid.
+    // Flagging an engineer 'cdo' here is what unlocks the route-planned schedule.
+    const validDisciplines = ['fire', 'security', 'installer', 'cdo', 'general']
+    const cleanDiscipline =
+      typeof discipline === 'string' && discipline.trim() ? discipline.trim() : null
+    if (cleanDiscipline && !validDisciplines.includes(cleanDiscipline)) {
+      return NextResponse.json({ error: 'Invalid discipline.' }, { status: 400 })
     }
 
     const adminClient = createAdminClient()
@@ -101,6 +110,7 @@ export async function POST(req: NextRequest) {
       email: trimmedEmail,
       full_name: fullName || null,
       role,
+      discipline: cleanDiscipline,
       department_id: departmentId || null,
       branch_id: branchId || null,
       status: 'active',

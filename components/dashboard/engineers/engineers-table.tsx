@@ -62,7 +62,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import type { Profile, UserRole, Department, Branch, WorkDayHours, Role } from '@/lib/types/database'
+import type {
+  Profile,
+  UserRole,
+  Department,
+  Branch,
+  WorkDayHours,
+  Role,
+  Discipline,
+} from '@/lib/types/database'
+import { DISCIPLINES } from '@/lib/disciplines'
 import type { LeaveBalance } from '@/lib/leave-utils'
 import { formatDateUK } from '@/lib/utils'
 import { InviteEngineerDialog } from './invite-engineer-dialog'
@@ -74,6 +83,7 @@ const NO_DEPARTMENT = '__none__'
 const NO_BRANCH = '__none__'
 const NO_MANAGER = '__none__'
 const NO_ROLE = '__none__'
+const NO_DISCIPLINE = '__none__'
 
 // ISO weekday numbers (1 = Monday ... 7 = Sunday) used for working patterns.
 const WEEKDAYS: { value: number; label: string }[] = [
@@ -200,6 +210,7 @@ export function EngineersTable({
     full_name: '',
     email: '',
     role: 'engineer' as UserRole,
+    discipline: NO_DISCIPLINE as string,
     department_id: NO_DEPARTMENT,
     branch_id: NO_BRANCH,
     status: 'active' as 'active' | 'inactive',
@@ -349,6 +360,7 @@ export function EngineersTable({
       full_name: user.full_name || '',
       email: user.email,
       role: user.role,
+      discipline: user.discipline ?? NO_DISCIPLINE,
       department_id: user.department_id ?? NO_DEPARTMENT,
       branch_id: user.branch_id ?? NO_BRANCH,
       status: user.status,
@@ -416,6 +428,7 @@ export function EngineersTable({
           full_name: editForm.full_name.trim(),
           email: editForm.email.trim(),
           role: editForm.role,
+          discipline: editForm.discipline === NO_DISCIPLINE ? null : editForm.discipline,
           department_id: editForm.department_id === NO_DEPARTMENT ? null : editForm.department_id,
           branch_id: editForm.branch_id === NO_BRANCH ? null : editForm.branch_id,
           status: editForm.status,
@@ -815,6 +828,28 @@ export function EngineersTable({
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">Shown on documents. Manage in Settings.</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-discipline">Discipline</Label>
+                <Select
+                  value={editForm.discipline}
+                  onValueChange={(value) => setEditForm({ ...editForm, discipline: value })}
+                >
+                  <SelectTrigger id="edit-discipline">
+                    <SelectValue placeholder="No discipline" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_DISCIPLINE}>No discipline</SelectItem>
+                    {DISCIPLINES.map((d) => (
+                      <SelectItem key={d.key} value={d.key}>
+                        {d.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Sets the trade. CDO unlocks the route-planned schedule &amp; next-call flow.
+                </p>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="edit-timesheet">Timesheet</Label>

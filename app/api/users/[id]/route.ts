@@ -74,6 +74,7 @@ export async function PUT(
       full_name,
       email,
       role,
+      discipline,
       department_id,
       branch_id,
       status,
@@ -97,6 +98,7 @@ export async function PUT(
       full_name?: string
       email?: string
       role?: string
+      discipline?: string | null
       department_id?: string | null
       branch_id?: string | null
       status?: string
@@ -146,6 +148,19 @@ export async function PUT(
     const validRoles = ['admin', 'office', 'engineer', 'subcontractor', 'client']
     if (role && !validRoles.includes(role)) {
       return NextResponse.json({ error: 'Invalid role.' }, { status: 400 })
+    }
+
+    // Discipline (trade) drives CDO-specific behaviour: engineers flagged 'cdo'
+    // get the route-planned schedule view, the route completion→next-call flow
+    // and are suppressed from opportunistic nearby-call prompts. Empty/null clears it.
+    const validDisciplines = ['fire', 'security', 'installer', 'cdo', 'general']
+    if (
+      discipline !== undefined &&
+      discipline !== null &&
+      discipline !== '' &&
+      !validDisciplines.includes(discipline)
+    ) {
+      return NextResponse.json({ error: 'Invalid discipline.' }, { status: 400 })
     }
 
     // Safeguard: prevent an admin from being silently demoted. This guards
@@ -221,6 +236,7 @@ export async function PUT(
     if (full_name !== undefined) profilePatch.full_name = full_name
     if (trimmedEmail) profilePatch.email = trimmedEmail
     if (role !== undefined) profilePatch.role = role
+    if (discipline !== undefined) profilePatch.discipline = discipline || null
     if (department_id !== undefined) profilePatch.department_id = department_id || null
     if (branch_id !== undefined) profilePatch.branch_id = branch_id || null
     if (status !== undefined) profilePatch.status = status

@@ -31,7 +31,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { MoreHorizontal, Pencil, Trash2, Search, Building, Plus, ChevronRight, ChevronDown, MapPin, ExternalLink, ListChecks, Link2, FileText, Wallet } from 'lucide-react'
+import { MoreHorizontal, Pencil, Trash2, Search, Building, Plus, ChevronRight, ChevronDown, MapPin, ExternalLink, ListChecks, Link2, FileText, Wallet, ReceiptText } from 'lucide-react'
 import { PrintButton } from '@/components/ui/print-button'
 import type { Client, Site, SystemType, ServiceType } from '@/lib/types/database'
 import { StatusBadge, effectiveStatus } from '@/lib/entity-status'
@@ -39,6 +39,7 @@ import { AddClientDialog } from './add-client-dialog'
 import { EditClientDialog } from './edit-client-dialog'
 import { ClientChecklistDialog } from './client-checklist-dialog'
 import { ClientLinksDialog } from './client-links-dialog'
+import { ClientInvoicesDialog } from './client-invoices-dialog'
 import { BillingAccountsDialog } from '@/components/dashboard/billing/billing-accounts-dialog'
 import { CreateDocumentDialog } from '@/components/documents/create-document-dialog'
 
@@ -50,6 +51,7 @@ interface ClientsTableProps {
   checklistCountByClient?: Record<string, number>
   linkCountByClient?: Record<string, number>
   billingCountByClient?: Record<string, number>
+  invoiceCountByClient?: Record<string, number>
 }
 
 export function ClientsTable({
@@ -60,6 +62,7 @@ export function ClientsTable({
   checklistCountByClient = {},
   linkCountByClient = {},
   billingCountByClient = {},
+  invoiceCountByClient = {},
 }: ClientsTableProps) {
   const [search, setSearch] = useState('')
   const [deleteId, setDeleteId] = useState<string | null>(null)
@@ -67,6 +70,7 @@ export function ClientsTable({
   const [checklistClient, setChecklistClient] = useState<Client | null>(null)
   const [linksClient, setLinksClient] = useState<Client | null>(null)
   const [billingClient, setBillingClient] = useState<Client | null>(null)
+  const [invoicesClient, setInvoicesClient] = useState<Client | null>(null)
   const [docClient, setDocClient] = useState<Client | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const searchParams = useSearchParams()
@@ -200,6 +204,10 @@ export function ClientsTable({
                               <Wallet className="mr-2 h-4 w-4" />
                               Billing accounts
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setInvoicesClient(client)}>
+                              <ReceiptText className="mr-2 h-4 w-4" />
+                              Invoices
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setChecklistClient(client)}>
                               <ListChecks className="mr-2 h-4 w-4" />
                               Checklist items
@@ -309,6 +317,22 @@ export function ClientsTable({
                                 Manage billing accounts
                               </Button>
                             </div>
+                            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <ReceiptText className="h-4 w-4" />
+                                {invoiceCountByClient[client.id] || 0} invoice
+                                {(invoiceCountByClient[client.id] || 0) === 1 ? '' : 's'}
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-2"
+                                onClick={() => setInvoicesClient(client)}
+                              >
+                                <ReceiptText className="h-4 w-4" />
+                                View invoices
+                              </Button>
+                            </div>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -356,6 +380,14 @@ export function ClientsTable({
           client={billingClient}
           open={!!billingClient}
           onOpenChange={(open) => !open && setBillingClient(null)}
+        />
+      )}
+
+      {invoicesClient && (
+        <ClientInvoicesDialog
+          client={invoicesClient}
+          open={!!invoicesClient}
+          onOpenChange={(open) => !open && setInvoicesClient(null)}
         />
       )}
 

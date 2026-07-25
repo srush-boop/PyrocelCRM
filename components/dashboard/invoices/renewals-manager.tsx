@@ -16,10 +16,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Mail, TrendingUp, Loader2, CheckCircle2 } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Mail, TrendingUp, Loader2, CheckCircle2, FilePlus } from 'lucide-react'
 import { formatPence } from '@/lib/billing/invoices'
 import { MONTH_LABELS, RECURRING_FREQUENCY_LABELS, marginPct } from '@/lib/billing/recurring'
 import { applyBulkIncrease, sendRenewalNotice, type RenewalRow } from '@/lib/actions/recurring-renewals'
+import { createInvoiceFromRecurringCharges } from '@/lib/actions/recurring-invoices'
 
 interface RenewalsManagerProps {
   rows: RenewalRow[]
@@ -42,6 +53,8 @@ export function RenewalsManager({ rows, month }: RenewalsManagerProps) {
   const [roundToPound, setRoundToPound] = useState(true)
   const [applying, setApplying] = useState(false)
   const [sendingAccount, setSendingAccount] = useState<string | null>(null)
+  const [creatingAccount, setCreatingAccount] = useState<string | null>(null)
+  const [confirmCreate, setConfirmCreate] = useState<AccountGroup | null>(null)
 
   const groups = useMemo<AccountGroup[]>(() => {
     const map = new Map<string, AccountGroup>()
@@ -117,6 +130,31 @@ export function RenewalsManager({ rows, month }: RenewalsManagerProps) {
       toast.error(result.error)
     } else {
       toast.success(`Renewal notice sent to ${result.sentTo}`)
+      startTransition(() => router.refresh())
+    }
+  }
+
+  // Commit a renewal to invoicing: raise a DRAFT recurring invoice covering all
+  // of this account's renewal charges. Available whether or not an increase was
+  // applied or a notice sent. Any per-account charges the user has selected are
+  // used; otherwise every charge in the group is invoiced. Lands on the draft
+  // invoice so it can be edited before issuing.
+  const handleCreateInvoice = async (group: AccountGroup) => {
+    setConfirmCreate(null)
+    setCreatingAccount(group.accountId)
+    const selectedInGroup = group.charges.filter((c) => selected.has(c.id)).map((c) => c.id)
+    const chargeIds = selectedInGroup.length > 0 ? selectedInGroup : group.charges.map((c) => c.id)
+    const result = await createInvoiceFromRecurringCharges(group.accountId, chargeIds)
+    setCreatingAccount(null)
+    if (result.error) {
+      toast.error(result.error)
+      return
+    }
+    if (result.invoiceId) {
+      toast.success('Draft invoice created')
+      router.push(`/dashboard/invoices/${result.invoiceId}`)
+    } else {
+      toast.success('Renewal committed to invoicing')
       startTransition(() => router.refresh())
     }
   }
@@ -225,20 +263,35 @@ export function RenewalsManager({ rows, month }: RenewalsManagerProps) {
                 />
                 <CardTitle className="text-base">{group.accountName}</CardTitle>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                disabled={!group.hasEmail || sendingAccount === group.accountId}
-                onClick={() => handleSend(group)}
-              >
-                {sendingAccount === group.accountId ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Mail className="h-4 w-4" />
-                )}
-                Send renewal notice
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  disabled={!group.hasEmail || sendingAccount === group.accountId}
+                  onClick={() => handleSend(group)}
+                >
+                  {sendingAccount === group.accountId ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Mail className="h-4 w-4" />
+                  )}
+                  Send renewal notice
+                </Button>
+                <Button
+                  size="sm"
+                  className="gap-2"
+                  disabled={group.accountId === 'unknown' || creatingAccount === group.accountId}
+                  onClick={() => setConfirmCreate(group)}
+                >
+                  {creatingAccount === group.accountId ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FilePlus className="h-4 w-4" />
+                  )}
+                  Commit to invoicing
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-2">
               {!group.hasEmail && (
@@ -289,6 +342,35 @@ export function RenewalsManager({ rows, month }: RenewalsManagerProps) {
           </Card>
         )
       })}
+
+      <AlertDialog open={!!confirmCreate} onOpenChange={(open) => !open && setConfirmCreate(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Commit to invoicing?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmCreate && (
+                <>
+                  This raises a draft recurring invoice for{' '}
+                  <span className="font-medium">{confirmCreate.accountName}</span> covering{' '}
+                  {(() => {
+                    const n = confirmCreate.charges.filter((c) => selected.has(c.id)).length
+                    const count = n > 0 ? n : confirmCreate.charges.length
+                    return `${count} charge${count === 1 ? '' : 's'}`
+                  })()}
+                  . You&apos;ll be taken to the draft invoice to edit it before issuing. This works
+                  whether or not an increase was applied or a renewal notice sent.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => confirmCreate && handleCreateInvoice(confirmCreate)}>
+              Create draft invoice
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

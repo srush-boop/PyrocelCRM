@@ -47,8 +47,9 @@ export default async function RenewalsPage({
         </Button>
         <h1 className="text-3xl font-bold tracking-tight">Renewals</h1>
         <p className="text-muted-foreground">
-          Recurring charges due for renewal. Apply price increases before sending each customer
-          their proposed pricing for the forthcoming period.
+          Recurring charges due for renewal. Optionally apply a price increase and send each
+          customer their proposed pricing, then commit any account straight to a draft invoice —
+          with or without an increase or notice.
         </p>
       </div>
 

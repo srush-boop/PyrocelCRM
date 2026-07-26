@@ -31,7 +31,7 @@ export default async function ClientsPage() {
 
   const { data: sites } = await supabase
     .from('sites')
-    .select('id, name, address, status, client_id')
+    .select('id, name, address, status, client_id, billing_account_id')
     .order('name')
 
   // Lookups for scoping client-specific checklist items, plus existing item
@@ -42,7 +42,7 @@ export default async function ClientsPage() {
       supabase.from('service_types').select('id, name').order('name'),
       supabase.from('client_checklist_items').select('client_id'),
       supabase.from('client_links').select('client_id'),
-      supabase.from('billing_accounts').select('client_id'),
+      supabase.from('billing_accounts').select('id, client_id, name, sage_account_ref, is_default'),
       supabase.from('invoices').select('client_id'),
     ])
 
@@ -56,9 +56,34 @@ export default async function ClientsPage() {
     linkCountByClient[row.client_id] = (linkCountByClient[row.client_id] || 0) + 1
   }
 
+  type BillingAcctRow = {
+    id: string
+    client_id: string
+    name: string
+    sage_account_ref: string | null
+    is_default: boolean
+  }
+  const billingAccounts = (billingItems || []) as BillingAcctRow[]
   const billingCountByClient: Record<string, number> = {}
-  for (const row of (billingItems || []) as { client_id: string }[]) {
+  const accountById: Record<string, BillingAcctRow> = {}
+  const defaultAccountByClient: Record<string, BillingAcctRow> = {}
+  for (const row of billingAccounts) {
     billingCountByClient[row.client_id] = (billingCountByClient[row.client_id] || 0) + 1
+    accountById[row.id] = row
+    if (row.is_default) defaultAccountByClient[row.client_id] = row
+  }
+
+  // Resolve each site's billing account (site override → client default) so the
+  // site tile can note which account ref it's billed under.
+  const siteBillingBySite: Record<string, { accountName: string | null; sageRef: string | null }> = {}
+  for (const site of (sites || []) as Site[]) {
+    const acct =
+      (site.billing_account_id ? accountById[site.billing_account_id] : undefined) ||
+      (site.client_id ? defaultAccountByClient[site.client_id] : undefined)
+    siteBillingBySite[site.id] = {
+      accountName: acct?.name ?? null,
+      sageRef: acct?.sage_account_ref ?? null,
+    }
   }
 
   const invoiceCountByClient: Record<string, number> = {}
@@ -94,6 +119,7 @@ export default async function ClientsPage() {
           linkCountByClient={linkCountByClient}
           billingCountByClient={billingCountByClient}
           invoiceCountByClient={invoiceCountByClient}
+          siteBillingBySite={siteBillingBySite}
         />
       </Suspense>
     </div>

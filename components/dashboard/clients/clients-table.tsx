@@ -52,6 +52,7 @@ interface ClientsTableProps {
   linkCountByClient?: Record<string, number>
   billingCountByClient?: Record<string, number>
   invoiceCountByClient?: Record<string, number>
+  siteBillingBySite?: Record<string, { accountName: string | null; sageRef: string | null }>
 }
 
 export function ClientsTable({
@@ -63,6 +64,7 @@ export function ClientsTable({
   linkCountByClient = {},
   billingCountByClient = {},
   invoiceCountByClient = {},
+  siteBillingBySite = {},
 }: ClientsTableProps) {
   const [search, setSearch] = useState('')
   const [deleteId, setDeleteId] = useState<string | null>(null)
@@ -76,6 +78,9 @@ export function ClientsTable({
   const searchParams = useSearchParams()
   const focusedClientId = searchParams.get('client')
   const [expandedId, setExpandedId] = useState<string | null>(focusedClientId)
+  // Sites list within an expanded client starts collapsed to reduce clutter;
+  // this tracks which clients have had their sites list opened.
+  const [openSites, setOpenSites] = useState<Set<string>>(new Set())
   const router = useRouter()
   const supabase = createClient()
   const focusedRowRef = useRef<HTMLTableRowElement | null>(null)
@@ -235,40 +240,74 @@ export function ClientsTable({
                       <TableRow className="hover:bg-transparent">
                         <TableCell colSpan={8} className="bg-muted/30 p-0">
                           <div className="p-4">
-                            <p className="text-xs font-medium text-muted-foreground mb-2">
-                              Sites for {client.name}
-                            </p>
-                            {clientSites.length === 0 ? (
-                              <p className="text-sm text-muted-foreground py-2">
-                                No sites assigned to this client yet.
-                              </p>
-                            ) : (
-                              <div className="grid gap-2 sm:grid-cols-2">
-                                {clientSites.map((site) => (
-                                  <Link
-                                    key={site.id}
-                                    href={`/dashboard/sites/${site.id}`}
-                                    className="flex items-center justify-between gap-2 rounded-md border bg-background px-3 py-2 transition-colors hover:border-primary hover:bg-primary/5"
+                            {(() => {
+                              const sitesOpen = openSites.has(client.id)
+                              const toggleSites = () =>
+                                setOpenSites((prev) => {
+                                  const next = new Set(prev)
+                                  if (next.has(client.id)) next.delete(client.id)
+                                  else next.add(client.id)
+                                  return next
+                                })
+                              return (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={toggleSites}
+                                    aria-expanded={sitesOpen}
+                                    className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
                                   >
-                                    <div className="flex items-start gap-2 min-w-0">
-                                      <MapPin className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
-                                      <div className="min-w-0">
-                                        <p className="text-sm font-medium truncate">{site.name}</p>
-                                        <p className="text-xs text-muted-foreground truncate">{site.address}</p>
+                                    {sitesOpen ? (
+                                      <ChevronDown className="h-3.5 w-3.5" />
+                                    ) : (
+                                      <ChevronRight className="h-3.5 w-3.5" />
+                                    )}
+                                    Sites for {client.name} ({clientSites.length})
+                                  </button>
+                                  {sitesOpen &&
+                                    (clientSites.length === 0 ? (
+                                      <p className="text-sm text-muted-foreground py-2">
+                                        No sites assigned to this client yet.
+                                      </p>
+                                    ) : (
+                                      <div className="grid gap-2 sm:grid-cols-2">
+                                        {clientSites.map((site) => {
+                                          const billing = siteBillingBySite[site.id]
+                                          return (
+                                            <Link
+                                              key={site.id}
+                                              href={`/dashboard/sites/${site.id}`}
+                                              className="flex items-center justify-between gap-2 rounded-md border bg-background px-3 py-2 transition-colors hover:border-primary hover:bg-primary/5"
+                                            >
+                                              <div className="flex items-start gap-2 min-w-0">
+                                                <MapPin className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
+                                                <div className="min-w-0">
+                                                  <p className="text-sm font-medium truncate">{site.name}</p>
+                                                  <p className="text-xs text-muted-foreground truncate">{site.address}</p>
+                                                  <p className="mt-1 text-xs text-muted-foreground truncate">
+                                                    <span className="text-foreground/70">Client:</span> {client.name}
+                                                    {' · '}
+                                                    <span className="text-foreground/70">Account ref:</span>{' '}
+                                                    {billing?.sageRef || billing?.accountName || 'Not set'}
+                                                  </p>
+                                                </div>
+                                              </div>
+                                              <div className="flex items-center gap-2 shrink-0">
+                                                <StatusBadge
+                                                  status={site.status}
+                                                  effective={effectiveStatus(client.status, site.status)}
+                                                  effectiveSource="client"
+                                                />
+                                                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+                                              </div>
+                                            </Link>
+                                          )
+                                        })}
                                       </div>
-                                    </div>
-                                    <div className="flex items-center gap-2 shrink-0">
-                                      <StatusBadge
-                                        status={site.status}
-                                        effective={effectiveStatus(client.status, site.status)}
-                                        effectiveSource="client"
-                                      />
-                                      <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-                                    </div>
-                                  </Link>
-                                ))}
-                              </div>
-                            )}
+                                    ))}
+                                </>
+                              )
+                            })()}
                             <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
                               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                 <ListChecks className="h-4 w-4" />

@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { Loader2, Plus, Trash2, Info } from 'lucide-react'
+import { Loader2, Plus, Trash2, Info, Upload, X } from 'lucide-react'
 import {
   saveMyEmailFooter,
   saveGlobalEmailFooter,
@@ -76,9 +76,32 @@ function FooterEditor({
   const [values, setValues] = useState<EmailFooterValues>(initial)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [pending, startTransition] = useTransition()
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   function update(patch: Partial<EmailFooterValues>) {
     setValues((v) => ({ ...v, ...patch }))
+  }
+
+  async function handleUpload(file: File) {
+    setMessage(null)
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('image', file)
+      const res = await fetch('/api/email-footer/image', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (!res.ok) {
+        setMessage({ type: 'error', text: data.error || 'Upload failed.' })
+        return
+      }
+      update({ imageUrl: data.url })
+    } catch {
+      setMessage({ type: 'error', text: 'Upload failed. Please try again.' })
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
   }
 
   function updateLink(index: number, patch: Partial<EmailFooterLink>) {
@@ -134,19 +157,78 @@ function FooterEditor({
       </div>
 
       <div className="grid gap-2">
-        <Label htmlFor="footer-image">Image URL</Label>
-        <Input
-          id="footer-image"
-          type="url"
-          value={values.imageUrl}
-          onChange={(e) => update({ imageUrl: e.target.value })}
-          placeholder="https://example.com/signature-banner.png"
+        <Label htmlFor="footer-image">Image</Label>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) void handleUpload(file)
+          }}
         />
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Info className="h-3.5 w-3.5" />
-          Paste a public image URL (e.g. a banner or signature). Email clients cannot load private
-          images.
-        </p>
+        {values.imageUrl ? (
+          <div className="flex items-center gap-3 rounded-md border border-border p-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={values.imageUrl || '/placeholder.svg'}
+              alt="Footer image preview"
+              className="h-12 w-auto max-w-[160px] rounded object-contain"
+            />
+            <div className="flex flex-1 items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={uploading}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Replace
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 text-muted-foreground"
+                onClick={() => update({ imageUrl: '' })}
+              >
+                <X className="h-4 w-4" />
+                Remove
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            className="w-fit gap-2"
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {uploading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Upload className="h-4 w-4" />
+            )}
+            Upload image
+          </Button>
+        )}
+        <div className="grid gap-1.5">
+          <Input
+            id="footer-image"
+            type="url"
+            value={values.imageUrl}
+            onChange={(e) => update({ imageUrl: e.target.value })}
+            placeholder="…or paste a public image URL"
+          />
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Info className="h-3.5 w-3.5 shrink-0" />
+            Upload a banner or signature image (PNG, JPG, WEBP or GIF, max 2MB), or paste a public
+            URL. Uploaded images are stored publicly so email clients can display them.
+          </p>
+        </div>
       </div>
 
       <div className="space-y-2">

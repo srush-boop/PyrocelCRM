@@ -12,6 +12,7 @@ import {
   Navigation,
   CalendarClock,
   Clock,
+  User,
 } from 'lucide-react'
 import type { TaskWithDetails, TaskStatus } from '@/lib/types/database'
 import { CreateDocumentButton } from '@/components/documents/create-document-dialog'
@@ -115,6 +116,14 @@ export function TaskHeader({
 
   const statusStyle = STATUS_STYLES[status] ?? STATUS_STYLES.pending
 
+  // Attribution: prefer the live assigned engineer, else the name snapshotted
+  // when the call was completed (survives the engineer's account being deleted).
+  const engineerName =
+    task.assigned_engineer?.full_name ||
+    task.assigned_engineer?.email ||
+    task.completed_engineer_name ||
+    null
+
   return (
     <div className="space-y-3">
       {/* Row 1: back + status, always reachable at the top on mobile */}
@@ -211,6 +220,16 @@ export function TaskHeader({
             Commenced {formatTimeUK(task.started_at)}
           </span>
         )}
+        <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+          <User className="h-3.5 w-3.5 shrink-0" />
+          {engineerName ? (
+            <>
+              Engineer <span className="font-medium text-foreground">{engineerName}</span>
+            </>
+          ) : (
+            <span className="italic">Unassigned</span>
+          )}
+        </span>
       </div>
 
       {/* Respond-by countdown — shown for all users when the call has a KPI deadline */}

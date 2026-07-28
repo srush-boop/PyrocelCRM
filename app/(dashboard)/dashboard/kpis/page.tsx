@@ -9,7 +9,22 @@ export const metadata = {
 
 export default async function KpisPage() {
   const supabase = await createClient()
-  const { tasks, tolerances } = await fetchKpiData(supabase)
+  const { tasks, tolerances, deadlineReasons, excludedReasons } = await fetchKpiData(supabase)
+
+  // Only office/admin can assign deadline-failed reasons / excuse misses here.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  let canReview = false
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+    const role = (profile as { role?: string } | null)?.role
+    canReview = role === 'admin' || role === 'office'
+  }
 
   // Distinct clients present in the data, for the filter.
   const clientMap = new Map<string, string>()
@@ -28,7 +43,15 @@ export default async function KpisPage() {
           Compliance against regulatory and client tolerances across all services.
         </p>
       </div>
-      <KpiDashboard tasks={tasks} tolerances={tolerances} clients={clients} showClientFilter />
+      <KpiDashboard
+        tasks={tasks}
+        tolerances={tolerances}
+        clients={clients}
+        showClientFilter
+        deadlineReasons={deadlineReasons}
+        excludedReasons={excludedReasons}
+        canReview={canReview}
+      />
     </div>
   )
 }

@@ -58,6 +58,8 @@ export function AddServiceTypeDialog({
     color: PYROCEL_RED,
     regulatory_tolerance_value: 0,
     regulatory_tolerance_unit: 'months' as ToleranceUnit,
+    // Subject to regulatory compliance by default; turn off for non-regulated services.
+    regulatory_compliance: true,
     // Recurring PPM by default. Change the kind to make this a reactive
     // on-demand call type or a planned one-off (e.g. Commissioning).
     call_kind: 'recurring' as ServiceType['call_kind'],
@@ -101,6 +103,7 @@ export function AddServiceTypeDialog({
         color: formData.color,
         regulatory_tolerance_value: formData.regulatory_tolerance_value,
         regulatory_tolerance_unit: formData.regulatory_tolerance_unit,
+        regulatory_compliance: formData.regulatory_compliance,
         // Client tier defaults to the regulatory standard; tighter client KPIs are
         // set per site/service. Keep the legacy default columns in sync as the fallback.
         client_tolerance_value: formData.regulatory_tolerance_value,
@@ -150,6 +153,7 @@ export function AddServiceTypeDialog({
         color: PYROCEL_RED,
         regulatory_tolerance_value: 0,
         regulatory_tolerance_unit: 'months',
+        regulatory_compliance: true,
         call_kind: 'recurring',
         is_emergency: false,
         default_kpi_hours: 24,
@@ -272,6 +276,7 @@ export function AddServiceTypeDialog({
                   value={{
                     regulatory_tolerance_value: formData.regulatory_tolerance_value,
                     regulatory_tolerance_unit: formData.regulatory_tolerance_unit,
+                    regulatory_compliance: formData.regulatory_compliance,
                   }}
                   onChange={(t) => setFormData({ ...formData, ...t })}
                 />

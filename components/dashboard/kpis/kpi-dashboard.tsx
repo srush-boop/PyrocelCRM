@@ -43,6 +43,7 @@ import {
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts'
 import {
   buildKpiReport,
+  buildMonthlyKpi,
   type ComplianceSummary,
   type ComplianceTier,
   type GroupSummary,
@@ -50,12 +51,17 @@ import {
   type ToleranceLookup,
 } from '@/lib/kpi'
 import { ShieldCheck, Target, AlertTriangle, CircleCheck, ListFilter, X } from 'lucide-react'
+import { DeadlineFailedReview } from './deadline-failed-review'
 
 interface KpiDashboardProps {
   tasks: KpiTask[]
   tolerances: ToleranceLookup
   clients?: { id: string; name: string }[]
   showClientFilter?: boolean
+  // Deadline-failed review support.
+  deadlineReasons?: string[]
+  excludedReasons?: string[]
+  canReview?: boolean
 }
 
 const chartConfig: ChartConfig = {
@@ -72,6 +78,9 @@ export function KpiDashboard({
   tolerances,
   clients = [],
   showClientFilter = false,
+  deadlineReasons = [],
+  excludedReasons = [],
+  canReview = false,
 }: KpiDashboardProps) {
   const [clientId, setClientId] = useState<string>('all')
   const [tier, setTier] = useState<ComplianceTier>('regulatory')
@@ -133,6 +142,12 @@ export function KpiDashboard({
 
   const report = useMemo(
     () => buildKpiReport(filteredTasks, tolerances),
+    [filteredTasks, tolerances],
+  )
+
+  // Month-by-month trend (chronological) for the current filters.
+  const monthly = useMemo(
+    () => buildMonthlyKpi(filteredTasks, tolerances),
     [filteredTasks, tolerances],
   )
 
@@ -391,6 +406,74 @@ export function KpiDashboard({
           </div>
         </CardContent>
       </Card>
+
+      {/* Monthly trend table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Monthly compliance</CardTitle>
+          <CardDescription>
+            {tier === 'regulatory' ? 'Regulatory' : 'Client'} on-time rate per month, based on the
+            call&apos;s due date. Excludes pending calls whose window is still open.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Month</TableHead>
+                  <TableHead className="text-right">On time</TableHead>
+                  <TableHead className="text-right">Early</TableHead>
+                  <TableHead className="text-right">Late</TableHead>
+                  <TableHead className="text-right">Overdue</TableHead>
+                  <TableHead className="text-right">Pending</TableHead>
+                  <TableHead className="text-right">Rate</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {monthly.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-muted-foreground">
+                      No data available.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  monthly.map((m) => {
+                    const s = tier === 'regulatory' ? m.regulatory : m.client
+                    return (
+                      <TableRow key={m.monthKey}>
+                        <TableCell className="font-medium">{m.label}</TableCell>
+                        <TableCell className="text-right">{s.compliant}</TableCell>
+                        <TableCell className="text-right">{s.early}</TableCell>
+                        <TableCell className="text-right">{s.late}</TableCell>
+                        <TableCell className="text-right">{s.overdue}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {s.pending}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <RateBadge rate={s.rate} />
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Deadline-failed review (managers) */}
+      {canReview && (
+        <DeadlineFailedReview
+          tasks={filteredTasks}
+          tolerances={tolerances}
+          tier={tier}
+          reasons={deadlineReasons}
+          excludedReasons={excludedReasons}
+          canEdit={canReview}
+        />
+      )}
     </div>
   )
 }

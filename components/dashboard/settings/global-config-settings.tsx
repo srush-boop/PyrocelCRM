@@ -18,11 +18,12 @@ import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { setGlobalConfig } from '@/lib/actions/global-config'
 import { OPENING_HOURS_KEY, type OpeningHours } from '@/lib/oncall/opening-hours'
-import { Loader2, Plus, Trash2, Save, Crown, Clock } from 'lucide-react'
+import { Loader2, Plus, Trash2, Save, Crown, Clock, ShieldOff } from 'lucide-react'
 
 interface GlobalConfigSettingsProps {
   poOverdueDays: number
   deadlineReasons: string[]
+  excludedReasons: string[]
   engagementStatsEnabled: boolean
   openingHours: OpeningHours
 }
@@ -30,6 +31,7 @@ interface GlobalConfigSettingsProps {
 export function GlobalConfigSettings({
   poOverdueDays: initialOverdueDays,
   deadlineReasons: initialReasons,
+  excludedReasons: initialExcluded,
   engagementStatsEnabled: initialEngagementEnabled,
   openingHours: initialOpeningHours,
 }: GlobalConfigSettingsProps) {
@@ -81,8 +83,9 @@ export function GlobalConfigSettings({
   const [overdueDays, setOverdueDays] = useState(String(initialOverdueDays))
   const [savingOverdue, setSavingOverdue] = useState(false)
 
-  // Deadline failed reasons list
+  // Deadline failed reasons list + the subset excluded from KPI calculations.
   const [reasons, setReasons] = useState<string[]>(initialReasons)
+  const [excluded, setExcluded] = useState<string[]>(initialExcluded)
   const [newReason, setNewReason] = useState('')
   const [savingReasons, setSavingReasons] = useState(false)
 
@@ -116,6 +119,24 @@ export function GlobalConfigSettings({
 
   const removeReason = (r: string) => {
     setReasons((prev) => prev.filter((x) => x !== r))
+    // Keep the exclusion list in sync so it never references a deleted reason.
+    setExcluded((prev) => prev.filter((x) => x !== r))
+  }
+
+  // Rename a reason in place, migrating its exclusion flag to the new label.
+  const renameReason = (oldName: string, next: string) => {
+    const trimmed = next.trim()
+    if (!trimmed || trimmed === oldName) return
+    if (reasons.includes(trimmed)) {
+      toast.error('That reason already exists')
+      return
+    }
+    setReasons((prev) => prev.map((x) => (x === oldName ? trimmed : x)))
+    setExcluded((prev) => prev.map((x) => (x === oldName ? trimmed : x)))
+  }
+
+  const toggleExcluded = (r: string, next: boolean) => {
+    setExcluded((prev) => (next ? [...new Set([...prev, r])] : prev.filter((x) => x !== r)))
   }
 
   const saveReasons = async () => {
@@ -124,8 +145,14 @@ export function GlobalConfigSettings({
       return
     }
     setSavingReasons(true)
-    const { error } = await setGlobalConfig('deadline_failed_reasons', reasons)
+    // Persist the reason list and the excludable subset (kept to existing reasons).
+    const cleanExcluded = excluded.filter((x) => reasons.includes(x))
+    const [{ error: e1 }, { error: e2 }] = await Promise.all([
+      setGlobalConfig('deadline_failed_reasons', reasons),
+      setGlobalConfig('deadline_failed_reason_exclusions', cleanExcluded),
+    ])
     setSavingReasons(false)
+    const error = e1 || e2
     if (error) {
       toast.error(error)
     } else {
@@ -283,25 +310,61 @@ export function GlobalConfigSettings({
           <CardTitle>Deadline Failed Reasons</CardTitle>
           <CardDescription>
             Configurable reasons selectable when a call misses its respond-by deadline. These
-            appear in a dropdown on the call overview for office and admin users.
+            appear in a dropdown on the call overview for office and admin users. You can rename a
+            reason inline, and flag any reason as{' '}
+            <span className="font-medium">excluded from KPI</span> &mdash; misses given an excluded
+            reason are excused and removed from compliance calculations.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            {reasons.map((r) => (
-              <div key={r} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
-                <span className="text-sm">{r}</span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                  onClick={() => removeReason(r)}
-                  aria-label={`Remove "${r}"`}
+            {reasons.map((r) => {
+              const isExcluded = excluded.includes(r)
+              return (
+                <div
+                  key={r}
+                  className="flex flex-wrap items-center gap-2 rounded-md border px-3 py-2"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            ))}
+                  <Input
+                    defaultValue={r}
+                    className="h-8 flex-1 min-w-[12rem]"
+                    onBlur={(e) => renameReason(r, e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                        e.preventDefault()
+                        ;(e.target as HTMLInputElement).blur()
+                      }
+                    }}
+                    aria-label={`Rename "${r}"`}
+                  />
+                  <div className="flex items-center gap-2 rounded-md px-2 py-1">
+                    <ShieldOff
+                      className={`h-3.5 w-3.5 ${isExcluded ? 'text-amber-600' : 'text-muted-foreground'}`}
+                    />
+                    <Label
+                      htmlFor={`exclude-${r}`}
+                      className="cursor-pointer text-xs text-muted-foreground"
+                    >
+                      Exclude from KPI
+                    </Label>
+                    <Switch
+                      id={`exclude-${r}`}
+                      checked={isExcluded}
+                      onCheckedChange={(next) => toggleExcluded(r, next)}
+                    />
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => removeReason(r)}
+                    aria-label={`Remove "${r}"`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              )
+            })}
             {reasons.length === 0 && (
               <p className="text-sm text-muted-foreground italic">No reasons configured yet.</p>
             )}

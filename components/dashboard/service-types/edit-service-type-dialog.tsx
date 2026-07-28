@@ -61,6 +61,8 @@ export function EditServiceTypeDialog({ serviceType, systemTypes, nominalCodes, 
     color: serviceType.color || PYROCEL_RED,
     regulatory_tolerance_value: serviceType.regulatory_tolerance_value ?? 0,
     regulatory_tolerance_unit: (serviceType.regulatory_tolerance_unit || 'days') as ToleranceUnit,
+    // Legacy rows may be null; default to subject-to-regulatory.
+    regulatory_compliance: serviceType.regulatory_compliance !== false,
     // Derive call_kind from the stored value, falling back to the legacy flags
     // for rows created before call_kind existed.
     call_kind: (serviceType.call_kind ??
@@ -132,6 +134,7 @@ export function EditServiceTypeDialog({ serviceType, systemTypes, nominalCodes, 
         color: formData.color,
         regulatory_tolerance_value: formData.regulatory_tolerance_value,
         regulatory_tolerance_unit: formData.regulatory_tolerance_unit,
+        regulatory_compliance: formData.regulatory_compliance,
         // Keep the legacy service-type client default in step with regulatory;
         // tighter client KPIs live per site/service.
         client_tolerance_value: formData.regulatory_tolerance_value,
@@ -281,6 +284,7 @@ export function EditServiceTypeDialog({ serviceType, systemTypes, nominalCodes, 
                   value={{
                     regulatory_tolerance_value: formData.regulatory_tolerance_value,
                     regulatory_tolerance_unit: formData.regulatory_tolerance_unit,
+                    regulatory_compliance: formData.regulatory_compliance,
                   }}
                   onChange={(t) => setFormData({ ...formData, ...t })}
                 />

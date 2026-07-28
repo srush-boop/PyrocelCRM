@@ -654,6 +654,10 @@ export interface ServiceType {
   // client = the (usually tighter) target shared with clients.
   regulatory_tolerance_value: number
   regulatory_tolerance_unit: ToleranceUnit
+  // Whether this service type is subject to regulatory compliance. When false,
+  // it is kept in the client KPI tier but omitted from regulatory figures and
+  // the regulatory compliance chart. Defaults to true.
+  regulatory_compliance: boolean
   client_tolerance_value: number
   client_tolerance_unit: ToleranceUnit
   color?: string | null

@@ -104,6 +104,7 @@ export default async function SettingsPage() {
     ? await getGlobalConfigs([
         'po_request_overdue_days',
         'deadline_failed_reasons',
+        'deadline_failed_reason_exclusions',
         'engagement_stats_enabled',
         OPENING_HOURS_KEY,
       ])
@@ -111,6 +112,8 @@ export default async function SettingsPage() {
 
   const poOverdueDays = (globalConfig['po_request_overdue_days'] as number | null) ?? 14
   const deadlineReasons = (globalConfig['deadline_failed_reasons'] as string[] | null) ?? []
+  const deadlineExcludedReasons =
+    (globalConfig['deadline_failed_reason_exclusions'] as string[] | null) ?? []
   // Encouragement stats default to ON when the key has never been set.
   const engagementStatsEnabled =
     (globalConfig['engagement_stats_enabled'] as boolean | null) ?? true
@@ -162,6 +165,7 @@ export default async function SettingsPage() {
         documentTemplates={(templatesResult.data as DocumentTemplate[]) || []}
         poOverdueDays={poOverdueDays}
         deadlineReasons={deadlineReasons}
+        deadlineExcludedReasons={deadlineExcludedReasons}
         engagementStatsEnabled={engagementStatsEnabled}
         canManageLoneWorker={canManageLoneWorker}
         loneWorkerUsers={loneWorkerData.users}

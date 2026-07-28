@@ -49,6 +49,7 @@ export async function fetchKpiData(supabase: SupabaseClient): Promise<KpiData> {
         )
       ),
       direct_site:sites!tasks_site_id_fkey(id, name, client_id, client:clients(id, name)),
+      system_type:system_types!tasks_system_type_id_fkey(id, name),
       direct_service_type:service_types!tasks_service_type_id_fkey(
         id,
         name,
@@ -129,6 +130,9 @@ export async function fetchKpiData(supabase: SupabaseClient): Promise<KpiData> {
       completedAt: row.completed_at,
       serviceTypeId,
       serviceTypeName: serviceType.name,
+      // Task carries a direct system_type_id (backfilled for recurring calls too).
+      systemTypeId: (row.system_type?.id as string | null) ?? null,
+      systemTypeName: (row.system_type?.name as string | null) ?? null,
       siteId: site.id,
       siteName: site.name,
       clientId: site.client?.id ?? site.client_id ?? null,

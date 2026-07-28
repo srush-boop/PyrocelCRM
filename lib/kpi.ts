@@ -24,7 +24,16 @@ export type ComplianceTier = 'regulatory' | 'client'
 // - late:      completed after the window closed
 // - overdue:   not completed and the window has already closed (counts as a miss)
 // - pending:   not completed but the window has not closed yet (excluded from rate)
-export type ComplianceStatus = 'compliant' | 'early' | 'late' | 'overdue' | 'pending'
+// - excluded:  a miss (late/overdue) whose deadline-failed reason is flagged as
+//              excusable, so it is removed from the calculation entirely (neither
+//              helps nor hurts the rate).
+export type ComplianceStatus =
+  | 'compliant'
+  | 'early'
+  | 'late'
+  | 'overdue'
+  | 'pending'
+  | 'excluded'
 
 export interface ToleranceConfig {
   value: number
@@ -52,6 +61,14 @@ export interface KpiTask {
   // client override, this falls back to the regulatory standard (set upstream
   // in kpi-data), so the client tier always has a figure to report against.
   clientTolerance?: ToleranceConfig
+  // ── Deadline-failed review / exclusions (optional; used by the KPI review) ──
+  // The call reference (PYR-…) for display in the review list.
+  referenceNumber?: string | null
+  // The logged reason a deadline was missed, if any.
+  deadlineFailedReason?: string | null
+  // When true, a late/overdue miss for this task is excused (reason is flagged
+  // as excludable). Derived upstream from the configured exclusion list.
+  deadlineExcluded?: boolean
 }
 
 function toDate(value: string | Date | null): Date | null {
@@ -196,24 +213,33 @@ export interface ComplianceCounts {
   late: number
   overdue: number
   pending: number
+  // Excused misses — removed from the rate entirely.
+  excluded: number
 }
 
 export interface ComplianceSummary extends ComplianceCounts {
   total: number
-  // Tasks that count toward the rate (everything except pending).
+  // Tasks that count toward the rate (everything except pending and excluded).
   assessed: number
   // compliant / assessed, 0-100, rounded. null when nothing is assessed yet.
   rate: number | null
 }
 
 function emptyCounts(): ComplianceCounts {
-  return { compliant: 0, early: 0, late: 0, overdue: 0, pending: 0 }
+  return { compliant: 0, early: 0, late: 0, overdue: 0, pending: 0, excluded: 0 }
 }
 
 function summarize(counts: ComplianceCounts): ComplianceSummary {
   const total =
-    counts.compliant + counts.early + counts.late + counts.overdue + counts.pending
-  const assessed = total - counts.pending
+    counts.compliant +
+    counts.early +
+    counts.late +
+    counts.overdue +
+    counts.pending +
+    counts.excluded
+  // Pending (window still open) and excluded (excused misses) are both removed
+  // from the assessed base, so an excused failure neither helps nor hurts.
+  const assessed = total - counts.pending - counts.excluded
   const rate = assessed > 0 ? Math.round((counts.compliant / assessed) * 100) : null
   return { ...counts, total, assessed, rate }
 }
@@ -222,11 +248,22 @@ function addToCounts(counts: ComplianceCounts, status: ComplianceStatus) {
   counts[status] += 1
 }
 
+// A miss (late/overdue) becomes "excluded" when the task carries an excusable
+// deadline-failed reason. Non-misses are never altered.
+function applyExclusion(status: ComplianceStatus, excluded: boolean | undefined): ComplianceStatus {
+  if (excluded && (status === 'late' || status === 'overdue')) return 'excluded'
+  return status
+}
+
 export interface GroupSummary {
   key: string
   label: string
   regulatory: ComplianceSummary
   client: ComplianceSummary
+  // Whether the regulatory tier applies to this group. False for service types
+  // marked as not subject to regulatory compliance (their regulatory figures
+  // are omitted). Always true for site groups.
+  regulatoryApplicable: boolean
 }
 
 export interface KpiReport {
@@ -235,10 +272,17 @@ export interface KpiReport {
   bySite: GroupSummary[]
 }
 
-// Tolerance lookups per service type, for each tier.
+// Tolerance lookups per service type, for each tier. `regulatoryCompliance`
+// (default true) marks whether the service type is subject to regulatory
+// compliance — non-regulatory types are kept in the client tier but omitted
+// from the regulatory tier.
 export type ToleranceLookup = Record<
   string,
-  { regulatory: ToleranceConfig; client: ToleranceConfig }
+  {
+    regulatory: ToleranceConfig
+    client: ToleranceConfig
+    regulatoryCompliance?: boolean
+  }
 >
 
 /**
@@ -252,19 +296,29 @@ export function buildKpiReport(
 ): KpiReport {
   const overallReg = emptyCounts()
   const overallClient = emptyCounts()
-  const svc = new Map<string, { label: string; reg: ComplianceCounts; client: ComplianceCounts }>()
-  const site = new Map<string, { label: string; reg: ComplianceCounts; client: ComplianceCounts }>()
+  const svc = new Map<
+    string,
+    { label: string; reg: ComplianceCounts; client: ComplianceCounts; regApplicable: boolean }
+  >()
+  const site = new Map<
+    string,
+    { label: string; reg: ComplianceCounts; client: ComplianceCounts; regApplicable: boolean }
+  >()
 
   for (const task of tasks) {
     const tol = tolerances[task.serviceTypeId]
     if (!tol) continue
+    // Whether the regulatory tier applies to this service type. Non-regulatory
+    // types are kept in the client tier but omitted from regulatory figures.
+    const regApplicable = tol.regulatoryCompliance !== false
     // Regulatory = the service type's legal baseline. Client = this site/service's
     // override when present, otherwise the regulatory standard as the default.
     const clientTol = task.clientTolerance ?? tol.regulatory
-    const regStatus = classifyTask(task, tol.regulatory, today)
-    const clientStatus = classifyTask(task, clientTol, today)
+    // Excusable misses are reclassified to "excluded" and drop out of the rate.
+    const regStatus = applyExclusion(classifyTask(task, tol.regulatory, today), task.deadlineExcluded)
+    const clientStatus = applyExclusion(classifyTask(task, clientTol, today), task.deadlineExcluded)
 
-    addToCounts(overallReg, regStatus)
+    if (regApplicable) addToCounts(overallReg, regStatus)
     addToCounts(overallClient, clientStatus)
 
     if (!svc.has(task.serviceTypeId)) {
@@ -272,10 +326,11 @@ export function buildKpiReport(
         label: task.serviceTypeName,
         reg: emptyCounts(),
         client: emptyCounts(),
+        regApplicable,
       })
     }
     const s = svc.get(task.serviceTypeId)!
-    addToCounts(s.reg, regStatus)
+    if (regApplicable) addToCounts(s.reg, regStatus)
     addToCounts(s.client, clientStatus)
 
     if (!site.has(task.siteId)) {
@@ -283,15 +338,21 @@ export function buildKpiReport(
         label: task.siteName,
         reg: emptyCounts(),
         client: emptyCounts(),
+        regApplicable: true,
       })
     }
     const st = site.get(task.siteId)!
-    addToCounts(st.reg, regStatus)
+    // A site can host both regulatory and non-regulatory services; only the
+    // regulatory ones contribute to its regulatory figure.
+    if (regApplicable) addToCounts(st.reg, regStatus)
     addToCounts(st.client, clientStatus)
   }
 
   const toGroups = (
-    m: Map<string, { label: string; reg: ComplianceCounts; client: ComplianceCounts }>,
+    m: Map<
+      string,
+      { label: string; reg: ComplianceCounts; client: ComplianceCounts; regApplicable: boolean }
+    >,
   ): GroupSummary[] =>
     Array.from(m.entries())
       .map(([key, v]) => ({
@@ -299,6 +360,7 @@ export function buildKpiReport(
         label: v.label,
         regulatory: summarize(v.reg),
         client: summarize(v.client),
+        regulatoryApplicable: v.regApplicable,
       }))
       .sort((a, b) => a.label.localeCompare(b.label))
 
@@ -309,12 +371,75 @@ export function buildKpiReport(
   }
 }
 
+// ─── Month-by-month performance ─────────────────────────────────────────────
+
+export interface MonthlyKpiRow {
+  // Sortable "YYYY-MM" key derived from each task's due date.
+  monthKey: string
+  // Display label, e.g. "Aug 2026".
+  label: string
+  regulatory: ComplianceSummary
+  client: ComplianceSummary
+}
+
+const MONTH_LABELS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+]
+
+/**
+ * Build a month-by-month compliance breakdown (by task due date) for both
+ * tiers, applying the same exclusion and non-regulatory rules as the main
+ * report. Tasks with no due date are skipped. Returned oldest → newest.
+ */
+export function buildMonthlyKpi(
+  tasks: KpiTask[],
+  tolerances: ToleranceLookup,
+  today: Date = new Date(),
+): MonthlyKpiRow[] {
+  const months = new Map<string, { reg: ComplianceCounts; client: ComplianceCounts }>()
+
+  for (const task of tasks) {
+    const tol = tolerances[task.serviceTypeId]
+    if (!tol) continue
+    const due = toDate(task.dueDate)
+    if (!due) continue
+
+    const monthKey = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}`
+    if (!months.has(monthKey)) {
+      months.set(monthKey, { reg: emptyCounts(), client: emptyCounts() })
+    }
+    const bucket = months.get(monthKey)!
+
+    const regApplicable = tol.regulatoryCompliance !== false
+    const clientTol = task.clientTolerance ?? tol.regulatory
+    const regStatus = applyExclusion(classifyTask(task, tol.regulatory, today), task.deadlineExcluded)
+    const clientStatus = applyExclusion(classifyTask(task, clientTol, today), task.deadlineExcluded)
+
+    if (regApplicable) addToCounts(bucket.reg, regStatus)
+    addToCounts(bucket.client, clientStatus)
+  }
+
+  return Array.from(months.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([monthKey, v]) => {
+      const [year, month] = monthKey.split('-').map((n) => parseInt(n, 10))
+      return {
+        monthKey,
+        label: `${MONTH_LABELS[month - 1]} ${year}`,
+        regulatory: summarize(v.reg),
+        client: summarize(v.client),
+      }
+    })
+}
+
 export const STATUS_LABELS: Record<ComplianceStatus, string> = {
   compliant: 'On time',
   early: 'Early',
   late: 'Late',
   overdue: 'Overdue',
   pending: 'Pending',
+  excluded: 'Excused',
 }
 
 // Human-readable description of a tolerance config, e.g. "exact day", "±3 days",

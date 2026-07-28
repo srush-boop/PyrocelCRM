@@ -1,10 +1,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { KpiTask, ToleranceLookup } from '@/lib/kpi'
 import type { ToleranceUnit } from '@/lib/types/database'
+import { getGlobalConfig } from '@/lib/actions/global-config'
 
 export interface KpiData {
   tasks: KpiTask[]
   tolerances: ToleranceLookup
+  // Configured deadline-failed reasons and the subset flagged as excusable
+  // (excluded from KPI), surfaced so the review UI can offer them and the
+  // dashboard can show exclusion state.
+  deadlineReasons: string[]
+  excludedReasons: string[]
 }
 
 // Fetches the raw data needed to compute KPIs and projects it into the shapes
@@ -12,13 +18,19 @@ export interface KpiData {
 // (sees everything) and the client portal (RLS scopes rows to the client's
 // sites) — the query is identical; row-level security does the filtering.
 export async function fetchKpiData(supabase: SupabaseClient): Promise<KpiData> {
-  const { data, error } = await supabase
-    .from('tasks')
-    .select(
-      `
+  // Configured deadline reasons + the excludable subset drive KPI exclusions.
+  const [reasonsCfg, excludedCfg, { data, error }] = await Promise.all([
+    getGlobalConfig<string[]>('deadline_failed_reasons'),
+    getGlobalConfig<string[]>('deadline_failed_reason_exclusions'),
+    supabase
+      .from('tasks')
+      .select(
+        `
       id,
+      reference_number,
       scheduled_date,
       completed_at,
+      deadline_failed_reason,
       site_service:site_services(
         service_type_id,
         client_tolerance_value,
@@ -28,17 +40,23 @@ export async function fetchKpiData(supabase: SupabaseClient): Promise<KpiData> {
           id,
           name,
           regulatory_tolerance_value,
-          regulatory_tolerance_unit
+          regulatory_tolerance_unit,
+          regulatory_compliance
         )
       )
     `,
-    )
-    .limit(5000)
+      )
+      .limit(5000),
+  ])
 
   if (error) {
     console.error('[v0] Error loading KPI data:', error.message)
     throw error
   }
+
+  const deadlineReasons = reasonsCfg ?? []
+  const excludedReasons = excludedCfg ?? []
+  const excludedSet = new Set(excludedReasons)
 
   const tasks: KpiTask[] = []
   const tolerances: ToleranceLookup = {}
@@ -59,7 +77,12 @@ export async function fetchKpiData(supabase: SupabaseClient): Promise<KpiData> {
     if (!tolerances[serviceTypeId]) {
       // Client tier defaults to the regulatory standard at the service-type
       // level; the per-site/service override (below) tightens it where set.
-      tolerances[serviceTypeId] = { regulatory, client: regulatory }
+      tolerances[serviceTypeId] = {
+        regulatory,
+        client: regulatory,
+        // Legacy rows may not have the column; default to subject-to-regulatory.
+        regulatoryCompliance: serviceType.regulatory_compliance !== false,
+      }
     }
 
     // Client KPI for this specific site/service: use the override when present,
@@ -72,6 +95,8 @@ export async function fetchKpiData(supabase: SupabaseClient): Promise<KpiData> {
           }
         : regulatory
 
+    const deadlineFailedReason = (row.deadline_failed_reason as string | null) ?? null
+
     tasks.push({
       id: row.id,
       dueDate: row.scheduled_date,
@@ -83,8 +108,11 @@ export async function fetchKpiData(supabase: SupabaseClient): Promise<KpiData> {
       clientId: site.client?.id ?? site.client_id ?? null,
       clientName: site.client?.name ?? null,
       clientTolerance,
+      referenceNumber: (row.reference_number as string | null) ?? null,
+      deadlineFailedReason,
+      deadlineExcluded: deadlineFailedReason ? excludedSet.has(deadlineFailedReason) : false,
     })
   }
 
-  return { tasks, tolerances }
+  return { tasks, tolerances, deadlineReasons, excludedReasons }
 }

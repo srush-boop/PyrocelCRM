@@ -53,6 +53,10 @@ export interface KpiTask {
   completedAt: string | Date | null
   serviceTypeId: string
   serviceTypeName: string
+  // System type the call belongs to (e.g. Fire Alarm, Emergency Lighting).
+  // Null when the call/service has no associated system type.
+  systemTypeId: string | null
+  systemTypeName: string | null
   siteId: string
   siteName: string
   clientId: string | null

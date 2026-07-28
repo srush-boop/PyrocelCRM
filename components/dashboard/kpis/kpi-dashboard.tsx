@@ -89,6 +89,8 @@ export function KpiDashboard({
   const [dateTo, setDateTo] = useState<string>('')
   // Empty set = no service-type restriction (show all).
   const [serviceTypeIds, setServiceTypeIds] = useState<Set<string>>(new Set())
+  // Empty set = no system-type restriction (show all).
+  const [systemTypeIds, setSystemTypeIds] = useState<Set<string>>(new Set())
 
   // Distinct service types present in the data, for the multi-select filter.
   const serviceTypeOptions = useMemo(() => {
@@ -101,8 +103,28 @@ export function KpiDashboard({
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [tasks])
 
+  // Distinct system types present in the data, for the multi-select filter.
+  const systemTypeOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const t of tasks) {
+      if (t.systemTypeId && t.systemTypeName) map.set(t.systemTypeId, t.systemTypeName)
+    }
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [tasks])
+
   const toggleServiceType = (id: string) => {
     setServiceTypeIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSystemType = (id: string) => {
+    setSystemTypeIds((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
@@ -119,6 +141,8 @@ export function KpiDashboard({
     return tasks.filter((t) => {
       if (clientId !== 'all' && t.clientId !== clientId) return false
       if (serviceTypeIds.size > 0 && !serviceTypeIds.has(t.serviceTypeId)) return false
+      if (systemTypeIds.size > 0 && !(t.systemTypeId && systemTypeIds.has(t.systemTypeId)))
+        return false
       if (fromTime !== null || toTime !== null) {
         if (!t.dueDate) return false
         const due = new Date(t.dueDate).getTime()
@@ -128,16 +152,21 @@ export function KpiDashboard({
       }
       return true
     })
-  }, [tasks, clientId, serviceTypeIds, dateFrom, dateTo])
+  }, [tasks, clientId, serviceTypeIds, systemTypeIds, dateFrom, dateTo])
 
   const hasActiveFilters =
-    dateFrom !== '' || dateTo !== '' || serviceTypeIds.size > 0 || clientId !== 'all'
+    dateFrom !== '' ||
+    dateTo !== '' ||
+    serviceTypeIds.size > 0 ||
+    systemTypeIds.size > 0 ||
+    clientId !== 'all'
 
   const clearFilters = () => {
     setClientId('all')
     setDateFrom('')
     setDateTo('')
     setServiceTypeIds(new Set())
+    setSystemTypeIds(new Set())
   }
 
   const report = useMemo(
@@ -217,6 +246,41 @@ export function KpiDashboard({
                         onCheckedChange={() => toggleServiceType(st.id)}
                       />
                       <span className="truncate">{st.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
+        </div>
+
+        {/* System type multi-select */}
+        <div className="grid gap-1.5">
+          <Label className="text-xs text-muted-foreground">Systems</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="w-[14rem] justify-start font-normal">
+                <ListFilter className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="truncate">
+                  {systemTypeIds.size === 0 ? 'All systems' : `${systemTypeIds.size} selected`}
+                </span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-[16rem] p-2">
+              {systemTypeOptions.length === 0 ? (
+                <p className="px-2 py-1.5 text-sm text-muted-foreground">No systems.</p>
+              ) : (
+                <div className="max-h-64 space-y-0.5 overflow-y-auto">
+                  {systemTypeOptions.map((sys) => (
+                    <label
+                      key={sys.id}
+                      className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted"
+                    >
+                      <Checkbox
+                        checked={systemTypeIds.has(sys.id)}
+                        onCheckedChange={() => toggleSystemType(sys.id)}
+                      />
+                      <span className="truncate">{sys.name}</span>
                     </label>
                   ))}
                 </div>

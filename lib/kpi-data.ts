@@ -47,6 +47,17 @@ export async function fetchKpiData(supabase: SupabaseClient): Promise<KpiData> {
           is_recurring,
           is_emergency
         )
+      ),
+      direct_site:sites!tasks_site_id_fkey(id, name, client_id, client:clients(id, name)),
+      direct_service_type:service_types!tasks_service_type_id_fkey(
+        id,
+        name,
+        regulatory_tolerance_value,
+        regulatory_tolerance_unit,
+        regulatory_compliance,
+        call_kind,
+        is_recurring,
+        is_emergency
       )
     `,
       )
@@ -67,8 +78,10 @@ export async function fetchKpiData(supabase: SupabaseClient): Promise<KpiData> {
 
   for (const row of (data as any[]) ?? []) {
     const ss = row.site_service
-    const serviceType = ss?.service_type
-    const site = ss?.site
+    // Recurring PPM calls resolve via site_service; reactive/emergency calls
+    // have no site_service and instead carry direct site + service-type anchors.
+    const serviceType = ss?.service_type ?? row.direct_service_type
+    const site = ss?.site ?? row.direct_site
     if (!serviceType || !site) continue
 
     const serviceTypeId = serviceType.id as string
@@ -90,9 +103,10 @@ export async function fetchKpiData(supabase: SupabaseClient): Promise<KpiData> {
     }
 
     // Client KPI for this specific site/service: use the override when present,
-    // otherwise fall back to the regulatory standard.
+    // otherwise fall back to the regulatory standard. Reactive/emergency calls
+    // have no site_service, so they always inherit the regulatory standard.
     const clientTolerance =
-      ss.client_tolerance_value != null
+      ss?.client_tolerance_value != null
         ? {
             value: ss.client_tolerance_value as number,
             unit: (ss.client_tolerance_unit ?? 'days') as ToleranceUnit,

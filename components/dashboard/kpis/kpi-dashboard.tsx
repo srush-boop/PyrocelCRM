@@ -413,7 +413,9 @@ export function KpiDashboard({
           <CardTitle>Monthly compliance</CardTitle>
           <CardDescription>
             {tier === 'regulatory' ? 'Regulatory' : 'Client'} on-time rate per month, based on the
-            call&apos;s due date. Excludes pending calls whose window is still open.
+            call&apos;s due date. Excludes pending calls whose window is still open. The PPM and
+            emergency columns show the same rate for recurring maintenance and reactive emergency
+            calls respectively.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -428,18 +430,22 @@ export function KpiDashboard({
                   <TableHead className="text-right">Overdue</TableHead>
                   <TableHead className="text-right">Pending</TableHead>
                   <TableHead className="text-right">Rate</TableHead>
+                  <TableHead className="text-right">PPM rate</TableHead>
+                  <TableHead className="text-right">Emergency rate</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {monthly.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center text-muted-foreground">
                       No data available.
                     </TableCell>
                   </TableRow>
                 ) : (
                   monthly.map((m) => {
                     const s = tier === 'regulatory' ? m.regulatory : m.client
+                    const ppm = tier === 'regulatory' ? m.ppm.regulatory : m.ppm.client
+                    const emg = tier === 'regulatory' ? m.emergency.regulatory : m.emergency.client
                     return (
                       <TableRow key={m.monthKey}>
                         <TableCell className="font-medium">{m.label}</TableCell>
@@ -452,6 +458,20 @@ export function KpiDashboard({
                         </TableCell>
                         <TableCell className="text-right">
                           <RateBadge rate={s.rate} />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {ppm.assessed > 0 ? (
+                            <RateBadge rate={ppm.rate} />
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {emg.assessed > 0 ? (
+                            <RateBadge rate={emg.rate} />
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                       </TableRow>
                     )

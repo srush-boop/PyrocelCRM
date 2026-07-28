@@ -1,7 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { KpiTask, ToleranceLookup } from '@/lib/kpi'
+import type { CallCategory, KpiTask, ToleranceLookup } from '@/lib/kpi'
 import type { ToleranceUnit } from '@/lib/types/database'
 import { getGlobalConfig } from '@/lib/actions/global-config'
+import { resolveCallKind } from '@/lib/call-kinds'
 
 export interface KpiData {
   tasks: KpiTask[]
@@ -41,7 +42,10 @@ export async function fetchKpiData(supabase: SupabaseClient): Promise<KpiData> {
           name,
           regulatory_tolerance_value,
           regulatory_tolerance_unit,
-          regulatory_compliance
+          regulatory_compliance,
+          call_kind,
+          is_recurring,
+          is_emergency
         )
       )
     `,
@@ -97,6 +101,14 @@ export async function fetchKpiData(supabase: SupabaseClient): Promise<KpiData> {
 
     const deadlineFailedReason = (row.deadline_failed_reason as string | null) ?? null
 
+    // Operational category for the monthly PPM vs emergency rate split.
+    const callKind = resolveCallKind({
+      call_kind: serviceType.call_kind ?? null,
+      is_recurring: serviceType.is_recurring ?? false,
+    })
+    const callCategory: CallCategory =
+      callKind === 'recurring' ? 'ppm' : serviceType.is_emergency ? 'emergency' : 'other'
+
     tasks.push({
       id: row.id,
       dueDate: row.scheduled_date,
@@ -111,6 +123,7 @@ export async function fetchKpiData(supabase: SupabaseClient): Promise<KpiData> {
       referenceNumber: (row.reference_number as string | null) ?? null,
       deadlineFailedReason,
       deadlineExcluded: deadlineFailedReason ? excludedSet.has(deadlineFailedReason) : false,
+      callCategory,
     })
   }
 

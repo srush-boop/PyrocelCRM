@@ -2,6 +2,8 @@
 
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import { ShieldCheck } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -15,6 +17,9 @@ import type { ToleranceUnit } from '@/lib/types/database'
 export interface ToleranceFieldsValue {
   regulatory_tolerance_value: number
   regulatory_tolerance_unit: ToleranceUnit
+  // Whether this service type is subject to regulatory compliance. When false,
+  // it's kept in the client KPI tier but omitted from regulatory figures.
+  regulatory_compliance: boolean
 }
 
 interface ToleranceFieldsProps {
@@ -26,6 +31,7 @@ interface ToleranceFieldsProps {
 // baseline and the default the client tier inherits. Tighter client KPIs are
 // set per site/service in the site's service setup, not here.
 export function ToleranceFields({ value, onChange }: ToleranceFieldsProps) {
+  const subjectToRegulatory = value.regulatory_compliance !== false
   return (
     <div className="grid gap-3 rounded-lg border border-border p-3">
       <div>
@@ -37,15 +43,36 @@ export function ToleranceFields({ value, onChange }: ToleranceFieldsProps) {
         </p>
       </div>
 
-      <ToleranceRow
-        idPrefix="regulatory"
-        label="Regulatory KPI"
-        hint="The legal/standards baseline."
-        unit={value.regulatory_tolerance_unit}
-        numberValue={value.regulatory_tolerance_value}
-        onValueChange={(v) => onChange({ ...value, regulatory_tolerance_value: v })}
-        onUnitChange={(u) => onChange({ ...value, regulatory_tolerance_unit: u })}
-      />
+      <div className="flex items-start justify-between gap-3 rounded-md border border-dashed p-3">
+        <div className="space-y-0.5">
+          <Label htmlFor="regulatory-compliance" className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-primary" />
+            Subject to regulatory compliance
+          </Label>
+          <p className="text-xs text-muted-foreground text-pretty">
+            {subjectToRegulatory
+              ? 'Included in the Regulatory KPI tier and the compliance-by-service chart.'
+              : 'Not a regulated service — kept in the Client KPI tier but omitted from regulatory figures.'}
+          </p>
+        </div>
+        <Switch
+          id="regulatory-compliance"
+          checked={subjectToRegulatory}
+          onCheckedChange={(v) => onChange({ ...value, regulatory_compliance: v })}
+        />
+      </div>
+
+      {subjectToRegulatory && (
+        <ToleranceRow
+          idPrefix="regulatory"
+          label="Regulatory KPI"
+          hint="The legal/standards baseline."
+          unit={value.regulatory_tolerance_unit}
+          numberValue={value.regulatory_tolerance_value}
+          onValueChange={(v) => onChange({ ...value, regulatory_tolerance_value: v })}
+          onUnitChange={(u) => onChange({ ...value, regulatory_tolerance_unit: u })}
+        />
+      )}
     </div>
   )
 }

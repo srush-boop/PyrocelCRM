@@ -51,6 +51,7 @@ interface SettingsContentProps {
   documentTemplates: DocumentTemplate[]
   poOverdueDays: number
   deadlineReasons: string[]
+  deadlineExcludedReasons: string[]
   engagementStatsEnabled: boolean
   canManageLoneWorker: boolean
   loneWorkerUsers: LoneWorkerManagedUser[]
@@ -75,7 +76,7 @@ interface SettingsContentProps {
   canManageGlobalFooter: boolean
 }
 
-export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards, chargeTemplates, nominalCodes, canManageTags, documentTags, openingHours, canManageInternalTasks, internalTaskTemplates, internalTaskUsers, internalTaskDepartments, internalTaskRoles, internalTaskDocuments, mfaFactors, mfaRequired, myEmailFooter, globalEmailFooter, canManageGlobalFooter }: SettingsContentProps) {
+export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, deadlineExcludedReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards, chargeTemplates, nominalCodes, canManageTags, documentTags, openingHours, canManageInternalTasks, internalTaskTemplates, internalTaskUsers, internalTaskDepartments, internalTaskRoles, internalTaskDocuments, mfaFactors, mfaRequired, myEmailFooter, globalEmailFooter, canManageGlobalFooter }: SettingsContentProps) {
   const isAdmin = profile.role === 'admin'
   // Templates are managed by office/admin (mail-merge letters for client correspondence).
   const canManageTemplates = profile.role === 'admin' || profile.role === 'office'
@@ -481,6 +482,7 @@ export function SettingsContent({ user, profile, company, branches, departments,
           <GlobalConfigSettings
             poOverdueDays={poOverdueDays}
             deadlineReasons={deadlineReasons}
+            excludedReasons={deadlineExcludedReasons}
             engagementStatsEnabled={engagementStatsEnabled}
             openingHours={openingHours}
           />

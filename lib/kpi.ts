@@ -433,6 +433,23 @@ export function buildMonthlyKpi(
     })
 }
 
+/**
+ * Classify a single task for a given tier, applying the exclusion rule. Used by
+ * the KPI deadline-failed review list to show each miss's status. Returns
+ * `null` when the service type has no tolerance config.
+ */
+export function classifyKpiTask(
+  task: KpiTask,
+  tolerances: ToleranceLookup,
+  tier: ComplianceTier,
+  today: Date = new Date(),
+): ComplianceStatus | null {
+  const tol = tolerances[task.serviceTypeId]
+  if (!tol) return null
+  const cfg = tier === 'client' ? (task.clientTolerance ?? tol.regulatory) : tol.regulatory
+  return applyExclusion(classifyTask(task, cfg, today), task.deadlineExcluded)
+}
+
 export const STATUS_LABELS: Record<ComplianceStatus, string> = {
   compliant: 'On time',
   early: 'Early',

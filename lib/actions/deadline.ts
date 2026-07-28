@@ -53,6 +53,7 @@ export async function setDeadlineFailedReason(
   }
 
   revalidatePath('/dashboard/chargeable')
+  revalidatePath('/dashboard/kpis')
   revalidatePath(`/dashboard/tasks/${taskId}`)
   return { error: null }
 }

@@ -69,7 +69,14 @@ export interface KpiTask {
   // When true, a late/overdue miss for this task is excused (reason is flagged
   // as excludable). Derived upstream from the configured exclusion list.
   deadlineExcluded?: boolean
+  // Operational category, used for the monthly PPM vs emergency rate split.
+  // - ppm:       recurring preventative maintenance calls.
+  // - emergency: reactive emergency call types.
+  // - other:     everything else (non-emergency reactive, planned one-offs).
+  callCategory?: CallCategory
 }
+
+export type CallCategory = 'ppm' | 'emergency' | 'other'
 
 function toDate(value: string | Date | null): Date | null {
   if (!value) return null
@@ -373,6 +380,13 @@ export function buildKpiReport(
 
 // ─── Month-by-month performance ─────────────────────────────────────────────
 
+// A compliance summary for each tier — reused for the overall row and the
+// per-category (PPM / emergency) sub-rates.
+export interface TieredSummary {
+  regulatory: ComplianceSummary
+  client: ComplianceSummary
+}
+
 export interface MonthlyKpiRow {
   // Sortable "YYYY-MM" key derived from each task's due date.
   monthKey: string
@@ -380,6 +394,10 @@ export interface MonthlyKpiRow {
   label: string
   regulatory: ComplianceSummary
   client: ComplianceSummary
+  // Per-category rates for the same month: PPM (recurring) and emergency
+  // (reactive emergency) calls, each per tier.
+  ppm: TieredSummary
+  emergency: TieredSummary
 }
 
 const MONTH_LABELS = [
@@ -397,7 +415,23 @@ export function buildMonthlyKpi(
   tolerances: ToleranceLookup,
   today: Date = new Date(),
 ): MonthlyKpiRow[] {
-  const months = new Map<string, { reg: ComplianceCounts; client: ComplianceCounts }>()
+  interface MonthBucket {
+    reg: ComplianceCounts
+    client: ComplianceCounts
+    ppmReg: ComplianceCounts
+    ppmClient: ComplianceCounts
+    emgReg: ComplianceCounts
+    emgClient: ComplianceCounts
+  }
+  const emptyBucket = (): MonthBucket => ({
+    reg: emptyCounts(),
+    client: emptyCounts(),
+    ppmReg: emptyCounts(),
+    ppmClient: emptyCounts(),
+    emgReg: emptyCounts(),
+    emgClient: emptyCounts(),
+  })
+  const months = new Map<string, MonthBucket>()
 
   for (const task of tasks) {
     const tol = tolerances[task.serviceTypeId]
@@ -406,9 +440,7 @@ export function buildMonthlyKpi(
     if (!due) continue
 
     const monthKey = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}`
-    if (!months.has(monthKey)) {
-      months.set(monthKey, { reg: emptyCounts(), client: emptyCounts() })
-    }
+    if (!months.has(monthKey)) months.set(monthKey, emptyBucket())
     const bucket = months.get(monthKey)!
 
     const regApplicable = tol.regulatoryCompliance !== false
@@ -418,6 +450,15 @@ export function buildMonthlyKpi(
 
     if (regApplicable) addToCounts(bucket.reg, regStatus)
     addToCounts(bucket.client, clientStatus)
+
+    // Split the same statuses into the PPM / emergency sub-buckets.
+    if (task.callCategory === 'ppm') {
+      if (regApplicable) addToCounts(bucket.ppmReg, regStatus)
+      addToCounts(bucket.ppmClient, clientStatus)
+    } else if (task.callCategory === 'emergency') {
+      if (regApplicable) addToCounts(bucket.emgReg, regStatus)
+      addToCounts(bucket.emgClient, clientStatus)
+    }
   }
 
   return Array.from(months.entries())
@@ -429,6 +470,8 @@ export function buildMonthlyKpi(
         label: `${MONTH_LABELS[month - 1]} ${year}`,
         regulatory: summarize(v.reg),
         client: summarize(v.client),
+        ppm: { regulatory: summarize(v.ppmReg), client: summarize(v.ppmClient) },
+        emergency: { regulatory: summarize(v.emgReg), client: summarize(v.emgClient) },
       }
     })
 }

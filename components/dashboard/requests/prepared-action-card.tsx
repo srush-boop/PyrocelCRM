@@ -104,27 +104,45 @@ export function PreparedActionCard({
     }
   }
 
+  function currentPatch() {
+    return kind === 'create_call'
+      ? { notes: notes.trim(), urgency }
+      : kind === 'chase_up'
+        ? { note: note.trim() }
+        : {
+            title: title.trim(),
+            summary: summary.trim(),
+            quoteLines: lines.filter((l) => l.description.trim()),
+          }
+  }
+
   async function handleSave() {
     if (!kind) return
     setSaving(true)
     try {
-      const patch =
-        kind === 'create_call'
-          ? { notes: notes.trim(), urgency }
-          : kind === 'chase_up'
-            ? { note: note.trim() }
-            : {
-                title: title.trim(),
-                summary: summary.trim(),
-                quoteLines: lines.filter((l) => l.description.trim()),
-              }
-      const res = await saveActionDraft(r.id, patch)
+      const res = await saveActionDraft(r.id, currentPatch())
       if (!res.ok) toast.error(res.error ?? 'Could not save.')
       else toast.success('Saved.')
       router.refresh()
     } finally {
       setSaving(false)
     }
+  }
+
+  // Persist the current (possibly edited) fields, then run the execute path so
+  // the booking dialog / quote / chase-up always uses exactly what's on screen.
+  async function handleConfirm() {
+    if (!kind) return
+    setSaving(true)
+    try {
+      await saveActionDraft(r.id, currentPatch())
+      // Refresh so the parent's `selected` payload reflects the saved edits before
+      // the booking dialog reads them (the awaited execute call below covers the lag).
+      router.refresh()
+    } finally {
+      setSaving(false)
+    }
+    onConfirm(kind)
   }
 
   // Not prepared yet: offer a Prepare button when there's something to work with.
@@ -346,7 +364,7 @@ export function PreparedActionCard({
           <Button
             size="sm"
             disabled={executing || disabled || saving || preparing || callNeedsSite}
-            onClick={() => onConfirm(kind)}
+            onClick={handleConfirm}
           >
             {executing ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />

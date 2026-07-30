@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { MAX_SHORTCUTS } from '@/lib/dashboard/shortcuts'
+import { MAX_SHORTCUTS, normaliseHeaderShortcutKeys } from '@/lib/dashboard/shortcuts'
 import { DASHBOARD_BACKGROUND_KEYS } from '@/lib/dashboard/backgrounds'
 
 /**
@@ -152,5 +152,33 @@ export async function setShortcut(slot: number, key: string | null) {
   if (error) return { ok: false as const, error: error.message }
 
   revalidatePath('/dashboard')
+  return { ok: true as const }
+}
+
+/**
+ * Replace the signed-in user's header micro-icon shortcuts with `keys` (an
+ * ordered list of catalogue keys). The list is validated + deduped + capped
+ * server-side via normaliseHeaderShortcutKeys. Stored on the profile
+ * (RLS `profiles_update_own`). Independent of dashboard_shortcuts.
+ */
+export async function setHeaderShortcuts(keys: string[]) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false as const, error: 'Not signed in' }
+
+  const next = normaliseHeaderShortcutKeys(Array.isArray(keys) ? keys : [])
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ header_shortcuts: next })
+    .eq('id', user.id)
+
+  if (error) return { ok: false as const, error: error.message }
+
+  // The header renders on every dashboard route, so refresh the whole segment.
+  revalidatePath('/dashboard', 'layout')
   return { ok: true as const }
 }

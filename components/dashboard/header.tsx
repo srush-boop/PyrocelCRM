@@ -18,6 +18,7 @@ import { LogOut, User, ArrowLeft, LayoutDashboard } from 'lucide-react'
 import Link from 'next/link'
 import { GlobalSiteSearch } from '@/components/dashboard/global-site-search'
 import { NotificationBell } from '@/components/dashboard/notifications/notification-bell'
+import { HeaderShortcuts } from '@/components/dashboard/header-shortcuts'
 import type { Profile } from '@/lib/types/database'
 
 interface DashboardHeaderProps {
@@ -106,6 +107,8 @@ export function DashboardHeader({ profile }: DashboardHeaderProps) {
           <span className="hidden sm:inline">Back</span>
         </Button>
       )}
+      <Separator orientation="vertical" className="mx-1 hidden h-6 md:block" />
+      <HeaderShortcuts shortcuts={profile.header_shortcuts} />
       <div className="flex-1" />
       {isManager && <GlobalSiteSearch />}
       <NotificationBell />

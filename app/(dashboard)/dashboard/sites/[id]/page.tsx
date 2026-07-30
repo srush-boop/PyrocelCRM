@@ -497,6 +497,8 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
         bookedStartTime: r.bookedStartTime,
         bookedEndTime: r.bookedEndTime,
         isWeeklyRecurring,
+        assignedEngineerName: r.engineerName,
+        assignedEngineerId: r.engineerId,
         otherDates: frequencyLabel ? [] : group.slice(1).map((o) => o.date),
         frequencyLabel,
         visitCount: group.length,
@@ -908,6 +910,8 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             openCallsCount={openCallsCount}
             awaitingPoCount={awaitingPoCount}
             upcomingVisits={upcomingVisits}
+            engineers={engineers.map((e) => ({ id: e.id, name: e.full_name || 'Unnamed engineer' }))}
+            canAssign={canManageDocuments}
           />
         </div>
         {siteClientId && (

@@ -12,6 +12,13 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   ClipboardList,
   FileClock,
   CalendarClock,
@@ -19,11 +26,15 @@ import {
   ArrowRight,
   Loader2,
   CalendarIcon,
+  UserPlus,
+  UserCog,
+  User,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { formatDateUK, formatBookedSlot, cn } from '@/lib/utils'
 import { SystemIcon, getSystemColors } from '@/lib/system-types'
 import { bookExistingCall } from '@/app/(dashboard)/dashboard/schedule/book-call-actions'
+import { assignCall } from '@/app/(dashboard)/dashboard/schedule/map/actions'
 
 export interface UpcomingVisit {
   /** Stable list key (task id for created calls, synthetic for forecasts). */
@@ -41,6 +52,10 @@ export interface UpcomingVisit {
   bookedEndTime: string | null
   /** Weekly recurring PPM calls can't be booked as an individual appointment. */
   isWeeklyRecurring: boolean
+  /** Name of the engineer this created call is assigned to (null = unassigned). */
+  assignedEngineerName: string | null
+  /** Id of the assigned engineer, to preselect the reassign picker. */
+  assignedEngineerId: string | null
   /** Further occurrences of this same service within the window (ISO dates). */
   otherDates: string[]
   /**
@@ -58,6 +73,10 @@ interface SiteCallsOverviewCardProps {
   openCallsCount: number
   awaitingPoCount: number
   upcomingVisits: UpcomingVisit[]
+  /** Assignable engineers for the reassign picker. */
+  engineers: { id: string; name: string }[]
+  /** Whether the viewer (admin/office) can assign engineers to calls. */
+  canAssign: boolean
 }
 
 // ─── Inline "Book now" popover ──────────────────────────────────────────────
@@ -176,6 +195,85 @@ function BookNowPopover({ visit }: { visit: UpcomingVisit }) {
   )
 }
 
+// ─── Inline "Assign / reassign" popover ─────────────────────────────────────
+
+function AssignPopover({
+  visit,
+  engineers,
+}: {
+  visit: UpcomingVisit
+  engineers: { id: string; name: string }[]
+}) {
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const [engineerId, setEngineerId] = useState(visit.assignedEngineerId ?? '')
+  const [saving, setSaving] = useState(false)
+  const isAssigned = !!visit.assignedEngineerId
+
+  const save = async () => {
+    if (!engineerId) return
+    setSaving(true)
+    const res = await assignCall(visit.taskId as string, engineerId)
+    setSaving(false)
+    if (res.ok) {
+      toast.success(isAssigned ? 'Call reassigned' : 'Call assigned')
+      setOpen(false)
+      router.refresh()
+    } else {
+      toast.error(res.error ?? 'Could not assign the call.')
+    }
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button size="sm" variant="outline" className="shrink-0">
+          {isAssigned ? (
+            <>
+              <UserCog className="h-4 w-4" />
+              Reassign
+            </>
+          ) : (
+            <>
+              <UserPlus className="h-4 w-4" />
+              Assign
+            </>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-64 space-y-3">
+        <p className="text-sm font-medium">
+          {isAssigned ? 'Reassign engineer' : 'Assign engineer'}
+        </p>
+        <div className="grid gap-1.5">
+          <label className="text-xs text-muted-foreground">Engineer</label>
+          <Select value={engineerId} onValueChange={setEngineerId}>
+            <SelectTrigger size="sm">
+              <SelectValue placeholder="Select engineer" />
+            </SelectTrigger>
+            <SelectContent>
+              {engineers.map((e) => (
+                <SelectItem key={e.id} value={e.id}>
+                  {e.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button
+          size="sm"
+          className="w-full"
+          disabled={saving || !engineerId || engineerId === visit.assignedEngineerId}
+          onClick={save}
+        >
+          {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+          {isAssigned ? 'Reassign call' : 'Assign call'}
+        </Button>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 // ─── Main tile ──────────────────────────────────────────────────────────────
 
 export function SiteCallsOverviewCard({
@@ -183,6 +281,8 @@ export function SiteCallsOverviewCard({
   openCallsCount,
   awaitingPoCount,
   upcomingVisits,
+  engineers,
+  canAssign,
 }: SiteCallsOverviewCardProps) {
   return (
     <Card className="md:col-span-2">
@@ -294,6 +394,23 @@ export function SiteCallsOverviewCard({
                           </>
                         )}
                       </p>
+                      {visit.status === 'created' && (
+                        <p className="mt-0.5 flex items-center gap-1 text-xs">
+                          <User className="h-3 w-3 text-muted-foreground" />
+                          {visit.assignedEngineerName ? (
+                            <span className="text-muted-foreground">
+                              Assigned to{' '}
+                              <span className="font-medium text-foreground">
+                                {visit.assignedEngineerName}
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="font-medium text-amber-600 dark:text-amber-400">
+                              Unassigned
+                            </span>
+                          )}
+                        </p>
+                      )}
                       {visit.frequencyLabel ? (
                         <p className="mt-0.5 truncate text-xs text-muted-foreground/80">
                           {visit.visitCount} visit{visit.visitCount === 1 ? '' : 's'} ·{' '}
@@ -325,6 +442,13 @@ export function SiteCallsOverviewCard({
                     ) : (
                       <BookNowPopover visit={visit} />
                     )}
+                    {canAssign &&
+                      visit.status === 'created' &&
+                      !visit.isWeeklyRecurring &&
+                      visit.taskId &&
+                      engineers.length > 0 && (
+                        <AssignPopover visit={visit} engineers={engineers} />
+                      )}
                     {visit.taskId && (
                       <Button variant="ghost" size="icon" asChild className="shrink-0">
                         <Link href={`/dashboard/tasks/${visit.taskId}`} aria-label="View call">

@@ -20,6 +20,8 @@ export interface ForecastRow {
   frequencyUnit: 'weeks' | 'months'
   status: 'created' | 'forecast'
   engineerName: string | null
+  /** Assigned engineer id when the occurrence already exists; null otherwise. */
+  engineerId: string | null
   /** Task id when the occurrence already exists ('created'); null for forecasts. */
   taskId: string | null
   bookedStartTime: string | null
@@ -55,7 +57,7 @@ interface TaskRow {
   scheduled_date: string
   booked_start_time: string | null
   booked_end_time: string | null
-  assigned_engineer: { full_name: string | null } | null
+  assigned_engineer: { id: string; full_name: string | null } | null
 }
 
 /** Add (or subtract, with a negative value) the service frequency to a date. */
@@ -122,7 +124,7 @@ export async function forecastCalls(
   // Existing tasks: used to anchor the cadence and to flag created occurrences.
   const { data: taskData } = await supabase
     .from('tasks')
-    .select('id, site_service_id, visit_type_id, scheduled_date, booked_start_time, booked_end_time, assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(full_name)')
+    .select('id, site_service_id, visit_type_id, scheduled_date, booked_start_time, booked_end_time, assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(id, full_name)')
     .in('site_service_id', serviceIds)
   const tasks = (taskData || []) as unknown as TaskRow[]
 
@@ -154,7 +156,13 @@ export async function forecastCalls(
   // Map of `ssId|visitId|date` -> the created task's details for flagging.
   const createdBySlot = new Map<
     string,
-    { taskId: string; start: string | null; end: string | null; engineer: string | null }
+    {
+      taskId: string
+      start: string | null
+      end: string | null
+      engineer: string | null
+      engineerId: string | null
+    }
   >()
 
   for (const t of tasks) {
@@ -170,6 +178,7 @@ export async function forecastCalls(
       start: t.booked_start_time,
       end: t.booked_end_time,
       engineer: t.assigned_engineer?.full_name ?? null,
+      engineerId: t.assigned_engineer?.id ?? null,
     })
   }
 
@@ -236,6 +245,7 @@ export async function forecastCalls(
           frequencyUnit: svc.frequency_unit,
           status: isCreated ? 'created' : 'forecast',
           engineerName: slot?.engineer ?? null,
+          engineerId: slot?.engineerId ?? null,
           taskId: slot?.taskId ?? null,
           bookedStartTime: slot?.start ?? null,
           bookedEndTime: slot?.end ?? null,

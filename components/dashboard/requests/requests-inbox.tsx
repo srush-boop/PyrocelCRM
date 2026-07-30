@@ -22,6 +22,7 @@ import {
   PhoneCall,
   FileSignature,
   BellRing,
+  Paperclip,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -37,6 +38,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { blobSrc } from '@/lib/blob'
 import { AddRequestDialog } from './add-request-dialog'
 import { ApproveCallDialog } from './approve-call-dialog'
 import { PreparedAnswerCard } from './prepared-answer-card'
@@ -49,7 +51,9 @@ import {
   sendAcknowledgement,
   executeRequestInstruction,
   executeSuggestedAction,
+  addManualRequest,
 } from '@/lib/actions/inbound-requests'
+import { parseEmailFile } from '@/lib/email/parse-email-file'
 import type {
   InboundRequest,
   InboundRequestUrgency,
@@ -136,7 +140,7 @@ export function RequestsInbox({
   const [replyText, setReplyText] = useState('')
   const [instruction, setInstruction] = useState('')
   const [executingId, setExecutingId] = useState<string | null>(null)
-  const [droppedFile, setDroppedFile] = useState<File | null>(null)
+  const [importing, setImporting] = useState(false)
   const [pageDragOver, setPageDragOver] = useState(false)
   const dragDepth = useRef(0)
 
@@ -166,7 +170,34 @@ export function RequestsInbox({
     dragDepth.current = 0
     setPageDragOver(false)
     const file = e.dataTransfer.files?.[0]
-    if (file) setDroppedFile(file)
+    if (file) void importEmailFile(file)
+  }
+
+  // A dropped .eml/.msg is parsed and turned into a real request row immediately
+  // (then AI-triaged) so it appears in "To review" — no extra dialog step.
+  async function importEmailFile(file: File) {
+    if (importing) return
+    setImporting(true)
+    try {
+      const parsed = await parseEmailFile(file)
+      const res = await addManualRequest({
+        fromName: parsed.fromName || undefined,
+        fromEmail: parsed.fromEmail || undefined,
+        subject: parsed.subject || undefined,
+        body: parsed.body,
+      })
+      if (!res.ok) {
+        toast.error(res.error ?? 'Could not add that email.')
+        return
+      }
+      toast.success('Email added and triaged. Review it below.')
+      setTab('review')
+      router.refresh()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not read that email file.')
+    } finally {
+      setImporting(false)
+    }
   }
 
   const siteById = useMemo(() => new Map(sites.map((s) => [s.id, s])), [sites])
@@ -339,11 +370,21 @@ export function RequestsInbox({
       onDragLeave={handlePageDragLeave}
       onDrop={handlePageDrop}
     >
-      {pageDragOver && (
+      {(pageDragOver || importing) && (
         <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary bg-background/85 backdrop-blur-sm">
-          <MailPlus className="h-10 w-10 text-primary" />
-          <p className="text-lg font-medium">Drop the email to triage it</p>
-          <p className="text-sm text-muted-foreground">.eml or .msg files</p>
+          {importing ? (
+            <>
+              <Loader2 className="h-10 w-10 animate-spin text-primary" />
+              <p className="text-lg font-medium">Reading and triaging the email…</p>
+              <p className="text-sm text-muted-foreground">This only takes a moment</p>
+            </>
+          ) : (
+            <>
+              <MailPlus className="h-10 w-10 text-primary" />
+              <p className="text-lg font-medium">Drop the email to triage it</p>
+              <p className="text-sm text-muted-foreground">.eml or .msg files</p>
+            </>
+          )}
         </div>
       )}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -361,10 +402,7 @@ export function RequestsInbox({
             <TabsTrigger value="dismissed">Dismissed</TabsTrigger>
           </TabsList>
         </Tabs>
-        <AddRequestDialog
-          fileToLoad={droppedFile}
-          onFileConsumed={() => setDroppedFile(null)}
-        />
+        <AddRequestDialog />
       </div>
 
       {list.length === 0 ? (
@@ -764,6 +802,31 @@ function RequestDetail({
           </Select>
         </div>
       </div>
+
+      {/* Attachments */}
+      {r.attachments && r.attachments.length > 0 && (
+        <div className="mt-4">
+          <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+            Attachments ({r.attachments.length})
+          </p>
+          <ul className="grid gap-1.5">
+            {r.attachments.map((a) => (
+              <li key={a.pathname}>
+                <a
+                  href={blobSrc(a.pathname) ?? '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm transition-colors hover:bg-muted/50"
+                >
+                  <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1 truncate">{a.name}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">Open</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Original email */}
       <details className="mt-4 rounded-md border">

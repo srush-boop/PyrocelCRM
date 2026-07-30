@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Plus, Paperclip, Loader2, FileText } from 'lucide-react'
+import { Plus, Paperclip, Loader2, FileText, Upload, X } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -20,10 +20,13 @@ import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import { addManualRequest } from '@/lib/actions/inbound-requests'
 import { parseEmailFile } from '@/lib/email/parse-email-file'
+import type { InboundAttachment } from '@/lib/types/database'
 
-// Phase-1 manual entry: drag in a .eml/.msg email (or paste one) so it's triaged
-// immediately. Once the inbound address is live (Phase 2) most requests arrive
-// automatically, but drag-and-drop remains the quickest way to file one by hand.
+const DOC_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*'
+
+// Manual entry: a staff member types a client request by hand (or imports a
+// forwarded .eml/.msg) and attaches any supporting documents (photos, PDFs,
+// spreadsheets). It's triaged immediately so a suggested action appears.
 export function AddRequestDialog({
   fileToLoad,
   onFileConsumed,
@@ -40,13 +43,16 @@ export function AddRequestDialog({
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [parsing, setParsing] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [loadedFileName, setLoadedFileName] = useState<string | null>(null)
   const [fromName, setFromName] = useState('')
   const [fromEmail, setFromEmail] = useState('')
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [attachments, setAttachments] = useState<InboundAttachment[]>([])
+  const emailInputRef = useRef<HTMLInputElement>(null)
+  const docInputRef = useRef<HTMLInputElement>(null)
 
   const resetFields = useCallback(() => {
     setFromName('')
@@ -54,9 +60,10 @@ export function AddRequestDialog({
     setSubject('')
     setBody('')
     setLoadedFileName(null)
+    setAttachments([])
   }, [])
 
-  const loadFile = useCallback(async (file: File) => {
+  const loadEmailFile = useCallback(async (file: File) => {
     setParsing(true)
     try {
       const parsed = await parseEmailFile(file)
@@ -73,25 +80,50 @@ export function AddRequestDialog({
     }
   }, [])
 
-  // A parent dropped a file onto the page — open and parse it.
+  // A parent dropped an email file onto the page — open and parse it.
   useEffect(() => {
     if (fileToLoad) {
       setOpen(true)
-      void loadFile(fileToLoad)
+      void loadEmailFile(fileToLoad)
       onFileConsumed?.()
     }
-  }, [fileToLoad, loadFile, onFileConsumed])
+  }, [fileToLoad, loadEmailFile, onFileConsumed])
 
-  function handleDrop(e: React.DragEvent) {
+  function handleEmailDrop(e: React.DragEvent) {
     e.preventDefault()
     setDragOver(false)
     const file = e.dataTransfer.files?.[0]
-    if (file) void loadFile(file)
+    if (file) void loadEmailFile(file)
+  }
+
+  // Upload supporting documents to private Blob and keep their references.
+  const uploadDocs = useCallback(async (files: File[]) => {
+    if (files.length === 0) return
+    setUploading(true)
+    try {
+      for (const file of files) {
+        const form = new FormData()
+        form.append('file', file)
+        const res = await fetch('/api/requests/upload', { method: 'POST', body: form })
+        const json = await res.json().catch(() => null)
+        if (!res.ok || !json?.attachment) {
+          toast.error(json?.error ?? `Could not upload "${file.name}".`)
+          continue
+        }
+        setAttachments((prev) => [...prev, json.attachment as InboundAttachment])
+      }
+    } finally {
+      setUploading(false)
+    }
+  }, [])
+
+  function removeAttachment(pathname: string) {
+    setAttachments((prev) => prev.filter((a) => a.pathname !== pathname))
   }
 
   async function handleSubmit() {
     if (!body.trim()) {
-      toast.error('Drop an email or paste its content first.')
+      toast.error('Enter the request details first.')
       return
     }
     setSaving(true)
@@ -101,6 +133,7 @@ export function AddRequestDialog({
         fromEmail: fromEmail.trim() || undefined,
         subject: subject.trim() || undefined,
         body,
+        attachments,
       })
       if (!res.ok) {
         toast.error(res.error ?? 'Could not add the request.')
@@ -114,12 +147,6 @@ export function AddRequestDialog({
       setSaving(false)
     }
   }
-
-  // Feature temporarily hidden everywhere: the manual "Add request" flow was
-  // mis-triaging and creating unintended calls. Returning null after all hooks
-  // keeps the Rules of Hooks intact while removing every entry point. Restore by
-  // deleting this early return once the triage flow is fixed.
-  return null
 
   return (
     <Dialog
@@ -139,67 +166,13 @@ export function AddRequestDialog({
         <DialogHeader>
           <DialogTitle>Add a request</DialogTitle>
           <DialogDescription className="text-pretty">
-            Drag in an email file, or paste its content. AI reads the sender and content, matches it
+            Log a client request by hand and attach any supporting documents. AI reads it, matches it
             to a site, and suggests an action for you to approve.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-2">
-          {/* Drop zone */}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={(e) => {
-              e.preventDefault()
-              setDragOver(true)
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={handleDrop}
-            className={cn(
-              'flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed p-6 text-center transition-colors',
-              dragOver ? 'border-primary bg-primary/[0.04]' : 'border-border hover:bg-muted/50',
-            )}
-            aria-label="Drop an email file here or click to browse"
-          >
-            {parsing ? (
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            ) : loadedFileName ? (
-              <FileText className="h-6 w-6 text-primary" />
-            ) : (
-              <Paperclip className="h-6 w-6 text-muted-foreground" />
-            )}
-            <span className="text-sm font-medium">
-              {parsing
-                ? 'Reading email…'
-                : loadedFileName
-                  ? loadedFileName
-                  : 'Drag an email here, or click to browse'}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              Supports .eml (Apple Mail, Thunderbird) and .msg (Outlook)
-            </span>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".eml,.msg,message/rfc822,application/vnd.ms-outlook"
-              className="sr-only"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                if (file) void loadFile(file)
-                e.target.value = ''
-              }}
-            />
-          </button>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center">
-              <span className="bg-background px-2 text-xs text-muted-foreground">or enter manually</span>
-            </div>
-          </div>
-
+          {/* Manual entry fields */}
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
               <Label htmlFor="from-name">Sender name</Label>
@@ -233,14 +206,128 @@ export function AddRequestDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="body">Email content *</Label>
+            <Label htmlFor="body">Request details *</Label>
             <Textarea
               id="body"
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              rows={10}
-              placeholder="Paste the full email here…"
+              rows={8}
+              placeholder="Describe what the client needs — the fault, site, urgency, any reference numbers…"
             />
+          </div>
+
+          {/* Supporting documents */}
+          <div className="grid gap-2">
+            <Label>Supporting documents (optional)</Label>
+            <button
+              type="button"
+              onClick={() => docInputRef.current?.click()}
+              className="flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-border p-5 text-center transition-colors hover:bg-muted/50"
+              aria-label="Attach supporting documents"
+            >
+              {uploading ? (
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              ) : (
+                <Upload className="h-6 w-6 text-muted-foreground" />
+              )}
+              <span className="text-sm font-medium">
+                {uploading ? 'Uploading…' : 'Attach photos, PDFs or spreadsheets'}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                PDF, Word, Excel, CSV, text or images — up to 25MB each
+              </span>
+              <input
+                ref={docInputRef}
+                type="file"
+                accept={DOC_ACCEPT}
+                multiple
+                className="sr-only"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files ?? [])
+                  if (files.length) void uploadDocs(files)
+                  e.target.value = ''
+                }}
+              />
+            </button>
+
+            {attachments.length > 0 && (
+              <ul className="grid gap-1.5">
+                {attachments.map((a) => (
+                  <li
+                    key={a.pathname}
+                    className="flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm"
+                  >
+                    <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate">{a.name}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 shrink-0"
+                      onClick={() => removeAttachment(a.pathname)}
+                      aria-label={`Remove ${a.name}`}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Optional: import a forwarded email file instead of typing */}
+          <div className="grid gap-2">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center">
+                <span className="bg-background px-2 text-xs text-muted-foreground">
+                  or import a forwarded email
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => emailInputRef.current?.click()}
+              onDragOver={(e) => {
+                e.preventDefault()
+                setDragOver(true)
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleEmailDrop}
+              className={cn(
+                'flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed p-4 text-center transition-colors',
+                dragOver ? 'border-primary bg-primary/[0.04]' : 'border-border hover:bg-muted/50',
+              )}
+              aria-label="Drop an email file here or click to browse"
+            >
+              {parsing ? (
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              ) : loadedFileName ? (
+                <FileText className="h-5 w-5 text-primary" />
+              ) : (
+                <Paperclip className="h-5 w-5 text-muted-foreground" />
+              )}
+              <span className="text-sm font-medium">
+                {parsing
+                  ? 'Reading email…'
+                  : loadedFileName
+                    ? `Loaded ${loadedFileName} — fields filled in above`
+                    : 'Drop a .eml / .msg here to fill in the fields'}
+              </span>
+              <input
+                ref={emailInputRef}
+                type="file"
+                accept=".eml,.msg,message/rfc822,application/vnd.ms-outlook"
+                className="sr-only"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) void loadEmailFile(file)
+                  e.target.value = ''
+                }}
+              />
+            </button>
           </div>
         </div>
 
@@ -248,7 +335,7 @@ export function AddRequestDialog({
           <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={saving || parsing}>
+          <Button onClick={handleSubmit} disabled={saving || parsing || uploading}>
             {saving ? 'Adding…' : 'Add & triage'}
           </Button>
         </DialogFooter>

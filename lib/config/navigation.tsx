@@ -606,6 +606,13 @@ export function resolveEnabledSet(
     enabled.add('requests')
     enabled.add('invoices')
   }
+  // The Requests inbox is a core admin/office operational surface added after the
+  // page-level menu model shipped. Overrides saved before it existed have no way
+  // to reference it, so always grant it to the roles whose menu includes it (the
+  // page itself is role-gated). This guarantees it never silently disappears.
+  if (role === 'admin' || role === 'office') {
+    enabled.add('requests')
+  }
 
   for (const item of menu) {
     if (!(item.children && item.children.length)) {

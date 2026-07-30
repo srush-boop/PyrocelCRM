@@ -343,10 +343,14 @@ export async function buildContractReviewDraft(
             ? (quote.po_number as string | null)?.trim() || suppliedPo
             : suppliedPo
       }
-      // Maintenance-bearing systems: those with a PPM calc, a service type, a
-      // Service/Maintenance work type (SVC), or priced service lines.
-      const isMaintenance =
-        !!ppm || !!sys.service_type_id || sys.work_type === 'SVC' || sysLines.length > 0
+      // Maintenance-bearing systems must carry an actual recurring value: a PPM
+      // calc, priced service lines, or a positive fallback price. A system that
+      // is merely typed as Service/Maintenance (work_type 'SVC') or has a
+      // service type but no quantities/price is NOT emitted — otherwise an empty
+      // discipline (e.g. Fire Alarm with nothing calculated) would seed a phantom
+      // £0 service + charge on the committed contract.
+      const fallbackPrice = Number(ppm?.computed_price_pence ?? sys.subtotal_pence ?? 0)
+      const isMaintenance = !!ppm || sysLines.length > 0 || fallbackPrice > 0
       if (!isMaintenance) continue
 
       const sysKey = `system:${sys.id}`
@@ -378,10 +382,12 @@ export async function buildContractReviewDraft(
           description: sys.specification || null,
           location: null,
           install_date: null,
-          booking_required: false,
-          access_required: false,
-          keys_required: false,
-          two_engineers_required: false,
+          // null = inherit the site-level pre-attendance flags. The reviewer can
+          // override per system in the detail view; an untouched system inherits.
+          booking_required: null,
+          access_required: null,
+          keys_required: null,
+          two_engineers_required: null,
           // Client-accepted per-system additional-service allowance (auto-
           // authorises non-recurring calls up to this value against the PO).
           additional_service_limit_pence: allowanceLimitPence,
@@ -432,10 +438,11 @@ export async function buildContractReviewDraft(
             subcontractor_annual_cost_pence: null,
             next_service_date: null,
             comprehensive_cover: false,
-            booking_required: false,
-            access_required: false,
-            keys_required: false,
-            two_engineers_required: false,
+            // null = inherit the site/system pre-attendance flags (see above).
+            booking_required: null,
+            access_required: null,
+            keys_required: null,
+            two_engineers_required: null,
             reporting_emails: siteContactEmail ? [siteContactEmail] : [],
           },
           source_quote_system_id: sys.id as string,

@@ -173,6 +173,14 @@ function int(payload: Record<string, unknown>, key: string, fallback = 0): numbe
 function bool(payload: Record<string, unknown>, key: string): boolean {
   return payload[key] === true
 }
+// Nullable flag: an explicit boolean overrides; anything else (incl. null/
+// undefined) means "inherit". Used for system/service pre-attendance flags so an
+// untouched entity inherits the site-level requirement instead of forcing it off
+// with an explicit false.
+function boolOrNull(payload: Record<string, unknown>, key: string): boolean | null {
+  const v = payload[key]
+  return typeof v === 'boolean' ? v : null
+}
 // String array (e.g. reporting_emails), trimmed and de-blanked.
 function arr(payload: Record<string, unknown>, key: string): string[] {
   const v = payload[key]
@@ -364,10 +372,11 @@ export async function commitContractReview(
             description: str(p, 'description'),
             location: str(p, 'location'),
             install_date: str(p, 'install_date'),
-            booking_required: bool(p, 'booking_required'),
-            access_required: bool(p, 'access_required'),
-            keys_required: bool(p, 'keys_required'),
-            two_engineers_required: bool(p, 'two_engineers_required'),
+            // Nullable overrides: null inherits the site-level flag.
+            booking_required: boolOrNull(p, 'booking_required'),
+            access_required: boolOrNull(p, 'access_required'),
+            keys_required: boolOrNull(p, 'keys_required'),
+            two_engineers_required: boolOrNull(p, 'two_engineers_required'),
             // Client-accepted per-system additional-service allowance.
             additional_service_limit_pence:
               typeof p.additional_service_limit_pence === 'number'
@@ -422,10 +431,11 @@ export async function commitContractReview(
             next_service_date: str(p, 'next_service_date'),
             comprehensive_cover: bool(p, 'comprehensive_cover'),
             reporting_emails: arr(p, 'reporting_emails'),
-            booking_required: bool(p, 'booking_required'),
-            access_required: bool(p, 'access_required'),
-            keys_required: bool(p, 'keys_required'),
-            two_engineers_required: bool(p, 'two_engineers_required'),
+            // Nullable overrides: null inherits the site/system-level flag.
+            booking_required: boolOrNull(p, 'booking_required'),
+            access_required: boolOrNull(p, 'access_required'),
+            keys_required: boolOrNull(p, 'keys_required'),
+            two_engineers_required: boolOrNull(p, 'two_engineers_required'),
             active: true,
           })
           .select('id')

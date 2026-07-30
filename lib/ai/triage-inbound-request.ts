@@ -518,6 +518,28 @@ export async function triageInboundRequest(
       }
     }
 
+    // For ACTIONABLE requests (new work, quote requests, chases) with a match,
+    // draft the operational action parameters now so staff open a ready-to-confirm
+    // card. Best-effort — never fail triage over it. Calls need a site.
+    const actionable =
+      intent === 'new_call' ||
+      intent === 'complaint' ||
+      intent === 'quote_request' ||
+      intent === 'chase_up'
+    const canPrepareAction =
+      intent === 'quote_request' ? matchedSiteId || derivedClientId : matchedSiteId
+    if (actionable && canPrepareAction) {
+      try {
+        const { prepareRequestAction } = await import('@/lib/ai/prepare-request-action')
+        await prepareRequestAction(requestId)
+      } catch (prepErr) {
+        console.log(
+          '[v0] auto prepareRequestAction failed (non-fatal):',
+          prepErr instanceof Error ? prepErr.message : String(prepErr),
+        )
+      }
+    }
+
     return { ok: true }
   } catch (err) {
     console.error('[v0] triageInboundRequest failed:', err)

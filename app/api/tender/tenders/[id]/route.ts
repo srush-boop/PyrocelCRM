@@ -42,6 +42,12 @@ export async function DELETE(
 
   const { id } = await params
   const supabase = await createClient()
+
+  // Remove child questions (which also hold their answers) first, so the delete
+  // leaves no orphans regardless of whether the FK has ON DELETE CASCADE.
+  const { error: qError } = await supabase.from('tender_questions').delete().eq('tender_id', id)
+  if (qError) return NextResponse.json({ error: qError.message }, { status: 500 })
+
   const { error } = await supabase.from('tenders').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })

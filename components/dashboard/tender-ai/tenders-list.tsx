@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { Plus, Loader2, FileSignature, ArrowRight } from 'lucide-react'
+import { Plus, Loader2, FileSignature, ArrowRight, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -34,6 +34,8 @@ export function TendersList({ tenders }: { tenders: Tender[] }) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ title: '', client_name: '', reference: '', due_date: '' })
+  const [deleteTarget, setDeleteTarget] = useState<Tender | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const create = useCallback(async () => {
     if (!form.title.trim()) {
@@ -63,6 +65,22 @@ export function TendersList({ tenders }: { tenders: Tender[] }) {
       setSaving(false)
     }
   }, [form, router])
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/tender/tenders/${deleteTarget.id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Failed to delete tender')
+      toast.success('Tender deleted')
+      setDeleteTarget(null)
+      router.refresh()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete tender')
+    } finally {
+      setDeleting(false)
+    }
+  }, [deleteTarget, router])
 
   return (
     <div className="flex flex-col gap-4">
@@ -109,7 +127,23 @@ export function TendersList({ tenders }: { tenders: Tender[] }) {
                       {t.due_date && ` · Due ${new Date(t.due_date).toLocaleDateString()}`}
                     </p>
                   </div>
-                  <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 text-muted-foreground hover:text-destructive"
+                      aria-label={`Delete ${t.title}`}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setDeleteTarget(t)
+                      }}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                    <ArrowRight className="size-4 text-muted-foreground" />
+                  </div>
                 </CardContent>
               </Card>
             </Link>
@@ -170,6 +204,28 @@ export function TendersList({ tenders }: { tenders: Tender[] }) {
             <Button onClick={create} disabled={saving}>
               {saving && <Loader2 className="size-4 animate-spin" />}
               Create tender
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteTarget !== null} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete tender</DialogTitle>
+            <DialogDescription>
+              This permanently deletes{' '}
+              <span className="font-medium text-foreground">{deleteTarget?.title}</span> and its
+              questions and answers. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
+              {deleting && <Loader2 className="size-4 animate-spin" />}
+              Delete tender
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -442,6 +442,13 @@ export function SiteCallsOverviewCard({
                     ) : (
                       <BookNowPopover visit={visit} />
                     )}
+                    {canAssign &&
+                      visit.status === 'created' &&
+                      !visit.isWeeklyRecurring &&
+                      visit.taskId &&
+                      engineers.length > 0 && (
+                        <AssignPopover visit={visit} engineers={engineers} />
+                      )}
                     {visit.taskId && (
                       <Button variant="ghost" size="icon" asChild className="shrink-0">
                         <Link href={`/dashboard/tasks/${visit.taskId}`} aria-label="View call">

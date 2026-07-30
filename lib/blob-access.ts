@@ -26,6 +26,8 @@ const ROUTE_POLICIES: Record<'blob' | 'file', PrefixRule[]> = {
   blob: [
     { prefix: 'avatars/', staffOnly: false },
     { prefix: 'chat/', staffOnly: true },
+    // Supporting documents attached to inbound requests (admin/office inbox).
+    { prefix: 'requests/', staffOnly: true },
   ],
   // /api/file — internal sales/product assets.
   file: [

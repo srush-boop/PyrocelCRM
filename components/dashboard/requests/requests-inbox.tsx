@@ -22,6 +22,7 @@ import {
   PhoneCall,
   FileSignature,
   BellRing,
+  Paperclip,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -37,6 +38,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { blobSrc } from '@/lib/blob'
 import { AddRequestDialog } from './add-request-dialog'
 import { ApproveCallDialog } from './approve-call-dialog'
 import { PreparedAnswerCard } from './prepared-answer-card'
@@ -764,6 +766,31 @@ function RequestDetail({
           </Select>
         </div>
       </div>
+
+      {/* Attachments */}
+      {r.attachments && r.attachments.length > 0 && (
+        <div className="mt-4">
+          <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+            Attachments ({r.attachments.length})
+          </p>
+          <ul className="grid gap-1.5">
+            {r.attachments.map((a) => (
+              <li key={a.pathname}>
+                <a
+                  href={blobSrc(a.pathname) ?? '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm transition-colors hover:bg-muted/50"
+                >
+                  <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1 truncate">{a.name}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">Open</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Original email */}
       <details className="mt-4 rounded-md border">

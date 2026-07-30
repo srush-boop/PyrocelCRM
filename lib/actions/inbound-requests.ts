@@ -16,6 +16,7 @@ import { prepareInboundAnswer } from '@/lib/ai/answer-inbound-request'
 import { prepareRequestAction } from '@/lib/ai/prepare-request-action'
 import type { EmailFooter } from '@/lib/email/templates'
 import type {
+  InboundAttachment,
   SuggestedAction,
   SuggestedActionKind,
   SuggestedActionPayload,
@@ -59,12 +60,19 @@ export async function addManualRequest(input: {
   fromName?: string
   subject?: string
   body: string
+  /** Supporting documents already uploaded via /api/requests/upload. */
+  attachments?: InboundAttachment[]
 }): Promise<ActionResult> {
   const { ctx, error } = await requireStaff()
   if (error || !ctx) return { ok: false, error: error ?? 'Not authorised.' }
 
   const body = input.body?.trim()
-  if (!body) return { ok: false, error: 'Paste the email content.' }
+  if (!body) return { ok: false, error: 'Enter the request details.' }
+
+  // Only persist well-formed attachment references (name + pathname).
+  const attachments: InboundAttachment[] = (input.attachments ?? []).filter(
+    (a) => a && typeof a.pathname === 'string' && a.pathname.length > 0,
+  )
 
   // Match the "forwarded by" staff member by their email, if the sender is known.
   let forwardedBy: string | null = null
@@ -85,6 +93,7 @@ export async function addManualRequest(input: {
       from_name: input.fromName?.trim() || null,
       subject: input.subject?.trim() || null,
       body_text: body,
+      attachments,
       forwarded_by: forwardedBy,
       status: 'new',
     })

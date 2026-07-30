@@ -573,7 +573,7 @@ export function ContractReviewDetail(props: Props) {
                   </div>
                   <div>
                     <div className="mb-2 text-xs font-medium text-muted-foreground">
-                      Visit requirements
+                      Attendance requirements
                     </div>
                     <FlagsGrid
                       payload={state[siteItem.id].payload}
@@ -679,7 +679,8 @@ export function ContractReviewDetail(props: Props) {
                   </div>
                   <div>
                     <div className="mb-2 text-xs font-medium text-muted-foreground">
-                      Visit requirements
+                      Attendance requirements{' '}
+                      <span className="font-normal normal-case">(override the site default)</span>
                     </div>
                     <FlagsGrid
                       payload={state[sys.id].payload}
@@ -831,16 +832,17 @@ export function ContractReviewDetail(props: Props) {
                             }
                           />
                         </Field>
-                        <div>
-                          <div className="mb-2 text-xs font-medium text-muted-foreground">
-                            Visit requirements
-                          </div>
-                          <FlagsGrid
-                            payload={state[service.id].payload}
-                            onToggle={(k, v) => setPayload(service.id, k, v)}
-                            editable={editable}
-                          />
-                        </div>
+                  <div>
+                    <div className="mb-2 text-xs font-medium text-muted-foreground">
+                      Attendance requirements{' '}
+                      <span className="font-normal normal-case">(override the site default)</span>
+                    </div>
+                    <FlagsGrid
+                      payload={state[service.id].payload}
+                      onToggle={(k, v) => setPayload(service.id, k, v)}
+                      editable={editable}
+                    />
+                  </div>
                       </MoreDetails>
                     </div>
                     <div className="sm:col-span-2">

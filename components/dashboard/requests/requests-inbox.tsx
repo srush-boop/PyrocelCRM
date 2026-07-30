@@ -51,7 +51,9 @@ import {
   sendAcknowledgement,
   executeRequestInstruction,
   executeSuggestedAction,
+  addManualRequest,
 } from '@/lib/actions/inbound-requests'
+import { parseEmailFile } from '@/lib/email/parse-email-file'
 import type {
   InboundRequest,
   InboundRequestUrgency,
@@ -138,7 +140,7 @@ export function RequestsInbox({
   const [replyText, setReplyText] = useState('')
   const [instruction, setInstruction] = useState('')
   const [executingId, setExecutingId] = useState<string | null>(null)
-  const [droppedFile, setDroppedFile] = useState<File | null>(null)
+  const [importing, setImporting] = useState(false)
   const [pageDragOver, setPageDragOver] = useState(false)
   const dragDepth = useRef(0)
 
@@ -168,7 +170,34 @@ export function RequestsInbox({
     dragDepth.current = 0
     setPageDragOver(false)
     const file = e.dataTransfer.files?.[0]
-    if (file) setDroppedFile(file)
+    if (file) void importEmailFile(file)
+  }
+
+  // A dropped .eml/.msg is parsed and turned into a real request row immediately
+  // (then AI-triaged) so it appears in "To review" — no extra dialog step.
+  async function importEmailFile(file: File) {
+    if (importing) return
+    setImporting(true)
+    try {
+      const parsed = await parseEmailFile(file)
+      const res = await addManualRequest({
+        fromName: parsed.fromName || undefined,
+        fromEmail: parsed.fromEmail || undefined,
+        subject: parsed.subject || undefined,
+        body: parsed.body,
+      })
+      if (!res.ok) {
+        toast.error(res.error ?? 'Could not add that email.')
+        return
+      }
+      toast.success('Email added and triaged. Review it below.')
+      setTab('review')
+      router.refresh()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not read that email file.')
+    } finally {
+      setImporting(false)
+    }
   }
 
   const siteById = useMemo(() => new Map(sites.map((s) => [s.id, s])), [sites])
@@ -341,11 +370,21 @@ export function RequestsInbox({
       onDragLeave={handlePageDragLeave}
       onDrop={handlePageDrop}
     >
-      {pageDragOver && (
+      {(pageDragOver || importing) && (
         <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary bg-background/85 backdrop-blur-sm">
-          <MailPlus className="h-10 w-10 text-primary" />
-          <p className="text-lg font-medium">Drop the email to triage it</p>
-          <p className="text-sm text-muted-foreground">.eml or .msg files</p>
+          {importing ? (
+            <>
+              <Loader2 className="h-10 w-10 animate-spin text-primary" />
+              <p className="text-lg font-medium">Reading and triaging the email…</p>
+              <p className="text-sm text-muted-foreground">This only takes a moment</p>
+            </>
+          ) : (
+            <>
+              <MailPlus className="h-10 w-10 text-primary" />
+              <p className="text-lg font-medium">Drop the email to triage it</p>
+              <p className="text-sm text-muted-foreground">.eml or .msg files</p>
+            </>
+          )}
         </div>
       )}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -363,10 +402,7 @@ export function RequestsInbox({
             <TabsTrigger value="dismissed">Dismissed</TabsTrigger>
           </TabsList>
         </Tabs>
-        <AddRequestDialog
-          fileToLoad={droppedFile}
-          onFileConsumed={() => setDroppedFile(null)}
-        />
+        <AddRequestDialog />
       </div>
 
       {list.length === 0 ? (

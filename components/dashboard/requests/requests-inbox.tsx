@@ -467,6 +467,9 @@ export function RequestsInbox({
 
       {selected && (
         <ApproveCallDialog
+          // Remount each time it opens (and per request) so the notes/date always
+          // seed from the latest prepared/saved payload rather than stale state.
+          key={`${selected.id}-${approveOpen ? 'open' : 'closed'}`}
           open={approveOpen}
           onOpenChange={setApproveOpen}
           request={selected}
@@ -659,8 +662,12 @@ function RequestDetail({
         </div>
       )}
 
-      {/* AI-prepared operational action (book call / prepare quote / log chase-up) */}
+      {/* AI-prepared operational action (book call / prepare quote / log chase-up).
+          Keyed on the prepared timestamp so a fresh Prepare/Regenerate re-seeds the
+          editable fields with the newly drafted content (Save doesn't bump the
+          timestamp, so in-session edits are preserved). */}
       <PreparedActionCard
+        key={`${r.id}-${r.action_prepared_at ?? 'none'}`}
         request={r}
         executing={executing}
         disabled={busy}

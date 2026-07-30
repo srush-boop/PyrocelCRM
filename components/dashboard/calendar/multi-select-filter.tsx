@@ -1,7 +1,9 @@
 'use client'
 
+import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
 import {
   Popover,
   PopoverContent,
@@ -10,7 +12,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
-import { Check, ChevronsUpDown } from 'lucide-react'
+import { Check, ChevronsUpDown, Search } from 'lucide-react'
 
 export interface MultiSelectOption {
   value: string
@@ -27,6 +29,9 @@ interface MultiSelectFilterProps {
   selected: string[]
   onChange: (next: string[]) => void
   className?: string
+  // When true, shows a search box at the top to filter long option lists.
+  searchable?: boolean
+  searchPlaceholder?: string
 }
 
 // A compact multi-select shown as a dropdown of checkboxes. An empty selection
@@ -38,8 +43,17 @@ export function MultiSelectFilter({
   selected,
   onChange,
   className,
+  searchable = false,
+  searchPlaceholder = 'Search…',
 }: MultiSelectFilterProps) {
   const selectedSet = new Set(selected)
+  const [query, setQuery] = useState('')
+
+  const visibleOptions = useMemo(() => {
+    if (!searchable || !query.trim()) return options
+    const q = query.trim().toLowerCase()
+    return options.filter((o) => o.label.toLowerCase().includes(q))
+  }, [options, query, searchable])
 
   const toggle = (value: string) => {
     const next = new Set(selectedSet)
@@ -86,12 +100,28 @@ export function MultiSelectFilter({
           )}
         </div>
         <Separator className="shrink-0" />
+        {searchable && (
+          <>
+            <div className="relative shrink-0 px-2 py-2">
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={searchPlaceholder}
+                className="h-8 pl-7 text-sm"
+              />
+            </div>
+            <Separator className="shrink-0" />
+          </>
+        )}
         <ScrollArea className="min-h-0 flex-1">
           <div className="p-1">
-            {options.length === 0 ? (
-              <p className="px-2 py-3 text-sm text-muted-foreground">No options</p>
+            {visibleOptions.length === 0 ? (
+              <p className="px-2 py-3 text-sm text-muted-foreground">
+                {options.length === 0 ? 'No options' : 'No matches'}
+              </p>
             ) : (
-              options.map((opt) => {
+              visibleOptions.map((opt) => {
                 const checked = selectedSet.has(opt.value)
                 return (
                   <button

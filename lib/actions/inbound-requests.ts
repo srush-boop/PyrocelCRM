@@ -7,6 +7,9 @@ import { executeRequestInstructionAI, type ExecuteInstructionResult } from '@/li
 import { bookCall } from '@/app/(dashboard)/dashboard/schedule/book-call-actions'
 import { saveQuote } from '@/app/(dashboard)/dashboard/sales/actions'
 import { sendEmail } from '@/lib/email/send-email'
+import { resolveEmailFooter } from '@/lib/email/footer'
+import { prepareInboundAnswer } from '@/lib/ai/answer-inbound-request'
+import type { EmailFooter } from '@/lib/email/templates'
 import type { SuggestedAction, SuggestedActionKind, SuggestedActionPayload } from '@/lib/types/database'
 
 interface StaffContext {
@@ -303,6 +306,163 @@ export async function sendAcknowledgement(id: string, body: string): Promise<Act
   }
   revalidatePath('/dashboard/requests')
   return { ok: true, id }
+}
+
+// ── AI-prepared answers (research -> draft -> confirm -> send) ────────────────
+
+/**
+ * Research the request against real system data and draft a reply for review.
+ * Called on demand from the inbox ("Prepare answer" / "Regenerate") and chained
+ * from triage. Runs under staff auth; the engine itself uses the admin client.
+ */
+export async function prepareAnswer(id: string): Promise<ActionResult> {
+  const { ctx, error } = await requireStaff()
+  if (error || !ctx) return { ok: false, error: error ?? 'Not authorised.' }
+
+  const res = await prepareInboundAnswer(id)
+  revalidatePath('/dashboard/requests')
+  if (!res.ok) return { ok: false, error: res.error ?? 'Could not prepare an answer.' }
+  return { ok: true, id }
+}
+
+/**
+ * Send the reviewed (optionally edited) AI-prepared answer to the client. This is
+ * a separate, explicit, staff-confirmed send — it does NOT depend on the parked
+ * general reply editor. On success the request is stamped and moved to Actioned.
+ */
+export async function sendInboundAnswer(
+  id: string,
+  input: { subject: string; body: string; recipients: string[] },
+): Promise<ActionResult> {
+  const { ctx, error } = await requireStaff()
+  if (error || !ctx) return { ok: false, error: error ?? 'Not authorised.' }
+
+  const subject = input.subject?.trim()
+  const body = input.body?.trim()
+  if (!subject) return { ok: false, error: 'Add a subject line.' }
+  if (!body) return { ok: false, error: 'The reply is empty.' }
+
+  // Validate + de-duplicate recipients.
+  const recipients = Array.from(
+    new Set(
+      (input.recipients || [])
+        .map((r) => r.trim().toLowerCase())
+        .filter((r) => /.+@.+\..+/.test(r)),
+    ),
+  )
+  if (recipients.length === 0) {
+    return { ok: false, error: 'Add at least one valid recipient email.' }
+  }
+
+  const footer = await resolveEmailFooter(ctx.userId)
+  const html = renderAnswerHtml(body, footer)
+
+  // Send to every recipient; treat a single failure as a failure.
+  const results = await Promise.all(recipients.map((to) => sendEmail(to, subject, html)))
+  const failed = results.find((r) => !r.success)
+  if (failed) {
+    return { ok: false, error: failed.error || 'Could not send the reply. Check email configuration.' }
+  }
+
+  const { error: updErr } = await ctx.supabase
+    .from('inbound_requests')
+    .update({
+      answer_subject: subject,
+      answer_body: body,
+      answer_sent_at: new Date().toISOString(),
+      answer_sent_to: recipients,
+      status: 'actioned',
+      actioned_at: new Date().toISOString(),
+      actioned_by: ctx.userId,
+    })
+    .eq('id', id)
+  if (updErr) {
+    console.log('[v0] sendInboundAnswer stamp failed:', updErr.message)
+    return { ok: false, error: 'The reply was sent, but the request could not be updated.' }
+  }
+
+  revalidatePath('/dashboard/requests')
+  return { ok: true, id }
+}
+
+/**
+ * Record that staff copied the draft to send it themselves. Persists any edits
+ * and moves the request to Actioned (no email is sent from the CRM).
+ */
+export async function markAnswerCopied(
+  id: string,
+  input?: { subject?: string; body?: string },
+): Promise<ActionResult> {
+  const { ctx, error } = await requireStaff()
+  if (error || !ctx) return { ok: false, error: error ?? 'Not authorised.' }
+
+  const patch: Record<string, unknown> = {
+    status: 'actioned',
+    actioned_at: new Date().toISOString(),
+    actioned_by: ctx.userId,
+  }
+  if (input?.subject?.trim()) patch.answer_subject = input.subject.trim()
+  if (input?.body?.trim()) patch.answer_body = input.body.trim()
+
+  const { error: updErr } = await ctx.supabase.from('inbound_requests').update(patch).eq('id', id)
+  if (updErr) return { ok: false, error: 'Could not update the request.' }
+  revalidatePath('/dashboard/requests')
+  return { ok: true, id }
+}
+
+/**
+ * Render a plain-text reply body as a simple, safe HTML email: paragraphs, with
+ * bare URLs (e.g. report links) turned into clickable links, plus the sender's
+ * configured footer.
+ */
+function renderAnswerHtml(body: string, footer: EmailFooter | undefined): string {
+  const paragraphs = body
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trim()
+      if (!trimmed) return '<br/>'
+      return `<p style="margin:0 0 12px">${linkify(escapeHtml(trimmed))}</p>`
+    })
+    .join('')
+
+  let footerHtml = ''
+  if (footer) {
+    const parts: string[] = []
+    if (footer.message) parts.push(`<p style="margin:0 0 8px">${linkify(escapeHtml(footer.message))}</p>`)
+    if (footer.imageUrl) {
+      parts.push(
+        `<p style="margin:0 0 8px"><img src="${escapeAttr(footer.imageUrl)}" alt="" style="max-width:320px;height:auto"/></p>`,
+      )
+    }
+    if (footer.links && footer.links.length > 0) {
+      const links = footer.links
+        .map(
+          (l) =>
+            `<a href="${escapeAttr(l.url)}" style="color:#b91c1c;text-decoration:none">${escapeHtml(l.label)}</a>`,
+        )
+        .join(' &nbsp;·&nbsp; ')
+      parts.push(`<p style="margin:0">${links}</p>`)
+    }
+    if (parts.length > 0) {
+      footerHtml = `<div style="margin-top:24px;padding-top:16px;border-top:1px solid #eee;color:#666;font-size:13px">${parts.join(
+        '',
+      )}</div>`
+    }
+  }
+
+  return `<div style="font-family:system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.6;color:#111;max-width:640px">${paragraphs}${footerHtml}</div>`
+}
+
+/** Turn bare http(s) URLs into anchor tags. Input must already be HTML-escaped. */
+function linkify(escaped: string): string {
+  return escaped.replace(
+    /(https?:\/\/[^\s<]+)/g,
+    (url) => `<a href="${url}" style="color:#b91c1c">${url}</a>`,
+  )
+}
+
+function escapeAttr(s: string): string {
+  return s.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
 /**

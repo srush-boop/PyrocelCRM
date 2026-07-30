@@ -3247,6 +3247,64 @@ export type SuggestedActionKind =
   | 'create_quote'
   | 'dismiss'
 
+// The category of an AI-prepared informational answer (research -> draft -> send).
+export type RequestAnswerKind =
+  | 'reports' // latest reports / certificates for a system/service
+  | 'next_due' // next service/maintenance due date(s)
+  | 'quote_status' // status/value of a quote
+  | 'service_history' // recent completed visits
+  | 'account_info' // contract/charge/contact details
+
+// Structured, deterministically-gathered facts backing a prepared answer. Only
+// the block(s) relevant to `answer_kind` are populated. The AI drafts prose FROM
+// these facts — it never invents them.
+export interface RequestAnswerFacts {
+  siteName?: string | null
+  clientName?: string | null
+  serviceLabel?: string | null // e.g. "Fire Alarm" / "Intruder Alarm"
+  // reports
+  reports?: {
+    reference: string | null
+    serviceName: string | null
+    systemName: string | null
+    completedDate: string | null // yyyy-MM-dd
+    status: string | null
+    link: string | null // public /r/<token> URL
+  }[]
+  documents?: { name: string; tag: string | null }[]
+  // next_due
+  nextDue?: {
+    serviceName: string
+    systemName: string | null
+    lastVisit: string | null // yyyy-MM-dd
+    nextDue: string | null // yyyy-MM-dd
+    frequency: string | null
+  }[]
+  // quote_status
+  quotes?: {
+    number: string | null
+    title: string | null
+    status: string | null
+    total: string | null // formatted currency
+    created: string | null // yyyy-MM-dd
+    updated: string | null // yyyy-MM-dd
+  }[]
+  // service_history
+  history?: {
+    reference: string | null
+    serviceName: string | null
+    date: string | null // yyyy-MM-dd
+    status: string | null
+  }[]
+  // account_info
+  account?: {
+    contactName: string | null
+    contactEmail: string | null
+    contactPhone: string | null
+    charges?: { name: string; frequency: string | null; annualValue: string | null }[]
+  } | null
+}
+
 // Fully-parameterised payload produced by triage so the action can be executed
 // deterministically (no second AI pass). All fields optional — only those
 // relevant to the action's `kind` are populated.
@@ -3319,6 +3377,14 @@ export interface InboundRequest {
   related_site_id: string | null
   related_task_id: string | null
   related_defect_id: string | null
+  // AI-prepared informational answer (research -> draft -> confirm -> send).
+  answer_kind: RequestAnswerKind | null
+  answer_subject: string | null
+  answer_body: string | null
+  answer_facts: RequestAnswerFacts | null
+  answer_prepared_at: string | null
+  answer_sent_at: string | null
+  answer_sent_to: string[] | null
   // Outcome.
   created_task_id: string | null
   actioned_at: string | null

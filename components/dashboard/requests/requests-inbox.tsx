@@ -39,6 +39,7 @@ import {
 import { cn } from '@/lib/utils'
 import { AddRequestDialog } from './add-request-dialog'
 import { ApproveCallDialog } from './approve-call-dialog'
+import { PreparedAnswerCard } from './prepared-answer-card'
 import {
   retriageRequest,
   dismissRequest,
@@ -645,6 +646,9 @@ function RequestDetail({
           )}
         </div>
       )}
+
+      {/* AI-prepared answer (research -> draft -> confirm -> send) */}
+      <PreparedAnswerCard request={r} disabled={busy || executing} />
 
       {/* Matched fields (editable) */}
       <div className="mt-4 grid gap-3 sm:grid-cols-2">

@@ -501,6 +501,23 @@ export async function triageInboundRequest(
       return { ok: false, error: 'Failed to save triage result.' }
     }
 
+    // For informational requests (report/history/next-due/quote/account queries)
+    // with a matched site or client, research + draft an answer now so staff open
+    // the request ready to review/send. Best-effort — never fail triage over it.
+    const informational =
+      intent === 'send_report' || intent === 'general' || intent === 'chase_up'
+    if (informational && (matchedSiteId || derivedClientId)) {
+      try {
+        const { prepareInboundAnswer } = await import('@/lib/ai/answer-inbound-request')
+        await prepareInboundAnswer(requestId)
+      } catch (prepErr) {
+        console.log(
+          '[v0] auto prepareInboundAnswer failed (non-fatal):',
+          prepErr instanceof Error ? prepErr.message : String(prepErr),
+        )
+      }
+    }
+
     return { ok: true }
   } catch (err) {
     console.error('[v0] triageInboundRequest failed:', err)

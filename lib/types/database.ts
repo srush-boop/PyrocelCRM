@@ -470,6 +470,10 @@ export interface Profile {
   // Per-user dashboard quick-shortcut destination keys (max 3), e.g.
   // ["calendar","invoices","sites"]. Missing entries = unset slot.
   dashboard_shortcuts: string[] | null
+  // Per-user ordered catalogue keys pinned as micro-icon shortcuts in the main
+  // app header (max MAX_HEADER_SHORTCUTS). NULL/empty = none pinned. Independent
+  // of dashboard_shortcuts (the home "Quick links" cards).
+  header_shortcuts: string[] | null
   // Per-user dashboard background preset key (e.g. "grid", "dots", "blueprint",
   // "glow"). NULL/empty = the default clean background.
   dashboard_background: string | null

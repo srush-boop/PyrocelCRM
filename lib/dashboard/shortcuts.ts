@@ -57,11 +57,35 @@ export const SHORTCUT_CATALOGUE: ShortcutDef[] = [
 // Maximum number of quick-shortcut slots a user can pin.
 export const MAX_SHORTCUTS = 6
 
+// Maximum number of micro-icon shortcuts a user can pin to the main header.
+export const MAX_HEADER_SHORTCUTS = 8
+
 const BY_KEY = new Map(SHORTCUT_CATALOGUE.map((s) => [s.key, s]))
 
 export function resolveShortcut(key: string | null | undefined): ShortcutDef | null {
   if (!key) return null
   return BY_KEY.get(key) ?? null
+}
+
+// Normalise stored header shortcut keys to a compact, valid list (no padding):
+// drops unknown keys + duplicates, preserves order, caps at MAX_HEADER_SHORTCUTS.
+export function normaliseHeaderShortcutKeys(stored: string[] | null | undefined): string[] {
+  const seen = new Set<string>()
+  const clean: string[] = []
+  for (const k of stored ?? []) {
+    if (clean.length >= MAX_HEADER_SHORTCUTS) break
+    if (typeof k !== 'string' || seen.has(k) || !BY_KEY.has(k)) continue
+    seen.add(k)
+    clean.push(k)
+  }
+  return clean
+}
+
+// Resolve stored header shortcut keys to their catalogue definitions, in order.
+export function resolveHeaderShortcuts(stored: string[] | null | undefined): ShortcutDef[] {
+  return normaliseHeaderShortcutKeys(stored)
+    .map((k) => BY_KEY.get(k))
+    .filter((s): s is ShortcutDef => !!s)
 }
 
 // Normalise a stored shortcut array to exactly MAX_SHORTCUTS slots (padded with

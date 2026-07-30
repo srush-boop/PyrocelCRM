@@ -134,12 +134,6 @@ export function AddRequestButton({
     }
   }
 
-  // Feature temporarily hidden everywhere: the "Add request" flow was
-  // mis-triaging and creating unintended calls. Returning null after all hooks
-  // keeps the Rules of Hooks intact while removing every entry point. Restore by
-  // deleting this early return once the triage flow is fixed.
-  return null
-
   return (
     <Dialog
       open={open}

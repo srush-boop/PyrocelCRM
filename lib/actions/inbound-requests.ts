@@ -404,14 +404,22 @@ export async function sendInboundAnswer(
   if (!subject) return { ok: false, error: 'Add a subject line.' }
   if (!body) return { ok: false, error: 'The reply is empty.' }
 
-  // Validate + de-duplicate recipients.
-  const recipients = Array.from(
-    new Set(
-      (input.recipients || [])
-        .map((r) => r.trim().toLowerCase())
-        .filter((r) => /.+@.+\..+/.test(r)),
-    ),
-  )
+  // Validate + de-duplicate recipients. Each entry may be a bare email or a
+  // "Display Name <email>" form; we validate/de-dupe on the email but keep the
+  // display name so the client sees a properly addressed reply.
+  const seen = new Set<string>()
+  const recipients: string[] = []
+  for (const raw of input.recipients || []) {
+    const entry = raw.trim()
+    if (!entry) continue
+    const angle = /<([^>]+)>/.exec(entry)
+    const email = (angle ? angle[1] : entry).trim().toLowerCase()
+    if (!/.+@.+\..+/.test(email)) continue
+    if (seen.has(email)) continue
+    seen.add(email)
+    // Preserve a display name if one was supplied and looks sane.
+    recipients.push(angle && entry.replace(/<[^>]+>/, '').trim() ? entry : email)
+  }
   if (recipients.length === 0) {
     return { ok: false, error: 'Add at least one valid recipient email.' }
   }

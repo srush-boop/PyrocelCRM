@@ -5,12 +5,21 @@ import { createClient } from '@/lib/supabase/server'
 import { triageInboundRequest } from '@/lib/ai/triage-inbound-request'
 import { executeRequestInstructionAI, type ExecuteInstructionResult } from '@/lib/ai/execute-request-instruction'
 import { bookCall } from '@/app/(dashboard)/dashboard/schedule/book-call-actions'
-import { saveQuote } from '@/app/(dashboard)/dashboard/sales/actions'
+import {
+  saveQuote,
+  type QuoteLineInput,
+  type QuoteSystemInput,
+} from '@/app/(dashboard)/dashboard/sales/actions'
 import { sendEmail } from '@/lib/email/send-email'
 import { resolveEmailFooter } from '@/lib/email/footer'
 import { prepareInboundAnswer } from '@/lib/ai/answer-inbound-request'
+import { prepareRequestAction } from '@/lib/ai/prepare-request-action'
 import type { EmailFooter } from '@/lib/email/templates'
-import type { SuggestedAction, SuggestedActionKind, SuggestedActionPayload } from '@/lib/types/database'
+import type {
+  SuggestedAction,
+  SuggestedActionKind,
+  SuggestedActionPayload,
+} from '@/lib/types/database'
 
 interface StaffContext {
   supabase: Awaited<ReturnType<typeof createClient>>
@@ -325,6 +334,59 @@ export async function prepareAnswer(id: string): Promise<ActionResult> {
   return { ok: true, id }
 }
 
+// ── AI-prepared operational actions (research -> draft -> confirm -> execute) ──
+
+/**
+ * Research the request and draft the parameters for the operational action a
+ * human will confirm (book a reactive call, prepare a priced quote, log a
+ * chase-up). On-demand ("Prepare action" / "Regenerate") and chained from triage.
+ */
+export async function prepareAction(id: string): Promise<ActionResult> {
+  const { ctx, error } = await requireStaff()
+  if (error || !ctx) return { ok: false, error: error ?? 'Not authorised.' }
+
+  const res = await prepareRequestAction(id)
+  revalidatePath('/dashboard/requests')
+  if (!res.ok) return { ok: false, error: res.error ?? 'Could not prepare an action.' }
+  return { ok: true, id }
+}
+
+/**
+ * Persist staff edits to a prepared action's parameters (notes, quote lines,
+ * chase note, etc.) WITHOUT executing it. Merges the patch into the primary
+ * suggested action's payload so the confirm step uses the edited values.
+ */
+export async function saveActionDraft(
+  id: string,
+  patch: Partial<SuggestedActionPayload>,
+): Promise<ActionResult> {
+  const { ctx, error } = await requireStaff()
+  if (error || !ctx) return { ok: false, error: error ?? 'Not authorised.' }
+
+  const { data: row, error: readErr } = await ctx.supabase
+    .from('inbound_requests')
+    .select('suggested_actions')
+    .eq('id', id)
+    .maybeSingle()
+  if (readErr || !row) return { ok: false, error: 'Request not found.' }
+
+  const actions = ((row as { suggested_actions: SuggestedAction[] | null }).suggested_actions ??
+    []) as SuggestedAction[]
+  if (actions.length === 0) return { ok: false, error: 'No prepared action to update.' }
+
+  const next = [...actions]
+  next[0] = { ...next[0], payload: { ...(next[0].payload ?? {}), ...patch } }
+
+  const { error: updErr } = await ctx.supabase
+    .from('inbound_requests')
+    .update({ suggested_actions: next })
+    .eq('id', id)
+  if (updErr) return { ok: false, error: 'Could not save the action.' }
+
+  revalidatePath('/dashboard/requests')
+  return { ok: true, id }
+}
+
 /**
  * Send the reviewed (optionally edited) AI-prepared answer to the client. This is
  * a separate, explicit, staff-confirmed send — it does NOT depend on the parked
@@ -342,14 +404,22 @@ export async function sendInboundAnswer(
   if (!subject) return { ok: false, error: 'Add a subject line.' }
   if (!body) return { ok: false, error: 'The reply is empty.' }
 
-  // Validate + de-duplicate recipients.
-  const recipients = Array.from(
-    new Set(
-      (input.recipients || [])
-        .map((r) => r.trim().toLowerCase())
-        .filter((r) => /.+@.+\..+/.test(r)),
-    ),
-  )
+  // Validate + de-duplicate recipients. Each entry may be a bare email or a
+  // "Display Name <email>" form; we validate/de-dupe on the email but keep the
+  // display name so the client sees a properly addressed reply.
+  const seen = new Set<string>()
+  const recipients: string[] = []
+  for (const raw of input.recipients || []) {
+    const entry = raw.trim()
+    if (!entry) continue
+    const angle = /<([^>]+)>/.exec(entry)
+    const email = (angle ? angle[1] : entry).trim().toLowerCase()
+    if (!/.+@.+\..+/.test(email)) continue
+    if (seen.has(email)) continue
+    seen.add(email)
+    // Preserve a display name if one was supplied and looks sane.
+    recipients.push(angle && entry.replace(/<[^>]+>/, '').trim() ? entry : email)
+  }
   if (recipients.length === 0) {
     return { ok: false, error: 'Add at least one valid recipient email.' }
   }
@@ -673,6 +743,31 @@ async function createDraftQuoteFromRequest(
     prospectName = s?.from_name || s?.from_email || 'New prospect'
   }
 
+  // If AI prepared line items, seed them into a single system so staff open a
+  // pre-populated builder (they still confirm/price). Otherwise leave it empty.
+  const preparedLines = Array.isArray(payload.quoteLines) ? payload.quoteLines : []
+  const systems: QuoteSystemInput[] =
+    preparedLines.length > 0
+      ? [
+          {
+            system_name: payload.quoteSystemName?.trim() || 'Works',
+            work_type: payload.quoteType || 'remedial',
+            lines: preparedLines
+              .filter((l) => l.description?.trim())
+              .map<QuoteLineInput>((l) => ({
+                description: l.description.trim(),
+                quantity: Math.max(1, Math.round(l.quantity || 1)),
+                // AI does not price; seed cost from any hint (pounds→pence) else 0.
+                unit_cost_pence:
+                  l.unitPricePounds != null && l.unitPricePounds > 0
+                    ? Math.round(l.unitPricePounds * 100)
+                    : 0,
+                margin_percent: null,
+              })),
+          },
+        ]
+      : []
+
   return saveQuote({
     title: payload.title?.trim() || 'New quote',
     quote_type: payload.quoteType || 'other',
@@ -682,7 +777,7 @@ async function createDraftQuoteFromRequest(
     summary: payload.summary || req.ai_summary || null,
     vat_rate: 20,
     discount_pence: 0,
-    systems: [],
+    systems,
   })
 }
 

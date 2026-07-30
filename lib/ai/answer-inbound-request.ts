@@ -92,13 +92,17 @@ export async function prepareInboundAnswer(id: string): Promise<PrepareAnswerRes
     // ── 3. Draft the reply prose from the verified facts ──────────────────────
     const draft = await draftReply(req, kind, facts)
 
+    // Guarantee the report links are attached: the LLM is asked to include them,
+    // but we never rely on that for something the client explicitly requested.
+    const body = ensureReportLinksAppended(draft.body, kind, facts)
+
     // ── 4. Persist ────────────────────────────────────────────────────────────
     const { error: updErr } = await supabase
       .from('inbound_requests')
       .update({
         answer_kind: kind,
         answer_subject: draft.subject,
-        answer_body: draft.body,
+        answer_body: body,
         answer_facts: facts,
         answer_prepared_at: new Date().toISOString(),
         // Clear any stale send stamps if this is a regenerate.
@@ -188,8 +192,11 @@ async function resolveTargetSystem(
   siteId: string,
   text: string,
 ): Promise<{ serviceTypeId: string | null; systemTypeId: string | null }> {
-  const needle = text.toLowerCase().replace(/[^a-z0-9 ]/g, ' ')
-  const tokens = needle.split(/\s+/).filter((t) => t.length > 2 && t !== 'alarm' && t !== 'system')
+  const needle = text.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').trim()
+  // Keep ALL meaningful tokens (including "alarm") so "fire alarm" can out-score
+  // "fire damper" — dropping "alarm" was collapsing every "fire ..." request to
+  // whichever fire service happened to come first (e.g. Fire Dampers).
+  const tokens = needle.split(/\s+/).filter((t) => t.length > 2 && t !== 'system')
 
   const { data } = await supabase
     .from('site_services')
@@ -207,21 +214,39 @@ async function resolveTargetSystem(
     } | null
   }[]
 
+  // Score every candidate and keep the strongest match, rather than the first hit.
+  let best: { serviceTypeId: string | null; systemTypeId: string | null; score: number } | null =
+    null
   for (const r of rows) {
     const svcName = (r.service_type?.name ?? '').toLowerCase()
     const sysName = (r.service_type?.system_type?.name ?? '').toLowerCase()
-    const haystack = `${svcName} ${sysName} ${needle}`
-    const hit =
-      tokens.some((t) => svcName.includes(t) || sysName.includes(t)) ||
-      (needle.includes('fire') && haystack.includes('fire')) ||
-      (needle.includes('intruder') && (haystack.includes('intruder') || haystack.includes('burglar'))) ||
-      (needle.includes('emergency') && haystack.includes('emergency'))
-    if (hit) {
-      return {
+    const haystack = `${svcName} ${sysName}`
+
+    let score = 0
+    // +1 per matched token — so a 2-word phrase like "fire alarm" beats a single
+    // shared word like "fire".
+    for (const t of tokens) if (haystack.includes(t)) score += 1
+    // Strong bonus if the full phrase appears verbatim.
+    if (needle.length > 2 && haystack.includes(needle)) score += 3
+    // Domain synonyms.
+    if (needle.includes('intruder') && (haystack.includes('intruder') || haystack.includes('burglar')))
+      score += 2
+
+    if (score > 0 && (!best || score > best.score)) {
+      best = {
         serviceTypeId: r.service_type?.id ?? r.service_type_id ?? null,
         systemTypeId: r.service_type?.system_type?.id ?? null,
+        score,
       }
     }
+  }
+
+  // Prefer SYSTEM-level filtering when the winner belongs to a system type: a
+  // client asking for "the fire alarm reports" wants every fire-alarm service's
+  // reports (weekly test + annual maintenance), not just one service.
+  if (best) {
+    if (best.systemTypeId) return { serviceTypeId: null, systemTypeId: best.systemTypeId }
+    return { serviceTypeId: best.serviceTypeId, systemTypeId: null }
   }
   return { serviceTypeId: null, systemTypeId: null }
 }
@@ -290,6 +315,13 @@ async function gatherFacts(
       .maybeSingle()
     const row = st as { name: string | null; system_type: { name: string | null } | null } | null
     facts.serviceLabel = row?.system_type?.name || row?.name || null
+  } else if (target.systemTypeId) {
+    const { data: sys } = await supabase
+      .from('system_types')
+      .select('name')
+      .eq('id', target.systemTypeId)
+      .maybeSingle()
+    facts.serviceLabel = (sys as { name: string | null } | null)?.name ?? null
   }
 
   switch (kind) {
@@ -533,6 +565,44 @@ async function gatherCharges(
       annualValue: formatGBP(annualPence / 100),
     }
   })
+}
+
+/**
+ * Deterministically ensure every report link the client asked for is present in
+ * the body. If the drafted prose already contains a link we leave it; any missing
+ * links are appended in a tidy "Your reports" block so reports are NEVER dropped.
+ */
+function ensureReportLinksAppended(
+  body: string,
+  kind: RequestAnswerKind,
+  facts: RequestAnswerFacts,
+): string {
+  if (kind !== 'reports') return body
+  const reports = (facts.reports ?? []).filter((r) => !!r.link)
+  if (reports.length === 0) return body
+
+  const missing = reports.filter((r) => !body.includes(r.link as string))
+  if (missing.length === 0) return body
+
+  const lines = missing.map((r) => {
+    const label =
+      [r.systemName, r.serviceName].filter(Boolean).join(' – ') || r.reference || 'Report'
+    const dated = r.completedDate ? ` (${formatDateForBody(r.completedDate)})` : ''
+    return `• ${label}${dated}: ${r.link}`
+  })
+
+  const heading =
+    reports.length === missing.length
+      ? 'Your latest report(s):'
+      : 'Additional report(s):'
+
+  return `${body.trimEnd()}\n\n${heading}\n${lines.join('\n')}`
+}
+
+/** DD/MM/YYYY for report dates that arrive as yyyy-MM-dd strings. */
+function formatDateForBody(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso
 }
 
 // ── Step 3: draft the reply ───────────────────────────────────────────────────

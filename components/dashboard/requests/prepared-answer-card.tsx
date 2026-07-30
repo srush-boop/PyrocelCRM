@@ -51,7 +51,15 @@ export function PreparedAnswerCard({
 
   const [subject, setSubject] = useState(r.answer_subject ?? '')
   const [body, setBody] = useState(r.answer_body ?? '')
-  const [recipients, setRecipients] = useState(r.from_email ?? '')
+  // Default the recipient to "Sender Name <email>" so the reply is addressed to
+  // the person who wrote in; fall back to the bare email when there's no name.
+  const [recipients, setRecipients] = useState(() =>
+    r.from_email
+      ? r.from_name?.trim()
+        ? `${r.from_name.trim()} <${r.from_email}>`
+        : r.from_email
+      : '',
+  )
   const [preparing, setPreparing] = useState(false)
   const [sending, setSending] = useState(false)
 
@@ -71,8 +79,9 @@ export function PreparedAnswerCard({
   }
 
   async function handleSend() {
+    // Split on commas/semicolons only — NOT spaces — so "Name <email>" stays intact.
     const list = recipients
-      .split(/[,;\s]+/)
+      .split(/[,;]+/)
       .map((e) => e.trim())
       .filter(Boolean)
     if (list.length === 0) {

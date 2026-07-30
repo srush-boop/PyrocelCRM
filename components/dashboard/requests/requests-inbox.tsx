@@ -40,6 +40,7 @@ import { cn } from '@/lib/utils'
 import { AddRequestDialog } from './add-request-dialog'
 import { ApproveCallDialog } from './approve-call-dialog'
 import { PreparedAnswerCard } from './prepared-answer-card'
+import { PreparedActionCard } from './prepared-action-card'
 import {
   retriageRequest,
   dismissRequest,
@@ -542,6 +543,15 @@ function RequestDetail({
   // Actions that touch a site can't run until a site is matched.
   const needsSite = primary?.kind === 'create_call' || primary?.kind === 'send_report'
   const primaryBlocked = needsSite && !r.matched_site_id
+  // The richer "prepared action" card handles call/quote/chase-up. When it's
+  // showing (prepared, or preparable but not yet), it replaces the inline button.
+  const preparableKind =
+    primary?.kind === 'create_call' ||
+    primary?.kind === 'create_quote' ||
+    primary?.kind === 'chase_up'
+  const canPrepareAction = !!r.matched_site_id || !!r.matched_client_id
+  const showPreparedAction =
+    !isClosed && (!!r.action_prepared_at || (preparableKind && canPrepareAction))
 
   return (
     <Card className="p-5">
@@ -609,7 +619,9 @@ function RequestDetail({
                 <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <p className="text-sm font-medium text-pretty">{r.ai_proposed_action}</p>
               </div>
-              {primary && primaryMeta && primary.kind !== 'dismiss' && (
+              {/* Inline one-click button — only when the richer prepared-action
+                  card below hasn't taken over (i.e. not a preparable/prepared action). */}
+              {primary && primaryMeta && primary.kind !== 'dismiss' && !showPreparedAction && (
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <Button
                     size="sm"
@@ -646,6 +658,14 @@ function RequestDetail({
           )}
         </div>
       )}
+
+      {/* AI-prepared operational action (book call / prepare quote / log chase-up) */}
+      <PreparedActionCard
+        request={r}
+        executing={executing}
+        disabled={busy}
+        onConfirm={(kind) => onRunPrimary(kind)}
+      />
 
       {/* AI-prepared answer (research -> draft -> confirm -> send) */}
       <PreparedAnswerCard request={r} disabled={busy || executing} />

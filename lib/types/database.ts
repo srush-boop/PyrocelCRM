@@ -3308,6 +3308,15 @@ export interface RequestAnswerFacts {
 // Fully-parameterised payload produced by triage so the action can be executed
 // deterministically (no second AI pass). All fields optional — only those
 // relevant to the action's `kind` are populated.
+// A single AI-suggested quote line. Free-text (no catalogue resolution in this
+// pass) so staff price it in the builder; qty defaults to 1.
+export interface PreparedQuoteLine {
+  description: string
+  quantity: number
+  // Optional AI hint at a price (pounds). Staff always confirm/adjust pricing.
+  unitPricePounds?: number | null
+}
+
 export interface SuggestedActionPayload {
   // Shared match context.
   siteId?: string | null
@@ -3325,6 +3334,8 @@ export interface SuggestedActionPayload {
   quoteType?: string | null
   title?: string | null
   summary?: string | null
+  quoteSystemName?: string | null // grouping label for the seeded quote system
+  quoteLines?: PreparedQuoteLine[] // AI-suggested line items (unpriced by default)
 }
 
 // One AI-proposed action. `kind` drives which control the inbox renders. The
@@ -3385,6 +3396,9 @@ export interface InboundRequest {
   answer_prepared_at: string | null
   answer_sent_at: string | null
   answer_sent_to: string[] | null
+  // AI-prepared operational action (params live in suggested_actions[0].payload);
+  // set once the action has been researched + drafted, ready for staff to confirm.
+  action_prepared_at: string | null
   // Outcome.
   created_task_id: string | null
   actioned_at: string | null

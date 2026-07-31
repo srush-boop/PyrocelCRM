@@ -7,7 +7,7 @@ import {
   financialYearOf,
   formatInvoiceNumber,
 } from '@/lib/billing/invoices'
-import { perVisitAmountPence } from '@/lib/billing/recurring'
+import { perVisitAmountPence, systemServiceLabel } from '@/lib/billing/recurring'
 import { getCompanyTaxConfig } from '@/lib/billing/company-tax'
 import type { RecurringCharge } from '@/lib/types/database'
 
@@ -46,6 +46,13 @@ interface ChargeRow {
   group_key: string | null
   nominal_code_id: string | null
   nominal_code: string | null
+  site_service?: {
+    service_type?: { name: string | null } | null
+    site_system?: {
+      name: string | null
+      system_type?: { name: string | null } | null
+    } | null
+  } | null
 }
 
 /**
@@ -113,7 +120,11 @@ export async function generateVisitCompletionInvoice(
     .from('recurring_charges')
     .select(
       `id, billing_account_id, site_service_id, description, unit_price_pence, quantity,
-       frequency, timing, visits_per_cycle, group_key, nominal_code_id, nominal_code`,
+       frequency, timing, visits_per_cycle, group_key, nominal_code_id, nominal_code,
+       site_service:site_services(
+         service_type:service_types(name),
+         site_system:site_systems(name, system_type:system_types(name))
+       )`,
     )
     .eq('site_service_id', task.site_service_id)
     .eq('timing', 'per_visit')
@@ -246,10 +257,20 @@ export async function generateVisitCompletionInvoice(
     const invoiceId = invoice.id as string
 
     // Insert one line per charge, capturing the line id for the ledger row.
-    const lines = prepared.map((p, i) => ({
+    const lines = prepared.map((p, i) => {
+      // Prefix the service type + system type so the per-visit recurring line
+      // reads e.g. "Annual maintenance — Fire Alarm / Inspection · visit 1 of 4".
+      const label = systemServiceLabel({
+        systemName: p.charge.site_service?.site_system?.name,
+        systemTypeName: p.charge.site_service?.site_system?.system_type?.name,
+        serviceName: p.charge.site_service?.service_type?.name,
+      })
+      const visitSuffix = `visit ${p.cycleIndex + 1} of ${p.visitsInCycle}`
+      const suffix = [label, visitSuffix].filter(Boolean).join(' \u00b7 ')
+      return {
       invoice_id: invoiceId,
       kind: 'other' as const,
-      description: `${p.charge.description} — visit ${p.cycleIndex + 1} of ${p.visitsInCycle}`,
+      description: `${p.charge.description} \u2014 ${suffix}`,
       quantity: 1,
       unit_price_pence: p.amountPence,
       amount_pence: p.amountPence,
@@ -260,7 +281,8 @@ export async function generateVisitCompletionInvoice(
       nominal_code:
         p.charge.nominal_code ??
         (p.charge.nominal_code_id ? nominalText.get(p.charge.nominal_code_id) ?? null : null),
-    }))
+      }
+    })
 
     const { data: insertedLines, error: lineError } = await db
       .from('invoice_line_items')

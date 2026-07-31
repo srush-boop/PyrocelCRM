@@ -419,6 +419,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
       id: c.id,
       visit_type_id: c.visit_type_id ?? null,
       service_type_id: c.service_type_id ?? c.site_service?.service_type?.id ?? null,
+      site_service_id: c.site_service_id ?? null,
     })),
   )
 

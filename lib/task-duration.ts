@@ -41,10 +41,18 @@ export interface ExpectedDuration {
   sampleSize: number
   // Provenance for tooltips/debug:
   //   'visit'/'service'    — learned average of recent completed calls
+  //   'setup-site-service' — per site_service estimated_visit_minutes (most specific setup)
   //   'setup-visit'        — manual per-visit expected time (service setup)
   //   'setup-service'      — manual service-level expected time (service setup)
   //   'booked'/'default'   — per-call booked slot / generic fallback
-  source: 'visit' | 'service' | 'setup-visit' | 'setup-service' | 'booked' | 'default'
+  source:
+    | 'visit'
+    | 'service'
+    | 'setup-site-service'
+    | 'setup-visit'
+    | 'setup-service'
+    | 'booked'
+    | 'default'
 }
 
 interface DurationRow {
@@ -127,13 +135,14 @@ export function expectedMinutesFor(
   opts: {
     visitTypeId?: string | null
     serviceTypeId?: string | null
+    siteServiceId?: string | null
     bookedDurationMinutes?: number | null
     // Manual "expected time to complete" fallbacks entered in service setup,
     // used when there isn't enough completed history to learn an average.
     setup?: SetupExpectedMinutes | null
   },
 ): ExpectedDuration {
-  const { visitTypeId, serviceTypeId, bookedDurationMinutes, setup } = opts
+  const { visitTypeId, serviceTypeId, siteServiceId, bookedDurationMinutes, setup } = opts
 
   // 1) Learned average of the most recent completed calls of the same type.
   if (visitTypeId) {
@@ -148,8 +157,15 @@ export function expectedMinutesFor(
       return { minutes: stat.avgMinutes, learned: true, sampleSize: stat.sampleSize, source: 'service' }
     }
   }
-  // 2) Manual service-setup fallback (per visit type, then service-level).
+  // 2) Manual setup fallback. Most specific first: the per site_service
+  //    estimate set on the service itself, then per visit type, then
+  //    service-level.
   if (setup) {
+    if (siteServiceId) {
+      const m = setup.bySiteService.get(siteServiceId)
+      if (m && m > 0)
+        return { minutes: m, learned: false, sampleSize: 0, source: 'setup-site-service' }
+    }
     if (visitTypeId) {
       const m = setup.byVisitType.get(visitTypeId)
       if (m && m > 0) return { minutes: m, learned: false, sampleSize: 0, source: 'setup-visit' }
@@ -171,6 +187,8 @@ export function expectedMinutesFor(
 export interface SetupExpectedMinutes {
   byVisitType: Map<string, number>
   byServiceType: Map<string, number>
+  // Per site_service explicit estimate (site_services.estimated_visit_minutes).
+  bySiteService: Map<string, number>
 }
 
 /**
@@ -183,8 +201,9 @@ export async function getSetupExpectedMinutes(
 ): Promise<SetupExpectedMinutes> {
   const byVisitType = new Map<string, number>()
   const byServiceType = new Map<string, number>()
+  const bySiteService = new Map<string, number>()
 
-  const [visitRes, serviceRes] = await Promise.all([
+  const [visitRes, serviceRes, siteServiceRes] = await Promise.all([
     supabase
       .from('service_visit_types')
       .select('id, expected_minutes')
@@ -193,6 +212,10 @@ export async function getSetupExpectedMinutes(
       .from('service_types')
       .select('id, expected_visit_minutes')
       .not('expected_visit_minutes', 'is', null),
+    supabase
+      .from('site_services')
+      .select('id, estimated_visit_minutes')
+      .not('estimated_visit_minutes', 'is', null),
   ])
 
   for (const row of (visitRes.data ?? []) as { id: string; expected_minutes: number | null }[]) {
@@ -205,8 +228,15 @@ export async function getSetupExpectedMinutes(
     if (row.expected_visit_minutes && row.expected_visit_minutes > 0)
       byServiceType.set(row.id, row.expected_visit_minutes)
   }
+  for (const row of (siteServiceRes.data ?? []) as {
+    id: string
+    estimated_visit_minutes: number | null
+  }[]) {
+    if (row.estimated_visit_minutes && row.estimated_visit_minutes > 0)
+      bySiteService.set(row.id, row.estimated_visit_minutes)
+  }
 
-  return { byVisitType, byServiceType }
+  return { byVisitType, byServiceType, bySiteService }
 }
 
 // A ready-to-consume lookup for resolving per-call estimates (learned history +
@@ -240,11 +270,12 @@ export interface CallEstimate {
  */
 export function estimateForCall(
   lookup: CallEstimateLookup,
-  opts: { visitTypeId?: string | null; serviceTypeId?: string | null },
+  opts: { visitTypeId?: string | null; serviceTypeId?: string | null; siteServiceId?: string | null },
 ): CallEstimate | null {
   const resolved = expectedMinutesFor(lookup.durations, {
     visitTypeId: opts.visitTypeId,
     serviceTypeId: opts.serviceTypeId,
+    siteServiceId: opts.siteServiceId,
     setup: lookup.setup,
   })
   if (resolved.source === 'default' || resolved.source === 'booked') return null
@@ -258,13 +289,19 @@ export function estimateForCall(
  */
 export function buildTaskEstimates(
   lookup: CallEstimateLookup,
-  tasks: { id: string; visit_type_id?: string | null; service_type_id?: string | null }[],
+  tasks: {
+    id: string
+    visit_type_id?: string | null
+    service_type_id?: string | null
+    site_service_id?: string | null
+  }[],
 ): Record<string, CallEstimate> {
   const out: Record<string, CallEstimate> = {}
   for (const t of tasks) {
     const est = estimateForCall(lookup, {
       visitTypeId: t.visit_type_id ?? null,
       serviceTypeId: t.service_type_id ?? null,
+      siteServiceId: t.site_service_id ?? null,
     })
     if (est) out[t.id] = est
   }

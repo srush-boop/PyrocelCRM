@@ -615,6 +615,14 @@ export function SiteSystemsManager({
               </p>
             </div>
           )}
+          {siteTotalMinutes > 0 && (
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Est. time per visit</p>
+              <p className="text-lg font-semibold tabular-nums">
+                {formatDuration(siteTotalMinutes)}
+              </p>
+            </div>
+          )}
           {siteSystems.length > 0 && (
             <Button
               variant="outline"
@@ -754,6 +762,8 @@ export function SiteSystemsManager({
               : null
             // Annualised recurring value across this system's services.
             const systemValue = sumServiceValue(services)
+            // Estimated on-site time per visit cycle across this system's services.
+            const systemMinutes = sumEstimatedMinutes(services)
             // Active services with no recurring charge set up, so we can warn the
             // user (revenue would be missed when calls are completed/invoiced).
             const chargelessServices = activeServices.filter((s) => serviceValue(s.id) <= 0)
@@ -812,6 +822,15 @@ export function SiteSystemsManager({
                         >
                           <Receipt className="h-3.5 w-3.5" />
                           {formatPence(systemValue)}/yr
+                        </span>
+                      )}
+                      {systemMinutes > 0 && (
+                        <span
+                          className="inline-flex items-center gap-1 font-medium text-foreground"
+                          title="Estimated on-site time per visit across this system's services"
+                        >
+                          <Clock className="h-3.5 w-3.5" />
+                          {formatDuration(systemMinutes)}/visit
                         </span>
                       )}
                       {nextDueDate && (
@@ -1004,6 +1023,30 @@ export function SiteSystemsManager({
                               <Settings2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                             </button>
                             <div className="flex shrink-0 items-center gap-2">
+                              {(() => {
+                                const estMinutes = serviceEstimatedMinutes(svc)
+                                if (estMinutes == null || estMinutes <= 0) return null
+                                const explicit = hasExplicitEstimate(svc)
+                                return (
+                                  <span
+                                    className={cn(
+                                      'flex items-center gap-1 text-xs tabular-nums',
+                                      explicit
+                                        ? 'text-muted-foreground'
+                                        : 'text-muted-foreground/70 italic',
+                                    )}
+                                    title={
+                                      explicit
+                                        ? 'Estimated time on site per visit'
+                                        : 'Suggested time on site per visit (from value & margin). Open service set up to confirm.'
+                                    }
+                                  >
+                                    <Clock className="h-3 w-3" />
+                                    {formatDuration(estMinutes)}
+                                    {!explicit && '*'}
+                                  </span>
+                                )
+                              })()}
                               {value > 0 ? (
                                 <span
                                   className="text-xs tabular-nums text-muted-foreground"

@@ -167,6 +167,7 @@ export default async function SchedulePage({
       id: t.id,
       visit_type_id: t.visit_type_id ?? null,
       service_type_id: t.service_type_id ?? null,
+      site_service_id: t.site_service_id ?? null,
     })),
   )
 

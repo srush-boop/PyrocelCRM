@@ -14,6 +14,7 @@ import type { Profile, Site, ServiceType, SiteService, SystemType, TaskWithDetai
 import { normalizeTasks } from '@/lib/normalize-task'
 import { getMyCurrentOncall } from '@/lib/oncall/queries'
 import { isTaskVisibleToEngineer } from '@/lib/engineer-visibility'
+import { getCallEstimateLookup, buildTaskEstimates } from '@/lib/task-duration'
 
 export default async function SchedulePage({
   searchParams,
@@ -112,6 +113,10 @@ export default async function SchedulePage({
   let siteServices: (SiteService & { site: Site; service_type: ServiceType })[] = []
   let clients: { id: string; name: string }[] = []
   let reactiveServiceTypes: ServiceType[] = []
+  // Full live service-type catalogue (recurring + reactive) used to populate the
+  // schedule's Service filter so every type is selectable, even when it has no
+  // calls in the currently-loaded window.
+  let allServiceTypes: ServiceType[] = []
   let systemTypes: SystemType[] = []
 
   if (needsBookingData) {
@@ -125,9 +130,10 @@ export default async function SchedulePage({
     sites = (sitesResult.data || []) as Site[]
     clients = (clientsResult.data || []) as { id: string; name: string }[]
     // Reactive / emergency (non-recurring) call types are logged ad-hoc via Log Call.
-    reactiveServiceTypes = ((serviceTypesResult.data || []) as ServiceType[]).filter(
-      (st) => st.is_recurring === false && (st.status || 'live') !== 'dead',
+    allServiceTypes = ((serviceTypesResult.data || []) as ServiceType[]).filter(
+      (st) => (st.status || 'live') !== 'dead',
     )
+    reactiveServiceTypes = allServiceTypes.filter((st) => st.is_recurring === false)
     systemTypes = (systemTypesResult.data || []) as SystemType[]
 
     if (isAdminOrOffice) {
@@ -150,6 +156,19 @@ export default async function SchedulePage({
       engineers = [profile as Profile]
     }
   }
+
+  // "Approximate time to complete" for each call: the learned average of the
+  // last 5 completed calls of the same type, or the manual expected time from
+  // service setup. Tasks without a grounded estimate are simply omitted.
+  const estimateLookup = await getCallEstimateLookup(supabase)
+  const estimates = buildTaskEstimates(
+    estimateLookup,
+    tasks.map((t) => ({
+      id: t.id,
+      visit_type_id: t.visit_type_id ?? null,
+      service_type_id: t.service_type_id ?? null,
+    })),
+  )
 
   return (
     <div className="space-y-4">
@@ -220,6 +239,9 @@ export default async function SchedulePage({
         profile={profile as Profile}
         engineers={engineers}
         initialTab={initialTab}
+        estimates={estimates}
+        serviceTypes={allServiceTypes}
+        systemTypes={systemTypes}
       />
     </div>
   )

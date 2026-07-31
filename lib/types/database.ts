@@ -694,6 +694,10 @@ export interface ServiceType {
   // delivered by a CDO but never routed (e.g. fire extinguisher servicing, fire
   // & smoke damper testing). Non-CDO delivery is never routed regardless.
   route_eligible: boolean
+  // Service-level default expected time on site (minutes). Used as the call tile
+  // "approximate time to complete" fallback for services with no per-visit
+  // override (e.g. single-visit services). NULL = not set.
+  expected_visit_minutes: number | null
   status: 'live' | 'dead'
   created_at: string
   system_type?: SystemType | null
@@ -716,6 +720,10 @@ export interface ServiceType {
   // alarm = 1 Annual + 51 Periodic). Revenue is apportioned as
   // annual_net * weight / Σ(occurrences_per_year * weight). 0 = not configured.
   occurrences_per_year: number
+  // Manually-entered expected time on site (minutes) for a visit of this type.
+  // Used as the call tile "approximate time to complete" fallback when there
+  // isn't enough completed history to learn an average. NULL = not set.
+  expected_minutes: number | null
   created_at: string
   updated_at: string
   }
@@ -1562,6 +1570,12 @@ export interface Task {
   // the engineer). Drives how long the task blocks out on the calendar; a
   // working day is treated as 8 hours (480 minutes).
   booked_duration_minutes: number | null
+  // The time we would like the engineer to attend site, in minutes, captured
+  // when raising ANY call. Defaults to 30 (0.5 hr) in the booking UI.
+  attend_time_minutes: number | null
+  // The expected time on site, in minutes, captured when raising a call.
+  // Defaults to 30 (0.5 hr) in the booking UI.
+  expected_on_site_minutes: number | null
   status: TaskStatus
   started_at: string | null
   completed_at: string | null

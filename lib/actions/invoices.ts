@@ -14,6 +14,7 @@ import type {
 import { resolveBillingAccount } from '@/lib/billing/resolve-billing-account'
 import { renderInvoicePdfBuffer } from '@/lib/pdf/invoice-pdf'
 import { resolveInvoiceLineSites } from '@/lib/billing/invoice-line-sites'
+import { resolveBillToAddress } from '@/lib/billing/invoice-bill-to'
 import { buildSageCsv, type SageExportInvoice } from '@/lib/billing/sage-export'
 import { sendEmail } from '@/lib/email/send-email'
 import {
@@ -1351,6 +1352,10 @@ export async function getInvoiceLinesForEdit(
  */
 export async function sendInvoiceToClient(
   invoiceId: string,
+  // Optional recipient override typed at send time. When omitted, the billing
+  // account's stored invoice email (bill_to_email) is used. Lets the office send
+  // to a one-off contact, or send at all when no invoice email is on file.
+  overrideEmail?: string,
 ): Promise<{ error: string | null }> {
   const ctx = await requireInvoiceEditor()
   if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
@@ -1358,21 +1363,33 @@ export async function sendInvoiceToClient(
 
   const { data: invRow } = await supabase
     .from('invoices')
-    .select('*, billing_account:billing_accounts(name)')
+    .select('*, billing_account:billing_accounts(name, invoice_email)')
     .eq('id', invoiceId)
     .maybeSingle()
-  const invoice = invRow as (Invoice & { billing_account: { name: string } | null }) | null
+  const invoice = invRow as
+    | (Invoice & { billing_account: { name: string; invoice_email: string | null } | null })
+    | null
   if (!invoice) return { error: 'Invoice not found' }
   if (invoice.document_type === 'credit_note') {
     return { error: 'Credit notes cannot be sent from here' }
   }
   if (invoice.sent_at) return { error: 'This invoice has already been sent' }
 
-  const toEmail = invoice.bill_to_email?.trim()
+  // A typed override wins over the stored invoice email; validate its shape so a
+  // typo can't silently send nowhere.
+  const override = overrideEmail?.trim()
+  if (override && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(override)) {
+    return { error: 'Enter a valid email address to send to.' }
+  }
+  // The invoice snapshots bill_to_email at creation, so an email added to the
+  // billing account AFTER the invoice was raised won't be on the snapshot. Fall
+  // back to the account's current invoice_email so those invoices still send.
+  const toEmail =
+    override || invoice.bill_to_email?.trim() || invoice.billing_account?.invoice_email?.trim()
   if (!toEmail) {
     return {
       error:
-        'No invoice email set for this billing account. Add an invoice email before sending.',
+        'No invoice email set for this billing account. Enter an email address to send to.',
     }
   }
 
@@ -1406,10 +1423,14 @@ export async function sendInvoiceToClient(
   const emailLines = (lines ?? []) as InvoiceLineItem[]
   const emailSiteByLineId = await resolveInvoiceLineSites(supabase, emailLines)
 
+  // Fall back to the client's address when the billing-account snapshot is blank
+  // so the customer copy still shows an address where one is on file.
+  const billToAddress = await resolveBillToAddress(supabase, fresh)
+
   let pdf: Buffer
   try {
     pdf = await renderInvoicePdfBuffer({
-      invoice: fresh,
+      invoice: { ...fresh, bill_to_address: billToAddress },
       lines: emailLines,
       company: (company ?? null) as CompanyInfo | null,
       siteByLineId: emailSiteByLineId,

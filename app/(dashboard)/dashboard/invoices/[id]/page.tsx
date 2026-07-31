@@ -31,7 +31,7 @@ export default async function InvoiceDetailPage({
 
   const { data: invoice } = await supabase
     .from('invoices')
-    .select('*, billing_account:billing_accounts(name), client:clients(name)')
+    .select('*, billing_account:billing_accounts(name, invoice_email), client:clients(name)')
     .eq('id', id)
     .maybeSingle()
 
@@ -99,7 +99,7 @@ export default async function InvoiceDetailPage({
 
       <InvoiceDetail
         invoice={invoice as unknown as Invoice & {
-          billing_account: { name: string } | null
+          billing_account: { name: string; invoice_email: string | null } | null
           client: { name: string } | null
         }}
         lines={lineList}

@@ -34,6 +34,7 @@ import {
   rejectTimesheet,
   setProcessed,
 } from '@/lib/actions/timesheets'
+import { TimesheetDetail } from './timesheet-detail'
 
 type ReviewRow = Timesheet & { user_name: string | null }
 type CardMode = 'approve' | 'process'
@@ -196,29 +197,11 @@ function ReviewCard({ row, mode }: { row: ReviewRow; mode: CardMode }) {
               className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
             >
               <ChevronDown className={cn('h-4 w-4 transition-transform', expanded && 'rotate-180')} />
-              {expanded ? 'Hide' : 'Show'} daily breakdown
+              {expanded ? 'Hide' : 'View'} full timesheet
             </button>
             {expanded && (
-              <div className="mt-2 space-y-2">
-                {summary.days
-                  .filter((d) => d.entries.length > 0 || d.shiftStart)
-                  .map((d) => (
-                    <div
-                      key={d.date}
-                      className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
-                    >
-                      <span className="font-medium">
-                        {d.dayName} {dateLabel(d.date)}
-                      </span>
-                      <span className="text-muted-foreground">
-                        {d.shiftStart
-                          ? `${new Date(d.shiftStart).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}–${d.shiftEnd ? new Date(d.shiftEnd).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '--'}`
-                          : 'No shift'}
-                        {d.weekdayOtMinutes + d.weekendOtMinutes > 0 &&
-                          ` · OT ${hm(d.weekdayOtMinutes + d.weekendOtMinutes)}`}
-                      </span>
-                    </div>
-                  ))}
+              <div className="mt-3">
+                <TimesheetDetail summary={summary} />
               </div>
             )}
           </div>

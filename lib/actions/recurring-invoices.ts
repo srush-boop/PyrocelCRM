@@ -65,6 +65,7 @@ export interface RecurringDueCharge {
 
 export interface RecurringDueGroup {
   accountId: string
+  clientId: string | null
   accountName: string
   accountStatus: string | null
   clientName: string
@@ -113,7 +114,7 @@ interface ChargeRow {
  * are surfaced only when their linked service has a completed, not-yet-invoiced
  * call since the charge was last invoiced.
  */
-export async function getRecurringDue(): Promise<RecurringDueGroup[]> {
+export async function getRecurringDue(clientId?: string): Promise<RecurringDueGroup[]> {
   const supabase = await createClient()
 
   const { data } = await supabase
@@ -134,7 +135,13 @@ export async function getRecurringDue(): Promise<RecurringDueGroup[]> {
     .eq('active', true)
     .order('description', { ascending: true })
 
-  const allRows = (data ?? []) as unknown as ChargeRow[]
+  let allRows = (data ?? []) as unknown as ChargeRow[]
+
+  // Optional client scope: keep only charges whose billing account belongs to
+  // the given client (used by the per-client bulk-invoicing flow).
+  if (clientId) {
+    allRows = allRows.filter((r) => r.billing_account?.client_id === clientId)
+  }
 
   // Lifecycle gate: never auto-invoice a charge whose linked service, its
   // system, its site or the client has been paused (Engaged) or ended
@@ -304,6 +311,7 @@ export async function getRecurringDue(): Promise<RecurringDueGroup[]> {
     if (!group) {
       group = {
         accountId: r.billing_account_id,
+        clientId: r.billing_account.client_id,
         accountName: r.billing_account.name,
         accountStatus: r.billing_account.status,
         clientName: r.billing_account.client?.name ?? '',

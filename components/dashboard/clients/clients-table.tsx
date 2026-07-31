@@ -31,7 +31,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { MoreHorizontal, Pencil, Trash2, Search, Building, Plus, ChevronRight, ChevronDown, MapPin, ExternalLink, ListChecks, Link2, FileText, Wallet, ReceiptText } from 'lucide-react'
+import { MoreHorizontal, Pencil, Trash2, Search, Building, Plus, ChevronRight, ChevronDown, MapPin, ExternalLink, ListChecks, Link2, FileText, Wallet, ReceiptText, Repeat } from 'lucide-react'
 import { PrintButton } from '@/components/ui/print-button'
 import type { Client, Site, SystemType, ServiceType } from '@/lib/types/database'
 import { StatusBadge, effectiveStatus } from '@/lib/entity-status'
@@ -40,6 +40,7 @@ import { EditClientDialog } from './edit-client-dialog'
 import { ClientChecklistDialog } from './client-checklist-dialog'
 import { ClientLinksDialog } from './client-links-dialog'
 import { ClientInvoicesDialog } from './client-invoices-dialog'
+import { ClientRecurringDialog } from './client-recurring-dialog'
 import { BillingAccountsDialog } from '@/components/dashboard/billing/billing-accounts-dialog'
 import { CreateDocumentDialog } from '@/components/documents/create-document-dialog'
 
@@ -73,6 +74,7 @@ export function ClientsTable({
   const [linksClient, setLinksClient] = useState<Client | null>(null)
   const [billingClient, setBillingClient] = useState<Client | null>(null)
   const [invoicesClient, setInvoicesClient] = useState<Client | null>(null)
+  const [recurringClient, setRecurringClient] = useState<Client | null>(null)
   const [docClient, setDocClient] = useState<Client | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const searchParams = useSearchParams()
@@ -212,6 +214,10 @@ export function ClientsTable({
                             <DropdownMenuItem onClick={() => setInvoicesClient(client)}>
                               <ReceiptText className="mr-2 h-4 w-4" />
                               Invoices
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setRecurringClient(client)}>
+                              <Repeat className="mr-2 h-4 w-4" />
+                              Recurring billing
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setChecklistClient(client)}>
                               <ListChecks className="mr-2 h-4 w-4" />
@@ -372,6 +378,21 @@ export function ClientsTable({
                                 View invoices
                               </Button>
                             </div>
+                            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <Repeat className="h-4 w-4" />
+                                Recurring billing — bulk invoice due charges &amp; download the schedule
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-2"
+                                onClick={() => setRecurringClient(client)}
+                              >
+                                <Repeat className="h-4 w-4" />
+                                Recurring billing
+                              </Button>
+                            </div>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -427,6 +448,14 @@ export function ClientsTable({
           client={invoicesClient}
           open={!!invoicesClient}
           onOpenChange={(open) => !open && setInvoicesClient(null)}
+        />
+      )}
+
+      {recurringClient && (
+        <ClientRecurringDialog
+          client={recurringClient}
+          open={!!recurringClient}
+          onOpenChange={(open) => !open && setRecurringClient(null)}
         />
       )}
 

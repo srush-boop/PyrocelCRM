@@ -24,7 +24,9 @@ import {
   Wrench,
   RotateCcw,
   MapPin,
+  Timer,
 } from 'lucide-react'
+import { formatDuration } from '@/lib/task-duration'
 
 // ─── Shared status / result badges ─────────────────────────────────────────────
 // These are the canonical call-status and call-result chips used everywhere a
@@ -139,6 +141,16 @@ export interface CallTileProps {
   engineerName?: string | null
   valuePence?: number | null
   address?: string | null
+  /**
+   * "Approximate time to complete", in minutes — the learned average of the
+   * previous 5 completed calls of the same type, or the manual expected time
+   * from service setup. Omitted when there's no grounded estimate.
+   */
+  approxMinutes?: number | null
+  /** Whether the estimate is a learned average (true) or a setup value (false). */
+  approxLearned?: boolean
+  /** Number of completed calls the average is based on (for the tooltip). */
+  approxSampleSize?: number
   /** Formatted booked slot string, or null to show a "Not booked" chip. */
   bookedSlot?: string | null
   /** Whether to render the booked/not-booked chip at all. */
@@ -185,6 +197,9 @@ export function CallTile({
   engineerName,
   valuePence,
   address,
+  approxMinutes,
+  approxLearned,
+  approxSampleSize,
   bookedSlot,
   showBooking,
   systemName,
@@ -374,6 +389,21 @@ export function CallTile({
                   <span className="flex items-center gap-1">
                     <MapPin className="h-3.5 w-3.5 shrink-0" />
                     {address}
+                  </span>
+                )}
+                {approxMinutes != null && approxMinutes > 0 && (
+                  <span
+                    className="flex items-center gap-1"
+                    title={
+                      approxLearned
+                        ? `Average on-site time of the last ${approxSampleSize ?? 0} completed call${
+                            (approxSampleSize ?? 0) === 1 ? '' : 's'
+                          } of this type`
+                        : 'Expected time to complete from the service setup'
+                    }
+                  >
+                    <Timer className="h-3.5 w-3.5 shrink-0" />
+                    <span>Approx. {formatDuration(approxMinutes)}</span>
                   </span>
                 )}
                 {showBooking &&

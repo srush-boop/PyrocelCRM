@@ -70,6 +70,7 @@ import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
 import type { Profile, TaskWithDetails, Site, Area } from '@/lib/types/database'
+import type { CallEstimate } from '@/lib/task-duration'
 import { WORKER_TYPE_LABELS } from '@/lib/assignment'
 import { SystemIcon, SystemBadge, getSystemColors } from '@/lib/system-types'
 import { Building2 } from 'lucide-react'
@@ -111,6 +112,12 @@ interface ScheduleViewProps {
   engineers?: Profile[]
   /** Which tab to open on mount (e.g. deep-linked from ?tab=completed). */
   initialTab?: string
+  /**
+   * taskId → "approximate time to complete" estimate (learned average of the
+   * last 5 same-type calls, or the manual service-setup expected time). Computed
+   * on the server; tasks without a grounded estimate are simply absent.
+   */
+  estimates?: Record<string, CallEstimate>
 }
 
 const statusConfig = {
@@ -214,7 +221,7 @@ function BookingEditor({
   )
 }
 
-export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initialTab }: ScheduleViewProps) {
+export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initialTab, estimates = {} }: ScheduleViewProps) {
   const router = useRouter()
   const supabase = createClient()
   const [search, setSearch] = useState('')
@@ -700,6 +707,9 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
             : undefined
         }
         address={task.site_service?.site?.address ?? null}
+        approxMinutes={estimates[task.id]?.minutes ?? null}
+        approxLearned={estimates[task.id]?.learned}
+        approxSampleSize={estimates[task.id]?.sampleSize}
         bookedSlot={bookedSlot}
         showBooking
         isEmergency={task.is_emergency}

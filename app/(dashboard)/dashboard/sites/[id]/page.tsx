@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getCallEstimateLookup, buildTaskEstimates } from '@/lib/task-duration'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -402,6 +403,18 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
         : null,
     }
   }) as SiteCall[]
+
+  // "Approximate time to complete" per call: learned average of the last 5
+  // same-type calls, or the manual expected time from service setup.
+  const callEstimateLookup = await getCallEstimateLookup(supabase)
+  const callEstimates = buildTaskEstimates(
+    callEstimateLookup,
+    allCalls.map((c) => ({
+      id: c.id,
+      visit_type_id: c.visit_type_id ?? null,
+      service_type_id: c.service_type_id ?? c.site_service?.service_type?.id ?? null,
+    })),
+  )
 
   // Unique engineers + service types from all calls for the filter dropdowns.
   const allCallEngineers = Array.from(
@@ -966,6 +979,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             engineers={allCallEngineers}
             serviceTypes={allCallServiceTypes}
             reportingEmails={(site as Site).reporting_emails || []}
+            estimates={callEstimates}
           />
         </TabsContent>
 

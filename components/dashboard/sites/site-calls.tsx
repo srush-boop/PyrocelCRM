@@ -45,6 +45,7 @@ import { SystemIcon, getSystemColors } from '@/lib/system-types'
 import { isDamperService } from '@/lib/dampers'
 import { isExtinguisherService } from '@/lib/extinguishers'
 import type { Task, SiteService, ServiceType, Profile, SystemType, TaskResult, ToleranceUnit } from '@/lib/types/database'
+import type { CallEstimate } from '@/lib/task-duration'
 import { isCallOverdue, getCallTargetDate } from '@/lib/kpi'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -124,7 +125,15 @@ function calcValue(call: SiteCall): number | null {
 // ─── Call card ────────────────────────────────────────────────────────────────
 // Thin wrapper that maps a SiteCall onto the shared CallTile template.
 
-function CallCard({ call, onSendReport }: { call: SiteCall; onSendReport?: (c: SiteCall) => void }) {
+function CallCard({
+  call,
+  onSendReport,
+  estimate,
+}: {
+  call: SiteCall
+  onSendReport?: (c: SiteCall) => void
+  estimate?: CallEstimate
+}) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   // The client KPI "complete by" target date drives both the overdue state and
@@ -179,6 +188,9 @@ function CallCard({ call, onSendReport }: { call: SiteCall; onSendReport?: (c: S
       isOverdue={isOverdue}
       engineerName={call.assigned_engineer?.full_name ?? ''}
       valuePence={calcValue(call)}
+      approxMinutes={estimate?.minutes ?? null}
+      approxLearned={estimate?.learned}
+      approxSampleSize={estimate?.sampleSize}
       isEmergency={call.is_emergency}
       isRemedial={call.is_remedial}
       followUp={
@@ -232,9 +244,11 @@ interface SiteCallsProps {
   engineers: { id: string; name: string }[]
   serviceTypes: { id: string; name: string }[]
   reportingEmails?: string[]
+  /** taskId → "approximate time to complete" estimate. */
+  estimates?: Record<string, CallEstimate>
 }
 
-export function SiteCalls({ calls, engineers, serviceTypes, reportingEmails = [] }: SiteCallsProps) {
+export function SiteCalls({ calls, engineers, serviceTypes, reportingEmails = [], estimates = {} }: SiteCallsProps) {
   // Send-report dialog state
   const [sendingCall, setSendingCall] = useState<SiteCall | null>(null)
   const [sendEmails, setSendEmails] = useState<string[]>([])
@@ -486,7 +500,12 @@ export function SiteCalls({ calls, engineers, serviceTypes, reportingEmails = []
       ) : (
         <div className="flex flex-col gap-3">
           {filtered.map((call) => (
-            <CallCard key={call.id} call={call} onSendReport={openSendDialog} />
+            <CallCard
+              key={call.id}
+              call={call}
+              onSendReport={openSendDialog}
+              estimate={estimates[call.id]}
+            />
           ))}
         </div>
       )}

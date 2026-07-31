@@ -48,6 +48,10 @@ export function ServiceVisitTypesManager({
   const [loading, setLoading] = useState(true)
   const [newName, setNewName] = useState('')
   const [busy, setBusy] = useState(false)
+  // Service-level default "expected time to complete" (minutes), used for the
+  // call-tile estimate when a service has no per-visit override and there isn't
+  // enough completed history to learn an average.
+  const [serviceExpectedMinutes, setServiceExpectedMinutes] = useState<number | null>(null)
 
   const loadChecklists = useCallback(async () => {
     const { data } = await supabase
@@ -68,15 +72,49 @@ export function ServiceVisitTypesManager({
 
   const load = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase
-      .from('service_visit_types')
-      .select('*')
-      .eq('service_type_id', serviceTypeId)
-      .order('sort_order', { ascending: true })
-    setVisits((data || []) as ServiceVisitType[])
+    const [visitsRes, serviceRes] = await Promise.all([
+      supabase
+        .from('service_visit_types')
+        .select('*')
+        .eq('service_type_id', serviceTypeId)
+        .order('sort_order', { ascending: true }),
+      supabase
+        .from('service_types')
+        .select('expected_visit_minutes')
+        .eq('id', serviceTypeId)
+        .single(),
+    ])
+    setVisits((visitsRes.data || []) as ServiceVisitType[])
+    setServiceExpectedMinutes(
+      (serviceRes.data as { expected_visit_minutes: number | null } | null)?.expected_visit_minutes ??
+        null,
+    )
     await loadChecklists()
     setLoading(false)
   }, [supabase, serviceTypeId, loadChecklists])
+
+  // Persist the service-level default expected time (minutes). Empty/0 clears it.
+  const persistServiceExpectedMinutes = async (raw: string) => {
+    const n = Number.parseInt(raw, 10)
+    const minutes = Number.isFinite(n) && n > 0 ? n : null
+    setServiceExpectedMinutes(minutes)
+    await supabase
+      .from('service_types')
+      .update({ expected_visit_minutes: minutes })
+      .eq('id', serviceTypeId)
+  }
+
+  // Persist a per-visit expected time (minutes). Empty/0 clears it (falls back
+  // to the service-level default).
+  const persistVisitExpectedMinutes = async (id: string, raw: string) => {
+    const n = Number.parseInt(raw, 10)
+    const minutes = Number.isFinite(n) && n > 0 ? n : null
+    setVisits((prev) => prev.map((v) => (v.id === id ? { ...v, expected_minutes: minutes } : v)))
+    await supabase
+      .from('service_visit_types')
+      .update({ expected_minutes: minutes, updated_at: new Date().toISOString() })
+      .eq('id', id)
+  }
 
   useEffect(() => {
     load()
@@ -265,6 +303,28 @@ export function ServiceVisitTypesManager({
         )}
       </div>
 
+      {!loading && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border border-dashed p-2.5">
+          <Label htmlFor="service-expected-minutes" className="text-xs font-medium">
+            Default expected time on site (min)
+          </Label>
+          <Input
+            id="service-expected-minutes"
+            type="number"
+            min={0}
+            step="5"
+            defaultValue={serviceExpectedMinutes ?? ''}
+            placeholder="e.g. 60"
+            onBlur={(e) => persistServiceExpectedMinutes(e.target.value)}
+            className="h-8 w-24 bg-background"
+          />
+          <span className="text-xs text-muted-foreground">
+            Used for the call&apos;s &ldquo;approximate time to complete&rdquo; when there isn&apos;t
+            enough completed history yet. Per-visit values below override this.
+          </span>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading visits…
@@ -372,6 +432,27 @@ export function ServiceVisitTypesManager({
                     </span>
                   </div>
                 )}
+
+                {/* Per-visit expected time on site — overrides the service-level
+                    default for the call-tile "approximate time to complete". */}
+                <div className="flex items-center gap-1.5 pl-7">
+                  <Label
+                    htmlFor={`expected-${visit.id}`}
+                    className="text-xs text-muted-foreground"
+                  >
+                    Expected time on site (min)
+                  </Label>
+                  <Input
+                    id={`expected-${visit.id}`}
+                    type="number"
+                    min={0}
+                    step="5"
+                    defaultValue={visit.expected_minutes ?? ''}
+                    placeholder={serviceExpectedMinutes ? String(serviceExpectedMinutes) : 'e.g. 60'}
+                    onBlur={(e) => persistVisitExpectedMinutes(visit.id, e.target.value)}
+                    className="h-8 w-24 bg-background"
+                  />
+                </div>
 
                 {/* Per-visit checklist: each visit type owns its own checklist. */}
                 <div className="flex items-center gap-2 pl-7">

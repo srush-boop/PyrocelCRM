@@ -113,6 +113,10 @@ export function CreateTaskDialog({
   const [reactiveTypeId, setReactiveTypeId] = useState('')
   const [reactiveSystemTypeId, setReactiveSystemTypeId] = useState(defaultSystemTypeId ?? NO_SYSTEM)
   const [kpiHours, setKpiHours] = useState<number | ''>('')
+  // Time we'd like the engineer to attend site + expected time on site, in
+  // hours. Captured on every call and default to 0.5 hr each.
+  const [attendHours, setAttendHours] = useState<number | ''>(0.5)
+  const [expectedOnSiteHours, setExpectedOnSiteHours] = useState<number | ''>(0.5)
   // Free-text description of the reactive / emergency call (fault, access, etc.).
   const [description, setDescription] = useState('')
 
@@ -280,6 +284,8 @@ export function CreateTaskDialog({
     setReactiveTypeId('')
     setReactiveSystemTypeId(defaultSystemTypeId ?? NO_SYSTEM)
     setKpiHours('')
+    setAttendHours(0.5)
+    setExpectedOnSiteHours(0.5)
     setDescription('')
     setSendConfirmation(true)
     setError(null)
@@ -338,6 +344,9 @@ export function CreateTaskDialog({
       scheduledDate: format(formData.scheduled_date, 'yyyy-MM-dd'),
       bookedStartTime: formData.booked_start_time || null,
       bookedEndTime: formData.booked_end_time || null,
+      attendTimeMinutes: attendHours === '' ? null : Math.round(Number(attendHours) * 60),
+      expectedOnSiteMinutes:
+        expectedOnSiteHours === '' ? null : Math.round(Number(expectedOnSiteHours) * 60),
       sendConfirmation,
     }
 
@@ -789,6 +798,45 @@ export function CreateTaskDialog({
                   Add a start and end time to book an appointment slot on the calendar.
                 </p>
               )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="attend-hours" className="text-sm">
+                  Time to attend (hours)
+                </Label>
+                <Input
+                  id="attend-hours"
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={attendHours}
+                  onChange={(e) =>
+                    setAttendHours(e.target.value === '' ? '' : Number(e.target.value))
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Time we&apos;d like the engineer to allow to attend site.
+                </p>
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="on-site-hours" className="text-sm">
+                  Expected time on site (hours)
+                </Label>
+                <Input
+                  id="on-site-hours"
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={expectedOnSiteHours}
+                  onChange={(e) =>
+                    setExpectedOnSiteHours(e.target.value === '' ? '' : Number(e.target.value))
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Expected duration of the visit on site.
+                </p>
+              </div>
             </div>
 
             <div className="flex items-start gap-3 rounded-md border p-3">

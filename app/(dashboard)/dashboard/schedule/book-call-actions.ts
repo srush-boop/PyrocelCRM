@@ -23,6 +23,10 @@ export interface BookCallInput {
   scheduledDate: string
   bookedStartTime?: string | null
   bookedEndTime?: string | null
+  /** The time we'd like the engineer to allow to attend site, in minutes. */
+  attendTimeMinutes?: number | null
+  /** Expected time on site, in minutes. */
+  expectedOnSiteMinutes?: number | null
   /** KPI hours for reactive calls (attend within X hours). */
   respondByHours?: number | null
   /** Free-text call description / notes (shown as "Call notes" on the task). */
@@ -95,6 +99,14 @@ export async function bookCall(input: BookCallInput): Promise<BookCallResult> {
     scheduled_date: input.scheduledDate,
     booked_start_time: input.bookedStartTime || null,
     booked_end_time: input.bookedEndTime || null,
+    attend_time_minutes:
+      input.attendTimeMinutes != null && input.attendTimeMinutes > 0
+        ? Math.round(input.attendTimeMinutes)
+        : null,
+    expected_on_site_minutes:
+      input.expectedOnSiteMinutes != null && input.expectedOnSiteMinutes > 0
+        ? Math.round(input.expectedOnSiteMinutes)
+        : null,
     status: 'pending' as const,
     assigned_at: input.assignedEngineerId ? new Date().toISOString() : null,
     notes: input.notes?.trim() || null,

@@ -14,6 +14,7 @@ import type { Profile, Site, ServiceType, SiteService, SystemType, TaskWithDetai
 import { normalizeTasks } from '@/lib/normalize-task'
 import { getMyCurrentOncall } from '@/lib/oncall/queries'
 import { isTaskVisibleToEngineer } from '@/lib/engineer-visibility'
+import { getCallEstimateLookup, buildTaskEstimates } from '@/lib/task-duration'
 
 export default async function SchedulePage({
   searchParams,
@@ -151,6 +152,19 @@ export default async function SchedulePage({
     }
   }
 
+  // "Approximate time to complete" for each call: the learned average of the
+  // last 5 completed calls of the same type, or the manual expected time from
+  // service setup. Tasks without a grounded estimate are simply omitted.
+  const estimateLookup = await getCallEstimateLookup(supabase)
+  const estimates = buildTaskEstimates(
+    estimateLookup,
+    tasks.map((t) => ({
+      id: t.id,
+      visit_type_id: t.visit_type_id ?? null,
+      service_type_id: t.service_type_id ?? null,
+    })),
+  )
+
   return (
     <div className="space-y-4">
       <div className="space-y-3">
@@ -220,6 +234,7 @@ export default async function SchedulePage({
         profile={profile as Profile}
         engineers={engineers}
         initialTab={initialTab}
+        estimates={estimates}
       />
     </div>
   )

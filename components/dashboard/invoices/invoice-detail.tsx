@@ -75,9 +75,9 @@ import { raiseCreditNote, holdInvoice, releaseInvoice } from '@/lib/actions/invo
 import { SendInvoiceDialog } from './send-invoice-dialog'
 
 type InvoiceWithNames = Invoice & {
-  billing_account: { name: string } | null
+  billing_account: { name: string; invoice_email?: string | null } | null
   client: { name: string } | null
-}
+  }
 
 function statusClasses(status: InvoiceStatus): string {
   switch (status) {
@@ -141,6 +141,11 @@ export function InvoiceDetail({
     canEdit && !isSent && !isCreditNote && (invoice.status === 'draft' || invoice.status === 'issued')
   const [busy, setBusy] = useState(false)
   const [sendOpen, setSendOpen] = useState(false)
+  // The invoice's bill_to_email is a snapshot from when it was raised; fall back
+  // to the billing account's current invoice email so an email added afterwards
+  // is still recognised (pre-fills the send dialog, clears the "no email" note).
+  const resolvedSendEmail =
+    invoice.bill_to_email?.trim() || invoice.billing_account?.invoice_email?.trim() || ''
   // Lines still missing an internal nominal code — blocks issuing.
   const missingNominal = lines.filter((l) => !l.nominal_code_id).length
 
@@ -498,6 +503,7 @@ export function InvoiceDetail({
             {canSend && (
               <SendInvoiceDialog
                 invoice={invoice}
+                defaultEmail={resolvedSendEmail}
                 open={sendOpen}
                 onOpenChange={setSendOpen}
                 onSent={() => router.refresh()}
@@ -510,7 +516,7 @@ export function InvoiceDetail({
                 {invoice.sent_at ? ` on ${formatDate(invoice.sent_at)}` : ''}.
               </p>
             )}
-            {canSend && !invoice.bill_to_email && (
+            {canSend && !resolvedSendEmail && (
               <p className="text-xs text-amber-700">
                 No invoice email set for this billing account — add one before sending.
               </p>

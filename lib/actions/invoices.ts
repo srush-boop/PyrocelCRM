@@ -1363,10 +1363,12 @@ export async function sendInvoiceToClient(
 
   const { data: invRow } = await supabase
     .from('invoices')
-    .select('*, billing_account:billing_accounts(name)')
+    .select('*, billing_account:billing_accounts(name, invoice_email)')
     .eq('id', invoiceId)
     .maybeSingle()
-  const invoice = invRow as (Invoice & { billing_account: { name: string } | null }) | null
+  const invoice = invRow as
+    | (Invoice & { billing_account: { name: string; invoice_email: string | null } | null })
+    | null
   if (!invoice) return { error: 'Invoice not found' }
   if (invoice.document_type === 'credit_note') {
     return { error: 'Credit notes cannot be sent from here' }
@@ -1379,7 +1381,11 @@ export async function sendInvoiceToClient(
   if (override && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(override)) {
     return { error: 'Enter a valid email address to send to.' }
   }
-  const toEmail = override || invoice.bill_to_email?.trim()
+  // The invoice snapshots bill_to_email at creation, so an email added to the
+  // billing account AFTER the invoice was raised won't be on the snapshot. Fall
+  // back to the account's current invoice_email so those invoices still send.
+  const toEmail =
+    override || invoice.bill_to_email?.trim() || invoice.billing_account?.invoice_email?.trim()
   if (!toEmail) {
     return {
       error:

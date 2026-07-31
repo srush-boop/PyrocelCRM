@@ -24,6 +24,12 @@ function isValidEmail(value: string) {
 
 interface Props {
   invoice: Invoice
+  /**
+   * Pre-fill for the recipient field. Callers pass the resolved address (the
+   * invoice's snapshot email OR the billing account's current invoice email).
+   * Falls back to the invoice's own bill_to_email when omitted.
+   */
+  defaultEmail?: string
   open: boolean
   onOpenChange: (open: boolean) => void
   /** Called after a successful send (e.g. to refresh a parent list). */
@@ -34,10 +40,18 @@ interface Props {
 // and the invoice detail page. Pre-fills the billing account's invoice email but
 // lets the office type a different recipient (or supply one when none is on
 // file). The address shown on the PDF is resolved server-side.
-export function SendInvoiceDialog({ invoice, open, onOpenChange, onSent }: Props) {
+export function SendInvoiceDialog({
+  invoice,
+  defaultEmail,
+  open,
+  onOpenChange,
+  onSent,
+}: Props) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
-  const [email, setEmail] = useState(invoice.bill_to_email?.trim() ?? '')
+  const [email, setEmail] = useState(
+    (defaultEmail ?? invoice.bill_to_email ?? '').trim(),
+  )
 
   const trimmed = email.trim()
   const valid = isValidEmail(trimmed)
@@ -82,7 +96,7 @@ export function SendInvoiceDialog({ invoice, open, onOpenChange, onSent }: Props
             placeholder="name@company.com"
             autoComplete="off"
           />
-          {!invoice.bill_to_email?.trim() ? (
+          {!(defaultEmail ?? invoice.bill_to_email)?.trim() ? (
             <p className="text-xs text-muted-foreground">
               No invoice email is on file for this billing account — enter one to send.
             </p>

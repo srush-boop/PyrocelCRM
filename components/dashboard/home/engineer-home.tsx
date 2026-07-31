@@ -29,6 +29,8 @@ import { LoneWorkerShiftCard } from '@/components/dashboard/lone-worker/lone-wor
 import { getEngineerEngagementStats } from '@/lib/engagement-stats'
 import { EngineerStandingCard } from '@/components/dashboard/home/engineer-standing-card'
 import { YourTasksTile } from '@/components/dashboard/internal-tasks/your-tasks-tile'
+import { getEngineerUpcomingParts } from '@/lib/stock'
+import { UpcomingPartsCard } from '@/components/dashboard/home/upcoming-parts-card'
 
 // Greeting that reflects the time of day, so the home feels alive.
 function greeting(d: Date): string {
@@ -88,7 +90,7 @@ export async function EngineerHome({
     )
   `
 
-  const [{ data: todayRows }, weekAheadCount] = await Promise.all([
+  const [{ data: todayRows }, weekAheadCount, upcomingParts] = await Promise.all([
     supabase
       .from('tasks')
       .select(taskSelect)
@@ -102,6 +104,8 @@ export async function EngineerHome({
       .eq('assigned_engineer_id', profile.id)
       .in('status', ['pending', 'in_progress'])
       .gt('scheduled_date', todayStr),
+    // Parts required across the engineer's calls over the next two weeks.
+    getEngineerUpcomingParts(profile.id, 14),
   ])
 
   // Hide only sub-contracted work (matches the Calls list rules); every other
@@ -245,6 +249,9 @@ export async function EngineerHome({
           )}
         </CardContent>
       </Card>
+
+      {/* Parts needed across the next two weeks of calls, with reserve action */}
+      {upcomingParts.length > 0 && <UpcomingPartsCard parts={upcomingParts} />}
 
       {/* Call count summary — compact so it doesn't dominate the home screen */}
       <div className="grid grid-cols-3 gap-3">

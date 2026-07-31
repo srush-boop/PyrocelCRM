@@ -1231,6 +1231,13 @@ export function TaskExecution({
         </CollapsibleCard>
       )}
 
+      {/* Parts required (internal) — let the engineer pre-load parts BEFORE
+          starting the call. RLS now allows managing call_parts on pending calls.
+          Hidden from sub-contractors; the in-progress flow renders its own copy. */}
+      {status === 'pending' && canSeeInternal && (
+        <CallPartsPicker taskId={task.id} canEdit={canManageParts} />
+      )}
+
       {/* Checklist */}
       {(status === 'in_progress' || status === 'completed') && (
         <>

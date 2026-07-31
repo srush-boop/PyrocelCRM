@@ -325,6 +325,163 @@ export async function searchPartLocations(query: string): Promise<PartLocationRe
   })
 }
 
+// One upcoming call that needs a given part, for the engineer parts summary.
+export interface UpcomingPartCall {
+  taskId: string
+  reference: string | null
+  siteName: string
+  scheduledDate: string | null
+  quantity: number
+}
+
+// A part required across an engineer's upcoming calls, aggregated with the
+// calls that need it and the stock locations that currently hold it.
+export interface UpcomingPartSummary {
+  part_id: string
+  part_name: string
+  sku: string | null
+  unit: string
+  totalQuantity: number
+  calls: UpcomingPartCall[]
+  locations: {
+    location_id: string
+    location_name: string
+    kind: StockLocationKind
+    quantity: number
+    engineer_id: string | null
+    engineer_name: string | null
+  }[]
+}
+
+/**
+ * Parts required for the calls assigned to an engineer over the next `days`
+ * (default 14), aggregated per part. Each part lists the calls that need it
+ * (with reference numbers) and the stock locations that currently hold it, so
+ * the engineer can reserve stock ahead of the visit. Relies on RLS: the
+ * assigned engineer can read `call_parts` on their own tasks at any status.
+ */
+export async function getEngineerUpcomingParts(
+  engineerId: string,
+  days = 14,
+): Promise<UpcomingPartSummary[]> {
+  const supabase = await createClient()
+
+  const today = new Date()
+  const start = today.toISOString().slice(0, 10)
+  const endDate = new Date(today)
+  endDate.setDate(endDate.getDate() + days)
+  const end = endDate.toISOString().slice(0, 10)
+
+  const { data: tasks } = await supabase
+    .from('tasks')
+    .select(
+      `id, reference_number, scheduled_date,
+       site_service:site_services(site:sites(name)),
+       call_parts(part_id, quantity, part:parts(name, sku, unit))`,
+    )
+    .eq('assigned_engineer_id', engineerId)
+    .in('status', ['pending', 'in_progress'])
+    .gte('scheduled_date', start)
+    .lte('scheduled_date', end)
+    .order('scheduled_date', { ascending: true })
+
+  type PartRow = {
+    part_id: string
+    quantity: number | null
+    part: { name: string | null; sku: string | null; unit: string | null } | null
+  }
+  type TaskRow = {
+    id: string
+    reference_number: string | null
+    scheduled_date: string | null
+    site_service: { site: { name: string | null } | null } | null
+    call_parts: PartRow[] | null
+  }
+
+  const rows = (tasks || []) as unknown as TaskRow[]
+
+  // Aggregate by part across every upcoming call.
+  const byPart = new Map<string, UpcomingPartSummary>()
+  for (const t of rows) {
+    const siteName = t.site_service?.site?.name ?? 'Unknown site'
+    for (const cp of t.call_parts ?? []) {
+      if (!cp.part_id) continue
+      const qty = cp.quantity ?? 0
+      if (qty <= 0) continue
+      let summary = byPart.get(cp.part_id)
+      if (!summary) {
+        summary = {
+          part_id: cp.part_id,
+          part_name: cp.part?.name ?? 'Unknown part',
+          sku: cp.part?.sku ?? null,
+          unit: cp.part?.unit ?? 'each',
+          totalQuantity: 0,
+          calls: [],
+          locations: [],
+        }
+        byPart.set(cp.part_id, summary)
+      }
+      summary.totalQuantity += qty
+      summary.calls.push({
+        taskId: t.id,
+        reference: t.reference_number,
+        siteName,
+        scheduledDate: t.scheduled_date,
+        quantity: qty,
+      })
+    }
+  }
+
+  const partIds = [...byPart.keys()]
+  if (partIds.length === 0) return []
+
+  // Where is each of those parts currently held (quantity > 0)?
+  const { data: items } = await supabase
+    .from('stock_items')
+    .select(
+      `part_id, quantity,
+       location:stock_locations(
+         id, name, kind, engineer_id,
+         engineer:profiles!stock_locations_engineer_id_fkey(full_name)
+       )`,
+    )
+    .in('part_id', partIds)
+    .gt('quantity', 0)
+
+  type StockRow = {
+    part_id: string
+    quantity: number
+    location: {
+      id: string
+      name: string
+      kind: StockLocationKind
+      engineer_id: string | null
+      engineer: { full_name: string | null } | null
+    } | null
+  }
+
+  for (const row of (items || []) as unknown as StockRow[]) {
+    if (!row.location) continue
+    const summary = byPart.get(row.part_id)
+    if (!summary) continue
+    summary.locations.push({
+      location_id: row.location.id,
+      location_name: row.location.name,
+      kind: row.location.kind,
+      quantity: row.quantity,
+      engineer_id: row.location.engineer_id,
+      engineer_name: row.location.engineer?.full_name ?? null,
+    })
+  }
+
+  // Highest-stock location first so the obvious pick is on top.
+  for (const summary of byPart.values()) {
+    summary.locations.sort((a, b) => b.quantity - a.quantity)
+  }
+
+  return [...byPart.values()].sort((a, b) => a.part_name.localeCompare(b.part_name))
+}
+
 // A selectable job/task that stock can be booked against. Combines the task's
 // site, scheduled date and (if generated) its report reference number.
 export interface JobOption {

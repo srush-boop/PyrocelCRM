@@ -92,6 +92,96 @@ export async function requestPart(input: {
 }
 
 /**
+ * Reserve a part from a stock location for the current engineer's upcoming
+ * calls. Records a `part_requests` row (reusing the request infrastructure) and
+ * notifies the location owner — or office/admin when the location is unassigned
+ * — including the engineer's name and the call reference numbers the parts are
+ * needed for, so whoever holds the stock knows exactly what to set aside.
+ */
+export async function reservePartForCalls(input: {
+  partId: string
+  locationId: string
+  quantity: number
+  callReferences: string[]
+}): Promise<{ ok: boolean; requestId?: string; error?: string }> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: 'Not authenticated' }
+
+  const { data: requester } = await supabase
+    .from('profiles')
+    .select('id, full_name, role')
+    .eq('id', user.id)
+    .single()
+  if (!requester || (requester as { role: string }).role === 'client') {
+    return { ok: false, error: 'Not authorised' }
+  }
+
+  const quantity = Math.max(1, Math.floor(input.quantity) || 1)
+  const refs = input.callReferences.map((r) => r.trim()).filter(Boolean)
+
+  const [{ data: part }, { data: location }] = await Promise.all([
+    supabase.from('parts').select('id, name').eq('id', input.partId).single(),
+    supabase
+      .from('stock_locations')
+      .select('id, name, engineer_id')
+      .eq('id', input.locationId)
+      .single(),
+  ])
+  if (!part || !location) return { ok: false, error: 'Part or location not found' }
+
+  const requesterName =
+    (requester as { full_name: string | null }).full_name || 'An engineer'
+  const callsText = refs.length > 0 ? ` for call${refs.length === 1 ? '' : 's'} ${refs.join(', ')}` : ''
+  const message = `Reserved by ${requesterName}${callsText}.`
+
+  const { data: created, error: insertError } = await supabase
+    .from('part_requests')
+    .insert({
+      part_id: input.partId,
+      location_id: input.locationId,
+      requested_by: user.id,
+      quantity,
+      message,
+      status: 'pending',
+    })
+    .select('id')
+    .single()
+
+  if (insertError) return { ok: false, error: insertError.message }
+
+  // Notify the location owner; fall back to office/admin if unassigned.
+  const admin = createAdminClient()
+  const ownerEngineerId = (location as { engineer_id: string | null }).engineer_id
+  const recipientIds = new Set<string>()
+  if (ownerEngineerId && ownerEngineerId !== user.id) {
+    recipientIds.add(ownerEngineerId)
+  } else {
+    const { data: officeAdmins } = await admin
+      .from('profiles')
+      .select('id')
+      .in('role', ['office', 'admin'])
+    for (const p of officeAdmins || []) recipientIds.add(p.id as string)
+  }
+  recipientIds.delete(user.id)
+
+  await notifyUsers({
+    userIds: Array.from(recipientIds),
+    title: 'Part reserved for upcoming calls',
+    body: `${requesterName} reserved ${quantity}× ${(part as { name: string }).name} from ${(location as { name: string }).name}${callsText}.`,
+    url: '/dashboard/stock',
+    category: 'part_request',
+    data: { partRequestId: created.id, locationId: input.locationId, callReferences: refs },
+    createdBy: user.id,
+  })
+
+  revalidatePath('/dashboard')
+  return { ok: true, requestId: created.id }
+}
+
+/**
  * Update the current engineer's live location sharing preference and optionally
  * store their current GPS coordinates.
  */

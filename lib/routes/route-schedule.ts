@@ -85,15 +85,27 @@ export function orderRouteCalls(tasks: TaskWithDetails[]): TaskWithDetails[] {
  * Recurring services (weekly / monthly PPM) generate a call per occurrence, so
  * a route can hold several future calls for the same service. For a route day
  * we only ever want the nearest-due occurrence per service, otherwise multiple
- * weeks get mixed into one list. Keeps the soonest-due call per site-service
- * (reactive calls with no site_service are always kept individually).
+ * weeks get mixed into one list. Keeps the soonest-due call per site-service.
+ *
+ * Only genuine recurring PPM occurrences are collapsed. One-off calls are always
+ * kept individually — they are distinct pieces of work that merely hang off the
+ * same recurring `site_service`, and must never disappear behind a PPM occurrence:
+ *  - reactive / emergency calls (no site_service_id at all),
+ *  - remedial calls raised from a defect or accepted quote (`is_remedial`),
+ *  - follow-up calls (`follow_up_to_id`),
+ *  - calls on an explicitly non-recurring service type.
  */
 export function dedupeSoonestPerService(tasks: TaskWithDetails[]): TaskWithDetails[] {
   const bestByService = new Map<string, TaskWithDetails>()
   const kept: TaskWithDetails[] = []
   for (const task of tasks) {
     const key = task.site_service_id
-    if (!key) {
+    const isRecurringOccurrence =
+      !!key &&
+      !task.is_remedial &&
+      !task.follow_up_to_id &&
+      task.site_service?.service_type?.is_recurring !== false
+    if (!isRecurringOccurrence) {
       kept.push(task)
       continue
     }

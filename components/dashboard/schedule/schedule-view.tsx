@@ -734,6 +734,7 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
         bookedSlot={bookedSlot}
         showBooking
         isEmergency={task.is_emergency}
+        isRemedial={task.is_remedial}
         emergencyAnimated={isEngineer}
         accentColor={!isOverdue ? sysColors.solid : undefined}
         leading={<SystemIcon system={system ?? {}} boxed boxClassName="h-8 w-8 shrink-0" />}
@@ -824,6 +825,16 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
               <p className="truncate text-sm font-medium leading-tight">{task.site_service?.site?.name}</p>
               {system?.name && (
                 <SystemBadge system={system} codeOnly showIcon={false} className="shrink-0 px-1.5 py-0 text-[10px]" />
+              )}
+              {task.is_remedial && (
+                <Badge variant="outline" className="shrink-0 border-destructive/40 px-1.5 py-0 text-[10px] text-destructive">
+                  Remedial
+                </Badge>
+              )}
+              {task.follow_up_to_id && (
+                <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[10px]">
+                  Follow-up
+                </Badge>
               )}
             </div>
             <p className="truncate text-xs text-muted-foreground leading-tight">

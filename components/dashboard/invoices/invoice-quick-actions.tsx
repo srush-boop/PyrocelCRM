@@ -23,16 +23,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import {
   MoreHorizontal,
   Eye,
   Pencil,
@@ -45,9 +35,9 @@ import {
   addInvoiceLine,
   updateInvoiceLine,
   deleteInvoiceLine,
-  sendInvoiceToClient,
   getInvoiceLinesForEdit,
 } from '@/lib/actions/invoices'
+import { SendInvoiceDialog } from './send-invoice-dialog'
 import type { Invoice, InvoiceLineItem, InvoiceLineKind } from '@/lib/types/database'
 
 const money = (pence: number) =>
@@ -116,7 +106,7 @@ export function InvoiceQuickActions({ invoice, canEdit, className }: Props) {
         <QuickEditDialog open={editOpen} onOpenChange={setEditOpen} invoice={invoice} />
       )}
       {editable && (
-        <SendDialog open={sendOpen} onOpenChange={setSendOpen} invoice={invoice} />
+        <SendInvoiceDialog open={sendOpen} onOpenChange={setSendOpen} invoice={invoice} />
       )}
     </>
   )
@@ -310,65 +300,4 @@ function AddLineRow({ invoiceId, onAdded }: { invoiceId: string; onAdded: () => 
   )
 }
 
-function SendDialog({
-  open,
-  onOpenChange,
-  invoice,
-}: {
-  open: boolean
-  onOpenChange: (o: boolean) => void
-  invoice: Invoice
-}) {
-  const router = useRouter()
-  const [pending, startTransition] = useTransition()
-  const toEmail = invoice.bill_to_email?.trim()
 
-  const send = () => {
-    startTransition(async () => {
-      const res = await sendInvoiceToClient(invoice.id)
-      if (res.error) {
-        toast.error(res.error)
-        return
-      }
-      toast.success('Invoice sent to client')
-      onOpenChange(false)
-      router.refresh()
-    })
-  }
-
-  return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Send {invoice.invoice_number} to client?</AlertDialogTitle>
-          <AlertDialogDescription>
-            {toEmail ? (
-              <>
-                The invoice PDF will be emailed to <strong>{toEmail}</strong>. Once sent, the
-                invoice is locked and can no longer be edited.
-              </>
-            ) : (
-              <>
-                No invoice email is set for this billing account. Add an invoice email on the
-                billing account before sending.
-              </>
-            )}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={(e) => {
-              e.preventDefault()
-              send()
-            }}
-            disabled={pending || !toEmail}
-          >
-            {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-            Send now
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  )
-}

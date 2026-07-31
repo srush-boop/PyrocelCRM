@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { renderInvoicePdfBuffer } from '@/lib/pdf/invoice-pdf'
 import { resolveInvoiceLineSites } from '@/lib/billing/invoice-line-sites'
+import { resolveBillToAddress } from '@/lib/billing/invoice-bill-to'
 import type { CompanyInfo, Invoice, InvoiceLineItem, Profile } from '@/lib/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -46,9 +47,14 @@ export async function GET(
 
   const lineList = (lines ?? []) as InvoiceLineItem[]
   const siteByLineId = await resolveInvoiceLineSites(supabase, lineList)
+  const typedInvoice = invoice as unknown as Invoice & {
+    billing_account: { name: string } | null
+  }
+  // Fall back to the client's address when the billing-account snapshot is blank.
+  const billToAddress = await resolveBillToAddress(supabase, typedInvoice)
 
   const buffer = await renderInvoicePdfBuffer({
-    invoice: invoice as unknown as Invoice & { billing_account: { name: string } | null },
+    invoice: { ...typedInvoice, bill_to_address: billToAddress },
     lines: lineList,
     company: (company ?? null) as CompanyInfo | null,
     siteByLineId,

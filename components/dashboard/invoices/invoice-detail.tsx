@@ -66,13 +66,13 @@ import {
   deleteInvoiceLine,
   issueInvoice,
   markInvoicePaid,
-  sendInvoiceToClient,
   setInvoiceLineNominal,
   updateInvoiceLine,
   updateInvoiceMeta,
   voidInvoice,
 } from '@/lib/actions/invoices'
 import { raiseCreditNote, holdInvoice, releaseInvoice } from '@/lib/actions/invoice-extras'
+import { SendInvoiceDialog } from './send-invoice-dialog'
 
 type InvoiceWithNames = Invoice & {
   billing_account: { name: string } | null
@@ -140,6 +140,7 @@ export function InvoiceDetail({
   const canSend =
     canEdit && !isSent && !isCreditNote && (invoice.status === 'draft' || invoice.status === 'issued')
   const [busy, setBusy] = useState(false)
+  const [sendOpen, setSendOpen] = useState(false)
   // Lines still missing an internal nominal code — blocks issuing.
   const missingNominal = lines.filter((l) => !l.nominal_code_id).length
 
@@ -485,24 +486,21 @@ export function InvoiceDetail({
               </Button>
             )}
             {canSend && (
-              <ConfirmButton
-                trigger={
-                  <Button
-                    className="w-full"
-                    disabled={busy || lines.length === 0 || invoice.on_hold || missingNominal > 0}
-                  >
-                    <Send className="mr-2 h-4 w-4" />
-                    Send to client
-                  </Button>
-                }
-                title="Send this invoice to the client?"
-                description={`Emails the invoice PDF to ${
-                  invoice.bill_to_email || 'the billing account email'
-                }${
-                  invoice.status === 'draft' ? ', issuing it first' : ''
-                }. Once sent, the invoice can no longer be edited.`}
-                actionLabel="Send"
-                onConfirm={() => run(() => sendInvoiceToClient(invoice.id), 'Invoice sent to client')}
+              <Button
+                className="w-full"
+                disabled={busy || lines.length === 0 || invoice.on_hold || missingNominal > 0}
+                onClick={() => setSendOpen(true)}
+              >
+                <Send className="mr-2 h-4 w-4" />
+                Send to client
+              </Button>
+            )}
+            {canSend && (
+              <SendInvoiceDialog
+                invoice={invoice}
+                open={sendOpen}
+                onOpenChange={setSendOpen}
+                onSent={() => router.refresh()}
               />
             )}
             {isSent && (

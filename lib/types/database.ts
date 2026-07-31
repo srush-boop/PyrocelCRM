@@ -2878,7 +2878,22 @@ export interface CallPartLine {
   // search results; present on saved lines so the picker can show whether the
   // line was deducted from the vehicle or just logged.
   stock_deducted_qty?: number
-}
+  }
+
+// An ad-hoc chargeable line added to a call at the chargeable review stage
+// (e.g. extra labour, sundries). Flows into the generated invoice alongside
+// parts and auto-labour. Distinct from call_parts (no stock/cost snapshot).
+export interface CallCharge {
+  id: string
+  task_id: string
+  description: string
+  quantity: number
+  unit_price_pence: number
+  kind: 'labour' | 'other'
+  nominal_code_id: string | null
+  created_by: string | null
+  created_at: string
+  }
 
 // A part held at a location, with its own minimum re-order level and the
 // target (ideal) quantity that defines the location's stock profile.

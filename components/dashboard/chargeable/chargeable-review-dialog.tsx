@@ -36,7 +36,6 @@ import {
   Ban,
   Receipt,
   ArrowLeft,
-  Wrench,
   ChevronRight,
   X,
   Plus,
@@ -52,6 +51,8 @@ import {
   sendPoRequestEmail,
   getPoRequestPreview,
 } from '@/lib/actions/po-requests'
+import { CallPartsPicker } from '@/components/dashboard/tasks/call-parts-picker'
+import { CallChargesEditor } from '@/components/dashboard/chargeable/call-charges-editor'
 import {
   buildPoRequestEmailHtml,
   type PoRequestEmailContent,
@@ -582,22 +583,26 @@ export function ChargeableReviewDialog({
                   Not chargeable
                 </Button>
               </div>
-              {chargeable && (
-                <div className="rounded-md border bg-muted/20 p-2.5 text-xs">
-                  {call.partsCount > 0 ? (
-                    <span className="flex items-center gap-1.5">
-                      <Wrench className="h-3.5 w-3.5 text-amber-600" />
-                      {call.partsCount} part{call.partsCount === 1 ? '' : 's'} · {formatGBP(call.partsTotalPence)} (parts)
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">No parts recorded on this call.</span>
-                  )}
-                  <p className="mt-1 text-muted-foreground">
-                    Labour charges <span className="italic">(coming soon)</span>
-                  </p>
-                </div>
-              )}
             </GatePoint>
+
+            {/* 3b. Parts + ad-hoc charges (editable at review; office/admin). RLS
+                lets is_staff() manage call_parts/call_charges at any status, so a
+                completed call under review can have parts corrected and extra
+                labour/sundries added. Both flow into the generated invoice. */}
+            {chargeable && (
+              <>
+                <Separator />
+                <div className="space-y-3">
+                  <p className="text-sm font-medium leading-5">Parts &amp; charges to invoice</p>
+                  <CallPartsPicker taskId={call.id} canEdit />
+                  <CallChargesEditor
+                    taskId={call.id}
+                    canEdit
+                    onChanged={() => router.refresh()}
+                  />
+                </div>
+              </>
+            )}
 
             {/* 4. Follow-up status */}
             <Separator />

@@ -379,7 +379,8 @@ async function buildInvoiceLineData(
       task_result:task_results(reference_number),
       direct_site:sites!tasks_site_id_fkey(id, name, address, postcode, rate_card_id),
       site_service:site_services(rate_card_id, service_type:service_types(name, nominal_code_id), sites(id, name, address, postcode, rate_card_id)),
-      call_parts(id, part_id, quantity, unit_cost_pence, sale_unit_price_pence, chargeable, part:parts(name, sku, unit_cost, nominal_code_id))
+      call_parts(id, part_id, quantity, unit_cost_pence, sale_unit_price_pence, chargeable, part:parts(name, sku, unit_cost, nominal_code_id)),
+      call_charges(id, description, quantity, unit_price_pence, kind, nominal_code_id)
     `,
     )
     .in('id', taskIds)
@@ -591,6 +592,28 @@ async function buildInvoiceLineData(
         amount_pence: lineAmountPence(qty, unit),
         sort_order: order++,
         ...nominalFor(partNominalId),
+      })
+    }
+
+    // Ad-hoc charges added at the chargeable review stage (extra labour /
+    // sundries). Labour-kind charges post as 'labour' lines, everything else as
+    // 'other'. Nominal resolution: the charge's own code → the call's service
+    // type (parts/attendance keep their own resolution above).
+    for (const c of (t.call_charges ?? []) as any[]) {
+      const qty = c.quantity ?? 0
+      if (qty <= 0) continue
+      const unit = c.unit_price_pence ?? 0
+      const chargeNominalId: string | null = c.nominal_code_id ?? svcNominalId
+      lines.push({
+        task_id: t.id,
+        part_id: null,
+        kind: c.kind === 'labour' ? 'labour' : 'other',
+        description: `${poPrefix}${c.description || 'Charge'} — ${suffix}`,
+        quantity: qty,
+        unit_price_pence: unit,
+        amount_pence: lineAmountPence(qty, unit),
+        sort_order: order++,
+        ...nominalFor(chargeNominalId),
       })
     }
   }

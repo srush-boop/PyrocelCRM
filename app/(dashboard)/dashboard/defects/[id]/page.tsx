@@ -16,6 +16,7 @@ import { getFailedChecklistItems, getAdvisoryChecklistItems, DEFECT_STATUS_LABEL
 import { isDamperService } from '@/lib/dampers'
 import { isExtinguisherService } from '@/lib/extinguishers'
 import { DefectStatusActions } from '@/components/dashboard/defects/defect-status-actions'
+import { RaiseRemedialDialog } from '@/components/dashboard/defects/raise-remedial-dialog'
 import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
 import { AddRequestButton } from '@/components/dashboard/requests/add-request-button'
 import { EntityRequestsCard } from '@/components/dashboard/requests/entity-requests-card'
@@ -74,6 +75,18 @@ export default async function DefectDetailPage({
 
   if (!data) notFound()
 
+  // Active engineers/subcontractors the remedial call can be assigned to.
+  const { data: engineerRows } = await supabase
+    .from('profiles')
+    .select('id, full_name, email')
+    .in('role', ['engineer', 'subcontractor'])
+    .eq('status', 'active')
+    .order('full_name')
+  const engineers = (engineerRows ?? []).map((e: any) => ({
+    id: e.id as string,
+    name: (e.full_name as string | null) || (e.email as string) || 'Unknown',
+  }))
+
   const d = data as any
   const status: DefectStatus = d.status
   const siteName: string = d.site?.name ?? 'Unknown site'
@@ -117,6 +130,7 @@ export default async function DefectDetailPage({
                 </Link>
               </Button>
             )}
+            {isOpen && <RaiseRemedialDialog defectId={d.id} engineers={engineers} />}
             <AddRequestButton
               entityType="defect"
               entityId={d.id}

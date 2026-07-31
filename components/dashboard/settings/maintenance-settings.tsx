@@ -8,8 +8,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Loader2, Plus, Trash2, RotateCcw } from 'lucide-react'
-import type { CompanyInfo } from '@/lib/types/database'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Loader2, Plus, Trash2, RotateCcw, Clock } from 'lucide-react'
+import type { CompanyInfo, Department } from '@/lib/types/database'
 import {
   DEFAULT_MAINTENANCE_RATES,
   resolveMaintenanceRates,
@@ -26,7 +33,10 @@ import {
 
 interface MaintenanceSettingsProps {
   company: CompanyInfo | null
+  departments: Department[]
 }
+
+const NO_DEPT = '__none__'
 
 type Feedback = { type: 'success' | 'error'; text: string } | null
 
@@ -54,13 +64,15 @@ const RATE_FIELDS: Array<{ key: keyof MaintenanceRates; label: string; step?: st
   { key: 'damperHoursPerDay', label: 'Testing hours / day', step: '0.5', suffix: 'hrs' },
 ]
 
-export function MaintenanceSettings({ company }: MaintenanceSettingsProps) {
+export function MaintenanceSettings({ company, departments }: MaintenanceSettingsProps) {
   const router = useRouter()
   const supabase = createClient()
 
   const initialRates = resolveMaintenanceRates(
     (company?.maintenance_rates ?? null) as Partial<MaintenanceRates> | null,
   )
+
+  const activeDepartments = departments.filter((d) => d.active)
   const initialCopy = resolveMaintenanceAgreement(
     (company?.maintenance_agreement ?? null) as Partial<MaintenanceAgreementCopy> | null,
   )
@@ -70,6 +82,14 @@ export function MaintenanceSettings({ company }: MaintenanceSettingsProps) {
     Object.fromEntries(RATE_FIELDS.map((f) => [f.key, String(initialRates[f.key] ?? '')])),
   )
   const [monitoring, setMonitoring] = useState<MonitoringPart[]>(initialRates.monitoringParts)
+
+  // Departments whose target margin drives the suggested visit-time allocation.
+  const [cdoMarginDeptId, setCdoMarginDeptId] = useState<string>(
+    initialRates.cdoMarginDepartmentId ?? NO_DEPT,
+  )
+  const [engineerMarginDeptId, setEngineerMarginDeptId] = useState<string>(
+    initialRates.engineerMarginDepartmentId ?? NO_DEPT,
+  )
 
   // Agreement copy state.
   const [strapline, setStrapline] = useState(initialCopy.strapline)
@@ -88,6 +108,8 @@ export function MaintenanceSettings({ company }: MaintenanceSettingsProps) {
       Object.fromEntries(RATE_FIELDS.map((f) => [f.key, String(DEFAULT_MAINTENANCE_RATES[f.key] ?? '')])),
     )
     setMonitoring(DEFAULT_MAINTENANCE_RATES.monitoringParts)
+    setCdoMarginDeptId(DEFAULT_MAINTENANCE_RATES.cdoMarginDepartmentId ?? NO_DEPT)
+    setEngineerMarginDeptId(DEFAULT_MAINTENANCE_RATES.engineerMarginDepartmentId ?? NO_DEPT)
   }
 
   function resetAgreement() {
@@ -131,6 +153,9 @@ export function MaintenanceSettings({ company }: MaintenanceSettingsProps) {
         sell: Number(m.sell) || 0,
       })),
       accessEquipmentOptions: DEFAULT_MAINTENANCE_RATES.accessEquipmentOptions,
+      cdoMarginDepartmentId: cdoMarginDeptId === NO_DEPT ? null : cdoMarginDeptId,
+      engineerMarginDepartmentId:
+        engineerMarginDeptId === NO_DEPT ? null : engineerMarginDeptId,
     } as MaintenanceRates
 
     const agreement: MaintenanceAgreementCopy = {
@@ -256,6 +281,60 @@ export function MaintenanceSettings({ company }: MaintenanceSettingsProps) {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          {/* Visit time allocation */}
+          <div className="rounded-lg border border-border p-4">
+            <div className="mb-1 flex items-center gap-2">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <Label className="text-sm font-semibold">Visit time allocation</Label>
+            </div>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Choose the department whose target margin is used when suggesting how long a
+              recurring visit should take. The suggestion works back from the visit&apos;s value
+              minus the margin, divided by the relevant hourly cost (CDO cost{' '}
+              <span className="tabular-nums">£{initialRates.cdoCost.toFixed(2)}</span>/hr, engineer
+              cost <span className="tabular-nums">£{initialRates.engineerCost.toFixed(2)}</span>/hr —
+              edit these above).
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label htmlFor="cdo-margin-dept" className="text-xs">
+                  CDO services — margin department
+                </Label>
+                <Select value={cdoMarginDeptId} onValueChange={setCdoMarginDeptId}>
+                  <SelectTrigger id="cdo-margin-dept">
+                    <SelectValue placeholder="No department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_DEPT}>No department (0% margin)</SelectItem>
+                    {activeDepartments.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.name} ({d.default_margin_percent ?? 0}%)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="engineer-margin-dept" className="text-xs">
+                  Engineer / sub-contractor services — margin department
+                </Label>
+                <Select value={engineerMarginDeptId} onValueChange={setEngineerMarginDeptId}>
+                  <SelectTrigger id="engineer-margin-dept">
+                    <SelectValue placeholder="No department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_DEPT}>No department (0% margin)</SelectItem>
+                    {activeDepartments.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.name} ({d.default_margin_percent ?? 0}%)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
         </CardContent>

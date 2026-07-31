@@ -252,14 +252,23 @@ export function formatCoveragePeriod(
 /**
  * Build a "System / Service" label from the (possibly partial) names linked to
  * a recurring charge's site_service. Returns null when nothing is known.
+ *
+ * The system portion always surfaces the system TYPE (e.g. "Fire Alarm") when
+ * known so recurring invoice lines identify the service type + system type, and
+ * appends the specific system's own name in parentheses when it differs. The
+ * service portion is the service type name.
  */
 export function systemServiceLabel(input: {
   systemName?: string | null
   systemTypeName?: string | null
   serviceName?: string | null
 }): string | null {
-  const sys = input.systemName || input.systemTypeName || null
-  const svc = input.serviceName || null
+  const type = input.systemTypeName?.trim() || null
+  const name = input.systemName?.trim() || null
+  let sys: string | null
+  if (type && name && name !== type) sys = `${type} (${name})`
+  else sys = type || name
+  const svc = input.serviceName?.trim() || null
   if (sys && svc) return `${sys} / ${svc}`
   return sys || svc || null
 }

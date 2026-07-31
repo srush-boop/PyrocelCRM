@@ -113,6 +113,10 @@ export default async function SchedulePage({
   let siteServices: (SiteService & { site: Site; service_type: ServiceType })[] = []
   let clients: { id: string; name: string }[] = []
   let reactiveServiceTypes: ServiceType[] = []
+  // Full live service-type catalogue (recurring + reactive) used to populate the
+  // schedule's Service filter so every type is selectable, even when it has no
+  // calls in the currently-loaded window.
+  let allServiceTypes: ServiceType[] = []
   let systemTypes: SystemType[] = []
 
   if (needsBookingData) {
@@ -126,9 +130,10 @@ export default async function SchedulePage({
     sites = (sitesResult.data || []) as Site[]
     clients = (clientsResult.data || []) as { id: string; name: string }[]
     // Reactive / emergency (non-recurring) call types are logged ad-hoc via Log Call.
-    reactiveServiceTypes = ((serviceTypesResult.data || []) as ServiceType[]).filter(
-      (st) => st.is_recurring === false && (st.status || 'live') !== 'dead',
+    allServiceTypes = ((serviceTypesResult.data || []) as ServiceType[]).filter(
+      (st) => (st.status || 'live') !== 'dead',
     )
+    reactiveServiceTypes = allServiceTypes.filter((st) => st.is_recurring === false)
     systemTypes = (systemTypesResult.data || []) as SystemType[]
 
     if (isAdminOrOffice) {
@@ -235,6 +240,8 @@ export default async function SchedulePage({
         engineers={engineers}
         initialTab={initialTab}
         estimates={estimates}
+        serviceTypes={allServiceTypes}
+        systemTypes={systemTypes}
       />
     </div>
   )

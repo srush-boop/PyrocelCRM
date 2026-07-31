@@ -69,7 +69,7 @@ import {
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
-import type { Profile, TaskWithDetails, Site, Area } from '@/lib/types/database'
+import type { Profile, TaskWithDetails, Site, Area, ServiceType, SystemType } from '@/lib/types/database'
 import type { CallEstimate } from '@/lib/task-duration'
 import { WORKER_TYPE_LABELS } from '@/lib/assignment'
 import { SystemIcon, SystemBadge, getSystemColors } from '@/lib/system-types'
@@ -118,6 +118,14 @@ interface ScheduleViewProps {
    * on the server; tasks without a grounded estimate are simply absent.
    */
   estimates?: Record<string, CallEstimate>
+  /**
+   * Full live service-type / system-type catalogue used to populate the System
+   * and Service filters so every type is selectable, even when it currently has
+   * no calls in the loaded window. When omitted (e.g. field-role logins that
+   * only see their own calls) the filters fall back to task-derived options.
+   */
+  serviceTypes?: ServiceType[]
+  systemTypes?: SystemType[]
 }
 
 const statusConfig = {
@@ -221,7 +229,7 @@ function BookingEditor({
   )
 }
 
-export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initialTab, estimates = {} }: ScheduleViewProps) {
+export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initialTab, estimates = {}, serviceTypes = [], systemTypes = [] }: ScheduleViewProps) {
   const router = useRouter()
   const supabase = createClient()
   const [search, setSearch] = useState('')
@@ -345,34 +353,47 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
   // on the task overview page, gated to the assigned engineer.
   const canPreviewCall = isEngineer || isAdminOrOffice
 
-  // Unique system types present across the current calls, for the system filter.
-  const systemOptions = Array.from(
-    tasks.reduce((map, task) => {
+  // System types for the system filter. Seeded from the full live catalogue
+  // (so every system is selectable even with no calls in the loaded window) and
+  // then unioned with any system present on the current tasks (covers dead
+  // systems that still have an active call).
+  const systemOptions = (() => {
+    const map = new Map<string, { id: string; name: string }>()
+    for (const sys of systemTypes) {
+      if (sys?.id && !map.has(sys.id)) map.set(sys.id, { id: sys.id, name: sys.name })
+    }
+    for (const task of tasks) {
       const sys = task.site_service?.service_type?.system_type
-      if (sys?.id && !map.has(sys.id)) map.set(sys.id, sys)
-      return map
-    }, new Map<string, NonNullable<NonNullable<NonNullable<TaskWithDetails['site_service']>['service_type']>['system_type']>>()).values()
-  ).sort((a, b) => (a?.name ?? '').localeCompare(b?.name ?? ''))
-  // Unique service types present across the current calls, for the service filter.
-  // Respects the selected system so the two filters narrow together.
+      if (sys?.id && !map.has(sys.id)) map.set(sys.id, { id: sys.id, name: sys.name })
+    }
+    return Array.from(map.values()).sort((a, b) => (a?.name ?? '').localeCompare(b?.name ?? ''))
+  })()
+  // Service types for the service filter. Seeded from the full live catalogue so
+  // every type is selectable, then unioned with types present on the current
+  // tasks. Respects the selected system so the two filters narrow together.
   // NOTE: after normalizeTasks all tasks have site_service?.service_type populated,
   // including reactive/emergency calls synthesised from direct_service_type.
   // When filtering by a specific system we must also include service types whose
   // system_type is null/undefined (reactive types with no system classification)
   // so they always appear rather than disappearing when a system is selected.
-  const serviceOptions = Array.from(
-    tasks.reduce((map, task) => {
-      const svc = task.site_service?.service_type
-      const sysId = svc?.system_type?.id ?? null
-      if (!svc?.id) return map
-      if (map.has(svc.id)) return map
+  const serviceOptions = (() => {
+    const map = new Map<string, { id: string; name: string; sysId: string | null }>()
+    const add = (id: string | undefined, name: string | undefined, sysId: string | null) => {
+      if (!id || map.has(id)) return
       // When systems are selected, show only services belonging to those systems.
-      // Services with no system_type are always shown (they can't be narrowed by system).
-      if (selectedSystems.length > 0 && sysId !== null && !selectedSystems.includes(sysId)) return map
-      map.set(svc.id, { id: svc.id, name: svc.name, sysId })
-      return map
-    }, new Map<string, { id: string; name: string; sysId: string | null }>()).values()
-  ).sort((a, b) => a.name.localeCompare(b.name))
+      // Services with no system_type are always shown (can't be narrowed by system).
+      if (selectedSystems.length > 0 && sysId !== null && !selectedSystems.includes(sysId)) return
+      map.set(id, { id, name: name ?? '', sysId })
+    }
+    for (const svc of serviceTypes) {
+      add(svc.id, svc.name, svc.system_type?.id ?? null)
+    }
+    for (const task of tasks) {
+      const svc = task.site_service?.service_type
+      add(svc?.id, svc?.name, svc?.system_type?.id ?? null)
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
+  })()
   // Only admin/office can multi-select and reassign tasks
   const canAssign = isAdminOrOffice && engineers.length > 0
   // Once an engineer has closed (completed) a call it can no longer be

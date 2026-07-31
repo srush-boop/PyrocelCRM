@@ -128,11 +128,45 @@ export async function createRemedialCallFromDefect(
     .maybeSingle()
 
   if (error) return { ok: false, error: error.message }
+  const newTaskId = (inserted as { id: string } | null)?.id ?? null
+
+  // Carry the parts from the defect's originating inspection call over to the
+  // new remedial call so the engineer arrives with the required parts planned.
+  // These are plan-only copies — no stock is deducted until the call is worked.
+  if (newTaskId && originTask?.id) {
+    const { data: sourceParts } = await supabase
+      .from('call_parts')
+      .select('part_id, quantity, unit_cost_pence, sale_unit_price_pence, chargeable, notes')
+      .eq('task_id', originTask.id)
+
+    const partRows = ((sourceParts ?? []) as Array<{
+      part_id: string
+      quantity: number | null
+      unit_cost_pence: number | null
+      sale_unit_price_pence: number | null
+      chargeable: boolean | null
+      notes: string | null
+    }>).map((p) => ({
+      task_id: newTaskId,
+      part_id: p.part_id,
+      quantity: p.quantity ?? 1,
+      unit_cost_pence: p.unit_cost_pence ?? null,
+      sale_unit_price_pence: p.sale_unit_price_pence ?? null,
+      chargeable: p.chargeable ?? true,
+      notes: `Carried over from defect ${d.reference_number ?? ''}`.trim(),
+      added_by: null,
+    }))
+
+    if (partRows.length > 0) {
+      const { error: partsError } = await supabase.from('call_parts').insert(partRows)
+      if (partsError) console.log('[v0] createRemedialCallFromDefect parts copy error:', partsError.message)
+    }
+  }
 
   revalidatePath('/dashboard/defects')
   revalidatePath(`/dashboard/defects/${defectId}`)
   revalidatePath('/dashboard/schedule')
-  return { ok: true, taskId: (inserted as { id: string } | null)?.id }
+  return { ok: true, taskId: newTaskId ?? undefined }
 }
 
 // Manually set a defect's lifecycle status (resolve / dismiss / reopen).

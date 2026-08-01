@@ -76,6 +76,13 @@ import {
   type EntityStatus,
 } from '@/lib/entity-status'
 import { formatPence } from '@/lib/billing/invoices'
+import {
+  suggestVisitMinutes,
+  visitsPerYear,
+  type VisitTimeConfig,
+  type VisitWorkerType,
+} from '@/lib/billing/visit-time-allocation'
+import { formatDuration } from '@/lib/task-duration'
 import { CreateDocumentDialog } from '@/components/documents/create-document-dialog'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -146,6 +153,9 @@ interface SiteSystemsManagerProps {
   // Annualised recurring value (pence) per site_service id, used to show the
   // £ value on each service row, per-system subtotals and the site total.
   annualValueByServiceId?: Record<string, number>
+  // CDO/engineer hourly costs + target margins, used to suggest a per-visit time
+  // when a service has no explicit estimate set.
+  visitTimeConfig?: VisitTimeConfig | null
 }
 
 export function SiteSystemsManager({
@@ -174,6 +184,7 @@ export function SiteSystemsManager({
     two_engineers_required: false,
   },
   annualValueByServiceId = {},
+  visitTimeConfig = null,
 }: SiteSystemsManagerProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -198,6 +209,33 @@ export function SiteSystemsManager({
   const sumServiceValue = (svcs: ServiceWithType[]) =>
     svcs.reduce((acc, s) => acc + serviceValue(s.id), 0)
   const siteTotalValue = sumServiceValue(siteServices)
+
+  // Estimated time on site per visit (minutes) for one service: the explicit
+  // value if set, otherwise the value-based suggestion. Returns null when
+  // neither is available (no estimate + no value/config to derive one).
+  const serviceEstimatedMinutes = (svc: ServiceWithType): number | null => {
+    if (svc.estimated_visit_minutes != null) return svc.estimated_visit_minutes
+    if (svc.service_type?.is_recurring === false) return null
+    const vpy = visitsPerYear(svc.frequency_value, svc.frequency_unit)
+    const value = serviceValue(svc.id)
+    if (!visitTimeConfig || value <= 0 || vpy <= 0) return null
+    const suggestion = suggestVisitMinutes({
+      annualValuePence: value,
+      visitsPerYear: vpy,
+      workerType: (svc.worker_type as VisitWorkerType) || 'cdo',
+      config: visitTimeConfig,
+    })
+    return suggestion ? suggestion.minutes : null
+  }
+  // Whether a service's shown estimate is an explicit value (vs a suggestion).
+  const hasExplicitEstimate = (svc: ServiceWithType) => svc.estimated_visit_minutes != null
+  // Sum estimated minutes across a list of services (ignoring un-estimable ones).
+  const sumEstimatedMinutes = (svcs: ServiceWithType[]) =>
+    svcs.reduce((acc, s) => {
+      const m = serviceEstimatedMinutes(s)
+      return acc + (m ?? 0)
+    }, 0)
+  const siteTotalMinutes = sumEstimatedMinutes(siteServices)
 
   // Active services across the whole site with no recurring charge set up. Drives
   // the "set up service charges" prompt shown after systems/services are added.
@@ -577,6 +615,14 @@ export function SiteSystemsManager({
               </p>
             </div>
           )}
+          {siteTotalMinutes > 0 && (
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Est. time per visit</p>
+              <p className="text-lg font-semibold tabular-nums">
+                {formatDuration(siteTotalMinutes)}
+              </p>
+            </div>
+          )}
           {siteSystems.length > 0 && (
             <Button
               variant="outline"
@@ -716,6 +762,8 @@ export function SiteSystemsManager({
               : null
             // Annualised recurring value across this system's services.
             const systemValue = sumServiceValue(services)
+            // Estimated on-site time per visit cycle across this system's services.
+            const systemMinutes = sumEstimatedMinutes(services)
             // Active services with no recurring charge set up, so we can warn the
             // user (revenue would be missed when calls are completed/invoiced).
             const chargelessServices = activeServices.filter((s) => serviceValue(s.id) <= 0)
@@ -774,6 +822,15 @@ export function SiteSystemsManager({
                         >
                           <Receipt className="h-3.5 w-3.5" />
                           {formatPence(systemValue)}/yr
+                        </span>
+                      )}
+                      {systemMinutes > 0 && (
+                        <span
+                          className="inline-flex items-center gap-1 font-medium text-foreground"
+                          title="Estimated on-site time per visit across this system's services"
+                        >
+                          <Clock className="h-3.5 w-3.5" />
+                          {formatDuration(systemMinutes)}/visit
                         </span>
                       )}
                       {nextDueDate && (
@@ -966,6 +1023,30 @@ export function SiteSystemsManager({
                               <Settings2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                             </button>
                             <div className="flex shrink-0 items-center gap-2">
+                              {(() => {
+                                const estMinutes = serviceEstimatedMinutes(svc)
+                                if (estMinutes == null || estMinutes <= 0) return null
+                                const explicit = hasExplicitEstimate(svc)
+                                return (
+                                  <span
+                                    className={cn(
+                                      'flex items-center gap-1 text-xs tabular-nums',
+                                      explicit
+                                        ? 'text-muted-foreground'
+                                        : 'text-muted-foreground/70 italic',
+                                    )}
+                                    title={
+                                      explicit
+                                        ? 'Estimated time on site per visit'
+                                        : 'Suggested time on site per visit (from value & margin). Open service set up to confirm.'
+                                    }
+                                  >
+                                    <Clock className="h-3 w-3" />
+                                    {formatDuration(estMinutes)}
+                                    {!explicit && '*'}
+                                  </span>
+                                )
+                              })()}
                               {value > 0 ? (
                                 <span
                                   className="text-xs tabular-nums text-muted-foreground"

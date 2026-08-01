@@ -455,7 +455,7 @@ export function SettingsContent({ user, profile, company, branches, departments,
 
       {isAdmin && (
         <TabsContent value="maintenance" className="space-y-4">
-          <MaintenanceSettings company={company} />
+          <MaintenanceSettings company={company} departments={departments} />
         </TabsContent>
       )}
 

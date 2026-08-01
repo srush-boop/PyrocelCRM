@@ -43,6 +43,7 @@ import { isEmergencyLightService } from '@/lib/emergency-lights'
 import { isExtinguisherService } from '@/lib/extinguishers'
 import { REMOTE_MONITORING_LABELS } from '@/lib/sites'
 import { annualRevenuePence } from '@/lib/billing/projected-revenue'
+import { getVisitTimeConfig } from '@/lib/billing/visit-time-allocation'
 import type {
   Profile,
   Site,
@@ -258,6 +259,11 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
       (annualValueByServiceId[charge.site_service_id] ?? 0) + value
   }
 
+  // Config for the value-based visit time allocation (CDO/engineer hourly costs
+  // + each worker type's target margin department). Suggests how long each
+  // recurring visit should take, and how the per-service estimate rolls up.
+  const visitTimeConfig = await getVisitTimeConfig(supabase)
+
   // Panels captured against this site's systems (Fire Alarm etc.). Loaded here
   // so the systems tab can list and edit them per system.
   const siteSystemIds = siteSystems.map((s) => s.id)
@@ -413,6 +419,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
       id: c.id,
       visit_type_id: c.visit_type_id ?? null,
       service_type_id: c.service_type_id ?? c.site_service?.service_type?.id ?? null,
+      site_service_id: c.site_service_id ?? null,
     })),
   )
 
@@ -1013,6 +1020,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
           clients={clients}
           reactiveServiceTypes={reactiveServiceTypes}
           annualValueByServiceId={annualValueByServiceId}
+          visitTimeConfig={visitTimeConfig}
           siteFlagDefaults={{
             booking_required: Boolean((site as Site).booking_required),
             access_required: Boolean((site as Site).access_required),
@@ -1038,6 +1046,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
                   siteStatus={(site as Site).status}
                   systemDefaultsById={systemDefaultsById}
                   annualValueByServiceId={annualValueByServiceId}
+                  visitTimeConfig={visitTimeConfig}
                 />
         </TabsContent>
 

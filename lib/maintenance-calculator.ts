@@ -68,6 +68,16 @@ export interface MaintenanceRates {
 
   monitoringParts: MonitoringPart[]
   accessEquipmentOptions: AccessEquipmentOption[]
+
+  /**
+   * Departments whose `default_margin_percent` supplies the target margin used
+   * when suggesting a recurring visit's time allocation. CDO-worker services use
+   * the CDO department's margin; engineer/subcontractor services use the
+   * engineer department's margin. null/undefined = no department chosen (the
+   * suggestion falls back to a 0% margin, i.e. full value as labour budget).
+   */
+  cdoMarginDepartmentId?: string | null
+  engineerMarginDepartmentId?: string | null
 }
 
 // Per-asset labour figures. Fire is in MINUTES; the rest are in HOURS, matching

@@ -1387,6 +1387,11 @@ export interface Site {
   // % uplift baked into a comprehensive service's charge, stripped out to leave
   // the base service revenue used for profitability. null = no uplift.
   comprehensive_uplift_pct: number | null
+  // Estimated time on site per visit for this recurring service, in minutes.
+  // Authoritative "estimated time taken" for the service's calls; site/system
+  // views aggregate the sum. null = not set (fall back to the value-based
+  // suggestion / service-setup expected time).
+  estimated_visit_minutes: number | null
   // Billing account this specific service is invoiced under. null = inherit the
   // site's billing account (which itself falls back to the client default). This
   // is how a single service can be billed to a different (sub-)client than its

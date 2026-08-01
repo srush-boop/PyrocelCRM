@@ -55,6 +55,13 @@ import {
   type AssignmentMethod,
 } from '@/lib/assignment'
 import { resolveWorkerType } from '@/lib/engineer-visibility'
+import {
+  suggestVisitMinutes,
+  visitsPerYear,
+  type VisitTimeConfig,
+  type VisitWorkerType,
+} from '@/lib/billing/visit-time-allocation'
+import { formatDuration } from '@/lib/task-duration'
 
 const NONE_VALUE = '__none__'
 
@@ -82,6 +89,9 @@ interface SiteServicesManagerProps {
   // Annualised recurring revenue (pence) per site_service id. Used to show the
   // true margin against the sub-contractor annual cost in the edit dialog.
   annualValueByServiceId?: Record<string, number>
+  // CDO/engineer hourly costs + target margins used to suggest a per-visit time
+  // allocation from the service's value.
+  visitTimeConfig?: VisitTimeConfig | null
 }
 
 export function SiteServicesManager({
@@ -98,6 +108,7 @@ export function SiteServicesManager({
   siteStatus = 'live',
   systemDefaultsById = {},
   annualValueByServiceId = {},
+  visitTimeConfig = null,
 }: SiteServicesManagerProps) {
   const [selectedServiceTypes, setSelectedServiceTypes] = useState<string[]>([])
   const [addServicesOpen, setAddServicesOpen] = useState(false)
@@ -134,6 +145,8 @@ export function SiteServicesManager({
   // Percentage uplift baked into a comprehensive service's charge. Stripped out
   // when working out the "actual service" revenue used for profitability.
   const [editComprehensiveUpliftPct, setEditComprehensiveUpliftPct] = useState('')
+  // Estimated time on site per visit, in minutes (empty string = not set).
+  const [editEstimatedMinutes, setEditEstimatedMinutes] = useState('')
   const [newEmail, setNewEmail] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
 
@@ -296,6 +309,9 @@ export function SiteServicesManager({
     setEditComprehensiveUpliftPct(
       ss.comprehensive_uplift_pct != null ? String(ss.comprehensive_uplift_pct) : '',
     )
+    setEditEstimatedMinutes(
+      ss.estimated_visit_minutes != null ? String(ss.estimated_visit_minutes) : '',
+    )
     setNewEmail('')
   }
 
@@ -420,6 +436,13 @@ export function SiteServicesManager({
           Number.isFinite(Number(editComprehensiveUpliftPct)) &&
           Number(editComprehensiveUpliftPct) >= 0
             ? Number(editComprehensiveUpliftPct)
+            : null,
+        // Estimated time on site per visit (minutes). Blank clears it.
+        estimated_visit_minutes:
+          editEstimatedMinutes.trim() !== '' &&
+          Number.isFinite(Number(editEstimatedMinutes)) &&
+          Number(editEstimatedMinutes) >= 0
+            ? Math.round(Number(editEstimatedMinutes))
             : null,
       })
       .eq('id', editingId)
@@ -1162,6 +1185,88 @@ export function SiteServicesManager({
                 The date the next recurring service is due for this system.
               </p>
             </div>
+
+            {/* Estimated time on site + value-based suggestion */}
+            {(() => {
+              const annualValuePence = editingId
+                ? annualValueByServiceId[editingId] ?? 0
+                : 0
+              const vpy = visitsPerYear(editFrequencyValue, editFrequencyUnit)
+              const suggestion =
+                visitTimeConfig && annualValuePence > 0 && vpy > 0
+                  ? suggestVisitMinutes({
+                      annualValuePence,
+                      visitsPerYear: vpy,
+                      workerType: editWorkerType as VisitWorkerType,
+                      config: visitTimeConfig,
+                    })
+                  : null
+              return (
+                <div className="grid gap-2 rounded-md border p-3">
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <Label htmlFor="estimated-minutes">Estimated time on site (minutes)</Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="estimated-minutes"
+                      type="number"
+                      min={0}
+                      step={5}
+                      inputMode="numeric"
+                      placeholder={suggestion ? String(suggestion.minutes) : 'Not set'}
+                      value={editEstimatedMinutes}
+                      onChange={(e) => setEditEstimatedMinutes(e.target.value)}
+                      className="max-w-[8rem]"
+                    />
+                    {editEstimatedMinutes.trim() !== '' && (
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {formatDuration(Number(editEstimatedMinutes) || 0)}
+                      </span>
+                    )}
+                    {editEstimatedMinutes.trim() !== '' && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEditEstimatedMinutes('')}
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
+                  {suggestion ? (
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <span>
+                        Suggested{' '}
+                        <span className="font-medium text-foreground">
+                          {formatDuration(suggestion.minutes)}
+                        </span>{' '}
+                        &mdash; {formatPence(suggestion.perVisitValuePence)}/visit at{' '}
+                        {suggestion.marginPct}% margin, {formatPence(suggestion.hourlyCostPence)}/hr{' '}
+                        {suggestion.workerType === 'cdo' ? 'CDO' : 'engineer'} cost.
+                      </span>
+                      {String(suggestion.minutes) !== editEstimatedMinutes.trim() && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-6 px-2"
+                          onClick={() => setEditEstimatedMinutes(String(suggestion.minutes))}
+                        >
+                          Use suggestion
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Add a recurring charge and set the visit-time margin department in Maintenance
+                      settings to see a suggested allocation.
+                    </p>
+                  )}
+                </div>
+              )
+            })()}
 
             <div className="flex items-start gap-3 rounded-md border p-3">
               <Checkbox

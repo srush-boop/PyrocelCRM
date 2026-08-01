@@ -257,6 +257,10 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
   const [needsBookingOnly, setNeedsBookingOnly] = useState(false)
   // Quick filter: only show overdue (past scheduled_date, still pending) calls.
   const [showOverdueOnly, setShowOverdueOnly] = useState(false)
+  // Quick filter: only show remedial calls (one-off remedial works raised from a
+  // defect or accepted quote). They share a recurring service's type, so the
+  // service filter can't isolate them — this can.
+  const [remedialOnly, setRemedialOnly] = useState(false)
   const [selectedEngineer, setSelectedEngineer] = useState<string>('all')
   // Multi-select filters: empty array = "all" (no restriction).
   const [selectedSystems, setSelectedSystems] = useState<string[]>([])
@@ -524,6 +528,7 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
   }
 
   const needsBookingCount = tasks.filter(taskNeedsBooking).length
+  const remedialCount = tasks.filter((t) => t.is_remedial).length
 
   // Weekly recurring calls (a recurring service repeating every 1 week, e.g.
   // weekly fire-alarm tests) are too routine to book an individual appointment
@@ -534,7 +539,7 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
   }
 
   const hasActiveFilters =
-    search || selectedEngineer !== 'all' || selectedSystems.length > 0 || selectedServices.length > 0 || dateFrom || dateTo || needsBookingOnly || showOverdueOnly
+    search || selectedEngineer !== 'all' || selectedSystems.length > 0 || selectedServices.length > 0 || dateFrom || dateTo || needsBookingOnly || showOverdueOnly || remedialOnly
 
   const clearFilters = () => {
     setSearch('')
@@ -545,6 +550,7 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
     setDateTo(undefined)
     setNeedsBookingOnly(false)
     setShowOverdueOnly(false)
+    setRemedialOnly(false)
   }
 
   const filteredTasks = tasks.filter((task) => {
@@ -559,15 +565,25 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
     const matchesEngineer = selectedEngineer === 'all' || 
       (selectedEngineer === 'unassigned' ? !task.assigned_engineer_id : task.assigned_engineer_id === selectedEngineer)
 
+    // Resolve the task's service/system type. Recurring calls carry it on the
+    // site_service; reactive/remedial calls anchored straight to a site carry it
+    // on the direct_* embeds. Fall back so one-off calls aren't dropped by the
+    // service/system filters.
+    const directServiceType = (task as { direct_service_type?: { id?: string; system_type?: { id?: string } | null } | null }).direct_service_type
+    const resolvedServiceType = task.site_service?.service_type ?? directServiceType ?? null
+
     // System type filter (multi-select; empty = all)
-    const taskSystemId = task.site_service?.service_type?.system_type?.id
+    const taskSystemId = resolvedServiceType?.system_type?.id
     const matchesSystem = selectedSystems.length === 0 ||
       (!!taskSystemId && selectedSystems.includes(taskSystemId))
 
     // Service type filter (multi-select; empty = all)
-    const taskServiceId = task.site_service?.service_type?.id
+    const taskServiceId = resolvedServiceType?.id
     const matchesService = selectedServices.length === 0 ||
       (!!taskServiceId && selectedServices.includes(taskServiceId))
+
+    // Remedial quick filter — only one-off remedial calls.
+    const matchesRemedial = !remedialOnly || !!task.is_remedial
     
     // Date range filter
     const taskDate = new Date(task.scheduled_date)
@@ -595,6 +611,7 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
       matchesDateTo &&
       matchesNeedsBooking &&
       matchesOverdue &&
+      matchesRemedial &&
       matchesRoute
     )
   })
@@ -1190,6 +1207,25 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
               className="ml-0.5 px-1.5 py-0"
             >
               {overdueTasks.length}
+            </Badge>
+          </Button>
+        )}
+
+        {(remedialCount > 0 || remedialOnly) && (
+          <Button
+            type="button"
+            variant={remedialOnly ? 'default' : 'outline'}
+            onClick={() => setRemedialOnly((v) => !v)}
+            aria-pressed={remedialOnly}
+            className="gap-1.5 shrink-0"
+          >
+            <Wrench className="h-4 w-4" />
+            Remedial
+            <Badge
+              variant={remedialOnly ? 'secondary' : 'outline'}
+              className="ml-0.5 px-1.5 py-0"
+            >
+              {remedialCount}
             </Badge>
           </Button>
         )}

@@ -44,6 +44,8 @@ import {
   FileText,
   Link2,
   Table as TableIcon,
+  ImageIcon,
+  X,
 } from 'lucide-react'
 import type {
   Department,
@@ -60,6 +62,7 @@ import {
   saveInternalTaskTemplate,
   deleteInternalTaskTemplate,
 } from '@/lib/actions/internal-tasks'
+import { blobSrc } from '@/lib/blob'
 
 interface Props {
   templates: InternalTaskTemplate[]
@@ -889,6 +892,13 @@ function TemplateEditorDialog({
                       </div>
                     </div>
 
+                    <div className="pl-6">
+                      <BlockImageField
+                        item={q}
+                        onChange={(u) => updateQuestion(q.id, u)}
+                      />
+                    </div>
+
                     {/* Conditional rules (not for text) */}
                     {q.type !== 'text' ? (
                       <div className="mt-3 space-y-2 pl-6">
@@ -1341,9 +1351,9 @@ function BlockEditor({
             </p>
             <div className="flex flex-col gap-1.5">
               {(block.columns ?? []).map((col) => (
-                <div key={col.id} className="flex items-center gap-2">
+                <div key={col.id} className="flex flex-wrap items-center gap-2">
                   <Input
-                    className="h-8"
+                    className="h-8 min-w-[8rem] flex-1"
                     value={col.label}
                     onChange={(e) => onUpdateColumn(col.id, { label: e.target.value })}
                     placeholder="Column name"
@@ -1353,6 +1363,8 @@ function BlockEditor({
                     onValueChange={(v) =>
                       onUpdateColumn(col.id, {
                         type: v as InternalTaskTableColumn['type'],
+                        // Only number columns can be summed — clear the flag otherwise.
+                        total: v === 'number' ? col.total : undefined,
                       })
                     }
                   >
@@ -1363,8 +1375,20 @@ function BlockEditor({
                       <SelectItem value="text">Text</SelectItem>
                       <SelectItem value="number">Number</SelectItem>
                       <SelectItem value="date">Date</SelectItem>
+                      <SelectItem value="image">Image</SelectItem>
                     </SelectContent>
                   </Select>
+                  {col.type === 'number' ? (
+                    <label className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
+                      <Checkbox
+                        checked={col.total === true}
+                        onCheckedChange={(v) =>
+                          onUpdateColumn(col.id, { total: v === true })
+                        }
+                      />
+                      Sum
+                    </label>
+                  ) : null}
                   <Button
                     variant="ghost"
                     size="icon"
@@ -1391,6 +1415,88 @@ function BlockEditor({
           </label>
         </div>
       )}
+
+      <BlockImageField item={block} onChange={onChange} />
+    </div>
+  )
+}
+
+// Author-uploaded reference image attached to any question or content block.
+// Uploads to the internal-task-templates/ Blob prefix (admin/office only) and
+// stores the returned pathname on the item so it can be shown to form-fillers.
+function BlockImageField({
+  item,
+  onChange,
+}: {
+  item: InternalTaskItem
+  onChange: (updates: Partial<InternalTaskItem>) => void
+}) {
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const src = blobSrc(item.imagePathname ?? null)
+
+  async function upload(file: File) {
+    setUploading(true)
+    setError(null)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/internal-tasks/template-image/upload', {
+        method: 'POST',
+        body: fd,
+      })
+      if (!res.ok) throw new Error('upload failed')
+      const data = (await res.json()) as { pathname: string; name: string }
+      onChange({ imagePathname: data.pathname, imageName: data.name })
+    } catch {
+      setError('Image upload failed — please try again.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="mt-2">
+      {src ? (
+        <div className="flex items-start gap-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={src || '/placeholder.svg'}
+            alt={item.imageName ?? 'Reference image'}
+            className="h-16 w-16 rounded-md border object-cover"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => onChange({ imagePathname: null, imageName: null })}
+          >
+            <X className="size-3.5" />
+            Remove image
+          </Button>
+        </div>
+      ) : (
+        <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+          {uploading ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <ImageIcon className="size-3.5" />
+          )}
+          Add reference image
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            disabled={uploading}
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) upload(f)
+              e.target.value = ''
+            }}
+          />
+        </label>
+      )}
+      {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
     </div>
   )
 }

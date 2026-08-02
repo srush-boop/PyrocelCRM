@@ -28,6 +28,9 @@ const ROUTE_POLICIES: Record<'blob' | 'file', PrefixRule[]> = {
     { prefix: 'chat/', staffOnly: true },
     // Supporting documents attached to inbound requests (admin/office inbox).
     { prefix: 'requests/', staffOnly: true },
+    // Author-uploaded reference images on internal task / form templates. Shown
+    // to every user filling the form (incl. subcontractors), so not staff-only.
+    { prefix: 'internal-task-templates/', staffOnly: false },
   ],
   // /api/file — internal sales/product assets.
   file: [

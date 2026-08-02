@@ -854,7 +854,12 @@ export type InternalTaskApprovalStatus = 'pending' | 'approved' | 'rejected'
 export interface InternalTaskTableColumn {
   id: string
   label: string
-  type: 'text' | 'number' | 'date'
+  // `image` cells let the user upload a photo per row (stored as an internal
+  // task attachment id in the cell value). Other types are plain text inputs.
+  type: 'text' | 'number' | 'date' | 'image'
+  // Number columns only: when true, the table shows a totals row summing this
+  // column across every filled row.
+  total?: boolean
 }
 
 // A form block on an internal task. This is a SUPERSET of ChecklistItem: it
@@ -889,6 +894,11 @@ export interface InternalTaskItem {
   url?: string
   // table: the column definitions the user fills row-by-row at completion.
   columns?: InternalTaskTableColumn[]
+  // Optional author-uploaded reference image shown to the user beneath this
+  // block/question (private Blob pathname + display name). Applies to every
+  // block type. Served via blobSrc() through /api/blob.
+  imagePathname?: string | null
+  imageName?: string | null
 }
 
 // One filled row of a table block: maps a column id to its cell text.
@@ -1676,7 +1686,7 @@ export interface Task {
   follow_up_to?: Task | null
   }
 
-  // ── Follow-up calls ────────────────────────────────────────────────────────
+  // ── Follow-up calls ────────────────��───────────────────────────────────────
   export type FollowUpStatus = 'pending' | 'approved' | 'rejected' | 'cancelled'
   export type FollowUpPartAction = 'none' | 'reserve' | 'order'
   export type FollowUpReservationStatus = 'pending' | 'confirmed'

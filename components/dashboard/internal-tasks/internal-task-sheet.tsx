@@ -25,6 +25,7 @@ import {
   AlertCircle,
   FileText,
   ExternalLink,
+  ImageIcon,
   Plus,
   Trash2,
 } from 'lucide-react'
@@ -36,6 +37,7 @@ import type {
   ChecklistCondition,
 } from '@/lib/types/database'
 import { submitInternalTask, decideApproval } from '@/lib/actions/internal-tasks'
+import { blobSrc } from '@/lib/blob'
 
 interface Props {
   instance: InternalTaskInstance
@@ -56,6 +58,9 @@ type RowPhoto = { id: string; name: string; url: string }
 type Row = InternalTaskAnswer & {
   photos?: RowPhoto[]
   columns?: InternalTaskItem['columns']
+  // Author reference image copied from the template item (top-level only).
+  imagePathname?: string | null
+  imageName?: string | null
 }
 
 // Question block types the user actually answers (produce a Row + can block
@@ -90,6 +95,8 @@ function buildRows(questions: InternalTaskItem[], saved: InternalTaskAnswer[]): 
       photos: (prev as Row | undefined)?.photos ?? [],
       conditions: q.conditions,
       columns: q.columns,
+      imagePathname: q.imagePathname ?? null,
+      imageName: q.imageName ?? null,
     })
     for (const cond of q.conditions ?? []) {
       for (const child of cond.items ?? []) {
@@ -166,6 +173,8 @@ export function InternalTaskSheet({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [photoUploadingId, setPhotoUploadingId] = useState<string | null>(null)
+  // Key = `${item_id}:${rowIdx}:${colId}` for the table image cell being uploaded.
+  const [cellUploading, setCellUploading] = useState<string | null>(null)
   // Approval-decision state (review mode).
   const [decisionNote, setDecisionNote] = useState('')
   const [deciding, setDeciding] = useState<'approved' | 'rejected' | null>(null)
@@ -202,6 +211,39 @@ export function InternalTaskSheet({
   const removeTableRow = (row: Row, idx: number) => {
     update(row.item_id, { value: tableRows(row).filter((_, i) => i !== idx) })
   }
+  // Uploads an image for an `image`-type table cell. The cell value stores the
+  // returned internal-task attachment id; it is rendered via the file proxy.
+  const uploadTableImage = async (
+    row: Row,
+    idx: number,
+    colId: string,
+    file: File,
+  ) => {
+    const key = `${row.item_id}:${idx}:${colId}`
+    setCellUploading(key)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('instance_id', instance.id)
+      const res = await fetch('/api/internal-tasks/attachments/upload', {
+        method: 'POST',
+        body: fd,
+      })
+      if (!res.ok) throw new Error('upload failed')
+      const { attachment } = await res.json()
+      updateTableCell(row, idx, colId, attachment.id as string)
+    } catch {
+      setError('Image upload failed — please try again.')
+    } finally {
+      setCellUploading(null)
+    }
+  }
+  // Sum of a number column across a table's filled rows.
+  const columnTotal = (row: Row, colId: string): number =>
+    tableRows(row).reduce((sum, r) => {
+      const n = Number(r[colId])
+      return sum + (Number.isFinite(n) ? n : 0)
+    }, 0)
 
   // A follow-up row is only visible when its owning condition is active.
   const isRowVisible = (row: Row): boolean => {
@@ -356,39 +398,57 @@ export function InternalTaskSheet({
                       {q.description}
                     </p>
                   )}
+                  {q.imagePathname ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={blobSrc(q.imagePathname) || '/placeholder.svg'}
+                      alt={q.imageName ?? 'Reference image'}
+                      className="mt-2 max-h-48 w-full rounded-md border object-contain"
+                    />
+                  ) : null}
                   <div className="mt-2 border-b" />
                 </div>
               )
             }
             if (q.type === 'doc_link') {
-              return q.documentId ? (
-                <a
-                  key={q.id}
-                  href={`/api/documents/file?id=${q.documentId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm text-primary hover:bg-muted/60"
-                >
-                  <FileText className="h-4 w-4 shrink-0" />
-                  <span className="text-pretty">
-                    {q.label || q.documentName || 'View document'}
-                  </span>
-                </a>
-              ) : null
+              if (!q.documentId && !q.imagePathname) return null
+              return (
+                <div key={q.id} className="space-y-2">
+                  {q.documentId ? (
+                    <a
+                      href={`/api/documents/file?id=${q.documentId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm text-primary hover:bg-muted/60"
+                    >
+                      <FileText className="h-4 w-4 shrink-0" />
+                      <span className="text-pretty">
+                        {q.label || q.documentName || 'View document'}
+                      </span>
+                    </a>
+                  ) : null}
+                  <BlockImage pathname={q.imagePathname} name={q.imageName} />
+                </div>
+              )
             }
             if (q.type === 'url_link') {
-              return q.url ? (
-                <a
-                  key={q.id}
-                  href={q.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm text-primary hover:bg-muted/60"
-                >
-                  <ExternalLink className="h-4 w-4 shrink-0" />
-                  <span className="text-pretty">{q.label || q.url}</span>
-                </a>
-              ) : null
+              if (!q.url && !q.imagePathname) return null
+              return (
+                <div key={q.id} className="space-y-2">
+                  {q.url ? (
+                    <a
+                      href={q.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm text-primary hover:bg-muted/60"
+                    >
+                      <ExternalLink className="h-4 w-4 shrink-0" />
+                      <span className="text-pretty">{q.label || q.url}</span>
+                    </a>
+                  ) : null}
+                  <BlockImage pathname={q.imagePathname} name={q.imageName} />
+                </div>
+              )
             }
             // Answerable question: render its row (plus any visible follow-ups).
             const own = rows.filter(
@@ -448,6 +508,15 @@ export function InternalTaskSheet({
                     </button>
                   )}
                 </div>
+
+                {!isFollowUp && row.imagePathname ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={blobSrc(row.imagePathname) || '/placeholder.svg'}
+                    alt={row.imageName ?? 'Reference image'}
+                    className="mt-2 max-h-48 w-full rounded-md border object-contain"
+                  />
+                ) : null}
 
                 {!row.na && (
                   <div className="mt-2 space-y-2">
@@ -548,21 +617,37 @@ export function InternalTaskSheet({
                                 <tr key={idx} className="border-b last:border-0">
                                   {(row.columns ?? []).map((c) => (
                                     <td key={c.id} className="px-1 py-1">
-                                      <Input
-                                        type={
-                                          c.type === 'number'
-                                            ? 'number'
-                                            : c.type === 'date'
-                                              ? 'date'
-                                              : 'text'
-                                        }
-                                        value={r[c.id] ?? ''}
-                                        disabled={readOnly}
-                                        onChange={(e) =>
-                                          updateTableCell(row, idx, c.id, e.target.value)
-                                        }
-                                        className="h-8"
-                                      />
+                                      {c.type === 'image' ? (
+                                        <TableImageCell
+                                          value={r[c.id] ?? ''}
+                                          readOnly={readOnly}
+                                          uploading={
+                                            cellUploading === `${row.item_id}:${idx}:${c.id}`
+                                          }
+                                          onUpload={(file) =>
+                                            uploadTableImage(row, idx, c.id, file)
+                                          }
+                                          onClear={() =>
+                                            updateTableCell(row, idx, c.id, '')
+                                          }
+                                        />
+                                      ) : (
+                                        <Input
+                                          type={
+                                            c.type === 'number'
+                                              ? 'number'
+                                              : c.type === 'date'
+                                                ? 'date'
+                                                : 'text'
+                                          }
+                                          value={r[c.id] ?? ''}
+                                          disabled={readOnly}
+                                          onChange={(e) =>
+                                            updateTableCell(row, idx, c.id, e.target.value)
+                                          }
+                                          className="h-8"
+                                        />
+                                      )}
                                     </td>
                                   ))}
                                   {!readOnly && (
@@ -581,6 +666,26 @@ export function InternalTaskSheet({
                               ))
                             )}
                           </tbody>
+                          {(row.columns ?? []).some(
+                            (c) => c.type === 'number' && c.total,
+                          ) && (
+                            <tfoot>
+                              <tr className="border-t-2 font-medium">
+                                {(row.columns ?? []).map((c, ci) => (
+                                  <td key={c.id} className="px-2 py-1.5">
+                                    {ci === 0
+                                      ? 'Total'
+                                      : c.type === 'number' && c.total
+                                        ? columnTotal(row, c.id).toLocaleString(undefined, {
+                                            maximumFractionDigits: 2,
+                                          })
+                                        : ''}
+                                  </td>
+                                ))}
+                                {!readOnly && <td />}
+                              </tr>
+                            </tfoot>
+                          )}
                         </table>
                         {!readOnly && (
                           <Button
@@ -825,6 +930,89 @@ function RowExtras({
       rows={2}
       className="text-sm"
     />
+  )
+}
+
+// Author reference image attached to a display-only block (section/doc/url).
+function BlockImage({
+  pathname,
+  name,
+}: {
+  pathname?: string | null
+  name?: string | null
+}) {
+  if (!pathname) return null
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={blobSrc(pathname) || '/placeholder.svg'}
+      alt={name ?? 'Reference image'}
+      className="max-h-48 w-full rounded-md border object-contain"
+    />
+  )
+}
+
+// A single image cell in a fillable table. Stores the uploaded attachment id as
+// the cell value and renders a thumbnail via the attachment file proxy.
+function TableImageCell({
+  value,
+  readOnly,
+  uploading,
+  onUpload,
+  onClear,
+}: {
+  value: string
+  readOnly: boolean
+  uploading: boolean
+  onUpload: (file: File) => void
+  onClear: () => void
+}) {
+  const url = value ? `/api/internal-tasks/attachments/file?id=${value}` : null
+  if (url) {
+    return (
+      <div className="relative w-fit">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={url || '/placeholder.svg'}
+          alt="Uploaded"
+          className="h-12 w-12 rounded-md border object-cover"
+        />
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={onClear}
+            aria-label="Remove image"
+            className="absolute -right-1.5 -top-1.5 rounded-full bg-destructive p-0.5 text-destructive-foreground"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+    )
+  }
+  if (readOnly) {
+    return <span className="text-xs text-muted-foreground">&mdash;</span>
+  }
+  return (
+    <label className="inline-flex h-12 w-12 cursor-pointer items-center justify-center rounded-md border border-dashed text-muted-foreground hover:bg-muted">
+      {uploading ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        <ImageIcon className="h-4 w-4" />
+      )}
+      <input
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        disabled={uploading}
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          if (f) onUpload(f)
+          e.target.value = ''
+        }}
+      />
+    </label>
   )
 }
 

@@ -13,7 +13,8 @@ interface Props {
   instances: InternalTaskInstance[]
 }
 
-function formatDue(due: string): { label: string; tone: 'overdue' | 'soon' | 'ok' } {
+function formatDue(due: string | null): { label: string; tone: 'overdue' | 'soon' | 'ok' } {
+  if (!due) return { label: 'No deadline', tone: 'ok' }
   const now = Date.now()
   const dueMs = new Date(due).getTime()
   const diffMs = dueMs - now
@@ -37,13 +38,13 @@ export function MyTasksList({ instances }: Props) {
   const { outstanding, completed } = useMemo(() => {
     const outstanding = instances
       .filter((i) => i.status !== 'completed')
-      .sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime())
+      .sort((a, b) => new Date(a.due_at ?? 0).getTime() - new Date(b.due_at ?? 0).getTime())
     const completed = instances
       .filter((i) => i.status === 'completed')
       .sort(
         (a, b) =>
-          new Date(b.completed_at ?? b.due_at).getTime() -
-          new Date(a.completed_at ?? a.due_at).getTime(),
+          new Date(b.completed_at ?? b.due_at ?? 0).getTime() -
+          new Date(a.completed_at ?? a.due_at ?? 0).getTime(),
       )
     return { outstanding, completed }
   }, [instances])

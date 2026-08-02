@@ -843,6 +843,13 @@ export type InternalTaskFrequency =
 
 export type InternalTaskStatus = 'pending' | 'completed' | 'overdue'
 
+// Recurring internal tasks are scheduled + assigned by the cron. On-demand forms
+// (e.g. uniform request, expense claim) are launched by any user at will.
+export type InternalTaskKind = 'recurring' | 'on_demand'
+
+// Approval state for a submitted instance. Null = the template needs no approval.
+export type InternalTaskApprovalStatus = 'pending' | 'approved' | 'rejected'
+
 // A user-defined column of a fillable table block on an internal task form.
 export interface InternalTaskTableColumn {
   id: string
@@ -907,6 +914,15 @@ export interface InternalTaskTemplate {
   category: string | null
   active: boolean
   sort_order: number
+  // 'recurring' = scheduled by the cron and assigned via targeting below.
+  // 'on_demand' = a form any user can launch/submit at will (targeting ignored).
+  task_kind: InternalTaskKind
+  // Approval workflow (used by on-demand forms; ignored when false).
+  requires_approval: boolean
+  // Route the approval to the submitter's line manager (profiles.manager_id).
+  approval_manager: boolean
+  // Additional nominated approver profile ids.
+  approval_user_ids: string[]
   // Recurrence
   frequency: InternalTaskFrequency
   week_ending_dow: number // 0=Sun..6=Sat, weekly period end
@@ -935,23 +951,32 @@ export interface InternalTaskTemplate {
   updated_at: string
 }
 
-// One occurrence of a template for one user, for one period.
+// One occurrence of a template. For recurring tasks this is one user × one
+// period; for on-demand forms it is a single submission (period_* / due_at null).
 export interface InternalTaskInstance {
   id: string
   template_id: string
   user_id: string
-  period_start: string
-  period_end: string
-  due_at: string
+  period_start: string | null
+  period_end: string | null
+  due_at: string | null
   status: InternalTaskStatus
   completed_at: string | null
   reference_number: string | null
   answers: InternalTaskAnswer[]
+  // Approval workflow. approval_status is null when the template needs none.
+  approval_status: InternalTaskApprovalStatus | null
+  // Snapshot of who can approve this submission, resolved at submit time.
+  approver_ids: string[]
+  approved_by: string | null
+  approved_at: string | null
+  approval_note: string | null
   created_at: string
   updated_at: string
   // Optional embeds
   template?: InternalTaskTemplate
   user?: Profile
+  approver?: Profile | null
 }
 
 export interface InternalTaskAttachment {

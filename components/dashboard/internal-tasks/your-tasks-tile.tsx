@@ -13,10 +13,10 @@ export async function YourTasksTile() {
   const instances = result.instances ?? []
 
   const now = Date.now()
-  const overdue = instances.filter((i) => new Date(i.due_at).getTime() < now)
+  const overdue = instances.filter((i) => new Date(i.due_at ?? 0).getTime() < now)
   const soonest = instances
     .slice()
-    .sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime())[0]
+    .sort((a, b) => new Date(a.due_at ?? 0).getTime() - new Date(b.due_at ?? 0).getTime())[0]
 
   const hasOverdue = overdue.length > 0
   const count = instances.length
@@ -48,7 +48,7 @@ export async function YourTasksTile() {
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold leading-tight">Your Tasks</p>
+              <p className="text-sm font-semibold leading-tight">Tasks &amp; Forms</p>
               {count > 0 ? (
                 <Badge
                   variant={hasOverdue ? 'destructive' : 'secondary'}
@@ -64,7 +64,7 @@ export async function YourTasksTile() {
                 : hasOverdue
                   ? `${overdue.length} overdue · ${soonest?.template?.name ?? ''}`
                   : `Next: ${soonest?.template?.name ?? ''} due ${
-                      soonest
+                      soonest?.due_at
                         ? new Date(soonest.due_at).toLocaleDateString('en-GB', {
                             weekday: 'short',
                             day: 'numeric',

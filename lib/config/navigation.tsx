@@ -95,7 +95,7 @@ const sitesNavItem: NavItem = {
 // sub-contractors, so it is locked (can never be permission-toggled off).
 const myTasksNavItem: NavItem = {
   key: 'my-tasks',
-  title: 'Your Tasks',
+  title: 'Tasks & Forms',
   href: '/dashboard/my-tasks',
   icon: ClipboardCheck,
   locked: true,

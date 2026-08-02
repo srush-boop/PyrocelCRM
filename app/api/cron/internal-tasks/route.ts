@@ -39,6 +39,7 @@ export async function GET(req: Request) {
     .from('internal_task_templates')
     .select('*')
     .eq('active', true)
+    .eq('task_kind', 'recurring')
   if (error) {
     console.log('[v0] internal-tasks cron template query failed:', error.message)
     return NextResponse.json({ error: error.message }, { status: 500 })

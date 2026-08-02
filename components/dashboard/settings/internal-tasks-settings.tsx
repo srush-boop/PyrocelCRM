@@ -117,6 +117,10 @@ function blankTemplate(): InternalTaskTemplate {
     category: null,
     active: true,
     sort_order: 0,
+    task_kind: 'recurring',
+    requires_approval: false,
+    approval_manager: false,
+    approval_user_ids: [],
     frequency: 'weekly',
     week_ending_dow: 0,
     anchor_month: null,
@@ -167,22 +171,24 @@ export function InternalTasksSettings({
         <div>
           <CardTitle className="flex items-center gap-2">
             <ClipboardCheck className="size-5" />
-            Internal Tasks
+            Internal Tasks &amp; Forms
           </CardTitle>
           <CardDescription>
-            Recurring internal quality/management tasks (toolbox talks, vehicle
-            checks, nominations) with conditional questions, photos and reminders.
+            Recurring internal tasks (toolbox talks, vehicle checks, nominations)
+            and on-demand forms anyone can submit (uniform requests, expense
+            claims) &mdash; with conditional questions, photos and optional approval.
           </CardDescription>
         </div>
         <Button onClick={startCreate}>
           <Plus className="size-4" />
-          New task
+          New task or form
         </Button>
       </CardHeader>
       <CardContent>
         {templates.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            No internal tasks yet. Create one to start assigning recurring work.
+            No tasks or forms yet. Create a recurring task or an on-demand form to
+            get started.
           </p>
         ) : (
           <div className="flex flex-col divide-y rounded-lg border">
@@ -191,22 +197,31 @@ export function InternalTasksSettings({
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="truncate font-medium">{t.name}</p>
-                    <Badge variant="secondary">{FREQUENCY_LABELS[t.frequency]}</Badge>
+                    {t.task_kind === 'on_demand' ? (
+                      <Badge>Form</Badge>
+                    ) : (
+                      <Badge variant="secondary">{FREQUENCY_LABELS[t.frequency]}</Badge>
+                    )}
+                    {t.requires_approval ? (
+                      <Badge variant="outline">Approval</Badge>
+                    ) : null}
                     {t.category ? <Badge variant="outline">{t.category}</Badge> : null}
                     {!t.active ? <Badge variant="outline">Inactive</Badge> : null}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {t.applies_to_all
-                      ? 'All users'
-                      : [
-                          t.role_names.length ? `${t.role_names.length} role(s)` : null,
-                          t.department_ids.length
-                            ? `${t.department_ids.length} dept(s)`
-                            : null,
-                          t.user_ids.length ? `${t.user_ids.length} user(s)` : null,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ') || 'No assignees'}
+                    {t.task_kind === 'on_demand'
+                      ? 'Anyone can submit'
+                      : t.applies_to_all
+                        ? 'All users'
+                        : [
+                            t.role_names.length ? `${t.role_names.length} role(s)` : null,
+                            t.department_ids.length
+                              ? `${t.department_ids.length} dept(s)`
+                              : null,
+                            t.user_ids.length ? `${t.user_ids.length} user(s)` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ') || 'No assignees'}
                     {t.questions.length ? ` · ${t.questions.length} question(s)` : ''}
                     {t.requires_reference ? ' · reference required' : ''}
                   </p>
@@ -512,13 +527,53 @@ function TemplateEditorDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{draft.id ? 'Edit' : 'New'} internal task</DialogTitle>
+          <DialogTitle>
+            {draft.id ? 'Edit' : 'New'}{' '}
+            {draft.task_kind === 'on_demand' ? 'form' : 'internal task'}
+          </DialogTitle>
           <DialogDescription>
-            Configure the recurring task, its questions and who it applies to.
+            {draft.task_kind === 'on_demand'
+              ? 'Configure the form, its questions and any approval workflow.'
+              : 'Configure the recurring task, its questions and who it applies to.'}
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-5">
+          {/* Type */}
+          <div className="rounded-lg border p-4">
+            <Label className="mb-2 block">Type</Label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => patch({ task_kind: 'recurring' })}
+                className={`rounded-md border p-3 text-left text-sm transition-colors ${
+                  draft.task_kind === 'recurring'
+                    ? 'border-primary bg-primary/5'
+                    : 'hover:bg-muted/50'
+                }`}
+              >
+                <span className="font-medium">Recurring task</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  Scheduled &amp; assigned automatically (toolbox talk, vehicle check).
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => patch({ task_kind: 'on_demand' })}
+                className={`rounded-md border p-3 text-left text-sm transition-colors ${
+                  draft.task_kind === 'on_demand'
+                    ? 'border-primary bg-primary/5'
+                    : 'hover:bg-muted/50'
+                }`}
+              >
+                <span className="font-medium">On-demand form</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  Anyone can submit anytime (uniform request, expense claim).
+                </span>
+              </button>
+            </div>
+          </div>
+
           {/* Basics */}
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="sm:col-span-2">
@@ -561,7 +616,8 @@ function TemplateEditorDialog({
             </div>
           </div>
 
-          {/* Recurrence */}
+          {/* Recurrence (recurring tasks only) */}
+          {draft.task_kind === 'recurring' ? (
           <div className="rounded-lg border p-4">
             <h3 className="mb-3 text-sm font-medium">Recurrence &amp; deadline</h3>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -658,6 +714,58 @@ function TemplateEditorDialog({
                 <Label htmlFor="it-warn">Warn when overdue</Label>
               </div>
             </div>
+          </div>
+          ) : null}
+
+          {/* Approval workflow */}
+          <div className="rounded-lg border p-4">
+            <div className="flex items-center gap-2">
+              <Switch
+                id="it-approval"
+                checked={draft.requires_approval}
+                onCheckedChange={(v) => patch({ requires_approval: v })}
+              />
+              <Label htmlFor="it-approval">Require approval after submission</Label>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              The submitter completes the form, then a nominated approver must
+              approve or reject it (e.g. an expense claim or uniform request).
+            </p>
+            {draft.requires_approval ? (
+              <div className="mt-3 space-y-3">
+                <label className="flex items-center gap-2 text-sm">
+                  <Switch
+                    checked={draft.approval_manager}
+                    onCheckedChange={(v) => patch({ approval_manager: v })}
+                  />
+                  <span>Route to the submitter&apos;s line manager</span>
+                </label>
+                <div>
+                  <p className="mb-2 text-xs font-medium text-muted-foreground">
+                    Additional approvers
+                  </p>
+                  <div className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-md border p-2">
+                    {users.map((u) => (
+                      <label key={u.id} className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={draft.approval_user_ids.includes(u.id)}
+                          onCheckedChange={() =>
+                            patch({
+                              approval_user_ids: toggleArray(draft.approval_user_ids, u.id),
+                            })
+                          }
+                        />
+                        {u.full_name ?? 'Unnamed'}
+                      </label>
+                    ))}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Any one approver can decide. Admin/office can always approve as a
+                    fallback.
+                  </p>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {/* Reference */}
@@ -956,7 +1064,8 @@ function TemplateEditorDialog({
             )}
           </div>
 
-          {/* Applies to */}
+          {/* Applies to (recurring tasks only; on-demand forms are open to all) */}
+          {draft.task_kind === 'recurring' ? (
           <div className="rounded-lg border p-4">
             <h3 className="mb-3 text-sm font-medium">Applies to</h3>
             <label className="mb-3 flex items-center gap-2">
@@ -1025,6 +1134,7 @@ function TemplateEditorDialog({
               </div>
             ) : null}
           </div>
+          ) : null}
 
           {/* Notify on issue */}
           <div className="rounded-lg border p-4">
@@ -1087,7 +1197,7 @@ function TemplateEditorDialog({
           </Button>
           <Button onClick={handleSave} disabled={saving}>
             {saving ? <Loader2 className="size-4 animate-spin" /> : null}
-            Save task
+            {draft.task_kind === 'on_demand' ? 'Save form' : 'Save task'}
           </Button>
         </DialogFooter>
       </DialogContent>

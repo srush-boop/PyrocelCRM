@@ -1,14 +1,21 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { getMyTasks } from '@/lib/actions/internal-tasks'
-import { MyTasksList } from '@/components/dashboard/internal-tasks/my-tasks-list'
+import {
+  getMyTasks,
+  getOnDemandForms,
+  getMyFormSubmissions,
+  getPendingApprovals,
+} from '@/lib/actions/internal-tasks'
+import { TasksAndForms } from '@/components/dashboard/internal-tasks/tasks-and-forms'
 
 export const metadata = {
-  title: 'Your Tasks',
+  title: 'Tasks & Forms',
 }
 
-// Every signed-in user has a "Your Tasks" page listing their recurring internal
-// quality/management tasks (toolbox talks, vehicle checks, nominations, etc.).
+// Every signed-in user has a "Tasks & Forms" page: their recurring internal
+// tasks (toolbox talks, vehicle checks), on-demand forms anyone can submit
+// (uniform requests, expense claims), their own submissions, and — for
+// approvers — an inbox of submissions awaiting a decision.
 export default async function MyTasksPage() {
   const supabase = await createClient()
   const {
@@ -16,22 +23,33 @@ export default async function MyTasksPage() {
   } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  const result = await getMyTasks()
+  const [tasksRes, formsRes, submissionsRes, approvalsRes] = await Promise.all([
+    getMyTasks(),
+    getOnDemandForms(),
+    getMyFormSubmissions(),
+    getPendingApprovals(),
+  ])
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Your Tasks</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Tasks &amp; Forms</h1>
         <p className="text-muted-foreground">
-          Recurring internal tasks assigned to you — complete each before its deadline.
+          Complete the tasks assigned to you, submit forms, and review anything
+          awaiting your approval.
         </p>
       </div>
 
-      {result.ok ? (
-        <MyTasksList instances={result.instances ?? []} />
+      {tasksRes.ok ? (
+        <TasksAndForms
+          tasks={tasksRes.instances ?? []}
+          forms={formsRes.forms ?? []}
+          submissions={submissionsRes.instances ?? []}
+          approvals={approvalsRes.instances ?? []}
+        />
       ) : (
         <p className="text-sm text-destructive">
-          Could not load your tasks: {result.error}
+          Could not load your tasks: {tasksRes.error}
         </p>
       )}
     </div>

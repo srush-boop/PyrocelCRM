@@ -35,12 +35,17 @@ import type {
   InternalTaskTableRow,
   ChecklistCondition,
 } from '@/lib/types/database'
-import { submitInternalTask } from '@/lib/actions/internal-tasks'
+import { submitInternalTask, decideApproval } from '@/lib/actions/internal-tasks'
 
 interface Props {
   instance: InternalTaskInstance
   open: boolean
   onOpenChange: (open: boolean) => void
+  // Approver review mode: renders the submitted answers read-only with
+  // approve/reject controls instead of the completion form.
+  reviewMode?: boolean
+  // Name of the submitter, shown in review mode.
+  submitterName?: string | null
 }
 
 type RowPhoto = { id: string; name: string; url: string }
@@ -144,17 +149,39 @@ function isConditionActive(row: Row, cond: ChecklistCondition): boolean {
   }
 }
 
-export function InternalTaskSheet({ instance, open, onOpenChange }: Props) {
+export function InternalTaskSheet({
+  instance,
+  open,
+  onOpenChange,
+  reviewMode = false,
+  submitterName = null,
+}: Props) {
   const router = useRouter()
   const template = instance.template
   const questions = useMemo<InternalTaskItem[]>(() => template?.questions ?? [], [template])
-  const readOnly = instance.status === 'completed'
+  const readOnly = instance.status === 'completed' || reviewMode
 
   const [rows, setRows] = useState<Row[]>(() => buildRows(questions, instance.answers ?? []))
   const [reference, setReference] = useState(instance.reference_number ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [photoUploadingId, setPhotoUploadingId] = useState<string | null>(null)
+  // Approval-decision state (review mode).
+  const [decisionNote, setDecisionNote] = useState('')
+  const [deciding, setDeciding] = useState<'approved' | 'rejected' | null>(null)
+
+  const handleDecision = async (decision: 'approved' | 'rejected') => {
+    setError(null)
+    setDeciding(decision)
+    const result = await decideApproval({ instanceId: instance.id, decision, note: decisionNote })
+    setDeciding(null)
+    if (!result.ok) {
+      setError(result.error || 'Could not record decision.')
+      return
+    }
+    onOpenChange(false)
+    router.refresh()
+  }
 
   const update = (itemId: string, patch: Partial<Row>) => {
     setRows((rs) => rs.map((r) => (r.item_id === itemId ? { ...r, ...patch } : r)))
@@ -667,11 +694,66 @@ export function InternalTaskSheet({ instance, open, onOpenChange }: Props) {
           </Alert>
         )}
 
-        {readOnly ? (
-          <Badge className="mt-5 bg-green-600 text-white hover:bg-green-600/90">
-            <Check className="mr-1 h-3.5 w-3.5" />
-            Completed
-          </Badge>
+        {reviewMode && instance.approval_status === 'pending' ? (
+          <div className="sticky bottom-0 -mx-6 mt-5 space-y-3 border-t bg-background px-6 py-4">
+            <p className="text-sm text-muted-foreground">
+              Submitted by{' '}
+              <span className="font-medium text-foreground">
+                {submitterName ?? 'a team member'}
+              </span>
+              . Approve or reject this submission.
+            </p>
+            <Textarea
+              value={decisionNote}
+              onChange={(e) => setDecisionNote(e.target.value)}
+              placeholder="Add a note (optional)"
+              rows={2}
+            />
+            <div className="flex gap-2">
+              <Button
+                onClick={() => handleDecision('approved')}
+                disabled={deciding !== null}
+                className="flex-1 bg-green-600 text-white hover:bg-green-600/90"
+              >
+                {deciding === 'approved' ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Check className="mr-2 h-4 w-4" />
+                )}
+                Approve
+              </Button>
+              <Button
+                onClick={() => handleDecision('rejected')}
+                disabled={deciding !== null}
+                variant="destructive"
+                className="flex-1"
+              >
+                {deciding === 'rejected' ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <X className="mr-2 h-4 w-4" />
+                )}
+                Reject
+              </Button>
+            </div>
+          </div>
+        ) : readOnly ? (
+          <div className="mt-5 space-y-2">
+            <Badge className="bg-green-600 text-white hover:bg-green-600/90">
+              <Check className="mr-1 h-3.5 w-3.5" />
+              {instance.template?.task_kind === 'on_demand' ? 'Submitted' : 'Completed'}
+            </Badge>
+            {instance.approval_status ? (
+              <div>
+                <ApprovalStatusBadge status={instance.approval_status} />
+                {instance.approval_note ? (
+                  <p className="mt-1.5 text-sm text-muted-foreground text-pretty">
+                    &ldquo;{instance.approval_note}&rdquo;
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         ) : (
           <div className="sticky bottom-0 -mx-6 mt-5 border-t bg-background px-6 py-4">
             {blockers.length > 0 && (
@@ -687,7 +769,11 @@ export function InternalTaskSheet({ instance, open, onOpenChange }: Props) {
                   Submitting…
                 </>
               ) : (
-                'Complete task'
+                template?.task_kind === 'on_demand'
+                  ? template?.requires_approval
+                    ? 'Submit for approval'
+                    : 'Submit form'
+                  : 'Complete task'
               )}
             </Button>
           </div>
@@ -695,6 +781,32 @@ export function InternalTaskSheet({ instance, open, onOpenChange }: Props) {
       </>
     )
   }
+}
+
+// Small coloured badge for a submission's approval outcome.
+function ApprovalStatusBadge({ status }: { status: 'pending' | 'approved' | 'rejected' }) {
+  if (status === 'approved') {
+    return (
+      <Badge className="bg-green-600 text-white hover:bg-green-600/90">
+        <Check className="mr-1 h-3.5 w-3.5" />
+        Approved
+      </Badge>
+    )
+  }
+  if (status === 'rejected') {
+    return (
+      <Badge variant="destructive">
+        <X className="mr-1 h-3.5 w-3.5" />
+        Rejected
+      </Badge>
+    )
+  }
+  return (
+    <Badge variant="outline" className="border-amber-500 text-amber-600">
+      <AlertCircle className="mr-1 h-3.5 w-3.5" />
+      Awaiting approval
+    </Badge>
+  )
 }
 
 // Optional note field, always available on top-level rows.

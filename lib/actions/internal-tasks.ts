@@ -59,6 +59,7 @@ export async function ensureMyInstances(): Promise<{ ok: boolean; error?: string
     .from('internal_task_templates')
     .select('*')
     .eq('active', true)
+    .eq('task_kind', 'recurring')
 
   const me = {
     id: profile.id,
@@ -129,7 +130,12 @@ export async function getMyTasks(): Promise<{
     .order('due_at', { ascending: true })
 
   if (error) return { ok: false, error: error.message }
-  return { ok: true, instances: (data ?? []) as InternalTaskInstance[] }
+  // Only scheduled recurring tasks belong in the task list; on-demand form
+  // submissions are surfaced separately (getMyFormSubmissions).
+  const instances = ((data ?? []) as InternalTaskInstance[]).filter(
+    (i) => i.template?.task_kind !== 'on_demand',
+  )
+  return { ok: true, instances }
 }
 
 /**
@@ -156,7 +162,10 @@ export async function getOutstandingTasks(): Promise<{
     .order('due_at', { ascending: true })
 
   if (error) return { ok: false, error: error.message }
-  return { ok: true, instances: (data ?? []) as InternalTaskInstance[] }
+  const instances = ((data ?? []) as InternalTaskInstance[]).filter(
+    (i) => i.template?.task_kind !== 'on_demand',
+  )
+  return { ok: true, instances }
 }
 
 // --- Completion -------------------------------------------------------------
@@ -178,7 +187,7 @@ export async function submitInternalTask(input: {
   const { data: instance } = await supabase
     .from('internal_task_instances')
     .select(
-      'id, user_id, template:internal_task_templates(id, name, questions, requires_reference, notify_on_issue_user_ids, notify_on_issue_email)',
+      'id, user_id, template:internal_task_templates(id, name, questions, requires_reference, notify_on_issue_user_ids, notify_on_issue_email, requires_approval, approval_manager, approval_user_ids)',
     )
     .eq('id', input.instanceId)
     .single()
@@ -196,10 +205,23 @@ export async function submitInternalTask(input: {
     requires_reference?: boolean
     notify_on_issue_user_ids?: string[] | null
     notify_on_issue_email?: string | null
+    requires_approval?: boolean
+    approval_manager?: boolean
+    approval_user_ids?: string[] | null
   } | null
 
   if (template?.requires_reference && !input.referenceNumber?.trim()) {
     return { ok: false, error: 'A reference number is required to complete this task.' }
+  }
+
+  // Resolve approvers (line manager + nominated users) when approval is required.
+  let approverIds: string[] = []
+  const needsApproval = !!template?.requires_approval
+  if (needsApproval) {
+    approverIds = await resolveApproverIds(supabase, userId, {
+      approval_manager: !!template?.approval_manager,
+      approval_user_ids: template?.approval_user_ids ?? [],
+    })
   }
 
   const { error } = await supabase
@@ -209,12 +231,39 @@ export async function submitInternalTask(input: {
       reference_number: input.referenceNumber?.trim() || null,
       status: 'completed',
       completed_at: new Date().toISOString(),
+      approval_status: needsApproval ? 'pending' : null,
+      approver_ids: approverIds,
       updated_at: new Date().toISOString(),
     })
     .eq('id', input.instanceId)
     .eq('user_id', userId)
 
   if (error) return { ok: false, error: error.message }
+
+  // Notify approvers that a submission awaits their decision. Best-effort.
+  if (needsApproval && approverIds.length > 0) {
+    try {
+      const { data: submitter } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', userId)
+        .single()
+      const submitterName =
+        (submitter as { full_name?: string } | null)?.full_name ?? 'A team member'
+      const { notifyUsers } = await import('@/lib/notifications')
+      await notifyUsers({
+        userIds: approverIds,
+        title: `Approval needed: ${template?.name ?? 'Form'}`,
+        body: `${submitterName} submitted "${template?.name ?? 'a form'}" for your approval.`,
+        url: MY_TASKS_PATH,
+        category: 'internal_task_approval',
+        createdBy: userId,
+        data: { template_name: template?.name ?? '', instanceId: input.instanceId },
+      })
+    } catch (err) {
+      console.log('[v0] internal-task approval notify failed:', (err as Error).message)
+    }
+  }
 
   // Escalation: if any answer is a failure or advisory, alert the nominated
   // user(s) in-app and email the nominated address. Best-effort — never blocks
@@ -251,6 +300,219 @@ export async function submitInternalTask(input: {
     })
   } catch (err) {
     console.log('[v0] internal-task conditional notify failed:', (err as Error).message)
+  }
+
+  revalidatePath(MY_TASKS_PATH)
+  return { ok: true }
+}
+
+// --- On-demand forms + approvals -------------------------------------------
+
+// Resolves the approver profile ids for a submission: the submitter's line
+// manager (when the template routes to it) plus any nominated approvers. The
+// submitter is never their own approver; the result is deduped.
+async function resolveApproverIds(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  submitterId: string,
+  cfg: { approval_manager: boolean; approval_user_ids: string[] },
+): Promise<string[]> {
+  const ids = new Set<string>(cfg.approval_user_ids ?? [])
+  if (cfg.approval_manager) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('manager_id')
+      .eq('id', submitterId)
+      .single()
+    const managerId = (data as { manager_id?: string | null } | null)?.manager_id
+    if (managerId) ids.add(managerId)
+  }
+  ids.delete(submitterId)
+  return Array.from(ids)
+}
+
+/**
+ * Active on-demand form templates that any signed-in user can launch. Ordered
+ * by sort order then name.
+ */
+export async function getOnDemandForms(): Promise<{
+  ok: boolean
+  error?: string
+  forms?: InternalTaskTemplate[]
+}> {
+  const auth = await getAuth()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { data, error } = await auth.supabase
+    .from('internal_task_templates')
+    .select('*')
+    .eq('active', true)
+    .eq('task_kind', 'on_demand')
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true })
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, forms: (data ?? []) as InternalTaskTemplate[] }
+}
+
+/**
+ * Creates a fresh draft instance of an on-demand form for the current user and
+ * returns it (with its template embedded) so the fill sheet can open on it.
+ * On-demand forms carry no period/deadline.
+ */
+export async function startOnDemandInstance(
+  templateId: string,
+): Promise<{ ok: boolean; error?: string; instance?: InternalTaskInstance }> {
+  const auth = await getAuth()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase, userId } = auth
+
+  const { data: template } = await supabase
+    .from('internal_task_templates')
+    .select('id, active, task_kind')
+    .eq('id', templateId)
+    .single()
+  const t = template as { id?: string; active?: boolean; task_kind?: string } | null
+  if (!t || !t.active || t.task_kind !== 'on_demand') {
+    return { ok: false, error: 'Form not available.' }
+  }
+
+  const { data, error } = await supabase
+    .from('internal_task_instances')
+    .insert({
+      template_id: templateId,
+      user_id: userId,
+      period_start: null,
+      period_end: null,
+      due_at: null,
+      status: 'pending',
+      answers: [],
+    })
+    .select('*, template:internal_task_templates(*)')
+    .single()
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(MY_TASKS_PATH)
+  return { ok: true, instance: data as InternalTaskInstance }
+}
+
+/**
+ * The current user's on-demand form submissions (their own), freshest first.
+ * Includes drafts, completed, and any approval outcome.
+ */
+export async function getMyFormSubmissions(): Promise<{
+  ok: boolean
+  error?: string
+  instances?: InternalTaskInstance[]
+}> {
+  const auth = await getAuth()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase, userId } = auth
+
+  const { data, error } = await supabase
+    .from('internal_task_instances')
+    .select('*, template:internal_task_templates(*), approver:profiles!internal_task_instances_approved_by_fkey(id, full_name)')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(100)
+  if (error) return { ok: false, error: error.message }
+  const instances = ((data ?? []) as InternalTaskInstance[]).filter(
+    (i) => i.template?.task_kind === 'on_demand',
+  )
+  return { ok: true, instances }
+}
+
+/**
+ * Submissions awaiting the current user's approval decision: instances where
+ * they are a nominated/line-manager approver (or, for quality managers, any
+ * pending approval), freshest first.
+ */
+export async function getPendingApprovals(): Promise<{
+  ok: boolean
+  error?: string
+  instances?: InternalTaskInstance[]
+}> {
+  const auth = await getAuth()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase, userId, profile } = auth
+  const isManager = profile.role === 'admin' || profile.role === 'office'
+
+  let query = supabase
+    .from('internal_task_instances')
+    .select('*, template:internal_task_templates(*), user:profiles!internal_task_instances_user_id_fkey(id, full_name)')
+    .eq('approval_status', 'pending')
+    .order('completed_at', { ascending: true })
+
+  // Non-managers only see approvals routed to them. Managers see all pending.
+  if (!isManager) query = query.contains('approver_ids', [userId])
+
+  const { data, error } = await query
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, instances: (data ?? []) as InternalTaskInstance[] }
+}
+
+/**
+ * Records an approver's decision on a submitted form and notifies the submitter.
+ * Permitted for a nominated/line-manager approver or a quality manager.
+ */
+export async function decideApproval(input: {
+  instanceId: string
+  decision: 'approved' | 'rejected'
+  note?: string | null
+}): Promise<{ ok: boolean; error?: string }> {
+  const auth = await getAuth()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase, userId, profile } = auth
+  const isManager = profile.role === 'admin' || profile.role === 'office'
+
+  const { data: instance } = await supabase
+    .from('internal_task_instances')
+    .select('id, user_id, approver_ids, approval_status, template:internal_task_templates(name)')
+    .eq('id', input.instanceId)
+    .single()
+  if (!instance) return { ok: false, error: 'Submission not found.' }
+
+  const approverIds = (instance as { approver_ids?: string[] }).approver_ids ?? []
+  if (!approverIds.includes(userId) && !isManager) {
+    return { ok: false, error: 'Not authorised to approve this submission.' }
+  }
+  if ((instance as { approval_status?: string }).approval_status !== 'pending') {
+    return { ok: false, error: 'This submission has already been decided.' }
+  }
+
+  const { error } = await supabase
+    .from('internal_task_instances')
+    .update({
+      approval_status: input.decision,
+      approved_by: userId,
+      approved_at: new Date().toISOString(),
+      approval_note: input.note?.trim() || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', input.instanceId)
+  if (error) return { ok: false, error: error.message }
+
+  // Notify the submitter of the outcome. Best-effort.
+  try {
+    const template = Array.isArray((instance as { template?: unknown }).template)
+      ? (instance as { template?: { name?: string }[] }).template?.[0]
+      : (instance as { template?: { name?: string } }).template
+    const { data: decider } = await supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', userId)
+      .single()
+    const deciderName = (decider as { full_name?: string } | null)?.full_name ?? 'A manager'
+    const { notifyUsers } = await import('@/lib/notifications')
+    await notifyUsers({
+      userIds: [(instance as { user_id: string }).user_id],
+      title: `Form ${input.decision}: ${template?.name ?? 'Form'}`,
+      body: `${deciderName} ${input.decision} your "${template?.name ?? 'form'}" submission${
+        input.note?.trim() ? `: ${input.note.trim()}` : '.'
+      }`,
+      url: MY_TASKS_PATH,
+      category: 'internal_task_approval',
+      createdBy: userId,
+      data: { template_name: template?.name ?? '', instanceId: input.instanceId },
+    })
+  } catch (err) {
+    console.log('[v0] internal-task decision notify failed:', (err as Error).message)
   }
 
   revalidatePath(MY_TASKS_PATH)
@@ -445,6 +707,10 @@ export async function saveInternalTaskTemplate(
     category: input.category ?? null,
     active: input.active ?? true,
     sort_order: input.sort_order ?? 0,
+    task_kind: input.task_kind ?? 'recurring',
+    requires_approval: input.requires_approval ?? false,
+    approval_manager: input.approval_manager ?? false,
+    approval_user_ids: input.approval_user_ids ?? [],
     frequency: input.frequency ?? 'weekly',
     week_ending_dow: input.week_ending_dow ?? 0,
     anchor_month: input.anchor_month ?? null,

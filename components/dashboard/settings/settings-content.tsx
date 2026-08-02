@@ -255,7 +255,7 @@ export function SettingsContent({ user, profile, company, branches, departments,
         {canManageInternalTasks && (
           <TabsTrigger value="internal-tasks" className="gap-2">
             <ClipboardCheck className="h-4 w-4" />
-            Internal Tasks
+            Tasks & Forms
           </TabsTrigger>
         )}
       </TabsList>

@@ -35,6 +35,7 @@ import { DashboardBackgroundPicker } from '@/components/dashboard/home/dashboard
 import { resolveDashboardBackground } from '@/lib/dashboard/backgrounds'
 import { tileIconStyle, tileAccentStyle, tileCardStyle } from '@/lib/dashboard-tile-colors'
 import { getVisibleLeaveRequests } from '@/lib/leave-approvals'
+import { getPendingApprovals } from '@/lib/actions/internal-tasks'
 import { EngineerHome } from '@/components/dashboard/home/engineer-home'
 import { getDailyFact } from '@/lib/system-facts'
 import { YourTasksTile } from '@/components/dashboard/internal-tasks/your-tasks-tile'
@@ -186,11 +187,18 @@ export default async function DashboardPage() {
   const valueRangeLabel = 'Last 60 days'
   const ppmRangeLabel = format(today, 'MMMM yyyy')
 
-  // Leave requests awaiting this user's decision (RLS-scoped: managers see their
-  // reports, accounts/admins see all). Surfaced as an always-visible card so the
-  // count is discoverable even when the detailed widget above is hidden.
-  const { pending: pendingApprovals } = await getVisibleLeaveRequests()
-  const pendingApprovalsCount = pendingApprovals.length
+  // Everything awaiting this user's decision (RLS-scoped: managers see their
+  // reports, accounts/admins see all) — leave requests plus form & task
+  // submissions. Surfaced as an always-visible card so the count is discoverable
+  // even when the detailed widget above is hidden.
+  const [{ pending: pendingApprovals }, formApprovalsResult] = await Promise.all([
+    getVisibleLeaveRequests(),
+    getPendingApprovals(),
+  ])
+  const pendingFormApprovalsCount = formApprovalsResult.ok
+    ? (formApprovalsResult.instances ?? []).length
+    : 0
+  const pendingApprovalsCount = pendingApprovals.length + pendingFormApprovalsCount
 
   // Per-user tile colour overrides (keyed by tile title). Empty = theme default.
   const tileColors = (profile as Profile).dashboard_tile_colors ?? {}
@@ -211,7 +219,7 @@ export default async function DashboardPage() {
   const modules: ModuleCard[] = [
     {
       title: 'Approvals',
-      description: 'Leave requests to action',
+      description: 'Leave, forms & tasks to action',
       icon: ClipboardCheck,
       href: '/dashboard/approvals',
       metrics: [

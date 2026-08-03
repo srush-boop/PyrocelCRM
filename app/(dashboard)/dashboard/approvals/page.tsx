@@ -4,7 +4,7 @@ import { getVisibleLeaveRequests } from '@/lib/leave-approvals'
 import { LeaveApprovals } from '@/components/dashboard/approvals/leave-approvals'
 import { getReviewQueue, getProcessingQueue } from '@/lib/actions/timesheets'
 import { TimesheetReview } from '@/components/dashboard/timesheets/timesheet-review'
-import { getPendingApprovals } from '@/lib/actions/internal-tasks'
+import { getPendingApprovals, getDecidedApprovals } from '@/lib/actions/internal-tasks'
 import { FormApprovals } from '@/components/dashboard/approvals/form-approvals'
 
 export const dynamic = 'force-dynamic'
@@ -17,19 +17,26 @@ export default async function ApprovalsPage() {
   } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  const [{ pending, decided }, approveQueue, processQueue, formApprovals] =
-    await Promise.all([
-      getVisibleLeaveRequests(),
-      getReviewQueue(),
-      getProcessingQueue(),
-      getPendingApprovals(),
-    ])
+  const [
+    { pending, decided },
+    approveQueue,
+    processQueue,
+    formPending,
+    formDecided,
+  ] = await Promise.all([
+    getVisibleLeaveRequests(),
+    getReviewQueue(),
+    getProcessingQueue(),
+    getPendingApprovals(),
+    getDecidedApprovals(),
+  ])
 
   const hasTimesheets = approveQueue.length > 0 || processQueue.length > 0
-  const formApprovalItems = formApprovals.ok ? formApprovals.instances ?? [] : []
+  const formPendingItems = formPending.ok ? formPending.instances ?? [] : []
+  const formDecidedItems = formDecided.ok ? formDecided.instances ?? [] : []
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Approvals</h1>
         <p className="text-muted-foreground">
@@ -37,9 +44,13 @@ export default async function ApprovalsPage() {
           submissions from your team
         </p>
       </div>
-      <LeaveApprovals pending={pending} decided={decided} />
 
-      <FormApprovals approvals={formApprovalItems} />
+      <section className="space-y-4">
+        <h2 className="text-xl font-semibold tracking-tight">Leave</h2>
+        <LeaveApprovals pending={pending} decided={decided} />
+      </section>
+
+      <FormApprovals pending={formPendingItems} decided={formDecidedItems} />
 
       {hasTimesheets && (
         <section className="space-y-4">

@@ -3484,3 +3484,61 @@ export interface InboundRequest {
   matched_system_type?: Pick<SystemType, 'id' | 'name'> | null
   forwarded_by_profile?: Pick<Profile, 'id' | 'full_name' | 'email'> | null
 }
+
+// Purchase (supplier) invoices: a document store with an approval-for-payment
+// workflow. Uploaders attach files, allocate them, assign an authoriser, and
+// track them through awaiting_approval -> approved | rejected -> complete.
+export type PurchaseInvoiceStatus =
+  | 'awaiting_approval'
+  | 'approved'
+  | 'rejected'
+  | 'complete'
+
+export interface PurchaseInvoice {
+  id: string
+  created_at: string
+  updated_at: string
+  // Document
+  name: string
+  blob_pathname: string
+  blob_url: string | null
+  content_type: string | null
+  size_bytes: number | null
+  uploaded_by: string | null
+  // Allocation
+  site_id: string | null
+  client_id: string | null
+  task_id: string | null
+  job_id: string | null
+  branch_id: string | null
+  nominal_code_id: string | null
+  department_id: string | null
+  supplier_id: string | null
+  supplier_ref: string | null
+  notes: string | null
+  is_prepayment: boolean
+  // Money / dates
+  amount_pence: number | null
+  invoice_date: string | null
+  due_date: string | null
+  // Approval
+  authoriser_id: string | null
+  status: PurchaseInvoiceStatus
+  decided_by: string | null
+  decided_at: string | null
+  decision_notes: string | null
+  completed_at: string | null
+  completed_by: string | null
+  // Embeds (optional, populated by list queries).
+  site?: Pick<Site, 'id' | 'name' | 'postcode'> | null
+  client?: Pick<Client, 'id' | 'name'> | null
+  supplier?: Pick<Supplier, 'id' | 'name'> | null
+  branch?: Pick<Branch, 'id' | 'name'> | null
+  nominal_code?: Pick<NominalCode, 'id' | 'code' | 'name'> | null
+  department?: Pick<Department, 'id' | 'name'> | null
+  task?: Pick<Task, 'id' | 'reference_number'> | null
+  job?: Pick<Job, 'id' | 'job_number' | 'title'> | null
+  authoriser?: Pick<Profile, 'id' | 'full_name'> | null
+  uploader?: Pick<Profile, 'id' | 'full_name'> | null
+  decider?: Pick<Profile, 'id' | 'full_name'> | null
+}

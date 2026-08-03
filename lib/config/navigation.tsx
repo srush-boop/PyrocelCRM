@@ -234,6 +234,7 @@ const invoicingNavItem: NavItem = {
   icon: ReceiptText,
   children: [
     { title: 'Invoices', href: '/dashboard/invoices', icon: ReceiptText },
+    { title: 'Purchase Invoices', href: '/dashboard/invoices/purchase-invoices', icon: FileText },
     { title: 'Renewals', href: '/dashboard/invoices/renewals', icon: CalendarClock },
     { title: 'Projected Revenue', href: '/dashboard/invoices/projected-revenue', icon: TrendingUp },
   ],

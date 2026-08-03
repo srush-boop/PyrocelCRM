@@ -175,6 +175,10 @@ export function InternalTaskSheet({
   const [photoUploadingId, setPhotoUploadingId] = useState<string | null>(null)
   // Key = `${item_id}:${rowIdx}:${colId}` for the table image cell being uploaded.
   const [cellUploading, setCellUploading] = useState<string | null>(null)
+  // Full-size photo lightbox — lets any attached image be viewed at every stage
+  // (in progress, completed, and approval review).
+  const [viewer, setViewer] = useState<{ url: string; name: string } | null>(null)
+  const openPhoto = (url: string, name: string) => setViewer({ url, name })
   // Approval-decision state (review mode).
   const [decisionNote, setDecisionNote] = useState('')
   const [deciding, setDeciding] = useState<'approved' | 'rejected' | null>(null)
@@ -399,12 +403,24 @@ export function InternalTaskSheet({
                     </p>
                   )}
                   {q.imagePathname ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={blobSrc(q.imagePathname) || '/placeholder.svg'}
-                      alt={q.imageName ?? 'Reference image'}
-                      className="mt-2 max-h-48 w-full rounded-md border object-contain"
-                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openPhoto(
+                          blobSrc(q.imagePathname ?? null) || '',
+                          q.imageName ?? 'Reference image',
+                        )
+                      }
+                      aria-label="View reference image"
+                      className="mt-2 block w-full"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={blobSrc(q.imagePathname) || '/placeholder.svg'}
+                        alt={q.imageName ?? 'Reference image'}
+                        className="max-h-48 w-full cursor-zoom-in rounded-md border object-contain"
+                      />
+                    </button>
                   ) : null}
                   <div className="mt-2 border-b" />
                 </div>
@@ -427,7 +443,11 @@ export function InternalTaskSheet({
                       </span>
                     </a>
                   ) : null}
-                  <BlockImage pathname={q.imagePathname} name={q.imageName} />
+                  <BlockImage
+                    pathname={q.imagePathname}
+                    name={q.imageName}
+                    onView={openPhoto}
+                  />
                 </div>
               )
             }
@@ -446,7 +466,11 @@ export function InternalTaskSheet({
                       <span className="text-pretty">{q.label || q.url}</span>
                     </a>
                   ) : null}
-                  <BlockImage pathname={q.imagePathname} name={q.imageName} />
+                  <BlockImage
+                    pathname={q.imagePathname}
+                    name={q.imageName}
+                    onView={openPhoto}
+                  />
                 </div>
               )
             }
@@ -463,6 +487,37 @@ export function InternalTaskSheet({
         </div>
 
         {renderTrailing()}
+
+        {viewer && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={viewer.name}
+            tabIndex={-1}
+            onClick={() => setViewer(null)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setViewer(null)
+            }}
+            ref={(el) => el?.focus()}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4"
+          >
+            <button
+              type="button"
+              aria-label="Close image"
+              onClick={() => setViewer(null)}
+              className="absolute right-4 top-4 rounded-full bg-background/90 p-2 text-foreground shadow-md hover:bg-background"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={viewer.url || '/placeholder.svg'}
+              alt={viewer.name}
+              onClick={(e) => e.stopPropagation()}
+              className="max-h-[90vh] max-w-full rounded-md object-contain"
+            />
+          </div>
+        )}
       </SheetContent>
     </Sheet>
   )
@@ -510,12 +565,24 @@ export function InternalTaskSheet({
                 </div>
 
                 {!isFollowUp && row.imagePathname ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={blobSrc(row.imagePathname) || '/placeholder.svg'}
-                    alt={row.imageName ?? 'Reference image'}
-                    className="mt-2 max-h-48 w-full rounded-md border object-contain"
-                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openPhoto(
+                        blobSrc(row.imagePathname ?? null) || '',
+                        row.imageName ?? 'Reference image',
+                      )
+                    }
+                    aria-label="View reference image"
+                    className="mt-2 block w-full"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={blobSrc(row.imagePathname) || '/placeholder.svg'}
+                      alt={row.imageName ?? 'Reference image'}
+                      className="max-h-48 w-full cursor-zoom-in rounded-md border object-contain"
+                    />
+                  </button>
                 ) : null}
 
                 {!row.na && (
@@ -630,6 +697,7 @@ export function InternalTaskSheet({
                                           onClear={() =>
                                             updateTableCell(row, idx, c.id, '')
                                           }
+                                          onView={openPhoto}
                                         />
                                       ) : (
                                         <Input
@@ -712,12 +780,19 @@ export function InternalTaskSheet({
                           <div className="flex flex-wrap gap-2">
                             {(row.photos ?? []).map((p) => (
                               <div key={p.id} className="relative">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={p.url || '/placeholder.svg'}
-                                  alt={p.name}
-                                  className="h-16 w-16 rounded-md border object-cover"
-                                />
+                                <button
+                                  type="button"
+                                  onClick={() => openPhoto(p.url, p.name)}
+                                  aria-label={`View ${p.name}`}
+                                  className="block"
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={p.url || '/placeholder.svg'}
+                                    alt={p.name}
+                                    className="h-16 w-16 cursor-zoom-in rounded-md border object-cover"
+                                  />
+                                </button>
                                 <button
                                   type="button"
                                   onClick={() => removePhoto(row, p.id)}
@@ -757,13 +832,20 @@ export function InternalTaskSheet({
                     {readOnly && (row.photos ?? []).length > 0 && (
                       <div className="flex flex-wrap gap-2">
                         {(row.photos ?? []).map((p) => (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
+                          <button
                             key={p.id}
-                            src={p.url || '/placeholder.svg'}
-                            alt={p.name}
-                            className="h-16 w-16 rounded-md border object-cover"
-                          />
+                            type="button"
+                            onClick={() => openPhoto(p.url, p.name)}
+                            aria-label={`View ${p.name}`}
+                            className="block"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={p.url || '/placeholder.svg'}
+                              alt={p.name}
+                              className="h-16 w-16 cursor-zoom-in rounded-md border object-cover"
+                            />
+                          </button>
                         ))}
                       </div>
                     )}
@@ -937,18 +1019,29 @@ function RowExtras({
 function BlockImage({
   pathname,
   name,
+  onView,
 }: {
   pathname?: string | null
   name?: string | null
+  onView?: (url: string, name: string) => void
 }) {
   if (!pathname) return null
+  const src = blobSrc(pathname) || '/placeholder.svg'
+  const label = name ?? 'Reference image'
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={blobSrc(pathname) || '/placeholder.svg'}
-      alt={name ?? 'Reference image'}
-      className="max-h-48 w-full rounded-md border object-contain"
-    />
+    <button
+      type="button"
+      onClick={() => onView?.(blobSrc(pathname) || '', label)}
+      aria-label={`View ${label}`}
+      className="block w-full"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src || "/placeholder.svg"}
+        alt={label}
+        className="max-h-48 w-full cursor-zoom-in rounded-md border object-contain"
+      />
+    </button>
   )
 }
 
@@ -960,23 +1053,32 @@ function TableImageCell({
   uploading,
   onUpload,
   onClear,
+  onView,
 }: {
   value: string
   readOnly: boolean
   uploading: boolean
   onUpload: (file: File) => void
   onClear: () => void
+  onView: (url: string, name: string) => void
 }) {
   const url = value ? `/api/internal-tasks/attachments/file?id=${value}` : null
   if (url) {
     return (
       <div className="relative w-fit">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={url || '/placeholder.svg'}
-          alt="Uploaded"
-          className="h-12 w-12 rounded-md border object-cover"
-        />
+        <button
+          type="button"
+          onClick={() => onView(url, 'Uploaded image')}
+          aria-label="View image"
+          className="block"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={url || '/placeholder.svg'}
+            alt="Uploaded"
+            className="h-12 w-12 cursor-zoom-in rounded-md border object-cover"
+          />
+        </button>
         {!readOnly && (
           <button
             type="button"

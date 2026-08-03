@@ -37,7 +37,7 @@ export const SHORTCUT_CATALOGUE: ShortcutDef[] = [
   { key: 'schedule', label: 'Calls', href: '/dashboard/schedule', icon: Calendar },
   { key: 'service', label: 'Service', href: '/dashboard/service', icon: Wrench },
   { key: 'jobs', label: 'Jobs', href: '/dashboard/jobs', icon: Hammer },
-  { key: 'tasks', label: 'Tasks', href: '/dashboard/tasks', icon: ClipboardList },
+  { key: 'tasks', label: 'Tasks & Forms', href: '/dashboard/my-tasks', icon: ClipboardList },
   { key: 'sites', label: 'Sites', href: '/dashboard/sites', icon: Building2 },
   { key: 'clients', label: 'Clients', href: '/dashboard/clients', icon: Users },
   { key: 'invoices', label: 'Invoices', href: '/dashboard/invoices', icon: ReceiptText },

@@ -186,6 +186,12 @@ export function FullSiteImport() {
                   {c.servicesSeeding} service{c.servicesSeeding === 1 ? '' : 's'} seeding calls
                 </Badge>
               )}
+              {c.duplicateServices > 0 && (
+                <Badge variant="destructive" className="gap-1">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  {c.duplicateServices} duplicate{c.duplicateServices === 1 ? '' : 's'}
+                </Badge>
+              )}
             </div>
 
             {/* Row issues */}
@@ -209,6 +215,35 @@ export function FullSiteImport() {
               </div>
             )}
 
+            {/* Duplicate services warning — non-blocking; import still proceeds. */}
+            {preview.duplicateWarnings.length > 0 && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                <div className="mb-2 flex items-center gap-2 font-medium">
+                  <AlertTriangle className="h-4 w-4" />
+                  {preview.duplicateWarnings.length} service
+                  {preview.duplicateWarnings.length === 1 ? '' : 's'} already exist and will be
+                  created again
+                </div>
+                <p className="mb-2 text-pretty text-xs opacity-90">
+                  These rows match a service that is already on the site&apos;s existing system.
+                  Importing will create a second copy — remove the row(s) if that is not what you
+                  want.
+                </p>
+                <ul className="space-y-1">
+                  {preview.duplicateWarnings.slice(0, 30).map((w, i) => (
+                    <li key={i} className="text-pretty">
+                      {w}
+                    </li>
+                  ))}
+                  {preview.duplicateWarnings.length > 30 && (
+                    <li className="text-xs opacity-80">
+                      …and {preview.duplicateWarnings.length - 30} more.
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
+
             {/* Per-site preview */}
             {preview.sites.length > 0 && (
               <div className="max-h-[320px] overflow-auto rounded-md border">
@@ -221,6 +256,7 @@ export function FullSiteImport() {
                       <TableHead className="w-20 text-right">Systems</TableHead>
                       <TableHead className="w-20 text-right">Services</TableHead>
                       <TableHead className="w-20 text-right">Charges</TableHead>
+                      <TableHead className="w-20 text-right">Dupes</TableHead>
                       <TableHead className="w-24">Calls</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -245,6 +281,15 @@ export function FullSiteImport() {
                         <TableCell className="text-right">{s.systems}</TableCell>
                         <TableCell className="text-right">{s.services}</TableCell>
                         <TableCell className="text-right">{s.charges}</TableCell>
+                        <TableCell className="text-right">
+                          {s.duplicateServices > 0 ? (
+                            <span className="font-medium text-destructive">
+                              {s.duplicateServices}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
                         <TableCell>
                           {s.seedsCalls ? (
                             <Badge className="gap-1">seed</Badge>

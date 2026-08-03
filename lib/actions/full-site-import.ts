@@ -312,6 +312,7 @@ export interface FullSiteSitePreview {
   services: number
   charges: number
   seedsCalls: boolean
+  duplicateServices: number
 }
 
 export interface FullSitePreview {
@@ -328,7 +329,11 @@ export interface FullSitePreview {
     servicesNew: number
     chargesNew: number
     servicesSeeding: number
+    duplicateServices: number
   }
+  // Human-readable duplicate warnings: which service/system/site would be
+  // created again because an identical service already exists.
+  duplicateWarnings: string[]
   sites: FullSiteSitePreview[]
 }
 
@@ -354,7 +359,18 @@ async function loadExisting(supabase: Supa) {
   for (const s of (systemRows as Record<string, unknown>[] | null) ?? [])
     systemByKey.set(`${s.site_id}::${lc(s.name)}`, String(s.id))
 
-  return { clientByName, siteByKey, billingByKey, systemByKey }
+  // Existing services keyed by systemId::serviceTypeId so we can warn when an
+  // import row would duplicate a service that already exists on that system.
+  const { data: serviceRows } = await supabase
+    .from('site_services')
+    .select('site_system_id, service_type_id')
+  const serviceKeys = new Set<string>()
+  for (const s of (serviceRows as Record<string, unknown>[] | null) ?? []) {
+    if (s.site_system_id && s.service_type_id)
+      serviceKeys.add(`${s.site_system_id}::${s.service_type_id}`)
+  }
+
+  return { clientByName, siteByKey, billingByKey, systemByKey, serviceKeys }
 }
 
 /** Validate an uploaded full-site sheet and report what would be created. */
@@ -364,7 +380,8 @@ export async function previewFullSiteImport(rows: SheetRow[]): Promise<FullSiteP
     rowIssues: [],
     validRowCount: 0,
     skipRowCount: 0,
-    counts: { clientsNew: 0, billingNew: 0, sitesNew: 0, systemsNew: 0, servicesNew: 0, chargesNew: 0, servicesSeeding: 0 },
+    counts: { clientsNew: 0, billingNew: 0, sitesNew: 0, systemsNew: 0, servicesNew: 0, chargesNew: 0, servicesSeeding: 0, duplicateServices: 0 },
+    duplicateWarnings: [],
     sites: [],
   }
   const { supabase, error } = await requireAdmin()
@@ -375,7 +392,8 @@ export async function previewFullSiteImport(rows: SheetRow[]): Promise<FullSiteP
   const { clients, rowIssues, validRowCount } = await buildGraph(supabase, rows)
   const existing = await loadExisting(supabase)
 
-  const counts = { clientsNew: 0, billingNew: 0, sitesNew: 0, systemsNew: 0, servicesNew: 0, chargesNew: 0, servicesSeeding: 0 }
+  const counts = { clientsNew: 0, billingNew: 0, sitesNew: 0, systemsNew: 0, servicesNew: 0, chargesNew: 0, servicesSeeding: 0, duplicateServices: 0 }
+  const duplicateWarnings: string[] = []
   const sitesOut: FullSiteSitePreview[] = []
 
   for (const client of clients.values()) {
@@ -401,17 +419,30 @@ export async function previewFullSiteImport(rows: SheetRow[]): Promise<FullSiteP
       let serviceCount = 0
       let chargeCount = 0
       let seeds = false
+      let siteDuplicates = 0
       for (const system of site.systems.values()) {
-        const systemExists = existingSiteId
-          ? existing.systemByKey.has(`${existingSiteId}::${system.key}`)
-          : false
-        if (!systemExists) {
+        const existingSystemId = existingSiteId
+          ? existing.systemByKey.get(`${existingSiteId}::${system.key}`) ?? null
+          : null
+        if (!existingSystemId) {
           counts.systemsNew += 1
           systemCount += 1
         }
         for (const service of system.services) {
           counts.servicesNew += 1
           serviceCount += 1
+          // Duplicate = the same service type already exists on this exact
+          // existing system (only possible when both site + system pre-exist).
+          if (
+            existingSystemId &&
+            existing.serviceKeys.has(`${existingSystemId}::${service.serviceTypeId}`)
+          ) {
+            counts.duplicateServices += 1
+            siteDuplicates += 1
+            duplicateWarnings.push(
+              `${client.name} → ${site.name} → ${system.name}: "${service.serviceTypeName}" already exists (row ${service.rowNumber})`,
+            )
+          }
           if (service.charge) {
             counts.chargesNew += 1
             chargeCount += 1
@@ -432,6 +463,7 @@ export async function previewFullSiteImport(rows: SheetRow[]): Promise<FullSiteP
         services: serviceCount,
         charges: chargeCount,
         seedsCalls: seeds,
+        duplicateServices: siteDuplicates,
       })
     }
   }
@@ -442,6 +474,7 @@ export async function previewFullSiteImport(rows: SheetRow[]): Promise<FullSiteP
     validRowCount,
     skipRowCount: rowIssues.length,
     counts,
+    duplicateWarnings,
     sites: sitesOut,
   }
 }

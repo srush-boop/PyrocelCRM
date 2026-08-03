@@ -448,6 +448,38 @@ export async function getPendingApprovals(): Promise<{
 }
 
 /**
+ * Form/task submissions the current user has already decided on (approved or
+ * rejected). Managers see every decided submission; other approvers see only
+ * those that were routed to them. Freshest decision first.
+ */
+export async function getDecidedApprovals(): Promise<{
+  ok: boolean
+  error?: string
+  instances?: InternalTaskInstance[]
+}> {
+  const auth = await getAuth()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase, userId, profile } = auth
+  const isManager = profile.role === 'admin' || profile.role === 'office'
+
+  let query = supabase
+    .from('internal_task_instances')
+    .select(
+      '*, template:internal_task_templates(*), user:profiles!internal_task_instances_user_id_fkey(id, full_name), approver:profiles!internal_task_instances_approved_by_fkey(id, full_name)',
+    )
+    .in('approval_status', ['approved', 'rejected'])
+    .order('approved_at', { ascending: false })
+    .limit(100)
+
+  // Non-managers only see approvals routed to them. Managers see all decided.
+  if (!isManager) query = query.contains('approver_ids', [userId])
+
+  const { data, error } = await query
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, instances: (data ?? []) as InternalTaskInstance[] }
+}
+
+/**
  * Records an approver's decision on a submitted form and notifies the submitter.
  * Permitted for a nominated/line-manager approver or a quality manager.
  */

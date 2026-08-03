@@ -463,7 +463,9 @@ export async function decideApproval(input: {
 
   const { data: instance } = await supabase
     .from('internal_task_instances')
-    .select('id, user_id, approver_ids, approval_status, template:internal_task_templates(name)')
+    .select(
+      'id, user_id, approver_ids, approval_status, template:internal_task_templates(name, notify_on_approval_user_ids)',
+    )
     .eq('id', input.instanceId)
     .single()
   if (!instance) return { ok: false, error: 'Submission not found.' }
@@ -513,6 +515,42 @@ export async function decideApproval(input: {
     })
   } catch (err) {
     console.log('[v0] internal-task decision notify failed:', (err as Error).message)
+  }
+
+  // On approval, notify the form's nominated finance/payroll group (per-form).
+  if (input.decision === 'approved') {
+    try {
+      const template = Array.isArray((instance as { template?: unknown }).template)
+        ? (instance as { template?: { name?: string; notify_on_approval_user_ids?: string[] }[] })
+            .template?.[0]
+        : (instance as { template?: { name?: string; notify_on_approval_user_ids?: string[] } })
+            .template
+      // Exclude the approver themselves to avoid a self-notification.
+      const notifyIds = (template?.notify_on_approval_user_ids ?? []).filter(
+        (id) => id && id !== userId,
+      )
+      if (notifyIds.length > 0) {
+        const { data: submitter } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', (instance as { user_id: string }).user_id)
+          .single()
+        const submitterName =
+          (submitter as { full_name?: string } | null)?.full_name ?? 'A team member'
+        const { notifyUsers } = await import('@/lib/notifications')
+        await notifyUsers({
+          userIds: notifyIds,
+          title: `Approved form: ${template?.name ?? 'Form'}`,
+          body: `${submitterName}'s "${template?.name ?? 'form'}" submission has been approved and is ready to action.`,
+          url: MY_TASKS_PATH,
+          category: 'internal_task_approval',
+          createdBy: userId,
+          data: { template_name: template?.name ?? '', instanceId: input.instanceId },
+        })
+      }
+    } catch (err) {
+      console.log('[v0] internal-task approval finance notify failed:', (err as Error).message)
+    }
   }
 
   revalidatePath(MY_TASKS_PATH)
@@ -711,6 +749,7 @@ export async function saveInternalTaskTemplate(
     requires_approval: input.requires_approval ?? false,
     approval_manager: input.approval_manager ?? false,
     approval_user_ids: input.approval_user_ids ?? [],
+    notify_on_approval_user_ids: input.notify_on_approval_user_ids ?? [],
     frequency: input.frequency ?? 'weekly',
     week_ending_dow: input.week_ending_dow ?? 0,
     anchor_month: input.anchor_month ?? null,

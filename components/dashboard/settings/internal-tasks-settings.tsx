@@ -121,9 +121,10 @@ function blankTemplate(): InternalTaskTemplate {
     active: true,
     sort_order: 0,
     task_kind: 'recurring',
-    requires_approval: false,
-    approval_manager: false,
-    approval_user_ids: [],
+  requires_approval: false,
+  approval_manager: false,
+  approval_user_ids: [],
+  notify_on_approval_user_ids: [],
     frequency: 'weekly',
     week_ending_dow: 0,
     anchor_month: null,
@@ -765,6 +766,33 @@ function TemplateEditorDialog({
                   <p className="mt-1 text-xs text-muted-foreground">
                     Any one approver can decide. Admin/office can always approve as a
                     fallback.
+                  </p>
+                </div>
+                <div>
+                  <p className="mb-2 text-xs font-medium text-muted-foreground">
+                    Notify once approved (e.g. finance / payroll)
+                  </p>
+                  <div className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-md border p-2">
+                    {users.map((u) => (
+                      <label key={u.id} className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={(draft.notify_on_approval_user_ids ?? []).includes(u.id)}
+                          onCheckedChange={() =>
+                            patch({
+                              notify_on_approval_user_ids: toggleArray(
+                                draft.notify_on_approval_user_ids ?? [],
+                                u.id,
+                              ),
+                            })
+                          }
+                        />
+                        {u.full_name ?? 'Unnamed'}
+                      </label>
+                    ))}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    These users get an in-app notification when a submission is
+                    approved, so they can action it (payment, ordering, etc.).
                   </p>
                 </div>
               </div>

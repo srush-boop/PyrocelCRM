@@ -933,6 +933,9 @@ export interface InternalTaskTemplate {
   approval_manager: boolean
   // Additional nominated approver profile ids.
   approval_user_ids: string[]
+  // Profile ids (e.g. a finance/payroll group) notified when a submission of
+  // this form is APPROVED. Per-form; empty = notify no one beyond the submitter.
+  notify_on_approval_user_ids: string[]
   // Recurrence
   frequency: InternalTaskFrequency
   week_ending_dow: number // 0=Sun..6=Sat, weekly period end

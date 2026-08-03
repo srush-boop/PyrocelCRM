@@ -26,7 +26,6 @@ import {
 import type { Profile } from '@/lib/types/database'
 import Link from 'next/link'
 import { AddRequestDialog } from '@/components/dashboard/requests/add-request-dialog'
-import { ApprovalsWidget } from '@/components/dashboard/approvals/approvals-widget'
 import { LoneWorkerDashboardTiles } from '@/components/dashboard/lone-worker/lone-worker-dashboard-tiles'
 import { TileColorPicker } from '@/components/dashboard/home/tile-color-picker'
 import { DashboardTileGrid, type DashboardTile } from '@/components/dashboard/home/dashboard-tile-grid'
@@ -408,12 +407,6 @@ export default async function DashboardPage() {
           <AddRequestDialog triggerVariant="outline" />
         </div>
       </div>
-
-      {/* Leave approvals waiting on this user (managers/accounts/admins only).
-          Renders nothing when there is nothing to action. */}
-      <Suspense fallback={null}>
-        <ApprovalsWidget />
-      </Suspense>
 
       {/* Compact status row: Your Tasks + live Lone Worker safety monitoring. */}
       <div className="grid gap-3 md:grid-cols-2">

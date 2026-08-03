@@ -23,6 +23,7 @@ import { DocumentTemplatesSettings } from './document-templates'
 import { SignatureManager } from './signature-manager'
 import { AvatarManager } from './avatar-manager'
 import { BulkDataSettings } from './bulk-data-settings'
+import { FullSiteImport } from './full-site-import'
 import { GlobalConfigSettings } from './global-config-settings'
 import { LoneWorkerSettings } from './lone-worker-settings'
 import { RateCardsSettings } from './rate-cards-settings'
@@ -473,6 +474,7 @@ export function SettingsContent({ user, profile, company, branches, departments,
 
       {isAdmin && (
         <TabsContent value="data" className="space-y-4">
+          <FullSiteImport />
           <BulkDataSettings />
         </TabsContent>
       )}

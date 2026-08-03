@@ -8,19 +8,35 @@ import {
 } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ClipboardCheck, CheckCircle2, ChevronRight, CalendarDays } from 'lucide-react'
+import {
+  ClipboardCheck,
+  CheckCircle2,
+  ChevronRight,
+  CalendarDays,
+  FileCheck,
+} from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { formatLeaveLength } from '@/lib/leave-utils'
 import { getVisibleLeaveRequests } from '@/lib/leave-approvals'
+import { getPendingApprovals } from '@/lib/actions/internal-tasks'
 
-// Dashboard card summarising leave requests awaiting the current user's
-// approval. Renders nothing when the user has no pending items to action, so it
-// only appears for managers/accounts/admins who actually have work to do.
+// Dashboard card summarising everything awaiting the current user's approval:
+// annual leave requests plus form & task submissions. Renders nothing when
+// there is no pending work, so it only appears for managers/approvers who
+// actually have decisions to make.
 export async function ApprovalsWidget() {
-  const { pending } = await getVisibleLeaveRequests()
-  if (pending.length === 0) return null
+  const [{ pending }, formResult] = await Promise.all([
+    getVisibleLeaveRequests(),
+    getPendingApprovals(),
+  ])
+  const forms = formResult.ok ? formResult.instances ?? [] : []
+  const totalPending = pending.length + forms.length
+  if (totalPending === 0) return null
 
-  const top = pending.slice(0, 4)
+  // Show up to 4 items total, leave first then forms/tasks.
+  const topLeave = pending.slice(0, 4)
+  const topForms = forms.slice(0, Math.max(0, 4 - topLeave.length))
+  const shown = topLeave.length + topForms.length
 
   return (
     <Card className="w-full border-amber-300/60 dark:border-amber-900/60 lg:flex-1">
@@ -28,10 +44,12 @@ export async function ApprovalsWidget() {
         <div>
           <CardTitle className="flex items-center gap-2">
             <ClipboardCheck className="h-5 w-5" />
-            Leave Approvals
-            <Badge variant="secondary">{pending.length}</Badge>
+            Approvals
+            <Badge variant="secondary">{totalPending}</Badge>
           </CardTitle>
-          <CardDescription>Requests waiting for your decision</CardDescription>
+          <CardDescription>
+            Leave, forms &amp; tasks waiting for your decision
+          </CardDescription>
         </div>
         <Button asChild variant="ghost" size="sm">
           <Link href="/dashboard/approvals">
@@ -42,7 +60,7 @@ export async function ApprovalsWidget() {
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
-          {top.map((r) => (
+          {topLeave.map((r) => (
             <Link
               key={r.id}
               href="/dashboard/approvals"
@@ -64,11 +82,31 @@ export async function ApprovalsWidget() {
                 </Badge>
             </Link>
           ))}
+          {topForms.map((f) => (
+            <Link
+              key={f.id}
+              href="/dashboard/approvals"
+              className="flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors hover:border-primary/50 hover:bg-accent/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <div className="min-w-0 space-y-0.5">
+                <p className="truncate font-medium">
+                  {f.user?.full_name ?? 'A team member'}
+                </p>
+                <p className="flex items-center gap-1.5 truncate text-sm text-muted-foreground">
+                  <FileCheck className="h-4 w-4 shrink-0" />
+                  {f.template?.name ?? 'Form submission'}
+                </p>
+              </div>
+              <Badge variant="outline" className="shrink-0">
+                Form
+              </Badge>
+            </Link>
+          ))}
         </div>
-        {pending.length > top.length && (
+        {totalPending > shown && (
           <p className="mt-3 flex items-center gap-1.5 text-sm text-muted-foreground">
             <CheckCircle2 className="h-4 w-4" />
-            {pending.length - top.length} more awaiting approval
+            {totalPending - shown} more awaiting approval
           </p>
         )}
       </CardContent>

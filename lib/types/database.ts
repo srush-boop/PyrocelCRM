@@ -871,6 +871,9 @@ export interface InternalTaskTableColumn {
 //   - doc_link : a link to a file in the company document library (display only)
 //   - url_link : an external URL link (display only)
 //   - table    : a fillable table; author defines columns, user adds rows
+//   - file     : the user uploads one or more documents (PDF/image/Office) as
+//                their answer; files are stored as internal-task attachments and
+//                carried on the answer's `photos` array.
 export interface InternalTaskItem {
   id: string
   label: string
@@ -883,6 +886,7 @@ export interface InternalTaskItem {
     | 'doc_link'
     | 'url_link'
     | 'table'
+    | 'file'
   required: boolean
   conditions?: ChecklistCondition[]
   // section: optional supporting copy shown beneath the heading.

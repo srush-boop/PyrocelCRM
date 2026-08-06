@@ -28,6 +28,7 @@ import {
   ImageIcon,
   Plus,
   Trash2,
+  Upload,
 } from 'lucide-react'
 import type {
   InternalTaskInstance,
@@ -65,7 +66,7 @@ type Row = InternalTaskAnswer & {
 
 // Question block types the user actually answers (produce a Row + can block
 // submit). Display-only blocks (section/doc_link/url_link) are skipped here.
-const ANSWERABLE = new Set(['pass_fail', 'text', 'number', 'checkbox', 'table'])
+const ANSWERABLE = new Set(['pass_fail', 'text', 'number', 'checkbox', 'table', 'file'])
 function isAnswerable(type: InternalTaskItem['type']): boolean {
   return ANSWERABLE.has(type)
 }
@@ -307,6 +308,8 @@ export function InternalTaskSheet({
           out.push(`${row.label}: enter a value`)
         } else if (row.type === 'table' && tableRows(row).length === 0) {
           out.push(`${row.label}: add at least one row`)
+        } else if (row.type === 'file' && (row.photos ?? []).length === 0) {
+          out.push(`${row.label}: attach a document`)
         }
       }
       // Conditional requirements on visible top-level rows.
@@ -769,12 +772,75 @@ export function InternalTaskSheet({
                       </div>
                     )}
 
+                    {row.type === 'file' && (
+                      <div className="space-y-2">
+                        {(row.photos ?? []).length > 0 && (
+                          <ul className="flex flex-col gap-1.5">
+                            {(row.photos ?? []).map((p) => (
+                              <li
+                                key={p.id}
+                                className="flex items-center gap-2 rounded-md border bg-muted/30 p-2 text-sm"
+                              >
+                                <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                <a
+                                  href={p.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="min-w-0 flex-1 truncate text-primary hover:underline"
+                                >
+                                  {p.name}
+                                </a>
+                                {!readOnly && (
+                                  <button
+                                    type="button"
+                                    onClick={() => removePhoto(row, p.id)}
+                                    aria-label={`Remove ${p.name}`}
+                                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </button>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {readOnly && (row.photos ?? []).length === 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            No documents attached.
+                          </p>
+                        )}
+                        {!readOnly && (
+                          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground">
+                            {photoUploadingId === row.item_id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Upload className="h-3.5 w-3.5" />
+                            )}
+                            Add document
+                            <input
+                              type="file"
+                              accept=".pdf,image/*,.doc,.docx,.xls,.xlsx,.csv,.txt"
+                              className="hidden"
+                              disabled={photoUploadingId === row.item_id}
+                              onChange={(e) => {
+                                const f = e.target.files?.[0]
+                                if (f) uploadPhoto(row, f)
+                                e.target.value = ''
+                              }}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    )}
+
                     {/* Notes + photos for top-level rows with an active condition
                         requiring them, or always available as optional notes. */}
                     {!isFollowUp && <RowExtras row={row} update={update} />}
 
-                    {/* Photo capture (top-level rows). */}
-                    {!isFollowUp && !readOnly && (
+                    {/* Photo capture (top-level rows). File blocks manage their
+                        own document list above, so the image capture UI is
+                        suppressed for them. */}
+                    {!isFollowUp && !readOnly && row.type !== 'file' && (
                       <div className="space-y-2">
                         {(row.photos ?? []).length > 0 && (
                           <div className="flex flex-wrap gap-2">
@@ -828,8 +894,9 @@ export function InternalTaskSheet({
                       </div>
                     )}
 
-                    {/* Read-only photo display. */}
-                    {readOnly && (row.photos ?? []).length > 0 && (
+                    {/* Read-only photo display (file blocks list their documents
+                        above instead). */}
+                    {readOnly && row.type !== 'file' && (row.photos ?? []).length > 0 && (
                       <div className="flex flex-wrap gap-2">
                         {(row.photos ?? []).map((p) => (
                           <button

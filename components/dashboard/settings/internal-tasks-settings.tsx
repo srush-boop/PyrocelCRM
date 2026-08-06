@@ -45,6 +45,7 @@ import {
   Link2,
   Table as TableIcon,
   ImageIcon,
+  Upload,
   X,
 } from 'lucide-react'
 import type {
@@ -350,12 +351,14 @@ function TemplateEditorDialog({
   }
   // Adds a display/content block (section heading, document link, URL link or
   // fillable table). These carry no answer and no conditional rules.
-  function addBlock(type: 'section' | 'doc_link' | 'url_link' | 'table') {
+  function addBlock(type: 'section' | 'doc_link' | 'url_link' | 'table' | 'file') {
     const base: InternalTaskItem = {
       id: crypto.randomUUID(),
       label: '',
       type,
-      required: false,
+      // File uploads are answerable and usually mandatory (e.g. attach a
+      // receipt/invoice), so default them to required.
+      required: type === 'file',
     }
     if (type === 'section') base.description = ''
     if (type === 'doc_link') {
@@ -847,12 +850,16 @@ function TemplateEditorDialog({
                   <TableIcon className="size-4" />
                   Table
                 </Button>
+                <Button variant="ghost" size="sm" onClick={() => addBlock('file')}>
+                  <Upload className="size-4" />
+                  Upload
+                </Button>
               </div>
             </div>
             {draft.questions.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No content yet — add questions, section headings, document/URL links or
-                tables. With none, the user just confirms completion.
+                No content yet — add questions, section headings, document/URL links,
+                tables or document uploads. With none, the user just confirms completion.
               </p>
             ) : (
               <div className="flex flex-col gap-4">
@@ -1270,7 +1277,9 @@ function BlockEditor({
         ? { icon: FileText, label: 'Document link' }
         : block.type === 'url_link'
           ? { icon: Link2, label: 'External link' }
-          : { icon: TableIcon, label: 'Fillable table' }
+          : block.type === 'file'
+            ? { icon: Upload, label: 'Document upload' }
+            : { icon: TableIcon, label: 'Fillable table' }
   const Icon = meta.icon
 
   return (
@@ -1440,6 +1449,27 @@ function BlockEditor({
               onCheckedChange={(v) => onChange({ required: v === true })}
             />
             Require at least one row
+          </label>
+        </div>
+      )}
+
+      {block.type === 'file' && (
+        <div className="space-y-2">
+          <Input
+            value={block.label}
+            onChange={(e) => onChange({ label: e.target.value })}
+            placeholder="Upload label (e.g. Attach receipt / invoice)"
+          />
+          <p className="text-xs text-muted-foreground">
+            The user attaches one or more documents (PDF, image, Word, Excel, CSV
+            or text, up to 25MB each) when completing this form.
+          </p>
+          <label className="flex items-center gap-2 text-xs">
+            <Checkbox
+              checked={block.required === true}
+              onCheckedChange={(v) => onChange({ required: v === true })}
+            />
+            Require at least one document
           </label>
         </div>
       )}

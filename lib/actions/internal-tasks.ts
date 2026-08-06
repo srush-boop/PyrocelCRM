@@ -782,6 +782,7 @@ export async function saveInternalTaskTemplate(
     approval_manager: input.approval_manager ?? false,
     approval_user_ids: input.approval_user_ids ?? [],
     notify_on_approval_user_ids: input.notify_on_approval_user_ids ?? [],
+    route_to_purchasing: input.route_to_purchasing ?? false,
     frequency: input.frequency ?? 'weekly',
     week_ending_dow: input.week_ending_dow ?? 0,
     anchor_month: input.anchor_month ?? null,

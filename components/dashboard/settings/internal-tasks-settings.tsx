@@ -126,6 +126,7 @@ function blankTemplate(): InternalTaskTemplate {
   approval_manager: false,
   approval_user_ids: [],
   notify_on_approval_user_ids: [],
+  route_to_purchasing: false,
     frequency: 'weekly',
     week_ending_dow: 0,
     anchor_month: null,
@@ -801,6 +802,27 @@ function TemplateEditorDialog({
               </div>
             ) : null}
           </div>
+
+          {/* Route uploads to Purchase Invoices */}
+          {draft.task_kind === 'on_demand' ? (
+            <div className="rounded-lg border p-4">
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="it-purchasing"
+                  checked={draft.route_to_purchasing}
+                  onCheckedChange={(v) => patch({ route_to_purchasing: v })}
+                />
+                <Label htmlFor="it-purchasing">Route uploads to Purchase Invoices</Label>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                When on, any submission of this form that includes an uploaded
+                document appears in the Purchase Invoices workspace (under
+                &ldquo;Expense &amp; receipt documents&rdquo;) so the office can
+                track it Outstanding &rarr; Complete. Use this for expense claims
+                and receipt uploads.
+              </p>
+            </div>
+          ) : null}
 
           {/* Reference */}
           <div className="rounded-lg border p-4">

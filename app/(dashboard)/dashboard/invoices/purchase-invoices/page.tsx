@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import type { Profile, PurchaseInvoice } from '@/lib/types/database'
 import { PurchaseInvoicesView } from '@/components/dashboard/purchase-invoices/purchase-invoices-view'
+import { listFormDocuments } from '@/lib/actions/form-documents'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,11 +66,14 @@ export default async function PurchaseInvoicesPage() {
       .limit(1000),
   ])
 
+  const formDocuments = await listFormDocuments()
+
   return (
     <PurchaseInvoicesView
       invoices={(invoices ?? []) as PurchaseInvoice[]}
       currentUserId={user.id}
       currentUserRole={role}
+      formDocuments={formDocuments}
       options={{
         sites: (sites ?? []) as { id: string; name: string; postcode: string | null }[],
         clients: (clients ?? []) as { id: string; name: string }[],

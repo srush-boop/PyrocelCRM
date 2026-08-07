@@ -54,7 +54,7 @@ export function TaskHeader({
   // everyone — incl. engineers — once a result row exists for the call.
   referenceNumber?: string | null
 }) {
-  const handleBack = useBackNavigation('/dashboard/schedule')
+  const { goBack: handleBack, label: backLabel } = useBackNavigation('/dashboard/schedule')
 
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
@@ -133,10 +133,10 @@ export function TaskHeader({
           size="sm"
           onClick={handleBack}
           className="-ml-2 gap-1.5 text-muted-foreground"
-          aria-label="Go back"
+          aria-label={`Back to ${backLabel}`}
         >
           <ArrowLeft className="h-4 w-4" />
-          Back
+          Back to {backLabel}
         </Button>
         <div className="flex items-center gap-2">
           {referenceNumber && (

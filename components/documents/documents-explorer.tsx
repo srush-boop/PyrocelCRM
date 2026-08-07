@@ -132,9 +132,10 @@ export function DocumentsExplorer({
             variant="outline"
             size="sm"
             onClick={() => router.push('/dashboard/documents')}
+            aria-label="Back to Documents"
           >
             <ChevronLeft className="mr-1 h-4 w-4" />
-            Back
+            Back to Documents
           </Button>
           <div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">

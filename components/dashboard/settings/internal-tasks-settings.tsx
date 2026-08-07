@@ -39,6 +39,8 @@ import {
   ClipboardCheck,
   CornerDownRight,
   GripVertical,
+  ChevronUp,
+  ChevronDown,
   BellRing,
   Heading,
   FileText,
@@ -64,6 +66,7 @@ import {
   deleteInternalTaskTemplate,
 } from '@/lib/actions/internal-tasks'
 import { blobSrc } from '@/lib/blob'
+import { cn } from '@/lib/utils'
 
 interface Props {
   templates: InternalTaskTemplate[]
@@ -335,6 +338,8 @@ function TemplateEditorDialog({
   const [draft, setDraft] = useState<InternalTaskTemplate>(template)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Index of the block currently being dragged, for reorder-by-drag.
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
 
   function patch(updates: Partial<InternalTaskTemplate>) {
     setDraft((d) => ({ ...d, ...updates }))
@@ -379,6 +384,56 @@ function TemplateEditorDialog({
   }
   function removeQuestion(id: string) {
     patch({ questions: draft.questions.filter((q) => q.id !== id) })
+  }
+  // Reorder helpers. `moveQuestion` shifts one item up/down by one slot; `reorder`
+  // performs an arbitrary from→to move (used by drag-and-drop).
+  function reorderQuestions(from: number, to: number) {
+    if (from === to || from < 0 || to < 0) return
+    const next = [...draft.questions]
+    if (from >= next.length || to >= next.length) return
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    patch({ questions: next })
+  }
+  function moveQuestion(index: number, dir: -1 | 1) {
+    reorderQuestions(index, index + dir)
+  }
+  // Drag handle + up/down controls shown to the left of every block, so the
+  // author can reorder questions/content either by dragging or clicking.
+  function renderReorderHandle(index: number) {
+    return (
+      <div className="flex flex-col items-center gap-0.5 pt-1">
+        <span
+          role="button"
+          aria-label="Drag to reorder"
+          title="Drag to reorder"
+          draggable
+          onDragStart={() => setDragIndex(index)}
+          onDragEnd={() => setDragIndex(null)}
+          className="cursor-grab text-muted-foreground active:cursor-grabbing"
+        >
+          <GripVertical className="size-4" />
+        </span>
+        <button
+          type="button"
+          aria-label="Move up"
+          disabled={index === 0}
+          onClick={() => moveQuestion(index, -1)}
+          className="text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+        >
+          <ChevronUp className="size-4" />
+        </button>
+        <button
+          type="button"
+          aria-label="Move down"
+          disabled={index === draft.questions.length - 1}
+          onClick={() => moveQuestion(index, 1)}
+          className="text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+        >
+          <ChevronDown className="size-4" />
+        </button>
+      </div>
+    )
   }
   // Table column helpers (table blocks only).
   function addColumn(qId: string) {
@@ -885,10 +940,23 @@ function TemplateEditorDialog({
               </p>
             ) : (
               <div className="flex flex-col gap-4">
-                {draft.questions.map((q) =>
-                  !isQuestionType(q.type) ? (
+                {draft.questions.map((q, index) => (
+                  <div
+                    key={q.id}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => {
+                      if (dragIndex !== null) reorderQuestions(dragIndex, index)
+                      setDragIndex(null)
+                    }}
+                    className={cn(
+                      'flex items-start gap-2 rounded-md transition',
+                      dragIndex === index && 'opacity-60 ring-2 ring-primary/40',
+                    )}
+                  >
+                    {renderReorderHandle(index)}
+                    <div className="min-w-0 flex-1">
+                  {!isQuestionType(q.type) ? (
                     <BlockEditor
-                      key={q.id}
                       block={q}
                       documents={documents}
                       onChange={(u) => updateQuestion(q.id, u)}
@@ -898,10 +966,8 @@ function TemplateEditorDialog({
                       onRemoveColumn={(colId) => removeColumn(q.id, colId)}
                     />
                   ) : (
-                  <div key={q.id} className="rounded-md border bg-muted/30 p-3">
-                    <div className="flex items-start gap-2">
-                      <GripVertical className="mt-2 size-4 shrink-0 text-muted-foreground" />
-                      <div className="grid flex-1 gap-2 sm:grid-cols-[1fr_auto_auto]">
+                  <div className="rounded-md border bg-muted/30 p-3">
+                    <div className="grid flex-1 gap-2 sm:grid-cols-[1fr_auto_auto]">
                         <Input
                           value={q.label}
                           onChange={(e) => updateQuestion(q.id, { label: e.target.value })}
@@ -947,7 +1013,6 @@ function TemplateEditorDialog({
                           </Button>
                         </div>
                       </div>
-                    </div>
 
                     <div className="pl-6">
                       <BlockImageField
@@ -1125,8 +1190,10 @@ function TemplateEditorDialog({
                       </div>
                     ) : null}
                   </div>
-                  ),
-                )}
+                  )}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

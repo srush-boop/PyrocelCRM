@@ -157,6 +157,49 @@ export async function createJobPurchaseOrder(
   return { ok: true, poId }
 }
 
+/**
+ * Create a standalone draft purchase order directly from the Purchasing screen
+ * (not tied to a job's quoted parts). Supplier, branch and notes are all
+ * optional so an order can be started as "Unassigned" and completed later; the
+ * caller is redirected to the detail page to add lines.
+ */
+export async function createPurchaseOrder(input: {
+  supplierId?: string | null
+  branchId?: string | null
+  notes?: string | null
+}): Promise<{ ok: boolean; poId?: string; error?: string }> {
+  const { supabase, user, error } = await requireStaff()
+  if (error || !user) return { ok: false, error: error ?? 'Not authorised.' }
+
+  let poId: string | null = null
+  for (let attempt = 0; attempt < 2 && !poId; attempt++) {
+    const poNumber = await nextPurchaseOrderNumber(supabase)
+    const { data: inserted, error: insErr } = await supabase
+      .from('purchase_orders')
+      .insert({
+        po_number: poNumber,
+        supplier_id: input.supplierId || null,
+        branch_id: input.branchId || null,
+        notes: input.notes?.trim() || null,
+        status: 'draft',
+        subtotal_pence: 0,
+        created_by: user.id,
+      })
+      .select('id')
+      .single()
+    if (!insErr && inserted) {
+      poId = (inserted as { id: string }).id
+    } else if (insErr && !insErr.message.toLowerCase().includes('duplicate')) {
+      console.log('[v0] createPurchaseOrder insert error:', insErr.message)
+      return { ok: false, error: 'Could not create the purchase order.' }
+    }
+  }
+  if (!poId) return { ok: false, error: 'Could not allocate a PO number, please try again.' }
+
+  revalidatePurchasing(poId)
+  return { ok: true, poId }
+}
+
 /** Editing lines is only allowed while a PO is still a draft. */
 async function assertDraft(supabase: Supabase, poId: string) {
   const { data } = await supabase.from('purchase_orders').select('status, job_id').eq('id', poId).maybeSingle()

@@ -1,10 +1,13 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { labelForPath } from '@/lib/navigation-labels'
 
 /**
- * Returns a handler that navigates the user back to where they came from.
+ * Resolves back-navigation for a detail screen and returns both the handler
+ * and a human-friendly label for the destination, so callers can render
+ * "Back to X".
  *
  * Resolution order (most reliable first):
  *  1. An explicit `?from=` query param on the current URL. Callers that link
@@ -14,16 +17,22 @@ import { useRouter, useSearchParams } from 'next/navigation'
  *     `router.back()` / `window.history` are unreliable.
  *  2. Genuine in-app browser history via `router.back()`.
  *  3. A sensible `fallback` parent route.
+ *
+ * The returned `label` reflects the best-known destination: the `?from=`
+ * origin when present, otherwise the `fallback` (history is not a resolvable
+ * path, so the fallback is the most accurate name we can show).
  */
 export function useBackNavigation(fallback = '/dashboard') {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  return useCallback(() => {
+  const from = searchParams.get('from')
+  const isSafeFrom = !!from && from.startsWith('/') && !from.startsWith('//')
+
+  const goBack = useCallback(() => {
     // 1. Prefer an explicit origin passed by the linking page. Only honour
     //    same-origin in-app paths to avoid open-redirect style navigation.
-    const from = searchParams.get('from')
-    if (from && from.startsWith('/') && !from.startsWith('//')) {
+    if (isSafeFrom && from) {
       router.push(from)
       return
     }
@@ -36,5 +45,10 @@ export function useBackNavigation(fallback = '/dashboard') {
 
     // 3. Otherwise fall back to a known parent route.
     router.push(fallback)
-  }, [router, searchParams, fallback])
+  }, [router, from, isSafeFrom, fallback])
+
+  const destination = isSafeFrom && from ? from : fallback
+  const label = useMemo(() => labelForPath(destination), [destination])
+
+  return { goBack, destination, label }
 }

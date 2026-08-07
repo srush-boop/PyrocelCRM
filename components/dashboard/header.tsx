@@ -20,6 +20,7 @@ import { GlobalSiteSearch } from '@/components/dashboard/global-site-search'
 import { NotificationBell } from '@/components/dashboard/notifications/notification-bell'
 import { HeaderShortcuts } from '@/components/dashboard/header-shortcuts'
 import type { Profile } from '@/lib/types/database'
+import { labelForPath } from '@/lib/navigation-labels'
 
 interface DashboardHeaderProps {
   profile: Profile
@@ -42,27 +43,31 @@ export function DashboardHeader({ profile }: DashboardHeaderProps) {
   const isManager = profile.role === 'admin' || profile.role === 'office'
   const showDashboardButton = isManager && pathname !== '/dashboard'
 
-  const handleBack = () => {
-    // 1. Prefer an explicit origin passed by the linking page (?from=). Detail
-    //    screens such as a task open from the schedule/calendar and carry their
-    //    origin here, so "Back" is deterministic. This also avoids landing on
-    //    non-existent parent routes: e.g. tasks live only at
-    //    /dashboard/tasks/[id] — there is no /dashboard/tasks list page, so the
-    //    parent-segment heuristic below would navigate to a dead route.
-    const from = searchParams.get('from')
-    if (from && from.startsWith('/') && !from.startsWith('//')) {
-      router.push(from)
-      return
-    }
+  // Resolve where "Back" leads so we can both navigate there and label the
+  // button with its destination ("Back to Sites").
+  //  1. Prefer an explicit origin passed by the linking page (?from=). Detail
+  //     screens such as a task open from the schedule/calendar carry their
+  //     origin here, so "Back" is deterministic. This also avoids landing on
+  //     non-existent parent routes: e.g. tasks live only at
+  //     /dashboard/tasks/[id] — there is no /dashboard/tasks list page, so the
+  //     parent-segment heuristic below would navigate to a dead route.
+  //  2. Otherwise navigate up one path segment (e.g. /dashboard/defects/[id] ->
+  //     /dashboard/defects). This is deterministic and always works, unlike
+  //     router.back(), which does nothing when there's no in-app history
+  //     (direct link / fresh load / sidebar navigation) and can land on an
+  //     unexpected page otherwise.
+  const from = searchParams.get('from')
+  const backTarget =
+    from && from.startsWith('/') && !from.startsWith('//')
+      ? from
+      : (() => {
+          const segments = pathname.split('/').filter(Boolean)
+          return segments.length > 1 ? `/${segments.slice(0, -1).join('/')}` : '/dashboard'
+        })()
+  const backLabel = labelForPath(backTarget)
 
-    // 2. Fall back to navigating up one path segment (e.g. /dashboard/defects ->
-    //    /dashboard). This is deterministic and always works, unlike
-    //    router.back(), which does nothing when there's no in-app history
-    //    (direct link / fresh load / sidebar navigation) and can land on an
-    //    unexpected page otherwise.
-    const segments = pathname.split('/').filter(Boolean)
-    const parent = segments.length > 1 ? `/${segments.slice(0, -1).join('/')}` : '/dashboard'
-    router.push(parent)
+  const handleBack = () => {
+    router.push(backTarget)
   }
 
   const handleSignOut = async () => {
@@ -102,9 +107,10 @@ export function DashboardHeader({ profile }: DashboardHeaderProps) {
           size="sm"
           onClick={handleBack}
           className="gap-2 text-muted-foreground hover:text-foreground"
+          aria-label={`Back to ${backLabel}`}
         >
           <ArrowLeft className="h-4 w-4" />
-          <span className="hidden sm:inline">Back</span>
+          <span className="hidden sm:inline">Back to {backLabel}</span>
         </Button>
       )}
       <Separator orientation="vertical" className="mx-1 hidden h-6 md:block" />

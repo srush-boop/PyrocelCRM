@@ -940,6 +940,9 @@ export interface InternalTaskTemplate {
   // Profile ids (e.g. a finance/payroll group) notified when a submission of
   // this form is APPROVED. Per-form; empty = notify no one beyond the submitter.
   notify_on_approval_user_ids: string[]
+  // When true, submissions of this form that carry an uploaded document surface
+  // in the Purchase Invoices workspace (expense/receipt tracking).
+  route_to_purchasing: boolean
   // Recurrence
   frequency: InternalTaskFrequency
   week_ending_dow: number // 0=Sun..6=Sat, weekly period end
@@ -988,6 +991,12 @@ export interface InternalTaskInstance {
   approved_by: string | null
   approved_at: string | null
   approval_note: string | null
+  // Manager escalation for missed recurring tasks. `reminded_at` records the
+  // last nudge sent to the assignee; `dismissed_at`/`dismissed_by` mark the
+  // escalation as acknowledged, removing it from the manager's action list.
+  escalation_reminded_at?: string | null
+  escalation_dismissed_at?: string | null
+  escalation_dismissed_by?: string | null
   created_at: string
   updated_at: string
   // Optional embeds
@@ -3545,4 +3554,32 @@ export interface PurchaseInvoice {
   authoriser?: Pick<Profile, 'id' | 'full_name'> | null
   uploader?: Pick<Profile, 'id' | 'full_name'> | null
   decider?: Pick<Profile, 'id' | 'full_name'> | null
+}
+
+// A form submission (internal-task instance) that carries uploaded documents and
+// whose template is flagged `route_to_purchasing`. Surfaced as a read-only
+// "Expense & receipt documents" section inside the Purchase Invoices workspace.
+export type FormDocumentStatus = 'outstanding' | 'complete'
+
+export interface FormDocumentFile {
+  id: string
+  name: string
+  content_type: string | null
+  size_bytes: number | null
+}
+
+export interface FormDocument {
+  instanceId: string
+  templateId: string
+  formName: string
+  category: string | null
+  submitterId: string | null
+  submitterName: string | null
+  submittedAt: string | null
+  reference: string | null
+  approvalStatus: string | null
+  status: FormDocumentStatus
+  completedAt: string | null
+  completedByName: string | null
+  files: FormDocumentFile[]
 }

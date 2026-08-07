@@ -21,11 +21,49 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Missing id' }, { status: 400 })
     }
 
-    const { data: attachment } = await supabase
+    let { data: attachment } = await supabase
       .from('internal_task_attachments')
       .select('blob_pathname, name, content_type')
       .eq('id', id)
       .single()
+
+    // Fallback for admin/office staff: internal-task RLS only exposes the row to
+    // the owner/quality manager, but staff must be able to view documents that
+    // were routed to Purchase Invoices. Re-fetch via the service-role client,
+    // but ONLY when the attachment belongs to a purchasing-flagged template.
+    if (!attachment) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+      const role = (profile as { role?: string } | null)?.role
+      if (role === 'admin' || role === 'office') {
+        const { createAdminClient } = await import('@/lib/supabase/admin')
+        const admin = createAdminClient()
+        const { data: staffRow } = await admin
+          .from('internal_task_attachments')
+          .select(
+            'blob_pathname, name, content_type, instance:internal_task_instances(template:internal_task_templates(route_to_purchasing))',
+          )
+          .eq('id', id)
+          .single()
+        const instance = (staffRow as { instance?: unknown } | null)?.instance as
+          | { template?: { route_to_purchasing?: boolean } | { route_to_purchasing?: boolean }[] }
+          | { template?: { route_to_purchasing?: boolean } | { route_to_purchasing?: boolean }[] }[]
+          | undefined
+        const inst = Array.isArray(instance) ? instance[0] : instance
+        const tpl = inst?.template
+        const flagged = Array.isArray(tpl) ? tpl[0]?.route_to_purchasing : tpl?.route_to_purchasing
+        if (staffRow && flagged) {
+          attachment = {
+            blob_pathname: (staffRow as { blob_pathname: string }).blob_pathname,
+            name: (staffRow as { name: string }).name,
+            content_type: (staffRow as { content_type: string | null }).content_type,
+          }
+        }
+      }
+    }
 
     if (!attachment) {
       return new NextResponse('Not found', { status: 404 })

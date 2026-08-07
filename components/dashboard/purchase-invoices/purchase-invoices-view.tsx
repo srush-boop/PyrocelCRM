@@ -53,8 +53,9 @@ import {
 } from 'lucide-react'
 import { formatPence } from '@/lib/billing/invoices'
 import { cn } from '@/lib/utils'
-import type { PurchaseInvoice, PurchaseInvoiceStatus } from '@/lib/types/database'
+import type { PurchaseInvoice, PurchaseInvoiceStatus, FormDocument } from '@/lib/types/database'
 import { PurchaseInvoiceEditor, type EditorOptions } from './purchase-invoice-editor'
+import { FormDocumentsSection } from './form-documents-section'
 import {
   decidePurchaseInvoice,
   completePurchaseInvoice,
@@ -88,11 +89,13 @@ export function PurchaseInvoicesView({
   currentUserId,
   currentUserRole,
   options,
+  formDocuments,
 }: {
   invoices: PurchaseInvoice[]
   currentUserId: string
   currentUserRole: string
   options: EditorOptions
+  formDocuments: FormDocument[]
 }) {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -506,6 +509,9 @@ export function PurchaseInvoicesView({
           </div>
         </CardContent>
       </Card>
+
+      {/* Separate section: expense/receipt documents submitted via Tasks & Forms. */}
+      <FormDocumentsSection documents={formDocuments} />
 
       {editing && (
         <PurchaseInvoiceEditor

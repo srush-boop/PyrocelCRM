@@ -589,6 +589,162 @@ export async function decideApproval(input: {
   return { ok: true }
 }
 
+// --- Missed recurring-task escalations (manager view) -----------------------
+
+const APPROVALS_PATH = '/dashboard/approvals'
+
+/**
+ * Recurring internal-task instances an assigned user has FAILED to complete on
+ * time (due_at passed, still not completed), surfaced to their manager as a
+ * notification-only escalation on the Approvals page. Managers (admin/office)
+ * see every open miss; anyone else sees only misses by their direct reports
+ * (profiles.manager_id = me). Dismissed escalations are excluded.
+ */
+export async function getMissedTaskEscalations(): Promise<{
+  ok: boolean
+  error?: string
+  instances?: InternalTaskInstance[]
+}> {
+  const auth = await getAuth()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase, userId, profile } = auth
+  const isManager = profile.role === 'admin' || profile.role === 'office'
+
+  // Non-managers must actually manage someone; otherwise nothing to show.
+  let reportIds: string[] = []
+  if (!isManager) {
+    const { data: reports } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('manager_id', userId)
+    reportIds = (reports ?? []).map((r) => (r as { id: string }).id)
+    if (reportIds.length === 0) return { ok: true, instances: [] }
+  }
+
+  let query = supabase
+    .from('internal_task_instances')
+    .select(
+      '*, template:internal_task_templates!inner(*), user:profiles!internal_task_instances_user_id_fkey(id, full_name, manager_id)',
+    )
+    .eq('template.task_kind', 'recurring')
+    .neq('status', 'completed')
+    .not('due_at', 'is', null)
+    .lt('due_at', new Date().toISOString())
+    .is('escalation_dismissed_at', null)
+    .order('due_at', { ascending: true })
+    .limit(200)
+
+  if (!isManager) query = query.in('user_id', reportIds)
+
+  const { data, error } = await query
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, instances: (data ?? []) as InternalTaskInstance[] }
+}
+
+/** Authorises the current user to action a given escalation instance. */
+async function canManageEscalation(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  isManager: boolean,
+  instanceId: string,
+): Promise<{ ok: true; assigneeId: string; templateName: string } | { ok: false; error: string }> {
+  const { data: instance } = await supabase
+    .from('internal_task_instances')
+    .select(
+      'id, user_id, status, template:internal_task_templates(name), assignee:profiles!internal_task_instances_user_id_fkey(manager_id)',
+    )
+    .eq('id', instanceId)
+    .single()
+  if (!instance) return { ok: false, error: 'Task not found.' }
+
+  const assigneeId = (instance as { user_id: string }).user_id
+  const assignee = Array.isArray((instance as { assignee?: unknown }).assignee)
+    ? (instance as { assignee?: { manager_id?: string }[] }).assignee?.[0]
+    : (instance as { assignee?: { manager_id?: string } }).assignee
+  const managesAssignee = assignee?.manager_id === userId
+  if (!isManager && !managesAssignee) {
+    return { ok: false, error: 'Not authorised for this task.' }
+  }
+  const template = Array.isArray((instance as { template?: unknown }).template)
+    ? (instance as { template?: { name?: string }[] }).template?.[0]
+    : (instance as { template?: { name?: string } }).template
+  return { ok: true, assigneeId, templateName: template?.name ?? 'a task' }
+}
+
+/**
+ * Sends the assignee a reminder to complete a missed recurring task, and stamps
+ * escalation_reminded_at. Notification-only — the escalation stays on the list.
+ */
+export async function remindMissedTask(input: {
+  instanceId: string
+}): Promise<{ ok: boolean; error?: string }> {
+  const auth = await getAuth()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase, userId, profile } = auth
+  const isManager = profile.role === 'admin' || profile.role === 'office'
+
+  const check = await canManageEscalation(supabase, userId, isManager, input.instanceId)
+  if (!check.ok) return { ok: false, error: check.error }
+
+  const { error } = await supabase
+    .from('internal_task_instances')
+    .update({ escalation_reminded_at: new Date().toISOString() })
+    .eq('id', input.instanceId)
+  if (error) return { ok: false, error: error.message }
+
+  try {
+    const { data: manager } = await supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', userId)
+      .single()
+    const managerName = (manager as { full_name?: string } | null)?.full_name ?? 'Your manager'
+    const { notifyUsers } = await import('@/lib/notifications')
+    await notifyUsers({
+      userIds: [check.assigneeId],
+      title: `Reminder: ${check.templateName}`,
+      body: `${managerName} has reminded you to complete "${check.templateName}", which is overdue.`,
+      url: MY_TASKS_PATH,
+      category: 'internal_task_issue',
+      createdBy: userId,
+      data: { instanceId: input.instanceId },
+    })
+  } catch (err) {
+    console.log('[v0] missed-task reminder notify failed:', (err as Error).message)
+  }
+
+  revalidatePath(APPROVALS_PATH)
+  return { ok: true }
+}
+
+/**
+ * Dismisses a missed-task escalation so it drops off the manager's action list
+ * (e.g. handled offline). Does not complete the task itself.
+ */
+export async function dismissMissedTaskEscalation(input: {
+  instanceId: string
+}): Promise<{ ok: boolean; error?: string }> {
+  const auth = await getAuth()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase, userId, profile } = auth
+  const isManager = profile.role === 'admin' || profile.role === 'office'
+
+  const check = await canManageEscalation(supabase, userId, isManager, input.instanceId)
+  if (!check.ok) return { ok: false, error: check.error }
+
+  const { error } = await supabase
+    .from('internal_task_instances')
+    .update({
+      escalation_dismissed_at: new Date().toISOString(),
+      escalation_dismissed_by: userId,
+    })
+    .eq('id', input.instanceId)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath(APPROVALS_PATH)
+  return { ok: true }
+}
+
 // Evaluates each question's conditions against the submitted answers and, for
 // every fired condition carrying notifyUserIds, notifies those users in-app.
 // Mirrors the client's isConditionActive so builder + runtime agree.
@@ -782,6 +938,7 @@ export async function saveInternalTaskTemplate(
     approval_manager: input.approval_manager ?? false,
     approval_user_ids: input.approval_user_ids ?? [],
     notify_on_approval_user_ids: input.notify_on_approval_user_ids ?? [],
+    route_to_purchasing: input.route_to_purchasing ?? false,
     frequency: input.frequency ?? 'weekly',
     week_ending_dow: input.week_ending_dow ?? 0,
     anchor_month: input.anchor_month ?? null,

@@ -29,7 +29,15 @@ export default async function PurchasingPage({
 
   const { branch } = await searchParams
   const scope = await getBranchScope(profile as Profile, branch)
-  const orders = await getPurchaseOrders(supabase, { branchId: scope.activeBranchId })
+  const [orders, suppliersRes] = await Promise.all([
+    getPurchaseOrders(supabase, { branchId: scope.activeBranchId }),
+    supabase
+      .from('suppliers')
+      .select('id, name')
+      .neq('status', 'dead')
+      .order('name', { ascending: true }),
+  ])
+  const suppliers = (suppliersRes.data ?? []) as { id: string; name: string }[]
 
   return (
     <div className="space-y-6">
@@ -44,7 +52,12 @@ export default async function PurchasingPage({
         <BranchFilter branches={scope.branches} activeBranchId={scope.activeBranchId} />
       </div>
 
-      <PurchaseOrdersTable orders={orders} />
+      <PurchaseOrdersTable
+        orders={orders}
+        suppliers={suppliers}
+        branches={scope.branches.map((b) => ({ id: b.id, name: b.name }))}
+        defaultBranchId={scope.activeBranchId ?? scope.userBranchId ?? null}
+      />
     </div>
   )
 }

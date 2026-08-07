@@ -4,8 +4,13 @@ import { getVisibleLeaveRequests } from '@/lib/leave-approvals'
 import { LeaveApprovals } from '@/components/dashboard/approvals/leave-approvals'
 import { getReviewQueue, getProcessingQueue } from '@/lib/actions/timesheets'
 import { TimesheetReview } from '@/components/dashboard/timesheets/timesheet-review'
-import { getPendingApprovals, getDecidedApprovals } from '@/lib/actions/internal-tasks'
+import {
+  getPendingApprovals,
+  getDecidedApprovals,
+  getMissedTaskEscalations,
+} from '@/lib/actions/internal-tasks'
 import { FormApprovals } from '@/components/dashboard/approvals/form-approvals'
+import { MissedTaskEscalations } from '@/components/dashboard/approvals/missed-task-escalations'
 import { getPurchaseInvoiceApprovals } from '@/lib/actions/purchase-invoices'
 import { PurchaseInvoiceApprovals } from '@/components/dashboard/approvals/purchase-invoice-approvals'
 
@@ -26,6 +31,7 @@ export default async function ApprovalsPage() {
     formPending,
     formDecided,
     purchaseInvoiceApprovals,
+    missedTasks,
   ] = await Promise.all([
     getVisibleLeaveRequests(),
     getReviewQueue(),
@@ -33,6 +39,7 @@ export default async function ApprovalsPage() {
     getPendingApprovals(),
     getDecidedApprovals(),
     getPurchaseInvoiceApprovals(),
+    getMissedTaskEscalations(),
   ])
 
   const hasTimesheets = approveQueue.length > 0 || processQueue.length > 0
@@ -41,6 +48,8 @@ export default async function ApprovalsPage() {
   const purchaseInvoiceItems = purchaseInvoiceApprovals.ok
     ? purchaseInvoiceApprovals.invoices ?? []
     : []
+  const missedTaskItems = missedTasks.ok ? missedTasks.instances ?? [] : []
+  const hasMissedTasks = missedTaskItems.length > 0
 
   return (
     <div className="space-y-8">
@@ -58,6 +67,8 @@ export default async function ApprovalsPage() {
       </section>
 
       <FormApprovals pending={formPendingItems} decided={formDecidedItems} />
+
+      {hasMissedTasks && <MissedTaskEscalations instances={missedTaskItems} />}
 
       <PurchaseInvoiceApprovals invoices={purchaseInvoiceItems} />
 

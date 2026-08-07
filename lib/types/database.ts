@@ -991,6 +991,12 @@ export interface InternalTaskInstance {
   approved_by: string | null
   approved_at: string | null
   approval_note: string | null
+  // Manager escalation for missed recurring tasks. `reminded_at` records the
+  // last nudge sent to the assignee; `dismissed_at`/`dismissed_by` mark the
+  // escalation as acknowledged, removing it from the manager's action list.
+  escalation_reminded_at?: string | null
+  escalation_dismissed_at?: string | null
+  escalation_dismissed_by?: string | null
   created_at: string
   updated_at: string
   // Optional embeds

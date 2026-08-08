@@ -1401,44 +1401,51 @@ function BlockEditor({
       )}
 
       {block.type === 'doc_link' && (
-        <div className="grid gap-2 sm:grid-cols-2">
-          <div>
-            <Label className="text-xs">Document</Label>
-            <Select
-              value={block.documentId ?? ''}
-              onValueChange={(v) =>
-                onChange({
-                  documentId: v,
-                  documentName: documents.find((d) => d.id === v)?.name ?? null,
-                })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Choose a document" />
-              </SelectTrigger>
-              <SelectContent>
-                {documents.length === 0 ? (
-                  <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                    No reference documents uploaded yet.
-                  </div>
-                ) : (
-                  documents.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>
-                      {d.name}
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
+        <div className="space-y-3">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div>
+              <Label className="text-xs">Choose an existing document</Label>
+              <Select
+                value={block.documentId ?? ''}
+                onValueChange={(v) =>
+                  onChange({
+                    documentId: v,
+                    documentName: documents.find((d) => d.id === v)?.name ?? null,
+                    // Picking an existing doc clears any uploaded one.
+                    documentPathname: null,
+                    documentFileName: null,
+                  })
+                }
+                disabled={!!block.documentPathname}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a document" />
+                </SelectTrigger>
+                <SelectContent>
+                  {documents.length === 0 ? (
+                    <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                      No reference documents uploaded yet.
+                    </div>
+                  ) : (
+                    documents.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Link label (optional)</Label>
+              <Input
+                value={block.label}
+                onChange={(e) => onChange({ label: e.target.value })}
+                placeholder={block.documentFileName ?? block.documentName ?? 'Shown to the user'}
+              />
+            </div>
           </div>
-          <div>
-            <Label className="text-xs">Link label (optional)</Label>
-            <Input
-              value={block.label}
-              onChange={(e) => onChange({ label: e.target.value })}
-              placeholder={block.documentName ?? 'Shown to the user'}
-            />
-          </div>
+          <BlockDocumentUpload block={block} onChange={onChange} />
         </div>
       )}
 
@@ -1564,6 +1571,104 @@ function BlockEditor({
       )}
 
       <BlockImageField item={block} onChange={onChange} />
+    </div>
+  )
+}
+
+// Author-uploaded document attached to a doc_link block. Uploads a file
+// (PDF/Word/etc.) to the internal-task-templates/ Blob prefix (admin/office
+// only) and stores its pathname + filename on the block, so the form-filler
+// can open and read it. An alternative to picking an existing company document.
+function BlockDocumentUpload({
+  block,
+  onChange,
+}: {
+  block: InternalTaskItem
+  onChange: (updates: Partial<InternalTaskItem>) => void
+}) {
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const href = blobSrc(block.documentPathname ?? null)
+
+  async function upload(file: File) {
+    setUploading(true)
+    setError(null)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('kind', 'document')
+      const res = await fetch('/api/internal-tasks/template-image/upload', {
+        method: 'POST',
+        body: fd,
+      })
+      if (!res.ok) throw new Error('upload failed')
+      const data = (await res.json()) as { pathname: string; name: string }
+      // Uploading a document clears any linked existing document.
+      onChange({
+        documentPathname: data.pathname,
+        documentFileName: data.name,
+        documentId: null,
+        documentName: null,
+      })
+    } catch {
+      setError('Document upload failed — please try again.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  if (block.documentPathname) {
+    return (
+      <div className="rounded-md border bg-muted/30 p-3">
+        <div className="flex items-center gap-2">
+          <FileText className="size-4 shrink-0 text-muted-foreground" />
+          <a
+            href={href ?? '#'}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="min-w-0 flex-1 truncate text-sm text-primary hover:underline"
+          >
+            {block.documentFileName ?? 'Uploaded document'}
+          </a>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => onChange({ documentPathname: null, documentFileName: null })}
+          >
+            <X className="size-3.5" />
+            Remove
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+        {uploading ? (
+          <Loader2 className="size-3.5 animate-spin" />
+        ) : (
+          <Upload className="size-3.5" />
+        )}
+        Or upload a document
+        <input
+          type="file"
+          accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*,application/pdf"
+          className="hidden"
+          disabled={uploading}
+          onChange={(e) => {
+            const f = e.target.files?.[0]
+            if (f) upload(f)
+            e.target.value = ''
+          }}
+        />
+      </label>
+      <p className="mt-1 text-xs text-muted-foreground">
+        The form-filler can open and read this document while completing the task.
+      </p>
+      {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
     </div>
   )
 }

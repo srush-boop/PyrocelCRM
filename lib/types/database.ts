@@ -894,6 +894,11 @@ export interface InternalTaskItem {
   // doc_link: the linked company document (documents.id) + cached display name.
   documentId?: string | null
   documentName?: string | null
+  // doc_link: an author-uploaded document (private Blob pathname + original
+  // filename) that the form-filler can open/read. An alternative to picking an
+  // existing company document; served via blobSrc() through /api/blob.
+  documentPathname?: string | null
+  documentFileName?: string | null
   // url_link: the external URL to open.
   url?: string
   // table: the column definitions the user fills row-by-row at completion.

@@ -76,6 +76,10 @@ interface DocumentBrowserProps {
   allowCreateTags?: boolean
   // Path to revalidate after tag edits.
   revalidatePath?: string
+  // Optional callback fired after any create/upload/rename/delete/tag change,
+  // in addition to router.refresh(). Used by dialogs whose data is fetched
+  // client-side (not from the route), so they can re-load after a mutation.
+  onMutate?: () => void
 }
 
 function fileIcon(contentType: string | null) {
@@ -98,8 +102,15 @@ export function DocumentBrowser({
   requireTags = true,
   allowCreateTags,
   revalidatePath,
+  onMutate,
 }: DocumentBrowserProps) {
   const router = useRouter()
+  // Fire router.refresh() (for route-fed callers) plus the optional onMutate
+  // callback (for dialogs whose data is fetched client-side).
+  const refreshAfterMutation = () => {
+    router.refresh()
+    onMutate?.()
+  }
   const [currentFolder, setCurrentFolder] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -201,7 +212,7 @@ export function DocumentBrowser({
       setUploadOpen(false)
       setPendingFiles([])
       setUploadTags(EMPTY_SELECTION)
-      router.refresh()
+      refreshAfterMutation()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed')
     } finally {
@@ -233,7 +244,7 @@ export function DocumentBrowser({
       }
       setNewFolderOpen(false)
       setNewFolderName('')
-      router.refresh()
+      refreshAfterMutation()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not create folder')
     } finally {
@@ -259,7 +270,7 @@ export function DocumentBrowser({
       })
       if (!res.ok) throw new Error('Rename failed')
       setRenameTarget(null)
-      router.refresh()
+      refreshAfterMutation()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Rename failed')
     } finally {
@@ -279,7 +290,7 @@ export function DocumentBrowser({
       const res = await fetch(url, { method: 'DELETE' })
       if (!res.ok) throw new Error('Delete failed')
       setDeleteTarget(null)
-      router.refresh()
+      refreshAfterMutation()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Delete failed')
     } finally {
@@ -308,7 +319,7 @@ export function DocumentBrowser({
       )
       if (!res.ok) throw new Error(res.error)
       setTagTarget(null)
-      router.refresh()
+      refreshAfterMutation()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not update tags')
     } finally {

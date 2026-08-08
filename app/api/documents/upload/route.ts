@@ -14,6 +14,7 @@ const OWNER_TYPES: DocumentOwnerType[] = [
   'site_engineer',
   'system_reference',
   'job',
+  'quote',
 ]
 
 // PDF text extraction for system references can take a little while.

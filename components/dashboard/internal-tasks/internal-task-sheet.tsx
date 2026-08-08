@@ -430,7 +430,8 @@ export function InternalTaskSheet({
               )
             }
             if (q.type === 'doc_link') {
-              if (!q.documentId && !q.imagePathname) return null
+              if (!q.documentId && !q.documentPathname && !q.imagePathname) return null
+              const uploadedHref = blobSrc(q.documentPathname ?? null)
               return (
                 <div key={q.id} className="space-y-2">
                   {q.documentId ? (
@@ -443,6 +444,19 @@ export function InternalTaskSheet({
                       <FileText className="h-4 w-4 shrink-0" />
                       <span className="text-pretty">
                         {q.label || q.documentName || 'View document'}
+                      </span>
+                    </a>
+                  ) : null}
+                  {q.documentPathname && uploadedHref ? (
+                    <a
+                      href={uploadedHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm text-primary hover:bg-muted/60"
+                    >
+                      <FileText className="h-4 w-4 shrink-0" />
+                      <span className="text-pretty">
+                        {q.label || q.documentFileName || 'View document'}
                       </span>
                     </a>
                   ) : null}

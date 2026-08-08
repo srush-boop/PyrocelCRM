@@ -9,6 +9,8 @@ import { QuoteGroupPanel } from '@/components/dashboard/sales/quote-group-panel'
 import { QuoteQueriesPanel } from '@/components/dashboard/sales/quote-queries-panel'
 import { RemedialCallControls } from '@/components/dashboard/sales/remedial-call-controls'
 import { CreateDocumentButton } from '@/components/documents/create-document-dialog'
+import { QuoteDocuments } from '@/components/dashboard/sales/quote-documents'
+import { getOwnerDocuments, getAllDocumentTags } from '@/lib/documents/data'
 import { AddRequestButton } from '@/components/dashboard/requests/add-request-button'
 import { EntityRequestsCard } from '@/components/dashboard/requests/entity-requests-card'
 import { resolveDefaultMargin, isRoutineMaintenanceOnly } from '@/lib/sales'
@@ -205,6 +207,13 @@ export default async function QuoteDetailPage({
 
   const editable = typedQuote.status === 'draft'
 
+  // Documents stored against this quote (uploads + generated letters). The
+  // page is admin/office-gated, so management is always permitted.
+  const [quoteDocs, allDocTags] = await Promise.all([
+    getOwnerDocuments('quote', typedQuote.id),
+    getAllDocumentTags(),
+  ])
+
   // Map saved requirement rows into the builder's editable draft shapes.
   const initialRequirements = ((requirements ?? []) as Array<{
     id: string
@@ -298,6 +307,15 @@ export default async function QuoteDetailPage({
       />
 
       <EntityRequestsCard entityType="quote" entityId={typedQuote.id} />
+
+      <QuoteDocuments
+        quoteId={typedQuote.id}
+        folders={quoteDocs.folders}
+        files={quoteDocs.files}
+        canManage
+        allTags={allDocTags}
+        usedTags={quoteDocs.usedTags}
+      />
 
       <QuoteQueriesPanel
         quoteId={typedQuote.id}

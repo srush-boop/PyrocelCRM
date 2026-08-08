@@ -42,7 +42,7 @@ import { ClientLinksDialog } from './client-links-dialog'
 import { ClientInvoicesDialog } from './client-invoices-dialog'
 import { ClientRecurringDialog } from './client-recurring-dialog'
 import { BillingAccountsDialog } from '@/components/dashboard/billing/billing-accounts-dialog'
-import { CreateDocumentDialog } from '@/components/documents/create-document-dialog'
+import { ClientDocumentsDialog } from './client-documents-dialog'
 
 interface ClientsTableProps {
   clients: Client[]
@@ -229,7 +229,7 @@ export function ClientsTable({
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setDocClient(client)}>
                               <FileText className="mr-2 h-4 w-4" />
-                              Create document
+                              Documents
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => setDeleteId(client.id)}
@@ -460,13 +460,10 @@ export function ClientsTable({
       )}
 
       {docClient && (
-        <CreateDocumentDialog
+        <ClientDocumentsDialog
+          client={docClient}
           open={!!docClient}
           onOpenChange={(open) => !open && setDocClient(null)}
-          ownerType="client"
-          ownerId={docClient.id}
-          entityLabel={docClient.name}
-          revalidatePath="/dashboard/clients"
         />
       )}
 

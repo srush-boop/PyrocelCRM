@@ -3,6 +3,7 @@ import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Hammer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { QuoteBuilder } from '@/components/dashboard/sales/quote-builder'
 import { QuoteStatusPanel } from '@/components/dashboard/sales/quote-status-panel'
 import { QuoteGroupPanel } from '@/components/dashboard/sales/quote-group-panel'
@@ -300,67 +301,88 @@ export default async function QuoteDetailPage({
         </p>
       </div>
 
-      <QuoteStatusPanel
-        quote={typedQuote}
-        contractReviewId={(linkedReview as { id: string } | null)?.id ?? null}
-        isMaintenanceOnly={isMaintenanceOnly}
-      />
+      <Tabs defaultValue="quote" className="gap-4">
+        <TabsList>
+          <TabsTrigger value="quote">Quote</TabsTrigger>
+          <TabsTrigger value="documents">Documents</TabsTrigger>
+        </TabsList>
 
-      <EntityRequestsCard entityType="quote" entityId={typedQuote.id} />
+        {/* forceMount keeps the builder (and its unsaved state) mounted while
+            the Documents tab is open; inactive content is hidden, not removed. */}
+        <TabsContent
+          value="quote"
+          forceMount
+          className="mt-0 space-y-6 data-[state=inactive]:hidden"
+        >
+          <QuoteStatusPanel
+            quote={typedQuote}
+            contractReviewId={(linkedReview as { id: string } | null)?.id ?? null}
+            isMaintenanceOnly={isMaintenanceOnly}
+          />
 
-      <QuoteDocuments
-        quoteId={typedQuote.id}
-        folders={quoteDocs.folders}
-        files={quoteDocs.files}
-        canManage
-        allTags={allDocTags}
-        usedTags={quoteDocs.usedTags}
-      />
+          <EntityRequestsCard entityType="quote" entityId={typedQuote.id} />
 
-      <QuoteQueriesPanel
-        quoteId={typedQuote.id}
-        initialMessages={(quoteMessages ?? []) as QuoteMessage[]}
-      />
+          <QuoteQueriesPanel
+            quoteId={typedQuote.id}
+            initialMessages={(quoteMessages ?? []) as QuoteMessage[]}
+          />
 
-      <QuoteGroupPanel
-        currentId={typedQuote.id}
-        members={(groupMembers ?? []) as Parameters<typeof QuoteGroupPanel>[0]['members']}
-      />
+          <QuoteGroupPanel
+            currentId={typedQuote.id}
+            members={(groupMembers ?? []) as Parameters<typeof QuoteGroupPanel>[0]['members']}
+          />
 
-      <QuoteBuilder
-        clients={(clients ?? []) as Client[]}
-        sites={(sites ?? []) as Site[]}
-        branches={(branches ?? []) as Branch[]}
-        defaultBranchId={(profile as Profile).branch_id ?? null}
-        savedMaintenanceRates={
-          ((companyInfo as { maintenance_rates: Partial<MaintenanceRates> | null } | null)
-            ?.maintenance_rates) ?? null
-        }
-        savedInstallationRates={
-          ((companyInfo as { installation_rates: Partial<InstallationRates> | null } | null)
-            ?.installation_rates) ?? null
-        }
-        systemTypes={(systemTypes ?? []) as SystemType[]}
-        serviceTypes={(serviceTypes ?? []) as ServiceType[]}
-        quoteServices={(quoteServices ?? []) as QuoteService[]}
-        assetTypes={(assetTypes ?? []) as AssetType[]}
-        defaultHourlyCostPence={defaultHourlyCostPence}
-        defaultMarginPercent={defaultMarginPercent}
-        specTemplates={(specTemplates ?? []) as SystemSpecTemplate[]}
-        systemReferences={systemReferences ?? []}
-        workTypeFields={(workTypeFields ?? []) as WorkTypeField[]}
-        systemWorkTypeMargins={(systemWorkTypeMargins ?? []) as SystemWorkTypeMargin[]}
-        workTypeSettings={(workTypeSettings ?? []) as WorkTypeSetting[]}
-        designCategories={(designCategories ?? []) as QuoteDesignCategory[]}
-        bankValues={(bankValues ?? []) as QuoteBankValue[]}
-        quote={typedQuote}
-        initialSystems={(systems ?? []) as QuoteSystem[]}
-        initialLines={(lines ?? []) as QuoteLineItem[]}
-        initialPpm={(ppmRows ?? []) as QuoteSystemPpm[]}
-        initialRequirements={initialRequirements}
-        initialRequirementSource={initialRequirementSource}
-        readOnly={!editable}
-      />
+          <QuoteBuilder
+            clients={(clients ?? []) as Client[]}
+            sites={(sites ?? []) as Site[]}
+            branches={(branches ?? []) as Branch[]}
+            defaultBranchId={(profile as Profile).branch_id ?? null}
+            savedMaintenanceRates={
+              ((companyInfo as { maintenance_rates: Partial<MaintenanceRates> | null } | null)
+                ?.maintenance_rates) ?? null
+            }
+            savedInstallationRates={
+              ((companyInfo as { installation_rates: Partial<InstallationRates> | null } | null)
+                ?.installation_rates) ?? null
+            }
+            systemTypes={(systemTypes ?? []) as SystemType[]}
+            serviceTypes={(serviceTypes ?? []) as ServiceType[]}
+            quoteServices={(quoteServices ?? []) as QuoteService[]}
+            assetTypes={(assetTypes ?? []) as AssetType[]}
+            defaultHourlyCostPence={defaultHourlyCostPence}
+            defaultMarginPercent={defaultMarginPercent}
+            specTemplates={(specTemplates ?? []) as SystemSpecTemplate[]}
+            systemReferences={systemReferences ?? []}
+            workTypeFields={(workTypeFields ?? []) as WorkTypeField[]}
+            systemWorkTypeMargins={(systemWorkTypeMargins ?? []) as SystemWorkTypeMargin[]}
+            workTypeSettings={(workTypeSettings ?? []) as WorkTypeSetting[]}
+            designCategories={(designCategories ?? []) as QuoteDesignCategory[]}
+            bankValues={(bankValues ?? []) as QuoteBankValue[]}
+            quote={typedQuote}
+            initialSystems={(systems ?? []) as QuoteSystem[]}
+            initialLines={(lines ?? []) as QuoteLineItem[]}
+            initialPpm={(ppmRows ?? []) as QuoteSystemPpm[]}
+            initialRequirements={initialRequirements}
+            initialRequirementSource={initialRequirementSource}
+            readOnly={!editable}
+          />
+        </TabsContent>
+
+        <TabsContent
+          value="documents"
+          forceMount
+          className="mt-0 data-[state=inactive]:hidden"
+        >
+          <QuoteDocuments
+            quoteId={typedQuote.id}
+            folders={quoteDocs.folders}
+            files={quoteDocs.files}
+            canManage
+            allTags={allDocTags}
+            usedTags={quoteDocs.usedTags}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

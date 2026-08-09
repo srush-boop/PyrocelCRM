@@ -250,8 +250,9 @@ export async function EngineerHome({
         </CardContent>
       </Card>
 
-      {/* Parts needed across the next two weeks of calls, with reserve action */}
-      {upcomingParts.length > 0 && <UpcomingPartsCard parts={upcomingParts} />}
+      {/* Parts needed across the next two weeks of calls, with reserve action.
+          Always shown (even when empty) so the summary is a reliable fixture. */}
+      <UpcomingPartsCard parts={upcomingParts} />
 
       {/* Call count summary — compact so it doesn't dominate the home screen */}
       <div className="grid grid-cols-3 gap-3">

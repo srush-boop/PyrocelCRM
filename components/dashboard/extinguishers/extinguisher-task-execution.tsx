@@ -469,10 +469,10 @@ export function ExtinguisherTaskExecution({
     await runExit(task.id, routeProgress?.nextTaskId)
   }
 
-  // CDO engineers run routine planned routes and want to begin in one tap, so
-  // for them the primary Start action sits directly beneath the overview header
-  // rather than below the pre-attendance information.
-  const startAtTop = profile.discipline === 'cdo'
+  // The primary Start action always sits directly beneath the overview header
+  // so engineers can begin in one tap and every task item stays below it,
+  // consistent across all call types.
+  const startAtTop = true
   const startButton =
     status === 'pending' && canEdit ? (
       <Button onClick={handleStart} disabled={checkingShift} size="lg" className="w-full">

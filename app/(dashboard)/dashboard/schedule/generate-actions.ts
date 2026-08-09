@@ -105,6 +105,8 @@ export interface GenerateCallsFilterOptions {
   subcontractors: FilterOption[]
   systemTypes: FilterOption[]
   serviceTypes: FilterOption[]
+  /** Active engineers a generated batch can be assigned to. */
+  engineers: FilterOption[]
 }
 
 /** Rich select shared by the planner and the filter-options loader. */
@@ -410,7 +412,15 @@ export async function getGenerateCallsFilterOptions(): Promise<
     return { ok: false, error: 'You do not have permission to generate calls.' }
   }
 
-  const { data, error } = await supabase.from('site_services').select(GENERATABLE_SERVICE_SELECT)
+  const [{ data, error }, { data: engineerRows }] = await Promise.all([
+    supabase.from('site_services').select(GENERATABLE_SERVICE_SELECT),
+    supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .eq('role', 'engineer')
+      .eq('status', 'active')
+      .order('full_name'),
+  ])
   if (error) return { ok: false, error: 'Could not load filter options.' }
 
   const services = ((data || []) as unknown as ServiceRow[]).filter(isGeneratableService)
@@ -441,6 +451,10 @@ export async function getGenerateCallsFilterOptions(): Promise<
   const toSorted = (m: Map<string, string>): FilterOption[] =>
     Array.from(m, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
 
+  const engineers: FilterOption[] = (
+    (engineerRows ?? []) as { id: string; full_name: string | null; email: string | null }[]
+  ).map((e) => ({ id: e.id, name: e.full_name || e.email || 'Engineer' }))
+
   return {
     ok: true,
     options: {
@@ -452,6 +466,7 @@ export async function getGenerateCallsFilterOptions(): Promise<
       subcontractors: toSorted(subcontractors),
       systemTypes: toSorted(systemTypes),
       serviceTypes: toSorted(serviceTypes),
+      engineers,
     },
   }
 }
@@ -517,6 +532,7 @@ export async function generateMonthlyCalls(
   year: number,
   month: number,
   filters: GenerateCallsFilters = {},
+  assignEngineerId: string | null = null,
 ): Promise<GenerateMonthlyCallsResult> {
   const plan = await planMonthlyCalls(year, month, filters)
   const empty = { created: 0, skipped: plan.skipped, monthLabel: plan.monthLabel }
@@ -530,11 +546,15 @@ export async function generateMonthlyCalls(
   }
 
   const supabase = await createClient()
+  // Optionally assign every generated call to a chosen engineer. Empty/omitted
+  // leaves them unassigned (the existing default).
+  const assignedEngineerId = assignEngineerId || null
   const insertRows = plan.rows.map((r) => ({
     site_service_id: r.site_service_id,
     visit_type_id: r.visit_type_id,
     scheduled_date: r.scheduled_date,
     status: 'pending' as const,
+    assigned_engineer_id: assignedEngineerId,
   }))
 
   const { error: insertError } = await supabase.from('tasks').insert(insertRows)

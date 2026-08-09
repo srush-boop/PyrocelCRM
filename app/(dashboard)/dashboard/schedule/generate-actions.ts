@@ -37,15 +37,119 @@ export interface PreviewMonthlyCallsResult {
 
 interface ServiceRow {
   id: string
+  site_id: string
   service_type_id: string
   frequency_value: number
   frequency_unit: 'weeks' | 'months'
   next_service_date: string | null
   active: boolean | null
   status: string | null
-  site: { status: string | null; name: string | null } | null
-  service_type: { status: string | null; is_recurring: boolean | null; name: string | null } | null
-  site_system: { status: string | null; system_type: { requires_recurring_visits: boolean | null } | null } | null
+  area_id: string | null
+  route_id: string | null
+  subcontractor_id: string | null
+  worker_type: string | null
+  site:
+    | {
+        status: string | null
+        name: string | null
+        client_id: string | null
+        branch_id: string | null
+        route_id: string | null
+        client: { id: string; name: string | null } | null
+        branch: { id: string; name: string | null } | null
+        route: { id: string; name: string | null } | null
+      }
+    | null
+  service_type: { id: string; status: string | null; is_recurring: boolean | null; name: string | null } | null
+  site_system: {
+    status: string | null
+    system_type: { id: string; name: string | null; requires_recurring_visits: boolean | null } | null
+  } | null
+  area: { id: string; name: string | null } | null
+  subcontractor: { id: string; name: string | null } | null
+}
+
+/**
+ * Optional narrowing applied to the monthly generator. Every field is a simple
+ * equality match against the service (or, for `dueByDate`, the projected call
+ * date). Undefined/null fields are ignored, so an empty object generates
+ * everything due that month exactly as before.
+ */
+export interface GenerateCallsFilters {
+  clientId?: string | null
+  siteId?: string | null
+  branchId?: string | null
+  areaId?: string | null
+  routeId?: string | null
+  subcontractorId?: string | null
+  systemTypeId?: string | null
+  serviceTypeId?: string | null
+  /** 'cdo' | 'engineer' | 'subcontractor' */
+  workerType?: string | null
+  /** YYYY-MM-DD. Keep only calls whose projected date is on/before this day. */
+  dueByDate?: string | null
+}
+
+export interface FilterOption {
+  id: string
+  name: string
+}
+
+/** Distinct, sorted option lists derived from the generatable services. */
+export interface GenerateCallsFilterOptions {
+  clients: FilterOption[]
+  sites: FilterOption[]
+  branches: FilterOption[]
+  areas: FilterOption[]
+  routes: FilterOption[]
+  subcontractors: FilterOption[]
+  systemTypes: FilterOption[]
+  serviceTypes: FilterOption[]
+}
+
+/** Rich select shared by the planner and the filter-options loader. */
+const GENERATABLE_SERVICE_SELECT = `id, site_id, service_type_id, frequency_value, frequency_unit,
+  next_service_date, active, status, area_id, route_id, subcontractor_id, worker_type,
+  site:sites(status, name, client_id, branch_id, route_id,
+    client:clients(id, name), branch:branches(id, name), route:routes(id, name)),
+  service_type:service_types(id, status, is_recurring, name),
+  site_system:site_systems(status, system_type:system_types(id, name, requires_recurring_visits)),
+  area:areas(id, name),
+  subcontractor:suppliers(id, name)`
+
+/**
+ * Shared "is this service one the monthly generator considers?" predicate.
+ * active mirrors status==='live' (trigger-synced), so Engaged (new) and Dormant
+ * (dead) services are excluded automatically; charge-only system types and
+ * non-recurring (reactive/emergency) service types never auto-generate.
+ */
+function isGeneratableService(s: ServiceRow): boolean {
+  return (
+    s.active !== false &&
+    s.status !== 'new' &&
+    s.status !== 'dead' &&
+    s.site?.status !== 'dead' &&
+    s.service_type?.status !== 'dead' &&
+    s.site_system?.status !== 'new' &&
+    s.site_system?.status !== 'dead' &&
+    s.site_system?.system_type?.requires_recurring_visits !== false &&
+    s.service_type?.is_recurring !== false
+  )
+}
+
+/** Apply the optional user filters to a single service (equality matches). */
+function serviceMatchesFilters(s: ServiceRow, f: GenerateCallsFilters): boolean {
+  if (f.clientId && s.site?.client_id !== f.clientId) return false
+  if (f.siteId && s.site_id !== f.siteId) return false
+  if (f.branchId && s.site?.branch_id !== f.branchId) return false
+  if (f.areaId && s.area_id !== f.areaId) return false
+  // Routes are site-level (a route is an ordered list of sites).
+  if (f.routeId && s.site?.route_id !== f.routeId) return false
+  if (f.subcontractorId && s.subcontractor_id !== f.subcontractorId) return false
+  if (f.systemTypeId && s.site_system?.system_type?.id !== f.systemTypeId) return false
+  if (f.serviceTypeId && s.service_type_id !== f.serviceTypeId) return false
+  if (f.workerType && s.worker_type !== f.workerType) return false
+  return true
 }
 
 interface TaskRow {
@@ -86,7 +190,11 @@ interface MonthPlan {
  * late in the month, or a site that was dormant and missed a generate, can be
  * back-filled by selecting a current or past month.
  */
-async function planMonthlyCalls(year: number, month: number): Promise<MonthPlan> {
+async function planMonthlyCalls(
+  year: number,
+  month: number,
+  filters: GenerateCallsFilters = {},
+): Promise<MonthPlan> {
   const monthStart = new Date(year, month - 1, 1)
   const monthEnd = new Date(year, month, 0) // last day of target month
   const monthLabel = monthStart.toLocaleDateString('en-GB', {
@@ -126,38 +234,19 @@ async function planMonthlyCalls(year: number, month: number): Promise<MonthPlan>
     return { ...base, ok: false, error: 'You do not have permission to generate calls.' }
   }
 
-  // Load live services (site + service type not "dead").
+  // Load live services (site + service type not "dead"), then apply the
+  // optional user filters (client / site / branch / area / route / subcontractor
+  // / system type / service type / worker type).
   const { data: serviceData, error: svcError } = await supabase
     .from('site_services')
-    .select(
-      `id, service_type_id, frequency_value, frequency_unit, next_service_date, active, status,
-       site:sites(status, name),
-       service_type:service_types(status, is_recurring, name),
-       site_system:site_systems(status, system_type:system_types(requires_recurring_visits))`,
-    )
+    .select(GENERATABLE_SERVICE_SELECT)
   if (svcError) {
     return { ...base, ok: false, error: 'Could not load services.' }
   }
 
-  const services = ((serviceData || []) as unknown as ServiceRow[]).filter(
-    (s) =>
-      // active mirrors status==='live' (trigger-synced), so Engaged (new) and
-      // Dormant (dead) services are excluded here automatically.
-      s.active !== false &&
-      s.status !== 'new' &&
-      s.status !== 'dead' &&
-      s.site?.status !== 'dead' &&
-      s.service_type?.status !== 'dead' &&
-      // A parent system that is Engaged/Dormant, or a charge-only system type
-      // (requires_recurring_visits === false, e.g. Remote Monitoring), never
-      // auto-generates PPM calls.
-      s.site_system?.status !== 'new' &&
-      s.site_system?.status !== 'dead' &&
-      s.site_system?.system_type?.requires_recurring_visits !== false &&
-      // Reactive / emergency (non-recurring) call types never auto-generate PPM
-      // calls — they are logged ad-hoc via "Book Call".
-      s.service_type?.is_recurring !== false,
-  )
+  const services = ((serviceData || []) as unknown as ServiceRow[])
+    .filter(isGeneratableService)
+    .filter((s) => serviceMatchesFilters(s, filters))
   if (services.length === 0) {
     return base
   }
@@ -286,7 +375,85 @@ async function planMonthlyCalls(year: number, month: number): Promise<MonthPlan>
     }
   }
 
-  return { ...base, rows: newRows, skipped }
+  // "Due by" cap: only keep calls whose projected date lands on/before the
+  // chosen day (YYYY-MM-DD string compare is safe for ISO dates).
+  const rows = filters.dueByDate
+    ? newRows.filter((r) => r.scheduled_date <= filters.dueByDate!)
+    : newRows
+
+  return { ...base, rows, skipped }
+}
+
+/**
+ * Load the distinct filter option lists for the Generate Calls dialog, derived
+ * from exactly the services the generator would consider (so the dropdowns only
+ * ever show clients / sites / routes / etc. that actually have generatable
+ * recurring services). Office/admin only.
+ */
+export async function getGenerateCallsFilterOptions(): Promise<
+  { ok: true; options: GenerateCallsFilterOptions } | { ok: false; error: string }
+> {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: 'Not authenticated.' }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+  const role = (profile as { role?: string } | null)?.role
+  if (role !== 'admin' && role !== 'office') {
+    return { ok: false, error: 'You do not have permission to generate calls.' }
+  }
+
+  const { data, error } = await supabase.from('site_services').select(GENERATABLE_SERVICE_SELECT)
+  if (error) return { ok: false, error: 'Could not load filter options.' }
+
+  const services = ((data || []) as unknown as ServiceRow[]).filter(isGeneratableService)
+
+  const clients = new Map<string, string>()
+  const sites = new Map<string, string>()
+  const branches = new Map<string, string>()
+  const areas = new Map<string, string>()
+  const routes = new Map<string, string>()
+  const subcontractors = new Map<string, string>()
+  const systemTypes = new Map<string, string>()
+  const serviceTypes = new Map<string, string>()
+
+  for (const s of services) {
+    if (s.site?.client?.id) clients.set(s.site.client.id, s.site.client.name ?? 'Client')
+    if (s.site_id) sites.set(s.site_id, s.site?.name ?? 'Site')
+    if (s.site?.branch?.id) branches.set(s.site.branch.id, s.site.branch.name ?? 'Branch')
+    if (s.area?.id) areas.set(s.area.id, s.area.name ?? 'Area')
+    if (s.site?.route?.id) routes.set(s.site.route.id, s.site.route.name ?? 'Route')
+    if (s.subcontractor?.id)
+      subcontractors.set(s.subcontractor.id, s.subcontractor.name ?? 'Sub-contractor')
+    if (s.site_system?.system_type?.id)
+      systemTypes.set(s.site_system.system_type.id, s.site_system.system_type.name ?? 'System')
+    if (s.service_type?.id)
+      serviceTypes.set(s.service_type.id, s.service_type.name ?? 'Service')
+  }
+
+  const toSorted = (m: Map<string, string>): FilterOption[] =>
+    Array.from(m, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
+
+  return {
+    ok: true,
+    options: {
+      clients: toSorted(clients),
+      sites: toSorted(sites),
+      branches: toSorted(branches),
+      areas: toSorted(areas),
+      routes: toSorted(routes),
+      subcontractors: toSorted(subcontractors),
+      systemTypes: toSorted(systemTypes),
+      serviceTypes: toSorted(serviceTypes),
+    },
+  }
 }
 
 /** Enrich raw plan rows into display-ready calls, sorted by date then site. */
@@ -313,8 +480,9 @@ function enrichPlan(plan: MonthPlan): PlannedCall[] {
 export async function previewMonthlyCalls(
   year: number,
   month: number,
+  filters: GenerateCallsFilters = {},
 ): Promise<PreviewMonthlyCallsResult> {
-  const plan = await planMonthlyCalls(year, month)
+  const plan = await planMonthlyCalls(year, month, filters)
   if (!plan.ok) {
     return {
       ok: false,
@@ -348,8 +516,9 @@ export async function previewMonthlyCalls(
 export async function generateMonthlyCalls(
   year: number,
   month: number,
+  filters: GenerateCallsFilters = {},
 ): Promise<GenerateMonthlyCallsResult> {
-  const plan = await planMonthlyCalls(year, month)
+  const plan = await planMonthlyCalls(year, month, filters)
   const empty = { created: 0, skipped: plan.skipped, monthLabel: plan.monthLabel }
 
   if (!plan.ok) {

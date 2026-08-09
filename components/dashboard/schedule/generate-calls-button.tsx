@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CalendarPlus, Loader2, Eye, History } from 'lucide-react'
+import { CalendarPlus, Loader2, Eye, History, SlidersHorizontal, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -15,6 +15,8 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
 import {
   Select,
   SelectContent,
@@ -24,9 +26,17 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
+import {
   generateMonthlyCalls,
   previewMonthlyCalls,
+  getGenerateCallsFilterOptions,
   type PlannedCall,
+  type GenerateCallsFilters,
+  type GenerateCallsFilterOptions,
 } from '@/app/(dashboard)/dashboard/schedule/generate-actions'
 
 interface MonthOption {
@@ -67,6 +77,25 @@ function formatCallDate(dateStr: string) {
   })
 }
 
+const ALL = '__all__'
+
+// The filter keys that map 1:1 to an option list from the server.
+type OptionFilterKey =
+  | 'clientId'
+  | 'siteId'
+  | 'branchId'
+  | 'areaId'
+  | 'routeId'
+  | 'subcontractorId'
+  | 'systemTypeId'
+  | 'serviceTypeId'
+
+const WORKER_TYPES: { value: string; label: string }[] = [
+  { value: 'cdo', label: 'CDO' },
+  { value: 'engineer', label: 'Engineer' },
+  { value: 'subcontractor', label: 'Sub-contractor' },
+]
+
 export function GenerateCallsButton() {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -80,22 +109,70 @@ export function GenerateCallsButton() {
   const defaultValue = monthOptions[7]?.value ?? monthOptions[0]?.value ?? ''
   const [selected, setSelected] = useState(defaultValue)
 
+  // Filters
+  const [filters, setFilters] = useState<GenerateCallsFilters>({})
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [options, setOptions] = useState<GenerateCallsFilterOptions | null>(null)
+  const [loadingOptions, setLoadingOptions] = useState(false)
+
   const selectedOption = monthOptions.find((o) => o.value === selected)
   const retroMonths = monthOptions.filter((o) => o.retro)
   const forwardMonths = monthOptions.filter((o) => !o.retro)
 
-  // Any change of month invalidates a stale preview.
-  const handleSelect = (value: string) => {
-    setSelected(value)
+  // Load the filter option lists once, the first time the dialog opens.
+  useEffect(() => {
+    if (!open || options || loadingOptions) return
+    setLoadingOptions(true)
+    getGenerateCallsFilterOptions()
+      .then((res) => {
+        if (res.ok) setOptions(res.options)
+      })
+      .catch(() => {
+        /* non-fatal: filters simply stay unavailable */
+      })
+      .finally(() => setLoadingOptions(false))
+  }, [open, options, loadingOptions])
+
+  // Number of active filters (for the badge on the Filters toggle).
+  const activeFilterCount = Object.values(filters).filter(
+    (v) => v !== undefined && v !== null && v !== '',
+  ).length
+
+  const invalidatePreview = () => {
     setPreview(null)
     setPreviewSkipped(0)
+  }
+
+  // Any change of month or filter invalidates a stale preview.
+  const handleSelect = (value: string) => {
+    setSelected(value)
+    invalidatePreview()
+  }
+
+  const setFilter = (key: keyof GenerateCallsFilters, value: string | null) => {
+    setFilters((prev) => {
+      const next = { ...prev }
+      if (!value || value === ALL) delete next[key]
+      else next[key] = value
+      return next
+    })
+    invalidatePreview()
+  }
+
+  const clearFilters = () => {
+    setFilters({})
+    invalidatePreview()
   }
 
   const handlePreview = async () => {
     if (!selectedOption) return
     setPreviewing(true)
     try {
-      const result = await previewMonthlyCalls(selectedOption.year, selectedOption.month)
+      const result = await previewMonthlyCalls(
+        selectedOption.year,
+        selectedOption.month,
+        filters,
+      )
       if (!result.ok) {
         toast.error(result.error ?? 'Could not preview calls.')
         return
@@ -113,7 +190,11 @@ export function GenerateCallsButton() {
     if (!selectedOption) return
     setSubmitting(true)
     try {
-      const result = await generateMonthlyCalls(selectedOption.year, selectedOption.month)
+      const result = await generateMonthlyCalls(
+        selectedOption.year,
+        selectedOption.month,
+        filters,
+      )
       if (!result.ok) {
         toast.error(result.error ?? 'Could not generate calls.')
         return
@@ -157,7 +238,7 @@ export function GenerateCallsButton() {
           Generate Calls
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Generate monthly calls</DialogTitle>
           <DialogDescription>
@@ -201,6 +282,119 @@ export function GenerateCallsButton() {
               : 'Due dates are rolled forward from each service’s fixed visit frequency.'}
           </p>
         </div>
+
+        {/* Optional filters — narrow which services get generated. */}
+        <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
+          <div className="flex items-center justify-between">
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="gap-2 px-2">
+                <SlidersHorizontal className="h-4 w-4" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <Badge variant="secondary" className="ml-1">
+                    {activeFilterCount}
+                  </Badge>
+                )}
+              </Button>
+            </CollapsibleTrigger>
+            {activeFilterCount > 0 && (
+              <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground" onClick={clearFilters}>
+                <X className="h-3.5 w-3.5" />
+                Clear
+              </Button>
+            )}
+          </div>
+
+          <CollapsibleContent className="pt-2">
+            {loadingOptions ? (
+              <div className="flex items-center gap-2 px-1 py-4 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading filters…
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <FilterSelect
+                  label="Client"
+                  value={filters.clientId ?? null}
+                  onChange={(v) => setFilter('clientId', v)}
+                  options={options?.clients ?? []}
+                />
+                <FilterSelect
+                  label="Site"
+                  value={filters.siteId ?? null}
+                  onChange={(v) => setFilter('siteId', v)}
+                  options={options?.sites ?? []}
+                />
+                <FilterSelect
+                  label="Branch"
+                  value={filters.branchId ?? null}
+                  onChange={(v) => setFilter('branchId', v)}
+                  options={options?.branches ?? []}
+                />
+                <FilterSelect
+                  label="Area"
+                  value={filters.areaId ?? null}
+                  onChange={(v) => setFilter('areaId', v)}
+                  options={options?.areas ?? []}
+                />
+                <FilterSelect
+                  label="Route"
+                  value={filters.routeId ?? null}
+                  onChange={(v) => setFilter('routeId', v)}
+                  options={options?.routes ?? []}
+                />
+                <FilterSelect
+                  label="System type"
+                  value={filters.systemTypeId ?? null}
+                  onChange={(v) => setFilter('systemTypeId', v)}
+                  options={options?.systemTypes ?? []}
+                />
+                <FilterSelect
+                  label="Service type"
+                  value={filters.serviceTypeId ?? null}
+                  onChange={(v) => setFilter('serviceTypeId', v)}
+                  options={options?.serviceTypes ?? []}
+                />
+                <FilterSelect
+                  label="Sub-contractor"
+                  value={filters.subcontractorId ?? null}
+                  onChange={(v) => setFilter('subcontractorId', v)}
+                  options={options?.subcontractors ?? []}
+                />
+                <div className="grid gap-1.5">
+                  <Label className="text-xs text-muted-foreground">Worker type</Label>
+                  <Select
+                    value={filters.workerType ?? ALL}
+                    onValueChange={(v) => setFilter('workerType', v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="All" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL}>All</SelectItem>
+                      {WORKER_TYPES.map((w) => (
+                        <SelectItem key={w.value} value={w.value}>
+                          {w.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="due-by" className="text-xs text-muted-foreground">
+                    Due by date
+                  </Label>
+                  <Input
+                    id="due-by"
+                    type="date"
+                    value={filters.dueByDate ?? ''}
+                    onChange={(e) => setFilter('dueByDate', e.target.value || null)}
+                  />
+                </div>
+              </div>
+            )}
+          </CollapsibleContent>
+        </Collapsible>
 
         {preview !== null && (
           <div className="rounded-md border">
@@ -274,5 +468,41 @@ export function GenerateCallsButton() {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * A single "All / <options>" filter select. Renders disabled with an
+ * "All (none)" hint when the option list is empty (e.g. no areas configured).
+ */
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string
+  value: string | null
+  onChange: (value: string | null) => void
+  options: { id: string; name: string }[]
+}) {
+  const empty = options.length === 0
+  return (
+    <div className="grid gap-1.5">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Select value={value ?? ALL} onValueChange={onChange} disabled={empty}>
+        <SelectTrigger>
+          <SelectValue placeholder="All" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL}>All</SelectItem>
+          {options.map((o) => (
+            <SelectItem key={o.id} value={o.id}>
+              {o.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   )
 }

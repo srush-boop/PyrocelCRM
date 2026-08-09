@@ -120,10 +120,12 @@ export function CallPartsPicker({ taskId, canEdit = true }: CallPartsPickerProps
           <div>
             <CardTitle className="flex items-center gap-2 text-lg">
               <Wrench className="h-5 w-5 text-muted-foreground" />
-              Parts used on this call
+              {lines.length > 0 ? 'Parts used on this call' : 'Parts'}
             </CardTitle>
             <CardDescription>
-              Catalogue parts fitted or used during this call.
+              {lines.length > 0
+                ? 'Catalogue parts fitted or used during this call.'
+                : 'Add any catalogue parts you fit or use on this call. None are recorded yet.'}
             </CardDescription>
           </div>
           <Badge variant="secondary" className="flex items-center gap-1">

@@ -164,6 +164,12 @@ export function TaskHeader({
             {site?.name ?? 'Call'}
           </h1>
           <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+            {systemType?.name && (
+              <>
+                <span className="font-medium text-foreground">{systemType.name}</span>
+                <span aria-hidden>·</span>
+              </>
+            )}
             <span className="font-medium text-foreground">{serviceType?.name ?? 'Service'}</span>
             {visitName && <span>· {visitName}</span>}
           </p>

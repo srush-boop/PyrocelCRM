@@ -33,6 +33,20 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -42,8 +56,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { GridHeader, GridToolbar, GridSearch } from '@/components/dashboard/grid-header'
+import { GridViewsBar } from '@/components/dashboard/grid-views-bar'
 import { cn } from '@/lib/utils'
 import { fixAttemptLabel } from '@/lib/follow-up'
+import type { SavedGridView, SharedGridView } from '@/lib/types/database'
 import {
   approveFollowUp,
   rejectFollowUp,
@@ -112,117 +129,299 @@ interface Props {
   rows: FollowUpReviewRow[]
   engineers: { id: string; name: string }[]
   locations: { id: string; name: string; kind: string }[]
+  savedViews: SavedGridView[]
+  sharedViews: SharedGridView[]
+  currentUserId: string
 }
+
+const STATUS_FILTERS = [
+  { value: 'all', label: 'All statuses' },
+  { value: 'pending', label: 'Pending review' },
+  { value: 'escalated', label: 'Escalated' },
+  { value: 'approved', label: 'Approved' },
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'cancelled', label: 'Cancelled' },
+] as const
+
+interface FollowUpFilters {
+  search: string
+  status: string
+}
+
+const EMPTY_FILTERS: FollowUpFilters = { search: '', status: 'all' }
 
 function formatDate(value: string | null): string {
   if (!value) return '—'
   return new Date(value).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-export function FollowUpsReview({ rows, engineers, locations }: Props) {
+function statusBadge(row: FollowUpReviewRow) {
+  if (row.escalated && row.status === 'pending') {
+    return (
+      <Badge variant="destructive" className="gap-1">
+        <AlertTriangle className="h-3 w-3" /> Escalated
+      </Badge>
+    )
+  }
+  if (row.status === 'pending') {
+    return <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Pending review</Badge>
+  }
+  return (
+    <Badge variant="outline" className="capitalize">
+      {row.status}
+    </Badge>
+  )
+}
+
+export function FollowUpsReview({
+  rows,
+  engineers,
+  locations,
+  savedViews,
+  sharedViews,
+  currentUserId,
+}: Props) {
   const searchParams = useSearchParams()
   const preselect = searchParams.get('id')
 
-  const pending = useMemo(() => rows.filter((r) => r.status === 'pending'), [rows])
-  const resolved = useMemo(() => rows.filter((r) => r.status !== 'pending'), [rows])
+  const [filters, setFilters] = useState<FollowUpFilters>(EMPTY_FILTERS)
+  const [selectedId, setSelectedId] = useState<string | null>(preselect ?? null)
+  const [printMode, setPrintMode] = useState<'summary' | 'detailed'>('summary')
 
-  const [selectedId, setSelectedId] = useState<string | null>(
-    preselect ?? pending[0]?.id ?? rows[0]?.id ?? null,
-  )
   useEffect(() => {
     if (preselect) setSelectedId(preselect)
   }, [preselect])
 
+  const isFiltered = filters.search.trim() !== '' || filters.status !== 'all'
+
+  const filtered = useMemo(() => {
+    const q = filters.search.trim().toLowerCase()
+    return rows.filter((r) => {
+      if (filters.status === 'escalated') {
+        if (!(r.escalated && r.status === 'pending')) return false
+      } else if (filters.status !== 'all' && r.status !== filters.status) {
+        return false
+      }
+      if (!q) return true
+      return (
+        r.siteName.toLowerCase().includes(q) ||
+        r.issueSummary.toLowerCase().includes(q) ||
+        r.requestedByName.toLowerCase().includes(q) ||
+        (r.originalRef ?? '').toLowerCase().includes(q) ||
+        r.originalServiceName.toLowerCase().includes(q)
+      )
+    })
+  }, [rows, filters])
+
+  const pendingCount = rows.filter((r) => r.status === 'pending').length
   const selected = rows.find((r) => r.id === selectedId) ?? null
 
-  if (rows.length === 0) {
-    return (
-      <Card>
-        <CardContent className="flex flex-col items-center gap-2 py-16 text-center">
-          <CheckCircle2 className="h-10 w-10 text-muted-foreground" />
-          <p className="font-medium">No follow-ups to review</p>
-          <p className="text-sm text-muted-foreground">
-            When an engineer flags further works required, it will appear here for review.
-          </p>
-        </CardContent>
-      </Card>
-    )
+  function handlePrint(mode: string) {
+    setPrintMode(mode === 'detailed' ? 'detailed' : 'summary')
+    setTimeout(() => window.print(), 60)
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
-      {/* Master list */}
-      <div className="flex flex-col gap-2">
-        {pending.length > 0 && (
-          <p className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Pending review ({pending.length})
-          </p>
-        )}
-        {pending.map((r) => (
-          <ListItem key={r.id} row={r} active={r.id === selectedId} onClick={() => setSelectedId(r.id)} />
-        ))}
-        {resolved.length > 0 && (
-          <p className="mt-3 px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Reviewed
-          </p>
-        )}
-        {resolved.map((r) => (
-          <ListItem key={r.id} row={r} active={r.id === selectedId} onClick={() => setSelectedId(r.id)} />
-        ))}
-      </div>
+    <div className="space-y-4">
+      <GridHeader
+        title="Follow-ups"
+        description={
+          pendingCount > 0
+            ? `${pendingCount} awaiting review`
+            : 'Review works flagged by engineers as unresolved.'
+        }
+        actions={
+          <GridViewsBar
+            gridKey="follow-ups"
+            filters={filters as unknown as Record<string, unknown>}
+            isFiltered={isFiltered}
+            onApply={(f) => setFilters({ ...EMPTY_FILTERS, ...(f as Partial<FollowUpFilters>) })}
+            savedViews={savedViews}
+            sharedViews={sharedViews}
+            currentUserId={currentUserId}
+            onPrint={handlePrint}
+            printModes={[
+              { key: 'summary', label: 'Print summary table' },
+              { key: 'detailed', label: 'Print detailed (with parts & history)' },
+            ]}
+          />
+        }
+      />
 
-      {/* Detail */}
-      <div>
-        {selected ? (
-          <FollowUpDetail row={selected} engineers={engineers} locations={locations} />
-        ) : (
-          <Card>
-            <CardContent className="py-16 text-center text-sm text-muted-foreground">
-              Select a follow-up to review.
-            </CardContent>
-          </Card>
-        )}
-      </div>
+      <GridToolbar
+        meta={`${filtered.length} of ${rows.length}`}
+        className="no-print"
+      >
+        <GridSearch
+          value={filters.search}
+          onChange={(v) => setFilters((f) => ({ ...f, search: v }))}
+          placeholder="Search site, issue, engineer or reference..."
+        />
+        <Select
+          value={filters.status}
+          onValueChange={(v) => setFilters((f) => ({ ...f, status: v }))}
+        >
+          <SelectTrigger className="w-[180px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {STATUS_FILTERS.map((s) => (
+              <SelectItem key={s.value} value={s.value}>
+                {s.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </GridToolbar>
+
+      {rows.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-2 py-16 text-center">
+            <CheckCircle2 className="h-10 w-10 text-muted-foreground" />
+            <p className="font-medium">No follow-ups to review</p>
+            <p className="text-sm text-muted-foreground">
+              When an engineer flags further works required, it will appear here for review.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="no-print">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Site</TableHead>
+                <TableHead>Issue</TableHead>
+                <TableHead>Raised by</TableHead>
+                <TableHead>Attempt</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead className="w-8" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((r) => (
+                <TableRow
+                  key={r.id}
+                  className={cn(
+                    'cursor-pointer',
+                    r.escalated && r.status === 'pending' && 'bg-destructive/5',
+                  )}
+                  onClick={() => setSelectedId(r.id)}
+                >
+                  <TableCell className="font-medium">{r.siteName}</TableCell>
+                  <TableCell className="max-w-[280px]">
+                    <p className="line-clamp-2 text-sm text-muted-foreground">{r.issueSummary}</p>
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{r.requestedByName}</TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">{fixAttemptLabel(r.fixAttempt)}</Badge>
+                  </TableCell>
+                  <TableCell>{statusBadge(r)}</TableCell>
+                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                    {formatDate(r.createdAt)}
+                  </TableCell>
+                  <TableCell>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                  </TableCell>
+                </TableRow>
+              ))}
+              {filtered.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                    No follow-ups match your filters.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
+
+      {/* Detail dialog */}
+      <Dialog open={!!selected} onOpenChange={(open) => !open && setSelectedId(null)}>
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Review follow-up</DialogTitle>
+          </DialogHeader>
+          {selected && (
+            <FollowUpDetail
+              row={selected}
+              engineers={engineers}
+              locations={locations}
+              onDone={() => setSelectedId(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Print-only view */}
+      <FollowUpsPrintView rows={filtered} mode={printMode} filters={filters} />
     </div>
   )
 }
 
-function ListItem({ row, active, onClick }: { row: FollowUpReviewRow; active: boolean; onClick: () => void }) {
+/** Print-only markup (hidden on screen, shown by @media print). */
+function FollowUpsPrintView({
+  rows,
+  mode,
+  filters,
+}: {
+  rows: FollowUpReviewRow[]
+  mode: 'summary' | 'detailed'
+  filters: FollowUpFilters
+}) {
+  const statusLabel = STATUS_FILTERS.find((s) => s.value === filters.status)?.label ?? 'All'
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'w-full rounded-lg border bg-card p-3 text-left transition-colors hover:border-primary/50',
-        active && 'border-primary ring-1 ring-primary',
-        row.escalated && row.status === 'pending' && 'border-destructive',
-        row.status !== 'pending' && 'opacity-70',
-      )}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-sm font-medium">{row.siteName}</span>
-        {row.escalated && row.status === 'pending' ? (
-          <Badge variant="destructive" className="shrink-0 gap-1">
-            <AlertTriangle className="h-3 w-3" /> Escalated
-          </Badge>
-        ) : row.status === 'pending' ? (
-          <Badge variant="secondary" className="shrink-0">
-            {fixAttemptLabel(row.fixAttempt)}
-          </Badge>
-        ) : (
-          <Badge variant="outline" className="shrink-0 capitalize">
-            {row.status}
-          </Badge>
-        )}
-      </div>
-      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{row.issueSummary}</p>
-      <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
-        <User className="h-3 w-3" />
-        <span className="truncate">{row.requestedByName}</span>
-        <span>·</span>
-        <span>{formatDate(row.createdAt)}</span>
-      </div>
-    </button>
+    <div className="hidden print:block">
+      <h1 className="text-xl font-bold">Follow-ups</h1>
+      <p className="mb-4 text-sm">
+        {statusLabel}
+        {filters.search ? ` · search: “${filters.search}”` : ''} · {rows.length} record
+        {rows.length === 1 ? '' : 's'}
+      </p>
+      <table className="w-full border-collapse text-xs">
+        <thead>
+          <tr className="border-b text-left">
+            <th className="py-1 pr-2">Site</th>
+            <th className="py-1 pr-2">Issue</th>
+            <th className="py-1 pr-2">Raised by</th>
+            <th className="py-1 pr-2">Attempt</th>
+            <th className="py-1 pr-2">Status</th>
+            <th className="py-1 pr-2">Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id} className="border-b align-top">
+              <td className="py-1 pr-2 font-medium">{r.siteName}</td>
+              <td className="py-1 pr-2">
+                {mode === 'detailed' ? r.issueSummary : r.issueSummary.slice(0, 80)}
+                {mode === 'detailed' && r.parts.length > 0 && (
+                  <div className="mt-1">
+                    <strong>Parts:</strong>{' '}
+                    {r.parts.map((p) => `${p.name} ×${p.quantity}`).join(', ')}
+                  </div>
+                )}
+                {mode === 'detailed' && r.history.length > 0 && (
+                  <div className="mt-1">
+                    <strong>History:</strong>{' '}
+                    {r.history
+                      .map((h) => `${fixAttemptLabel(h.fixAttempt)} ${formatDate(h.date)}`)
+                      .join(' → ')}
+                  </div>
+                )}
+              </td>
+              <td className="py-1 pr-2">{r.requestedByName}</td>
+              <td className="py-1 pr-2">{fixAttemptLabel(r.fixAttempt)}</td>
+              <td className="py-1 pr-2">
+                {r.escalated && r.status === 'pending' ? 'Escalated' : r.status}
+              </td>
+              <td className="py-1 pr-2">{formatDate(r.createdAt)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
@@ -237,10 +436,12 @@ function FollowUpDetail({
   row,
   engineers,
   locations,
+  onDone,
 }: {
   row: FollowUpReviewRow
   engineers: { id: string; name: string }[]
   locations: { id: string; name: string; kind: string }[]
+  onDone?: () => void
 }) {
   const readOnly = row.status !== 'pending'
   const [date, setDate] = useState(row.proposedDate ?? '')
@@ -262,6 +463,7 @@ function FollowUpDetail({
         assignedEngineerId: engineerId === 'unassigned' ? null : engineerId,
       })
       if (!res.ok) setError(res.error ?? 'Could not approve.')
+      else onDone?.()
     })
   }
 
@@ -269,6 +471,7 @@ function FollowUpDetail({
     startTransition(async () => {
       await rejectFollowUp(row.id, rejectReason)
       setRejectOpen(false)
+      onDone?.()
     })
   }
 

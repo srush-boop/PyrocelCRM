@@ -429,6 +429,47 @@ export interface WorkDayHoursEntry {
 // Sunday). Absent keys mean the day is not worked.
 export type WorkDayHours = Record<string, WorkDayHoursEntry>
 
+/** A stored filter preset for one of the main list grids. */
+export interface SavedGridView {
+  id: string
+  created_at: string
+  updated_at: string
+  user_id: string
+  /** Identifies which grid the preset belongs to, e.g. 'calls' | 'quotes'. */
+  grid_key: string
+  name: string
+  /** Grid-specific serialised filter state. */
+  filters: Record<string, unknown>
+  is_default: boolean
+}
+
+/** A filter snapshot captured by one user and sent to another for discussion. */
+export interface SharedGridView {
+  id: string
+  created_at: string
+  grid_key: string
+  name: string
+  filters: Record<string, unknown>
+  note: string | null
+  sender_id: string
+  recipient_id: string
+  resolved: boolean
+  read_at: string | null
+  // Optional embeds.
+  sender?: { id: string; full_name: string | null } | null
+  recipient?: { id: string; full_name: string | null } | null
+  comments?: SharedGridViewComment[]
+}
+
+export interface SharedGridViewComment {
+  id: string
+  created_at: string
+  shared_view_id: string
+  author_id: string
+  body: string
+  author?: { id: string; full_name: string | null } | null
+}
+
 export interface Profile {
   id: string
   email: string

@@ -47,16 +47,20 @@ import {
   MessageCircle,
 } from 'lucide-react'
 import { GridSearch } from '@/components/dashboard/grid-header'
+import { GridViewsBar } from '@/components/dashboard/grid-views-bar'
 import { toast } from 'sonner'
 import { cn, formatDateUK } from '@/lib/utils'
 import { formatPence, quoteTypeLabel, QUOTE_STATUS_META, QUOTE_TYPES } from '@/lib/sales'
-import type { Quote, QuoteStatus } from '@/lib/types/database'
+import type { Quote, QuoteStatus, SavedGridView, SharedGridView } from '@/lib/types/database'
 import { deleteQuote, createRevision } from '@/app/(dashboard)/dashboard/sales/actions'
 
 export function QuotesTable({
   quotes,
   newQuoteHref = '/dashboard/sales/new',
   unreadQueries = {},
+  savedViews,
+  sharedViews,
+  currentUserId,
 }: {
   quotes: Quote[]
   // Lets callers (e.g. a site's Quotes tab) deep-link "New Quote" with context
@@ -65,6 +69,10 @@ export function QuotesTable({
   // Map of quote id -> number of unread client queries, for the "new questions"
   // badge on each row.
   unreadQueries?: Record<string, number>
+  // Saved/shared views — only supplied on the standalone Quotes grid page.
+  savedViews?: SavedGridView[]
+  sharedViews?: SharedGridView[]
+  currentUserId?: string
 }) {
   const router = useRouter()
   const [search, setSearch] = useState('')
@@ -73,6 +81,20 @@ export function QuotesTable({
   const [preparedBy, setPreparedBy] = useState<string>('all')
   const [deleteTarget, setDeleteTarget] = useState<Quote | null>(null)
   const [isPending, startTransition] = useTransition()
+
+  const showViews = !!currentUserId
+  const filters = { search, status, type, preparedBy }
+  const isFiltered =
+    search.trim() !== '' || status !== 'all' || type !== 'all' || preparedBy !== 'all'
+  function applyFilters(f: Record<string, unknown>) {
+    setSearch((f.search as string) ?? '')
+    setStatus((f.status as string) ?? 'all')
+    setType((f.type as string) ?? 'all')
+    setPreparedBy((f.preparedBy as string) ?? 'all')
+  }
+  function handlePrint() {
+    setTimeout(() => window.print(), 60)
+  }
 
   // Distinct preparers present in the current quote set, for the filter dropdown.
   const preparers = useMemo(() => {
@@ -135,7 +157,7 @@ export function QuotesTable({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 no-print sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-1 flex-wrap items-center gap-3">
           <GridSearch
             value={search}
@@ -185,7 +207,19 @@ export function QuotesTable({
             </Select>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {showViews && (
+            <GridViewsBar
+              gridKey="quotes"
+              filters={filters}
+              isFiltered={isFiltered}
+              onApply={applyFilters}
+              savedViews={savedViews ?? []}
+              sharedViews={sharedViews ?? []}
+              currentUserId={currentUserId!}
+              onPrint={handlePrint}
+            />
+          )}
           <Button variant="outline" asChild>
             <Link href="/dashboard/stock/catalogue">
               <BookOpen className="mr-2 h-4 w-4" />
@@ -201,7 +235,7 @@ export function QuotesTable({
         </div>
       </div>
 
-      <Card>
+      <Card className="no-print">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 p-12 text-center">
             <FileText className="h-8 w-8 text-muted-foreground" />
@@ -311,6 +345,53 @@ export function QuotesTable({
           </Table>
         )}
       </Card>
+
+      {/* Print-only view — reflects the current filters. */}
+      <div className="hidden print:block">
+        <h1 className="text-xl font-bold">Quotes</h1>
+        <p className="mb-4 text-sm">
+          {status === 'all' ? 'All statuses' : QUOTE_STATUS_META[status as QuoteStatus]?.label}
+          {type !== 'all' ? ` · ${quoteTypeLabel(type)}` : ''}
+          {search ? ` · search: “${search}”` : ''} · {filtered.length} quote
+          {filtered.length === 1 ? '' : 's'}
+        </p>
+        <table className="w-full border-collapse text-xs">
+          <thead>
+            <tr className="border-b text-left">
+              <th className="py-1 pr-2">Quote</th>
+              <th className="py-1 pr-2">Ref</th>
+              <th className="py-1 pr-2">Client / Prospect</th>
+              <th className="py-1 pr-2">Type</th>
+              <th className="py-1 pr-2">Status</th>
+              <th className="py-1 pr-2 text-right">Total</th>
+              <th className="py-1 pr-2">Prepared by</th>
+              <th className="py-1 pr-2">Created</th>
+              <th className="py-1 pr-2">Valid until</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((quote) => (
+              <tr key={quote.id} className="border-b">
+                <td className="py-1 pr-2 font-medium">{quote.title}</td>
+                <td className="py-1 pr-2">{quote.reference ?? quote.quote_number ?? 'Draft'}</td>
+                <td className="py-1 pr-2">{quote.client?.name ?? quote.prospect_name ?? '—'}</td>
+                <td className="py-1 pr-2">{quoteTypeLabel(quote.quote_type)}</td>
+                <td className="py-1 pr-2">{QUOTE_STATUS_META[quote.status].label}</td>
+                <td className="py-1 pr-2 text-right tabular-nums">
+                  {formatPence(quote.total_pence, quote.currency)}
+                </td>
+                <td className="py-1 pr-2">{quote.preparer?.full_name ?? '—'}</td>
+                <td className="py-1 pr-2">
+                  {quote.created_at ? formatDateUK(quote.created_at) : '—'}
+                </td>
+                <td className="py-1 pr-2">
+                  {quote.valid_until ? formatDateUK(quote.valid_until) : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>

@@ -44,7 +44,8 @@ import { formatDateUK } from '@/lib/utils'
 import { setChargeReview } from '@/lib/actions/charge-review'
 import { PoRequestLog } from '@/components/dashboard/chargeable/po-request-log'
 import { ChargeableReviewDialog } from '@/components/dashboard/chargeable/chargeable-review-dialog'
-import type { PurchaseOrderRequest } from '@/lib/types/database'
+import { GridViewsBar } from '@/components/dashboard/grid-views-bar'
+import type { PurchaseOrderRequest, SavedGridView, SharedGridView } from '@/lib/types/database'
 
 export interface ChargeableCall {
   id: string
@@ -243,12 +244,18 @@ export function ChargeableCallsTable({
   calls,
   overdueAfterDays = 14,
   initialReviewId = null,
+  savedViews,
+  sharedViews,
+  currentUserId,
 }: {
   calls: ChargeableCall[]
   overdueAfterDays?: number
   // When set (via ?review=<taskId>), opens the guided review dialog on mount —
   // used to deep-link from a call's report page into its review.
   initialReviewId?: string | null
+  savedViews?: SavedGridView[]
+  sharedViews?: SharedGridView[]
+  currentUserId?: string
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -261,6 +268,18 @@ export function ChargeableCallsTable({
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending')
   const [reasonFilter, setReasonFilter] = useState<string>('all')
+
+  const showViews = !!currentUserId
+  const filters = { search, statusFilter, reasonFilter }
+  const isFiltered = search.trim() !== '' || statusFilter !== 'pending' || reasonFilter !== 'all'
+  function applyFilters(f: Record<string, unknown>) {
+    setSearch((f.search as string) ?? '')
+    setStatusFilter((f.statusFilter as StatusFilter) ?? 'pending')
+    setReasonFilter((f.reasonFilter as string) ?? 'all')
+  }
+  function handlePrint() {
+    setTimeout(() => window.print(), 60)
+  }
 
   const filtered = useMemo(() => {
     const rows = calls.filter((c) => {
@@ -331,10 +350,24 @@ export function ChargeableCallsTable({
   }
 
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-4 p-4 md:p-6">
+    <Card className="print:border-0 print:shadow-none">
+      <CardContent className="flex flex-col gap-4 p-4 md:p-6 print:p-0">
+        {showViews && (
+          <div className="no-print">
+            <GridViewsBar
+              gridKey="chargeable"
+              filters={filters}
+              isFiltered={isFiltered}
+              onApply={applyFilters}
+              savedViews={savedViews ?? []}
+              sharedViews={sharedViews ?? []}
+              currentUserId={currentUserId!}
+              onPrint={handlePrint}
+            />
+          </div>
+        )}
         {/* Filter row — mirrors defects table layout */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-3 no-print sm:flex-row sm:items-center">
           <div className="relative flex-1">
             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -396,7 +429,7 @@ export function ChargeableCallsTable({
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto no-print">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -603,6 +636,53 @@ export function ChargeableCallsTable({
             </Table>
           </div>
         )}
+
+        {/* Print-only view — reflects the current filters. */}
+        <div className="hidden print:block">
+          <h1 className="text-xl font-bold">Chargeable calls</h1>
+          <p className="mb-4 text-sm">
+            {STATUS_OPTIONS.find((o) => o.value === statusFilter)?.label ?? 'All'}
+            {reasonFilter !== 'all' ? ` · ${REASON_LABELS[reasonFilter] ?? reasonFilter}` : ''}
+            {search ? ` · search: “${search}”` : ''} · {filtered.length} call
+            {filtered.length === 1 ? '' : 's'}
+          </p>
+          <table className="w-full border-collapse text-xs">
+            <thead>
+              <tr className="border-b text-left">
+                <th className="py-1 pr-2">Reference</th>
+                <th className="py-1 pr-2">Site</th>
+                <th className="py-1 pr-2">Client</th>
+                <th className="py-1 pr-2">Service</th>
+                <th className="py-1 pr-2">Completed</th>
+                <th className="py-1 pr-2">Reason</th>
+                <th className="py-1 pr-2">Client Ref</th>
+                <th className="py-1 pr-2 text-right">Parts</th>
+                <th className="py-1 pr-2">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((c) => (
+                <tr key={c.id} className="border-b">
+                  <td className="py-1 pr-2 font-medium">{c.referenceNumber}</td>
+                  <td className="py-1 pr-2">{c.siteName}</td>
+                  <td className="py-1 pr-2">{c.clientName}</td>
+                  <td className="py-1 pr-2">{c.serviceName}</td>
+                  <td className="py-1 pr-2">
+                    {c.completedAt ? formatDateUK(c.completedAt) : '—'}
+                  </td>
+                  <td className="py-1 pr-2">
+                    {c.chargeReason ? (REASON_LABELS[c.chargeReason] ?? c.chargeReason) : '—'}
+                  </td>
+                  <td className="py-1 pr-2">{c.clientRef || '—'}</td>
+                  <td className="py-1 pr-2 text-right tabular-nums">
+                    {c.partsCount > 0 ? formatGBP(c.partsTotalPence) : '—'}
+                  </td>
+                  <td className="py-1 pr-2">{deriveCallStatus(c, overdueAfterDays).label}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </CardContent>
 
       {reviewCall && (

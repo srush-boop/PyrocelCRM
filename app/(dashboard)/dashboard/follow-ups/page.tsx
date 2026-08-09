@@ -7,6 +7,7 @@ import {
   type HistoryEntry,
   type PartStock,
 } from '@/components/dashboard/follow-ups/follow-ups-review'
+import { getSavedGridViews, getSharedGridViews } from '@/lib/actions/grid-views'
 
 export const dynamic = 'force-dynamic'
 
@@ -206,16 +207,21 @@ export default async function FollowUpsPage() {
     }
   })
 
+  const [savedViews, sharedViews] = await Promise.all([
+    getSavedGridViews('follow-ups'),
+    getSharedGridViews('follow-ups'),
+  ])
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Follow-ups</h1>
-        <p className="text-muted-foreground">
-          Review works flagged by engineers as unresolved. Reserve or order parts, then approve to
-          book a linked Planned Call.
-        </p>
-      </div>
-      <FollowUpsReview rows={rows} engineers={engineers} locations={locations} />
+      <FollowUpsReview
+        rows={rows}
+        engineers={engineers}
+        locations={locations}
+        savedViews={savedViews}
+        sharedViews={sharedViews}
+        currentUserId={user.id}
+      />
     </div>
   )
 }

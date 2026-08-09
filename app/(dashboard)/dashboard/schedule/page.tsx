@@ -15,6 +15,7 @@ import { normalizeTasks } from '@/lib/normalize-task'
 import { getMyCurrentOncall } from '@/lib/oncall/queries'
 import { isTaskVisibleToEngineer } from '@/lib/engineer-visibility'
 import { getCallEstimateLookup, buildTaskEstimates } from '@/lib/task-duration'
+import { getSavedGridViews, getSharedGridViews } from '@/lib/actions/grid-views'
 
 export default async function SchedulePage({
   searchParams,
@@ -171,9 +172,14 @@ export default async function SchedulePage({
     })),
   )
 
+  // Saved + shared filter views for the Calls grid (office/admin only).
+  const [savedViews, sharedViews] = isAdminOrOffice
+    ? await Promise.all([getSavedGridViews('calls'), getSharedGridViews('calls')])
+    : [[], []]
+
   return (
     <div className="space-y-4">
-      <div className="space-y-3">
+      <div className="space-y-3 no-print">
         {/* Title row: the circular Scan QR sits level with the "Calls" heading. */}
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
@@ -243,6 +249,9 @@ export default async function SchedulePage({
         estimates={estimates}
         serviceTypes={allServiceTypes}
         systemTypes={systemTypes}
+        savedViews={savedViews}
+        sharedViews={sharedViews}
+        currentUserId={isAdminOrOffice ? user.id : undefined}
       />
     </div>
   )

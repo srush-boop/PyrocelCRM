@@ -93,6 +93,18 @@ export function SettingsContent({ user, profile, company, branches, departments,
   const router = useRouter()
   const supabase = createClient()
 
+  // Which top-level groups are visible for this user.
+  const showCompany = isAdmin
+  const showPricing = isAdmin || canManageRates
+  const showOperations = isAdmin || canManageLoneWorker
+  const showDocuments = canManageTemplates || canManageTags
+  const showTasks = canManageInternalTasks
+  const showData = isAdmin
+  // First visible sub-tab within each group (gating differs per section).
+  const pricingDefault = isAdmin ? 'maintenance' : 'rates'
+  const documentsDefault = canManageTemplates ? 'templates' : 'tags'
+  const operationsDefault = isAdmin ? 'calls' : 'lone-worker'
+
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoadingProfile(true)
@@ -152,379 +164,426 @@ export function SettingsContent({ user, profile, company, branches, departments,
 
   return (
     <Tabs defaultValue="account" className="space-y-6">
-      <TabsList>
+      <TabsList className="flex h-auto flex-wrap justify-start">
         <TabsTrigger value="account" className="gap-2">
           <User className="h-4 w-4" />
           Account
         </TabsTrigger>
-        <TabsTrigger value="password" className="gap-2">
-          <Lock className="h-4 w-4" />
-          Password
-        </TabsTrigger>
-        <TabsTrigger value="security" className="gap-2">
-          <ShieldCheck className="h-4 w-4" />
-          Security
-        </TabsTrigger>
-        <TabsTrigger value="email-footer" className="gap-2">
-          <Mail className="h-4 w-4" />
-          Email Footer
-        </TabsTrigger>
-        {isAdmin && (
+        {showCompany && (
           <TabsTrigger value="company" className="gap-2">
             <Building2 className="h-4 w-4" />
             Company
           </TabsTrigger>
         )}
-        {isAdmin && (
-          <TabsTrigger value="departments" className="gap-2">
-            <Users className="h-4 w-4" />
-            Departments
+        {showPricing && (
+          <TabsTrigger value="pricing" className="gap-2">
+            <Coins className="h-4 w-4" />
+            Pricing
           </TabsTrigger>
         )}
-        {isAdmin && (
-          <TabsTrigger value="roles" className="gap-2">
-            <Briefcase className="h-4 w-4" />
-            Roles
+        {showOperations && (
+          <TabsTrigger value="operations" className="gap-2">
+            <PhoneCall className="h-4 w-4" />
+            Operations
           </TabsTrigger>
         )}
-        {isAdmin && (
-          <TabsTrigger value="property-types" className="gap-2">
-            <Home className="h-4 w-4" />
-            Property Types
-          </TabsTrigger>
-        )}
-        {isAdmin && (
-          <TabsTrigger value="maintenance" className="gap-2">
-            <Wrench className="h-4 w-4" />
-            Maintenance
-          </TabsTrigger>
-        )}
-        {isAdmin && (
-          <TabsTrigger value="installation" className="gap-2">
-            <HardHat className="h-4 w-4" />
-            Installation
-          </TabsTrigger>
-        )}
-        {canManageTemplates && (
-          <TabsTrigger value="templates" className="gap-2">
+        {showDocuments && (
+          <TabsTrigger value="documents" className="gap-2">
             <FileText className="h-4 w-4" />
             Documents
           </TabsTrigger>
         )}
-        {isAdmin && (
+        {showTasks && (
+          <TabsTrigger value="tasks" className="gap-2">
+            <ClipboardCheck className="h-4 w-4" />
+            Tasks & Forms
+          </TabsTrigger>
+        )}
+        {showData && (
           <TabsTrigger value="data" className="gap-2">
             <Database className="h-4 w-4" />
             Data
           </TabsTrigger>
         )}
-        {isAdmin && (
-          <TabsTrigger value="calls-config" className="gap-2">
-            <PhoneCall className="h-4 w-4" />
-            Calls
-          </TabsTrigger>
-        )}
-        {canManageLoneWorker && (
-          <TabsTrigger value="lone-worker" className="gap-2">
-            <ShieldCheck className="h-4 w-4" />
-            Lone Worker
-          </TabsTrigger>
-        )}
-        {canManageRates && (
-          <TabsTrigger value="rates" className="gap-2">
-            <Receipt className="h-4 w-4" />
-            Rates
-          </TabsTrigger>
-        )}
-        {canManageRates && (
-          <TabsTrigger value="charges" className="gap-2">
-            <Coins className="h-4 w-4" />
-            Charges
-          </TabsTrigger>
-        )}
-        {canManageRates && (
-          <TabsTrigger value="nominal" className="gap-2">
-            <Hash className="h-4 w-4" />
-            Nominal Codes
-          </TabsTrigger>
-        )}
-        {canManageTags && (
-          <TabsTrigger value="tags" className="gap-2">
-            <Tags className="h-4 w-4" />
-            Tags
-          </TabsTrigger>
-        )}
-        {canManageInternalTasks && (
-          <TabsTrigger value="internal-tasks" className="gap-2">
-            <ClipboardCheck className="h-4 w-4" />
-            Tasks & Forms
-          </TabsTrigger>
-        )}
       </TabsList>
 
+      {/* ACCOUNT — personal profile, password, security & email footer */}
       <TabsContent value="account" className="space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Profile Picture</CardTitle>
-            <CardDescription>
-              Shown on your messages in team chat and across the app.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <AvatarManager avatarUrl={profile.avatar_url ?? null} fullName={profile.full_name} />
-          </CardContent>
-        </Card>
+        <Tabs defaultValue="profile" className="space-y-4">
+          <TabsList className="flex h-auto flex-wrap justify-start">
+            <TabsTrigger value="profile" className="gap-2">
+              <User className="h-4 w-4" />
+              Profile
+            </TabsTrigger>
+            <TabsTrigger value="password" className="gap-2">
+              <Lock className="h-4 w-4" />
+              Password
+            </TabsTrigger>
+            <TabsTrigger value="security" className="gap-2">
+              <ShieldCheck className="h-4 w-4" />
+              Security
+            </TabsTrigger>
+            <TabsTrigger value="email-footer" className="gap-2">
+              <Mail className="h-4 w-4" />
+              Email Footer
+            </TabsTrigger>
+          </TabsList>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Account Information</CardTitle>
-            <CardDescription>Update your account details</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <form onSubmit={handleUpdateProfile} className="space-y-4">
-              <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={user.email || ''}
-                  disabled
-                  className="bg-muted"
-                />
-                <p className="text-xs text-muted-foreground">Email cannot be changed</p>
-              </div>
+          <TabsContent value="profile" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Profile Picture</CardTitle>
+                <CardDescription>
+                  Shown on your messages in team chat and across the app.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AvatarManager avatarUrl={profile.avatar_url ?? null} fullName={profile.full_name} />
+              </CardContent>
+            </Card>
 
-              <div className="grid gap-2">
-                <Label htmlFor="full_name">Full Name</Label>
-                <Input
-                  id="full_name"
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Enter your full name"
-                />
-              </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Account Information</CardTitle>
+                <CardDescription>Update your account details</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <form onSubmit={handleUpdateProfile} className="space-y-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={user.email || ''}
+                      disabled
+                      className="bg-muted"
+                    />
+                    <p className="text-xs text-muted-foreground">Email cannot be changed</p>
+                  </div>
 
-              <div className="grid gap-2 sm:grid-cols-2">
-                <div className="grid gap-2">
-                  <Label htmlFor="user_type">User Type</Label>
-                  <Input
-                    id="user_type"
-                    type="text"
-                    value={userTypeLabel}
-                    disabled
-                    className="bg-muted"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Controls your access. Managed by an administrator.
-                  </p>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="role">Role</Label>
-                  <Input
-                    id="role"
-                    type="text"
-                    value={assignedRole}
-                    disabled
-                    className="bg-muted"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Shown on your documents. Set by an administrator.
-                  </p>
-                </div>
-              </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="full_name">Full Name</Label>
+                    <Input
+                      id="full_name"
+                      type="text"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="Enter your full name"
+                    />
+                  </div>
 
-              {message && (
-                <div
-                  className={`rounded-lg p-3 text-sm ${
-                    message.type === 'success'
-                      ? 'bg-green-50 text-green-800'
-                      : 'bg-red-50 text-red-800'
-                  }`}
-                >
-                  {message.text}
-                </div>
-              )}
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="grid gap-2">
+                      <Label htmlFor="user_type">User Type</Label>
+                      <Input
+                        id="user_type"
+                        type="text"
+                        value={userTypeLabel}
+                        disabled
+                        className="bg-muted"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Controls your access. Managed by an administrator.
+                      </p>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="role">Role</Label>
+                      <Input
+                        id="role"
+                        type="text"
+                        value={assignedRole}
+                        disabled
+                        className="bg-muted"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Shown on your documents. Set by an administrator.
+                      </p>
+                    </div>
+                  </div>
 
-              <Button type="submit" disabled={loadingProfile}>
-                {loadingProfile && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Save Changes
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+                  {message && (
+                    <div
+                      className={`rounded-lg p-3 text-sm ${
+                        message.type === 'success'
+                          ? 'bg-green-50 text-green-800'
+                          : 'bg-red-50 text-red-800'
+                      }`}
+                    >
+                      {message.text}
+                    </div>
+                  )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Signature</CardTitle>
-            <CardDescription>
-              Your signature is applied to reports, RAMS, documents and receipt confirmations you
-              generate. Upload an image or draw one.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <SignatureManager signatureUrl={signatureSrc(profile.signature_url)} />
-          </CardContent>
-        </Card>
+                  <Button type="submit" disabled={loadingProfile}>
+                    {loadingProfile && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save Changes
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Signature</CardTitle>
+                <CardDescription>
+                  Your signature is applied to reports, RAMS, documents and receipt confirmations you
+                  generate. Upload an image or draw one.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <SignatureManager signatureUrl={signatureSrc(profile.signature_url)} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="password" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Change Password</CardTitle>
+                <CardDescription>Update your password to keep your account secure</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleUpdatePassword} className="space-y-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="new_password">New Password</Label>
+                    <Input
+                      id="new_password"
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Enter new password"
+                    />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="confirm_password">Confirm Password</Label>
+                    <Input
+                      id="confirm_password"
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirm new password"
+                    />
+                  </div>
+
+                  {message && (
+                    <div
+                      className={`rounded-lg p-3 text-sm ${
+                        message.type === 'success'
+                          ? 'bg-green-50 text-green-800'
+                          : 'bg-red-50 text-red-800'
+                      }`}
+                    >
+                      {message.text}
+                    </div>
+                  )}
+
+                  <Button type="submit" disabled={loadingPassword}>
+                    {loadingPassword && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Update Password
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="security" className="space-y-4">
+            <SecuritySettings initialFactors={mfaFactors} required={mfaRequired} />
+          </TabsContent>
+
+          <TabsContent value="email-footer" className="space-y-4">
+            <EmailFooterSettings
+              myFooter={myEmailFooter}
+              globalFooter={globalEmailFooter ?? { message: '', imageUrl: '', links: [], enabled: true }}
+              canManageGlobal={canManageGlobalFooter}
+            />
+          </TabsContent>
+        </Tabs>
       </TabsContent>
 
-      <TabsContent value="password" className="space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Change Password</CardTitle>
-            <CardDescription>Update your password to keep your account secure</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleUpdatePassword} className="space-y-4">
-              <div className="grid gap-2">
-                <Label htmlFor="new_password">New Password</Label>
-                <Input
-                  id="new_password"
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Enter new password"
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="confirm_password">Confirm Password</Label>
-                <Input
-                  id="confirm_password"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Confirm new password"
-                />
-              </div>
-
-              {message && (
-                <div
-                  className={`rounded-lg p-3 text-sm ${
-                    message.type === 'success'
-                      ? 'bg-green-50 text-green-800'
-                      : 'bg-red-50 text-red-800'
-                  }`}
-                >
-                  {message.text}
-                </div>
-              )}
-
-              <Button type="submit" disabled={loadingPassword}>
-                {loadingPassword && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Update Password
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </TabsContent>
-
-      <TabsContent value="security" className="space-y-4">
-        <SecuritySettings initialFactors={mfaFactors} required={mfaRequired} />
-      </TabsContent>
-
-      <TabsContent value="email-footer" className="space-y-4">
-        <EmailFooterSettings
-          myFooter={myEmailFooter}
-          globalFooter={globalEmailFooter ?? { message: '', imageUrl: '', links: [], enabled: true }}
-          canManageGlobal={canManageGlobalFooter}
-        />
-      </TabsContent>
-
-      {isAdmin && (
+      {/* COMPANY — organisation structure */}
+      {showCompany && (
         <TabsContent value="company" className="space-y-4">
-          <CompanySettings company={company} branches={branches} />
+          <Tabs defaultValue="company-info" className="space-y-4">
+            <TabsList className="flex h-auto flex-wrap justify-start">
+              <TabsTrigger value="company-info" className="gap-2">
+                <Building2 className="h-4 w-4" />
+                Company
+              </TabsTrigger>
+              <TabsTrigger value="departments" className="gap-2">
+                <Users className="h-4 w-4" />
+                Departments
+              </TabsTrigger>
+              <TabsTrigger value="roles" className="gap-2">
+                <Briefcase className="h-4 w-4" />
+                Roles
+              </TabsTrigger>
+              <TabsTrigger value="property-types" className="gap-2">
+                <Home className="h-4 w-4" />
+                Property Types
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="company-info" className="space-y-4">
+              <CompanySettings company={company} branches={branches} />
+            </TabsContent>
+            <TabsContent value="departments" className="space-y-4">
+              <DepartmentsSettings departments={departments} nominalCodes={nominalCodes} />
+            </TabsContent>
+            <TabsContent value="roles" className="space-y-4">
+              <RolesSettings roles={roles} users={internalTaskUsers} />
+            </TabsContent>
+            <TabsContent value="property-types" className="space-y-4">
+              <PropertyTypesSettings propertyTypes={propertyTypes} />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
       )}
 
-      {isAdmin && (
-        <TabsContent value="departments" className="space-y-4">
-          <DepartmentsSettings departments={departments} nominalCodes={nominalCodes} />
+      {/* PRICING — rates, charges, margins & nominal codes */}
+      {showPricing && (
+        <TabsContent value="pricing" className="space-y-4">
+          <Tabs defaultValue={pricingDefault} className="space-y-4">
+            <TabsList className="flex h-auto flex-wrap justify-start">
+              {isAdmin && (
+                <TabsTrigger value="maintenance" className="gap-2">
+                  <Wrench className="h-4 w-4" />
+                  Maintenance
+                </TabsTrigger>
+              )}
+              {isAdmin && (
+                <TabsTrigger value="installation" className="gap-2">
+                  <HardHat className="h-4 w-4" />
+                  Installation
+                </TabsTrigger>
+              )}
+              {canManageRates && (
+                <TabsTrigger value="rates" className="gap-2">
+                  <Receipt className="h-4 w-4" />
+                  Rates
+                </TabsTrigger>
+              )}
+              {canManageRates && (
+                <TabsTrigger value="charges" className="gap-2">
+                  <Coins className="h-4 w-4" />
+                  Charges
+                </TabsTrigger>
+              )}
+              {canManageRates && (
+                <TabsTrigger value="nominal" className="gap-2">
+                  <Hash className="h-4 w-4" />
+                  Nominal Codes
+                </TabsTrigger>
+              )}
+            </TabsList>
+
+            {isAdmin && (
+              <TabsContent value="maintenance" className="space-y-4">
+                <MaintenanceSettings company={company} departments={departments} />
+              </TabsContent>
+            )}
+            {isAdmin && (
+              <TabsContent value="installation" className="space-y-4">
+                <InstallationSettings company={company} />
+              </TabsContent>
+            )}
+            {canManageRates && (
+              <TabsContent value="rates" className="space-y-4">
+                <RateCardsSettings rateCards={rateCards} nominalCodes={nominalCodes} />
+              </TabsContent>
+            )}
+            {canManageRates && (
+              <TabsContent value="charges" className="space-y-4">
+                <ChargeTemplatesSettings chargeTemplates={chargeTemplates} nominalCodes={nominalCodes} />
+              </TabsContent>
+            )}
+            {canManageRates && (
+              <TabsContent value="nominal" className="space-y-4">
+                <NominalCodesSettings nominalCodes={nominalCodes} />
+              </TabsContent>
+            )}
+          </Tabs>
         </TabsContent>
       )}
 
-      {isAdmin && (
-        <TabsContent value="roles" className="space-y-4">
-          <RolesSettings roles={roles} users={internalTaskUsers} />
+      {/* OPERATIONS — calls config & lone worker safety */}
+      {showOperations && (
+        <TabsContent value="operations" className="space-y-4">
+          <Tabs defaultValue={operationsDefault} className="space-y-4">
+            <TabsList className="flex h-auto flex-wrap justify-start">
+              {isAdmin && (
+                <TabsTrigger value="calls" className="gap-2">
+                  <PhoneCall className="h-4 w-4" />
+                  Calls
+                </TabsTrigger>
+              )}
+              {canManageLoneWorker && (
+                <TabsTrigger value="lone-worker" className="gap-2">
+                  <ShieldCheck className="h-4 w-4" />
+                  Lone Worker
+                </TabsTrigger>
+              )}
+            </TabsList>
+
+            {isAdmin && (
+              <TabsContent value="calls" className="space-y-4">
+                <GlobalConfigSettings
+                  poOverdueDays={poOverdueDays}
+                  deadlineReasons={deadlineReasons}
+                  excludedReasons={deadlineExcludedReasons}
+                  engagementStatsEnabled={engagementStatsEnabled}
+                  openingHours={openingHours}
+                />
+              </TabsContent>
+            )}
+            {canManageLoneWorker && (
+              <TabsContent value="lone-worker" className="space-y-4">
+                <LoneWorkerSettings
+                  timings={loneWorkerTimings}
+                  users={loneWorkerUsers}
+                  isAdmin={isAdmin}
+                />
+              </TabsContent>
+            )}
+          </Tabs>
         </TabsContent>
       )}
 
-      {isAdmin && (
-        <TabsContent value="property-types" className="space-y-4">
-          <PropertyTypesSettings propertyTypes={propertyTypes} />
+      {/* DOCUMENTS — mail-merge templates & document tags */}
+      {showDocuments && (
+        <TabsContent value="documents" className="space-y-4">
+          <Tabs defaultValue={documentsDefault} className="space-y-4">
+            <TabsList className="flex h-auto flex-wrap justify-start">
+              {canManageTemplates && (
+                <TabsTrigger value="templates" className="gap-2">
+                  <FileText className="h-4 w-4" />
+                  Templates
+                </TabsTrigger>
+              )}
+              {canManageTags && (
+                <TabsTrigger value="tags" className="gap-2">
+                  <Tags className="h-4 w-4" />
+                  Tags
+                </TabsTrigger>
+              )}
+            </TabsList>
+
+            {canManageTemplates && (
+              <TabsContent value="templates" className="space-y-4">
+                <DocumentTemplatesSettings templates={documentTemplates} />
+              </TabsContent>
+            )}
+            {canManageTags && (
+              <TabsContent value="tags" className="space-y-4">
+                <DocumentTagsSettings tags={documentTags} />
+              </TabsContent>
+            )}
+          </Tabs>
         </TabsContent>
       )}
 
-      {isAdmin && (
-        <TabsContent value="maintenance" className="space-y-4">
-          <MaintenanceSettings company={company} departments={departments} />
-        </TabsContent>
-      )}
-
-      {isAdmin && (
-        <TabsContent value="installation" className="space-y-4">
-          <InstallationSettings company={company} />
-        </TabsContent>
-      )}
-
-      {canManageTemplates && (
-        <TabsContent value="templates" className="space-y-4">
-          <DocumentTemplatesSettings templates={documentTemplates} />
-        </TabsContent>
-      )}
-
-      {isAdmin && (
-        <TabsContent value="data" className="space-y-4">
-          <FullSiteImport />
-          <BulkDataSettings />
-        </TabsContent>
-      )}
-
-      {isAdmin && (
-        <TabsContent value="calls-config" className="space-y-4">
-          <GlobalConfigSettings
-            poOverdueDays={poOverdueDays}
-            deadlineReasons={deadlineReasons}
-            excludedReasons={deadlineExcludedReasons}
-            engagementStatsEnabled={engagementStatsEnabled}
-            openingHours={openingHours}
-          />
-        </TabsContent>
-      )}
-
-      {canManageLoneWorker && (
-        <TabsContent value="lone-worker" className="space-y-4">
-          <LoneWorkerSettings
-            timings={loneWorkerTimings}
-            users={loneWorkerUsers}
-            isAdmin={isAdmin}
-          />
-        </TabsContent>
-      )}
-
-        {canManageRates && (
-          <TabsContent value="rates" className="space-y-4">
-            <RateCardsSettings rateCards={rateCards} nominalCodes={nominalCodes} />
-          </TabsContent>
-        )}
-        {canManageRates && (
-          <TabsContent value="charges" className="space-y-4">
-            <ChargeTemplatesSettings chargeTemplates={chargeTemplates} nominalCodes={nominalCodes} />
-          </TabsContent>
-        )}
-        {canManageRates && (
-          <TabsContent value="nominal" className="space-y-4">
-            <NominalCodesSettings nominalCodes={nominalCodes} />
-          </TabsContent>
-        )}
-
-      {canManageTags && (
-        <TabsContent value="tags" className="space-y-4">
-          <DocumentTagsSettings tags={documentTags} />
-        </TabsContent>
-      )}
-
-      {canManageInternalTasks && (
-        <TabsContent value="internal-tasks" className="space-y-4">
+      {/* TASKS & FORMS — internal recurring tasks / form builder */}
+      {showTasks && (
+        <TabsContent value="tasks" className="space-y-4">
           <InternalTasksSettings
             templates={internalTaskTemplates}
             departments={internalTaskDepartments}
@@ -532,6 +591,14 @@ export function SettingsContent({ user, profile, company, branches, departments,
             users={internalTaskUsers}
             documents={internalTaskDocuments}
           />
+        </TabsContent>
+      )}
+
+      {/* DATA — bulk import/export */}
+      {showData && (
+        <TabsContent value="data" className="space-y-4">
+          <FullSiteImport />
+          <BulkDataSettings />
         </TabsContent>
       )}
 

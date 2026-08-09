@@ -429,6 +429,61 @@ export interface WorkDayHoursEntry {
 // Sunday). Absent keys mean the day is not worked.
 export type WorkDayHours = Record<string, WorkDayHoursEntry>
 
+/** A stored filter preset for one of the main list grids. */
+export interface SavedGridView {
+  id: string
+  created_at: string
+  updated_at: string
+  user_id: string
+  /** Identifies which grid the preset belongs to, e.g. 'calls' | 'quotes'. */
+  grid_key: string
+  name: string
+  /** Grid-specific serialised filter state. */
+  filters: Record<string, unknown>
+  is_default: boolean
+}
+
+/** A filter snapshot captured by one user and sent to another for discussion. */
+export interface SharedGridView {
+  id: string
+  created_at: string
+  grid_key: string
+  name: string
+  filters: Record<string, unknown>
+  note: string | null
+  sender_id: string
+  recipient_id: string
+  resolved: boolean
+  read_at: string | null
+  // Optional embeds.
+  sender?: { id: string; full_name: string | null } | null
+  recipient?: { id: string; full_name: string | null } | null
+  comments?: SharedGridViewComment[]
+}
+
+export interface SharedGridViewComment {
+  id: string
+  created_at: string
+  shared_view_id: string
+  author_id: string
+  body: string
+  author?: { id: string; full_name: string | null } | null
+}
+
+/** A user-defined shortcut tile on the main dashboard. */
+export interface CustomDashboardTile {
+  /** Stable client-generated id. */
+  id: string
+  /** Tile label. */
+  title: string
+  /** In-app destination path, e.g. "/dashboard/sites". */
+  href: string
+  /** Optional hex colour; falls back to the default theme accent. */
+  color?: string | null
+  /** Optional lucide icon key from the shortcut catalogue. */
+  icon?: string | null
+}
+
 export interface Profile {
   id: string
   email: string
@@ -477,6 +532,15 @@ export interface Profile {
   // Per-user dashboard background preset key (e.g. "grid", "dots", "blueprint",
   // "glow"). NULL/empty = the default clean background.
   dashboard_background: string | null
+  // Per-user list of built-in module tile titles the user has hidden from the
+  // main dashboard (e.g. ["Reports"]). NULL/empty = all visible.
+  dashboard_hidden_tiles: string[] | null
+  // Per-user custom shortcut tiles added to the main dashboard. Each links to
+  // any path in the app. NULL/empty = none.
+  dashboard_custom_tiles: CustomDashboardTile[] | null
+  // Per-user colour overrides for header/quick-link shortcuts, keyed by
+  // catalogue key -> hex (e.g. { "invoices": "#2563eb" }). NULL/empty = default.
+  dashboard_shortcut_colors: Record<string, string> | null
   // Nominated line manager for this user (self-referencing). Recorded for HR /
   // future approvals wiring. NULL = no manager set.
   manager_id: string | null

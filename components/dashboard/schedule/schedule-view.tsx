@@ -69,8 +69,9 @@ import {
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
-import type { Profile, TaskWithDetails, Site, Area, ServiceType, SystemType } from '@/lib/types/database'
+import type { Profile, TaskWithDetails, Site, Area, ServiceType, SystemType, SavedGridView, SharedGridView } from '@/lib/types/database'
 import type { CallEstimate } from '@/lib/task-duration'
+import { GridViewsBar } from '@/components/dashboard/grid-views-bar'
 import { WORKER_TYPE_LABELS } from '@/lib/assignment'
 import { SystemIcon, SystemBadge, getSystemColors } from '@/lib/system-types'
 import { Building2 } from 'lucide-react'
@@ -126,6 +127,10 @@ interface ScheduleViewProps {
    */
   serviceTypes?: ServiceType[]
   systemTypes?: SystemType[]
+  /** Saved + shared filter views for the Calls grid (office/admin only). */
+  savedViews?: SavedGridView[]
+  sharedViews?: SharedGridView[]
+  currentUserId?: string
 }
 
 const statusConfig = {
@@ -229,7 +234,7 @@ function BookingEditor({
   )
 }
 
-export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initialTab, estimates = {}, serviceTypes = [], systemTypes = [] }: ScheduleViewProps) {
+export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initialTab, estimates = {}, serviceTypes = [], systemTypes = [], savedViews, sharedViews, currentUserId }: ScheduleViewProps) {
   const router = useRouter()
   const supabase = createClient()
   const [search, setSearch] = useState('')
@@ -551,6 +556,38 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
     setNeedsBookingOnly(false)
     setShowOverdueOnly(false)
     setRemedialOnly(false)
+  }
+
+  // ---- Saved / shared views (office/admin) ----------------------------------
+  const showViews = !!currentUserId
+  const viewFilters = {
+    search,
+    selectedEngineer,
+    selectedSystems,
+    selectedServices,
+    dateFrom: dateFrom ? dateFrom.toISOString() : null,
+    dateTo: dateTo ? dateTo.toISOString() : null,
+    needsBookingOnly,
+    showOverdueOnly,
+    remedialOnly,
+    activeTab,
+    sortBy,
+  }
+  function applyViewFilters(f: Record<string, unknown>) {
+    setSearch((f.search as string) ?? '')
+    setSelectedEngineer((f.selectedEngineer as string) ?? 'all')
+    setSelectedSystems((f.selectedSystems as string[]) ?? [])
+    setSelectedServices((f.selectedServices as string[]) ?? [])
+    setDateFrom(f.dateFrom ? new Date(f.dateFrom as string) : undefined)
+    setDateTo(f.dateTo ? new Date(f.dateTo as string) : undefined)
+    setNeedsBookingOnly(!!f.needsBookingOnly)
+    setShowOverdueOnly(!!f.showOverdueOnly)
+    setRemedialOnly(!!f.remedialOnly)
+    if (typeof f.activeTab === 'string') setActiveTab(f.activeTab)
+    if (typeof f.sortBy === 'string') setSortBy(f.sortBy as SortKey)
+  }
+  function handlePrint() {
+    setTimeout(() => window.print(), 60)
   }
 
   const filteredTasks = tasks.filter((task) => {
@@ -1133,9 +1170,23 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
 
   return (
     <div className="space-y-2">
+      {showViews && (
+        <div className="no-print">
+          <GridViewsBar
+            gridKey="calls"
+            filters={viewFilters}
+            isFiltered={!!hasActiveFilters}
+            onApply={applyViewFilters}
+            savedViews={savedViews ?? []}
+            sharedViews={sharedViews ?? []}
+            currentUserId={currentUserId!}
+            onPrint={handlePrint}
+          />
+        </div>
+      )}
       {/* The shared schedule toolbar is hidden on the rich Completed table,
           which carries its own search + filters. */}
-      <Tabs value={effectiveTab} onValueChange={setActiveTab}>
+      <Tabs value={effectiveTab} onValueChange={setActiveTab} className="no-print">
       {!showRichCompleted ? (
         <>
       {/* Row 1: search | quick-filter pill buttons | engineer select | dates | clear */}
@@ -1394,6 +1445,72 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
         </TabsContent>
       </div>
       </Tabs>
+
+      {/* Print-only view — reflects the current filters + active tab. */}
+      <div className="hidden print:block">
+        {(() => {
+          const printTasks =
+            effectiveTab === 'completed'
+              ? completedTasks
+              : effectiveTab === 'overdue'
+                ? overdueTasks
+                : upcomingTasks
+          const tabLabel =
+            effectiveTab === 'completed'
+              ? 'Completed'
+              : effectiveTab === 'overdue'
+                ? 'Overdue'
+                : 'Upcoming'
+          return (
+            <>
+              <h1 className="text-xl font-bold">Calls — {tabLabel}</h1>
+              <p className="mb-4 text-sm">
+                {printTasks.length} call{printTasks.length === 1 ? '' : 's'}
+                {search ? ` · search: “${search}”` : ''}
+              </p>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="border-b text-left">
+                    <th className="py-1 pr-2">Ref</th>
+                    <th className="py-1 pr-2">Date</th>
+                    <th className="py-1 pr-2">Site</th>
+                    <th className="py-1 pr-2">Service</th>
+                    <th className="py-1 pr-2">Engineer</th>
+                    <th className="py-1 pr-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {printTasks.map((t) => (
+                    <tr key={t.id} className="border-b">
+                      <td className="py-1 pr-2">
+                        {t.reference_number ?? t.task_result?.reference_number ?? '—'}
+                      </td>
+                      <td className="py-1 pr-2">
+                        {t.scheduled_date ? formatDateUK(t.scheduled_date) : '—'}
+                      </td>
+                      <td className="py-1 pr-2">
+                        {t.site_service?.site?.name ??
+                          (t as { direct_site?: { name?: string } | null }).direct_site?.name ??
+                          '—'}
+                      </td>
+                      <td className="py-1 pr-2">
+                        {t.site_service?.service_type?.name ??
+                          (t as { direct_service_type?: { name?: string } | null })
+                            .direct_service_type?.name ??
+                          'Reactive'}
+                      </td>
+                      <td className="py-1 pr-2">{t.assigned_engineer?.full_name ?? 'Unassigned'}</td>
+                      <td className="py-1 pr-2">
+                        {statusConfig[t.status as keyof typeof statusConfig]?.label ?? t.status}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )
+        })()}
+      </div>
 
       {canAssign && selectedIds.size > 0 && (
         <div className="fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">

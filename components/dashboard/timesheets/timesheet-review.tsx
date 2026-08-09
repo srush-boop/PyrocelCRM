@@ -1,11 +1,21 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -14,7 +24,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   CircleCheck,
   CircleAlert,
@@ -25,6 +34,8 @@ import {
   Loader2,
   ChevronDown,
   ClipboardCheck,
+  Search,
+  Printer,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { TimesheetSummary } from '@/lib/timesheets/compute'
@@ -38,6 +49,7 @@ import { TimesheetDetail } from './timesheet-detail'
 
 type ReviewRow = Timesheet & { user_name: string | null }
 type CardMode = 'approve' | 'process'
+type SectionFilter = 'all' | 'approve' | 'process' | 'processed'
 
 function hm(mins: number): string {
   const h = Math.floor(mins / 60)
@@ -63,7 +75,42 @@ export function TimesheetReview({
   approveQueue: ReviewRow[]
   processQueue: ReviewRow[]
 }) {
+  const [search, setSearch] = useState('')
+  const [section, setSection] = useState<SectionFilter>('all')
+  const [lateOnly, setLateOnly] = useState(false)
+
+  // The processing queue carries both unprocessed and already-processed sheets;
+  // splitting here means a sheet moves from "To process" to "Processed" as soon
+  // as it is ticked (router.refresh re-fetches and re-partitions).
+  const toProcess = useMemo(() => processQueue.filter((r) => !r.processed), [processQueue])
+  const processed = useMemo(() => processQueue.filter((r) => r.processed), [processQueue])
+
+  const matches = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return (r: ReviewRow) => {
+      if (q && !(r.user_name ?? '').toLowerCase().includes(q)) return false
+      if (lateOnly && !r.late) return false
+      return true
+    }
+  }, [search, lateOnly])
+
+  const showApprove = section === 'all' || section === 'approve'
+  const showProcess = section === 'all' || section === 'process'
+  const showProcessed = section === 'all' || section === 'processed'
+
+  const fApprove = showApprove ? approveQueue.filter(matches) : []
+  const fToProcess = showProcess ? toProcess.filter(matches) : []
+  const fProcessed = showProcessed ? processed.filter(matches) : []
+
   const bothEmpty = approveQueue.length === 0 && processQueue.length === 0
+  const filteredEmpty = fApprove.length === 0 && fToProcess.length === 0 && fProcessed.length === 0
+
+  // Flat list (with a stage label) backing the print-only summary table.
+  const printRows: Array<{ stage: string; row: ReviewRow }> = [
+    ...fApprove.map((row) => ({ stage: 'To approve', row })),
+    ...fToProcess.map((row) => ({ stage: 'To process', row })),
+    ...fProcessed.map((row) => ({ stage: 'Processed', row })),
+  ]
 
   if (bothEmpty) {
     return (
@@ -80,35 +127,168 @@ export function TimesheetReview({
   }
 
   return (
-    <div className="space-y-8">
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <h2 className="text-lg font-medium">To approve</h2>
-          <Badge variant="secondary">{approveQueue.length}</Badge>
+    <div className="space-y-6">
+      {/* Filter + print toolbar (excluded from print output) */}
+      <div className="no-print flex flex-wrap items-end gap-3 rounded-lg border bg-card p-3">
+        <div className="min-w-48 flex-1 space-y-1">
+          <Label htmlFor="ts-search" className="text-xs text-muted-foreground">
+            Search
+          </Label>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              id="ts-search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Employee name"
+              className="pl-8"
+            />
+          </div>
         </div>
-        {approveQueue.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nothing awaiting approval.</p>
-        ) : (
-          approveQueue.map((row) => <ReviewCard key={row.id} row={row} mode="approve" />)
-        )}
-      </section>
+        <div className="w-44 space-y-1">
+          <Label className="text-xs text-muted-foreground">Stage</Label>
+          <Select value={section} onValueChange={(v) => setSection(v as SectionFilter)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All stages</SelectItem>
+              <SelectItem value="approve">To approve</SelectItem>
+              <SelectItem value="process">To process</SelectItem>
+              <SelectItem value="processed">Processed</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <label className="flex h-9 items-center gap-2 text-sm">
+          <Checkbox
+            checked={lateOnly}
+            onCheckedChange={(v) => setLateOnly(v === true)}
+          />
+          Late only
+        </label>
+        <Button
+          type="button"
+          variant="outline"
+          className="ml-auto"
+          onClick={() => window.print()}
+        >
+          <Printer className="mr-2 h-4 w-4" />
+          Print
+        </Button>
+      </div>
 
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <h2 className="text-lg font-medium">To process</h2>
-          <Badge variant="secondary">
-            {processQueue.filter((r) => !r.processed).length}
-          </Badge>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Approved timesheets ready for payroll processing. Tick when processed.
+      {/* Print-only summary grid honouring the current filters */}
+      <PrintSummaryTable rows={printRows} />
+
+      {filteredEmpty ? (
+        <p className="no-print py-8 text-center text-sm text-muted-foreground">
+          No timesheets match the current filters.
         </p>
-        {processQueue.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nothing awaiting processing.</p>
-        ) : (
-          processQueue.map((row) => <ReviewCard key={row.id} row={row} mode="process" />)
-        )}
-      </section>
+      ) : (
+        <div className="print:hidden space-y-8">
+          {showApprove && (
+            <section className="space-y-3">
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-medium">To approve</h2>
+                <Badge variant="secondary">{fApprove.length}</Badge>
+              </div>
+              {fApprove.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nothing awaiting approval.</p>
+              ) : (
+                fApprove.map((row) => <ReviewCard key={row.id} row={row} mode="approve" />)
+              )}
+            </section>
+          )}
+
+          {showProcess && (
+            <section className="space-y-3">
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-medium">To process</h2>
+                <Badge variant="secondary">{fToProcess.length}</Badge>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Approved timesheets ready for payroll processing. Tick when processed.
+              </p>
+              {fToProcess.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nothing awaiting processing.</p>
+              ) : (
+                fToProcess.map((row) => <ReviewCard key={row.id} row={row} mode="process" />)
+              )}
+            </section>
+          )}
+
+          {showProcessed && fProcessed.length > 0 && (
+            <section className="space-y-3">
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-medium">Processed</h2>
+                <Badge variant="secondary">{fProcessed.length}</Badge>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Completed for payroll. Untick to move a sheet back to processing.
+              </p>
+              {fProcessed.map((row) => (
+                <ReviewCard key={row.id} row={row} mode="process" />
+              ))}
+            </section>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PrintSummaryTable({
+  rows,
+}: {
+  rows: Array<{ stage: string; row: ReviewRow }>
+}) {
+  if (rows.length === 0) return null
+  return (
+    <div className="hidden print:block">
+      <h2 className="mb-1 text-lg font-semibold">Timesheets</h2>
+      <p className="mb-3 text-sm text-muted-foreground">
+        {rows.length} timesheet{rows.length === 1 ? '' : 's'} ·{' '}
+        {new Date().toLocaleDateString('en-GB', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        })}
+      </p>
+      <table className="w-full border-collapse text-xs">
+        <thead>
+          <tr className="border-b text-left">
+            <th className="py-1 pr-2 font-medium">Employee</th>
+            <th className="py-1 pr-2 font-medium">Week ending</th>
+            <th className="py-1 pr-2 font-medium">Stage</th>
+            <th className="py-1 pr-2 font-medium">Late</th>
+            <th className="py-1 pr-2 text-right font-medium">Mon–Fri OT</th>
+            <th className="py-1 pr-2 text-right font-medium">Sat OT</th>
+            <th className="py-1 pr-2 text-right font-medium">Sun OT</th>
+            <th className="py-1 pr-2 text-right font-medium">Night</th>
+            <th className="py-1 pr-2 text-right font-medium">On-call</th>
+            <th className="py-1 pr-2 text-right font-medium">Worked</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ stage, row }) => {
+            const s = row.summary as TimesheetSummary | null
+            return (
+              <tr key={row.id} className="avoid-break border-b">
+                <td className="py-1 pr-2">{row.user_name ?? 'Unknown'}</td>
+                <td className="py-1 pr-2">{dateLabel(row.week_ending)}</td>
+                <td className="py-1 pr-2">{stage}</td>
+                <td className="py-1 pr-2">{row.late ? 'Yes' : '—'}</td>
+                <td className="py-1 pr-2 text-right">{hm(s?.weekdayOtMinutes ?? 0)}</td>
+                <td className="py-1 pr-2 text-right">{hm(s?.saturdayOtMinutes ?? 0)}</td>
+                <td className="py-1 pr-2 text-right">{hm(s?.sundayOtMinutes ?? 0)}</td>
+                <td className="py-1 pr-2 text-right">{s?.nightShiftCount ?? 0}</td>
+                <td className="py-1 pr-2 text-right">{s?.oncallCount ?? 0}</td>
+                <td className="py-1 pr-2 text-right">{hm(s?.totalWorkedMinutes ?? 0)}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }

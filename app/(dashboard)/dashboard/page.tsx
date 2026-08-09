@@ -205,6 +205,10 @@ export default async function DashboardPage() {
   // Per-user preferred tile order (array of tile titles). Empty = default order.
   const savedTileOrder = (profile as Profile).dashboard_tile_positions ?? []
 
+  // Per-user hidden built-in tiles + custom shortcut tiles.
+  const hiddenTiles = (profile as Profile).dashboard_hidden_tiles ?? []
+  const customTiles = (profile as Profile).dashboard_custom_tiles ?? []
+
   // Per-user pinned quick-shortcut destinations (max 3). Empty = all unset.
   const savedShortcuts = (profile as Profile).dashboard_shortcuts ?? []
 
@@ -420,7 +424,10 @@ export default async function DashboardPage() {
       <div className="space-y-2">
         <h2 className="text-sm font-medium text-muted-foreground">Quick links</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          <DashboardShortcuts saved={savedShortcuts} />
+          <DashboardShortcuts
+            saved={savedShortcuts}
+            colors={(profile as Profile).dashboard_shortcut_colors ?? null}
+          />
         </div>
       </div>
 
@@ -428,6 +435,8 @@ export default async function DashboardPage() {
           that lets the user drag tiles into their preferred, saved order. */}
       <DashboardTileGrid
         savedOrder={savedTileOrder}
+        hiddenTiles={hiddenTiles}
+        customTiles={customTiles}
         tiles={modules.map((m): DashboardTile => {
           const color = tileColors[m.title] ?? null
           const iconStyle = tileIconStyle(color)

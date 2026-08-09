@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { MAX_SHORTCUTS, normaliseHeaderShortcutKeys } from '@/lib/dashboard/shortcuts'
 import { DASHBOARD_BACKGROUND_KEYS } from '@/lib/dashboard/backgrounds'
+import type { CustomDashboardTile } from '@/lib/types/database'
 
 /**
  * Persist a single dashboard tile's colour for the signed-in user. Passing a
@@ -179,6 +180,119 @@ export async function setHeaderShortcuts(keys: string[]) {
   if (error) return { ok: false as const, error: error.message }
 
   // The header renders on every dashboard route, so refresh the whole segment.
+  revalidatePath('/dashboard', 'layout')
+  return { ok: true as const }
+}
+
+/**
+ * Show/hide a built-in module tile on the signed-in user's dashboard. Stored as
+ * a list of hidden tile titles on their profile (RLS `profiles_update_own`).
+ * `hidden=true` adds the title to the hidden set; `false` removes it.
+ */
+export async function setTileHidden(tileTitle: string, hidden: boolean) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false as const, error: 'Not signed in' }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('dashboard_hidden_tiles')
+    .eq('id', user.id)
+    .single()
+
+  const set = new Set<string>((profile?.dashboard_hidden_tiles as string[] | null) ?? [])
+  if (hidden) set.add(tileTitle)
+  else set.delete(tileTitle)
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ dashboard_hidden_tiles: Array.from(set) })
+    .eq('id', user.id)
+
+  if (error) return { ok: false as const, error: error.message }
+
+  revalidatePath('/dashboard')
+  return { ok: true as const }
+}
+
+/**
+ * Replace the signed-in user's custom dashboard shortcut tiles. Each tile is
+ * validated (title + in-app href required, colour must be a hex if present).
+ * Capped at 12. Stored on the profile (RLS `profiles_update_own`).
+ */
+export async function setCustomTiles(tiles: CustomDashboardTile[]) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false as const, error: 'Not signed in' }
+
+  const clean: CustomDashboardTile[] = (Array.isArray(tiles) ? tiles : [])
+    .filter(
+      (t) =>
+        t &&
+        typeof t.title === 'string' &&
+        t.title.trim() &&
+        typeof t.href === 'string' &&
+        t.href.startsWith('/'),
+    )
+    .slice(0, 12)
+    .map((t) => ({
+      id: typeof t.id === 'string' && t.id ? t.id : crypto.randomUUID(),
+      title: t.title.trim().slice(0, 40),
+      href: t.href.trim(),
+      color: t.color && /^#[0-9a-f]{6}$/i.test(t.color) ? t.color : null,
+      icon: typeof t.icon === 'string' && t.icon ? t.icon : null,
+    }))
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ dashboard_custom_tiles: clean })
+    .eq('id', user.id)
+
+  if (error) return { ok: false as const, error: error.message }
+
+  revalidatePath('/dashboard')
+  return { ok: true as const }
+}
+
+/**
+ * Set (or clear) the colour override for a shortcut/quick-link, keyed by its
+ * catalogue key. Passing a null/invalid colour clears the override. Stored as a
+ * { key: hex } map on the profile (RLS `profiles_update_own`).
+ */
+export async function setShortcutColor(key: string, color: string | null) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false as const, error: 'Not signed in' }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('dashboard_shortcut_colors')
+    .eq('id', user.id)
+    .single()
+
+  const colors: Record<string, string> = {
+    ...((profile?.dashboard_shortcut_colors as Record<string, string> | null) ?? {}),
+  }
+  if (color && /^#[0-9a-f]{6}$/i.test(color)) colors[key] = color
+  else delete colors[key]
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ dashboard_shortcut_colors: colors })
+    .eq('id', user.id)
+
+  if (error) return { ok: false as const, error: error.message }
+
+  // Shortcuts render in the header too, so refresh the whole segment.
   revalidatePath('/dashboard', 'layout')
   return { ok: true as const }
 }

@@ -470,6 +470,20 @@ export interface SharedGridViewComment {
   author?: { id: string; full_name: string | null } | null
 }
 
+/** A user-defined shortcut tile on the main dashboard. */
+export interface CustomDashboardTile {
+  /** Stable client-generated id. */
+  id: string
+  /** Tile label. */
+  title: string
+  /** In-app destination path, e.g. "/dashboard/sites". */
+  href: string
+  /** Optional hex colour; falls back to the default theme accent. */
+  color?: string | null
+  /** Optional lucide icon key from the shortcut catalogue. */
+  icon?: string | null
+}
+
 export interface Profile {
   id: string
   email: string
@@ -518,6 +532,15 @@ export interface Profile {
   // Per-user dashboard background preset key (e.g. "grid", "dots", "blueprint",
   // "glow"). NULL/empty = the default clean background.
   dashboard_background: string | null
+  // Per-user list of built-in module tile titles the user has hidden from the
+  // main dashboard (e.g. ["Reports"]). NULL/empty = all visible.
+  dashboard_hidden_tiles: string[] | null
+  // Per-user custom shortcut tiles added to the main dashboard. Each links to
+  // any path in the app. NULL/empty = none.
+  dashboard_custom_tiles: CustomDashboardTile[] | null
+  // Per-user colour overrides for header/quick-link shortcuts, keyed by
+  // catalogue key -> hex (e.g. { "invoices": "#2563eb" }). NULL/empty = default.
+  dashboard_shortcut_colors: Record<string, string> | null
   // Nominated line manager for this user (self-referencing). Recorded for HR /
   // future approvals wiring. NULL = no manager set.
   manager_id: string | null

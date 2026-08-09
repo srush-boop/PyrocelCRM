@@ -1,12 +1,12 @@
 import type { CSSProperties } from 'react'
-import { SERVICE_COLOR_OPTIONS } from './service-colors'
+import { TILE_COLOR_OPTIONS as WIDE_TILE_COLOR_OPTIONS } from './service-colors'
 
 /**
- * Colour swatches offered when personalising a dashboard tile. Reuses the same
- * on-brand palette as service types so the whole app stays consistent (Pyrocel
- * red first, purple/violet intentionally excluded).
+ * Colour swatches offered when personalising a dashboard tile. Uses the wider
+ * personalisation palette (full spectrum incl. purple/pink) rather than the
+ * constrained service-type palette, since these are personal preferences.
  */
-export const TILE_COLOR_OPTIONS = SERVICE_COLOR_OPTIONS
+export const TILE_COLOR_OPTIONS = WIDE_TILE_COLOR_OPTIONS
 
 /**
  * Inline styles for a tile's icon badge given a stored hex colour. The badge

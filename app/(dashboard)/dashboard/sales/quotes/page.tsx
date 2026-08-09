@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { QuotesTable } from '@/components/dashboard/sales/quotes-table'
 import { BranchFilter } from '@/components/dashboard/branch-filter'
 import { getBranchScope } from '@/lib/branches'
+import { getSavedGridViews, getSharedGridViews } from '@/lib/actions/grid-views'
 import type { Profile, Quote } from '@/lib/types/database'
 
 export const metadata = {
@@ -56,9 +57,14 @@ export default async function QuotesPage({
     return acc
   }, {})
 
+  const [savedViews, sharedViews] = await Promise.all([
+    getSavedGridViews('quotes'),
+    getSharedGridViews('quotes'),
+  ])
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 no-print sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Quotes</h1>
           <p className="text-muted-foreground">
@@ -68,7 +74,13 @@ export default async function QuotesPage({
         <BranchFilter branches={scope.branches} activeBranchId={scope.activeBranchId} />
       </div>
 
-      <QuotesTable quotes={quotes} unreadQueries={unreadQueries} />
+      <QuotesTable
+        quotes={quotes}
+        unreadQueries={unreadQueries}
+        savedViews={savedViews}
+        sharedViews={sharedViews}
+        currentUserId={user.id}
+      />
     </div>
   )
 }

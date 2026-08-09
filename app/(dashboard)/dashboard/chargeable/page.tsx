@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { ChargeableCallsTable, type ChargeableCall } from '@/components/dashboard/chargeable/chargeable-calls-table'
 import { getGlobalConfig } from '@/lib/actions/global-config'
+import { getSavedGridViews, getSharedGridViews } from '@/lib/actions/grid-views'
 import type { Profile, PurchaseOrderRequest } from '@/lib/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -165,9 +166,14 @@ export default async function ChargeableCallsPage({
     }
   })
 
+  const [savedViews, sharedViews] = await Promise.all([
+    getSavedGridViews('chargeable'),
+    getSharedGridViews('chargeable'),
+  ])
+
   return (
     <div className="space-y-6">
-      <div>
+      <div className="no-print">
         <h1 className="text-3xl font-bold tracking-tight">Chargeable Calls</h1>
         <p className="text-muted-foreground">
           Completed calls deemed chargeable. Review, log PO requests, then mark invoiced once raised.
@@ -178,6 +184,9 @@ export default async function ChargeableCallsPage({
           calls={rows}
           overdueAfterDays={overdueAfterDays}
           initialReviewId={reviewTaskId ?? null}
+          savedViews={savedViews}
+          sharedViews={sharedViews}
+          currentUserId={user.id}
         />
     </div>
   )

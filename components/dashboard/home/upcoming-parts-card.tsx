@@ -118,6 +118,15 @@ export function UpcomingPartsCard({ parts }: { parts: UpcomingPartSummary[] }) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
+        {parts.length === 0 && (
+          <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-8 text-center">
+            <CheckCircle2 className="h-6 w-6 text-muted-foreground" />
+            <p className="text-sm font-medium">No parts required</p>
+            <p className="text-xs text-muted-foreground">
+              None of your upcoming calls in the next 2 weeks have parts pre-loaded.
+            </p>
+          </div>
+        )}
         {parts.map((part) => {
           const isOpen = expanded === part.part_id
           const isReserved = reserved.has(part.part_id)

@@ -440,27 +440,24 @@ export function ExtinguisherTaskExecution({
         .eq('id', task.site_service_id)
     }
 
-    // Send report email (server route handles recipients)
-    try {
-      await fetch('/api/send-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId: task.id }),
-      })
-    } catch (err) {
-      console.log('[v0] Report email request error:', err)
-    }
+    // Terminal side-effects: send the completion report email (server route
+    // handles recipients) and run per-visit "invoice on completion" billing.
+    // Both are best-effort and idempotent server-side, so we DON'T await them —
+    // awaiting was adding ~10s before the UI navigated back to Calls.
+    // `keepalive` lets the requests finish even as the page navigates away.
+    void fetch('/api/send-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskId: task.id }),
+      keepalive: true,
+    }).catch((err) => console.log('[v0] Report email request error:', err))
 
-    // Per-visit "invoice on completion" billing — best-effort, idempotent server-side.
-    try {
-      await fetch('/api/tasks/complete-billing', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId: task.id }),
-      })
-    } catch (err) {
-      console.log('[v0] Visit billing request error:', err)
-    }
+    void fetch('/api/tasks/complete-billing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskId: task.id }),
+      keepalive: true,
+    }).catch((err) => console.log('[v0] Visit billing request error:', err))
 
     setStatus('completed')
     setSubmitting(false)

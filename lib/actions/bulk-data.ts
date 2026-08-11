@@ -324,6 +324,16 @@ async function analyse(
       updates.push({ id: targetId, values: dbValues })
       plans.push({ rowNumber, action: 'update', label, issues: [], warnings })
     } else {
+      // On INSERT, explicitly fill any NOT-NULL-with-default column (e.g. status)
+      // whose cell was blank/absent. This guarantees every row in the batch
+      // carries a valid value instead of relying on the DB default surviving a
+      // heterogeneous multi-row insert — the cause of the clients_status_check
+      // violation when some rows had a status and others didn't.
+      for (const col of ds.columns) {
+        if (col.defaultOnInsert !== undefined && dbValues[col.field] === undefined) {
+          dbValues[col.field] = col.defaultOnInsert
+        }
+      }
       inserts.push(dbValues)
       plans.push({ rowNumber, action: 'insert', label, issues: [], warnings })
     }
@@ -369,12 +379,26 @@ export async function commitMerge(key: string, rows: SheetRow[]): Promise<MergeR
   const { plans, inserts, updates } = await analyse(supabase, ds, rows)
   const skipped = plans.filter((p) => p.action === 'skip').length
 
-  // Inserts as a single batch.
+  // Inserts, grouped by their exact set of provided columns. A single batch of
+  // objects with DIFFERENT keys makes PostgREST build one multi-row statement
+  // over the UNION of columns and fill each row's missing keys — so a genuinely
+  // absent column no longer falls back to its DB default. Grouping by key
+  // signature keeps every batch homogeneous, so DB defaults apply correctly for
+  // absent columns (e.g. status) and we still insert efficiently.
   if (inserts.length > 0) {
-    const { error: insErr } = await supabase.from(ds.table).insert(inserts)
-    if (insErr) {
-      console.log('[v0] bulk-data insert failed:', insErr.message)
-      return { ok: false, error: `Insert failed: ${insErr.message}`, inserted: 0, updated: 0, skipped }
+    const groups = new Map<string, Record<string, unknown>[]>()
+    for (const row of inserts) {
+      const sig = Object.keys(row).sort().join('|')
+      const g = groups.get(sig)
+      if (g) g.push(row)
+      else groups.set(sig, [row])
+    }
+    for (const group of groups.values()) {
+      const { error: insErr } = await supabase.from(ds.table).insert(group)
+      if (insErr) {
+        console.log('[v0] bulk-data insert failed:', insErr.message)
+        return { ok: false, error: `Insert failed: ${insErr.message}`, inserted: 0, updated: 0, skipped }
+      }
     }
   }
 

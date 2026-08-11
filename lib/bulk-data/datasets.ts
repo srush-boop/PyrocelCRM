@@ -43,6 +43,13 @@ export interface ColumnSpec {
   enumValues?: string[]
   /** For enum columns: alias -> canonical map (keys lowercased), e.g. UI labels. */
   enumAliases?: Record<string, string>
+  /**
+   * Value written on INSERT when the cell is blank/absent. Use for NOT-NULL
+   * columns that carry a DB default (e.g. status) so a batch insert never relies
+   * on the DB default surviving a heterogeneous multi-row statement — every
+   * inserted row explicitly carries a valid value. Ignored on update.
+   */
+  defaultOnInsert?: string | number | boolean
   /** Example value shown in the blank template's sample row. */
   example?: string | number | boolean
   /** Optional helper note shown under the dataset. */
@@ -91,8 +98,9 @@ export const DATASETS: DatasetDef[] = [
         enumValues: ['live', 'new', 'dead'],
         // Accept the UI-facing labels too (Active/Engaged/Dormant), any casing.
         enumAliases: { active: 'live', engaged: 'new', dormant: 'dead' },
+        defaultOnInsert: 'live',
         example: 'live',
-        note: "'live' (Active), 'new' (Engaged) or 'dead' (Dormant).",
+        note: "'live' (Active), 'new' (Engaged) or 'dead' (Dormant). Blank defaults to 'live'.",
       },
       { header: 'requires_po', field: 'requires_po', kind: 'boolean', example: false, note: 'Whether a PO is required before invoicing.' },
       { header: 'po_number', field: 'po_number', kind: 'text', note: 'Standing/blanket PO number, if any.' },
@@ -133,8 +141,9 @@ export const DATASETS: DatasetDef[] = [
         enumValues: ['live', 'new', 'dead'],
         // Accept the UI-facing labels too (Active/Engaged/Dormant), any casing.
         enumAliases: { active: 'live', engaged: 'new', dormant: 'dead' },
+        defaultOnInsert: 'live',
         example: 'live',
-        note: "'live' (Active), 'new' (Engaged) or 'dead' (Dormant).",
+        note: "'live' (Active), 'new' (Engaged) or 'dead' (Dormant). Blank defaults to 'live'.",
       },
       {
         header: 'branch',
@@ -217,8 +226,9 @@ export const DATASETS: DatasetDef[] = [
         field: 'status',
         kind: 'enum',
         enumValues: ['active', 'inactive'],
+        defaultOnInsert: 'active',
         example: 'active',
-        note: "'active' or 'inactive'.",
+        note: "'active' or 'inactive'. Blank defaults to 'active'.",
       },
       { header: 'notes', field: 'notes', kind: 'text' },
     ],

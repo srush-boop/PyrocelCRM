@@ -30,6 +30,122 @@ export async function getOpenRemedialForSite(
   return { siteOpen: serviceOpenIds.size > 0, serviceOpenIds }
 }
 
+// A part required for a remedial call, flattened for display.
+export interface RemedialPart {
+  id: string
+  name: string
+  sku: string | null
+  unit: string | null
+  quantity: number
+}
+
+// A single outstanding remedial call at a site, with everything the attending
+// engineer needs to see it in one place: the works required (notes), the parts
+// required, its reference, who (if anyone) currently owns it, and enough to
+// link through / take ownership.
+export interface OpenRemedialCall {
+  id: string
+  reference: string | null
+  status: string
+  scheduledDate: string | null
+  worksDescription: string | null
+  assignedEngineerId: string | null
+  assignedEngineerName: string | null
+  parts: RemedialPart[]
+}
+
+/**
+ * Fetch the outstanding (pending / in-progress) remedial calls at a site, each
+ * enriched with its works description, required parts and current owner. This
+ * backs the single consolidated "Outstanding remedial" section shown on every
+ * call at the site. `excludeTaskId` omits the call you're already viewing (so
+ * the remedial call itself doesn't list itself).
+ *
+ * Accepts any Supabase client (server or admin). Never throws.
+ */
+export async function getOpenRemedialCallsForSite(
+  supabase: SupabaseClient,
+  siteId: string,
+  excludeTaskId?: string,
+): Promise<OpenRemedialCall[]> {
+  try {
+    // Remedial calls can be anchored either to a service (site_service.site_id)
+    // or directly to the site (tasks.site_id) — cover both.
+    const { data } = await supabase
+      .from('tasks')
+      .select(
+        `id, reference_number, status, scheduled_date, notes, assigned_engineer_id, site_id,
+         site_service:site_services(site_id),
+         assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(full_name),
+         call_parts(quantity, part:parts(id, name, sku, unit))`,
+      )
+      .eq('is_remedial', true)
+      .in('status', OPEN_STATUSES as unknown as string[])
+      .order('scheduled_date', { ascending: true })
+
+    type Row = {
+      id: string
+      reference_number: string | null
+      status: string
+      scheduled_date: string | null
+      notes: string | null
+      assigned_engineer_id: string | null
+      site_id: string | null
+      site_service: { site_id: string | null } | { site_id: string | null }[] | null
+      assigned_engineer: { full_name: string | null } | { full_name: string | null }[] | null
+      call_parts:
+        | {
+            quantity: number | null
+            part: { id: string; name: string | null; sku: string | null; unit: string | null }
+              | { id: string; name: string | null; sku: string | null; unit: string | null }[]
+              | null
+          }[]
+        | null
+    }
+
+    const rows = (data ?? []) as Row[]
+    const out: OpenRemedialCall[] = []
+    for (const r of rows) {
+      if (excludeTaskId && r.id === excludeTaskId) continue
+      const svc = Array.isArray(r.site_service) ? r.site_service[0] : r.site_service
+      const belongsToSite = r.site_id === siteId || svc?.site_id === siteId
+      if (!belongsToSite) continue
+
+      const eng = Array.isArray(r.assigned_engineer) ? r.assigned_engineer[0] : r.assigned_engineer
+      const parts: RemedialPart[] = []
+      for (const cp of r.call_parts ?? []) {
+        const part = Array.isArray(cp.part) ? cp.part[0] : cp.part
+        if (!part) continue
+        parts.push({
+          id: part.id,
+          name: part.name ?? 'Part',
+          sku: part.sku,
+          unit: part.unit,
+          quantity: cp.quantity ?? 1,
+        })
+      }
+
+      out.push({
+        id: r.id,
+        reference: r.reference_number,
+        status: r.status,
+        scheduledDate: r.scheduled_date,
+        worksDescription: r.notes,
+        assignedEngineerId: r.assigned_engineer_id,
+        assignedEngineerName: eng?.full_name ?? null,
+        parts,
+      })
+    }
+    return out
+  } catch (err) {
+    console.log(
+      '[v0] getOpenRemedialCallsForSite failed:',
+      err instanceof Error ? err.message : String(err),
+    )
+    return []
+  }
+}
+
 // A quote line item, narrowed to the fields we import onto the remedial call.
 interface QuoteLine {
   id: string

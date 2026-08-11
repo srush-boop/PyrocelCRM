@@ -16,7 +16,8 @@ import { EntityRequestsCard } from '@/components/dashboard/requests/entity-reque
 import { CommissioningJobPanel } from '@/components/dashboard/tasks/commissioning-job-panel'
 import { RemedialCallPanel } from '@/components/dashboard/tasks/remedial-call-panel'
 import { resolveSiteFlags } from '@/lib/site-flags'
-import { getOpenRemedialForSite } from '@/lib/remedial'
+import { getOpenRemedialCallsForSite } from '@/lib/remedial'
+import { OutstandingRemedialCard } from '@/components/dashboard/tasks/outstanding-remedial-card'
 import { DeadlineFailedPanel } from '@/components/dashboard/tasks/deadline-failed-panel'
 import { CallNotesCard } from '@/components/dashboard/tasks/call-notes-card'
 import { CallHistoryCard, type CallHistoryEntry } from '@/components/dashboard/tasks/call-history-card'
@@ -141,6 +142,10 @@ export default async function TaskPage({ params }: PageProps) {
   const canModerateNotes = role === 'admin' || role === 'office'
 
   let preAttendancePanel: ReactNode = null
+  // Call history is rendered separately at the very BOTTOM of the call view
+  // (below the completion action), collapsed by default — not in the
+  // pre-attendance slot. Each execution flow receives it via `callHistory`.
+  let callHistory: ReactNode = null
   if (preAttendanceSiteId) {
     const [{ data: notesData }, engDocs, allDocumentTags] = await Promise.all([
       supabase
@@ -154,16 +159,11 @@ export default async function TaskPage({ params }: PageProps) {
     const engFolders = engDocs.folders
     const engFiles = engDocs.files
 
-    // Derive the "remedial works required" alert automatically from any
-    // outstanding remedial call on this site (site + service scope) rather than
-    // a manual toggle.
-    const { siteOpen: remedialOpen } = await getOpenRemedialForSite(
-      supabase,
-      preAttendanceSiteId,
-    )
+    // The "remedial works required" detail is now shown in one consolidated
+    // OutstandingRemedialCard below (work + parts + view + take-ownership), so
+    // the pre-attendance flags no longer carry a derived remedial badge.
     const flags = resolveSiteFlags(task.site_service?.site, task.site_service, {
       system: task.site_service?.site_system,
-      remedialOpen,
     })
 
     preAttendancePanel = (
@@ -180,6 +180,25 @@ export default async function TaskPage({ params }: PageProps) {
         usedTags={engDocs.usedTags}
       />
     )
+
+    // One consolidated "Outstanding remedial" section, shown on ANY call at a
+    // site that has an open remedial call (excluding the remedial call itself).
+    // Visible to everyone; surfaces the works required, parts required, a link
+    // to view the remedial call, and a take-ownership action. Placed directly
+    // under the pre-attendance panel so it reads as part of "before you attend".
+    const openRemedials = await getOpenRemedialCallsForSite(supabase, preAttendanceSiteId, id)
+    if (openRemedials.length > 0) {
+      preAttendancePanel = (
+        <>
+          {preAttendancePanel}
+          <OutstandingRemedialCard
+            calls={openRemedials}
+            currentUserId={user.id}
+            canTakeOwnership={role === 'admin' || role === 'office' || role === 'engineer'}
+          />
+        </>
+      )
+    }
   }
 
   // ─── System call history ──────────────────────────────────────────────────
@@ -263,12 +282,7 @@ export default async function TaskPage({ params }: PageProps) {
     }
 
     if (historyEntries.length > 0) {
-      preAttendancePanel = (
-        <>
-          {preAttendancePanel}
-          <CallHistoryCard systemName={systemName} entries={historyEntries} />
-        </>
-      )
+      callHistory = <CallHistoryCard systemName={systemName} entries={historyEntries} />
     }
   }
 
@@ -497,6 +511,7 @@ export default async function TaskPage({ params }: PageProps) {
         dampers={(dampersData || []) as Damper[]}
         existingInspections={(inspectionsData || []) as DamperInspection[]}
         preAttendance={preAttendancePanel}
+        callHistory={callHistory}
         routeProgress={routeProgress}
         existingSignature={existingSignature}
         existingSignatureName={existingSignatureName}
@@ -519,6 +534,7 @@ export default async function TaskPage({ params }: PageProps) {
         extinguishers={(extinguishersData || []) as Extinguisher[]}
         existingInspections={(inspectionsData || []) as ExtinguisherInspection[]}
         preAttendance={preAttendancePanel}
+        callHistory={callHistory}
         routeProgress={routeProgress}
         existingSignature={existingSignature}
         existingSignatureName={existingSignatureName}
@@ -588,6 +604,7 @@ export default async function TaskPage({ params }: PageProps) {
         lastTestedDate={lastTestedDate}
         nimbusUrl={nimbusUrl}
         preAttendance={preAttendancePanel}
+        callHistory={callHistory}
         routeProgress={routeProgress}
         existingSignature={existingSignature}
         existingSignatureName={existingSignatureName}
@@ -614,6 +631,7 @@ export default async function TaskPage({ params }: PageProps) {
         lights={(lightsData || []) as EmergencyLight[]}
         existingInspections={(inspectionsData || []) as EmergencyLightInspection[]}
         preAttendance={preAttendancePanel}
+        callHistory={callHistory}
         routeProgress={routeProgress}
         existingSignature={existingSignature}
         existingSignatureName={existingSignatureName}
@@ -804,6 +822,7 @@ export default async function TaskPage({ params }: PageProps) {
       panels={panels}
       panelChecklists={panelChecklists}
       preAttendance={preAttendancePanel}
+      callHistory={callHistory}
       routeProgress={routeProgress}
     />
   )

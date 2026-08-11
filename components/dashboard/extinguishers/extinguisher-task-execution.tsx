@@ -9,6 +9,7 @@ import type { RouteProgress } from '@/lib/routes/route-progress'
 import { useRouter } from 'next/navigation'
 import { CompletedReportActions } from '@/components/dashboard/reports/completed-report-actions'
 import { ClientSignOffCard } from '@/components/dashboard/tasks/client-sign-off-card'
+import { CallTimeCard } from '@/components/dashboard/tasks/call-times-card'
 import { resolveCallKind } from '@/lib/call-kinds'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -66,6 +67,8 @@ interface ExtinguisherTaskExecutionProps {
   existingInspections: ExtinguisherInspection[]
   /** Shared "Before you attend" panel, rendered beneath the site/service header. */
   preAttendance?: ReactNode
+  /** Collapsed call history, rendered at the very bottom (below the completion action). */
+  callHistory?: ReactNode
   /** CDO route context: "call X of Y" position + next call to jump to on completion. */
   routeProgress?: RouteProgress | null
   /** Saved client sign-off (name + signature) for redisplay on a completed call. */
@@ -151,6 +154,7 @@ export function ExtinguisherTaskExecution({
   extinguishers: initialExtinguishers,
   existingInspections,
   preAttendance,
+  callHistory,
   routeProgress,
   existingSignature = null,
   existingSignatureName = null,
@@ -167,6 +171,11 @@ export function ExtinguisherTaskExecution({
   const [submitting, setSubmitting] = useState(false)
   const [clientSignature, setClientSignature] = useState<string | null>(existingSignature)
   const [clientSignatureName, setClientSignatureName] = useState(existingSignatureName ?? '')
+  // Editable end time — auto-set to now on completion, adjustable via the End
+  // time card. Feeds the task's completed_at on submit.
+  const [endTime, setEndTime] = useState<Date | null>(
+    task.completed_at ? new Date(task.completed_at) : null,
+  )
 
   const [extinguishers, setExtinguishers] = useState<Extinguisher[]>(initialExtinguishers)
   const [addOpen, setAddOpen] = useState(false)
@@ -408,7 +417,9 @@ export function ExtinguisherTaskExecution({
     }
 
     // Mark task complete
-    const completedAt = new Date()
+    // End time defaults to now if the engineer didn't set one, still adjustable.
+    const completedAt = endTime ?? new Date()
+    if (!endTime) setEndTime(completedAt)
     await supabase
       .from('tasks')
       .update({ status: 'completed', completed_at: completedAt.toISOString(), updated_at: completedAt.toISOString() })
@@ -518,6 +529,14 @@ export function ExtinguisherTaskExecution({
 
       {(status === 'in_progress' || status === 'completed') && (
         <>
+          {/* Start time — before the service body. */}
+          <CallTimeCard
+            taskId={task.id}
+            mode="start"
+            initialValue={task.started_at}
+            canEdit={canEdit}
+          />
+
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -606,6 +625,14 @@ export function ExtinguisherTaskExecution({
               ))}
             </div>
           )}
+          {/* End time — after the service body, at completion. */}
+          <CallTimeCard
+            taskId={task.id}
+            mode="end"
+            initialValue={task.completed_at}
+            canEdit={canEdit}
+            onChange={setEndTime}
+          />
         </>
       )}
 
@@ -650,6 +677,9 @@ export function ExtinguisherTaskExecution({
 
       {/* Attachments */}
       <TaskAttachments taskId={task.id} profile={profile} />
+
+      {/* Call history — collapsed, at the very bottom below the completion action. */}
+      {callHistory}
 
       {/* Add extinguisher in the field */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>

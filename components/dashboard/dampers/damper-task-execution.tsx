@@ -9,6 +9,7 @@ import type { RouteProgress } from '@/lib/routes/route-progress'
 import { useRouter } from 'next/navigation'
 import { CompletedReportActions } from '@/components/dashboard/reports/completed-report-actions'
 import { ClientSignOffCard } from '@/components/dashboard/tasks/client-sign-off-card'
+import { CallTimeCard } from '@/components/dashboard/tasks/call-times-card'
 import { resolveCallKind } from '@/lib/call-kinds'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -59,6 +60,8 @@ interface DamperTaskExecutionProps {
   existingInspections: DamperInspection[]
   /** Shared "Before you attend" panel, rendered beneath the site/service header. */
   preAttendance?: ReactNode
+  /** Collapsed call history, rendered at the very bottom (below the completion action). */
+  callHistory?: ReactNode
   /** CDO route context: "call X of Y" position + next call to jump to on completion. */
   routeProgress?: RouteProgress | null
   /** Saved client sign-off (name + signature) for redisplay on a completed call. */
@@ -137,6 +140,7 @@ export function DamperTaskExecution({
   dampers: initialDampers,
   existingInspections,
   preAttendance,
+  callHistory,
   routeProgress,
   existingSignature = null,
   existingSignatureName = null,
@@ -153,6 +157,11 @@ export function DamperTaskExecution({
   const [submitting, setSubmitting] = useState(false)
   const [clientSignature, setClientSignature] = useState<string | null>(existingSignature)
   const [clientSignatureName, setClientSignatureName] = useState(existingSignatureName ?? '')
+  // Editable end time — auto-set to now on completion, adjustable via the End
+  // time card. Feeds the task's completed_at on submit.
+  const [endTime, setEndTime] = useState<Date | null>(
+    task.completed_at ? new Date(task.completed_at) : null,
+  )
   const [dampers, setDampers] = useState<Damper[]>(initialDampers)
   const [addOpen, setAddOpen] = useState(false)
   const [addForm, setAddForm] = useState(emptyDamperForm)
@@ -387,8 +396,10 @@ export function DamperTaskExecution({
       await supabase.from('task_results').insert(resultData)
     }
 
-    // Mark task complete
-    const completedAt = new Date()
+    // Mark task complete. End time defaults to now if the engineer didn't set
+    // one, and stays adjustable via the End time card beforehand.
+    const completedAt = endTime ?? new Date()
+    if (!endTime) setEndTime(completedAt)
     await supabase
       .from('tasks')
       .update({ status: 'completed', completed_at: completedAt.toISOString(), updated_at: completedAt.toISOString() })
@@ -500,6 +511,14 @@ export function DamperTaskExecution({
 
       {(status === 'in_progress' || status === 'completed') && (
         <>
+          {/* Start time — before the inspection body. */}
+          <CallTimeCard
+            taskId={task.id}
+            mode="start"
+            initialValue={task.started_at}
+            canEdit={canEdit}
+          />
+
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -588,6 +607,14 @@ export function DamperTaskExecution({
               ))}
             </div>
           )}
+          {/* End time — after the inspection body, at completion. */}
+          <CallTimeCard
+            taskId={task.id}
+            mode="end"
+            initialValue={task.completed_at}
+            canEdit={canEdit}
+            onChange={setEndTime}
+          />
         </>
       )}
 
@@ -712,6 +739,9 @@ export function DamperTaskExecution({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Call history — collapsed, at the very bottom below the completion action. */}
+      {callHistory}
 
       {/* Post-completion: offer nearby overdue / due-soon calls, then Calls. */}
       {nearbyPrompt}

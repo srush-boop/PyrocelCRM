@@ -11,6 +11,7 @@ import { TaskHeader } from '@/components/dashboard/tasks/task-header'
 import { PauseResumeControls } from '@/components/dashboard/tasks/pause-resume-controls'
 import { CompletedReportActions } from '@/components/dashboard/reports/completed-report-actions'
 import { ClientSignOffCard } from '@/components/dashboard/tasks/client-sign-off-card'
+import { CallTimeCard } from '@/components/dashboard/tasks/call-times-card'
 import { resolveCallKind } from '@/lib/call-kinds'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -75,6 +76,8 @@ interface McpTaskExecutionProps {
   nimbusUrl?: string | null
   /** Shared "Before you attend" panel, rendered beneath the site/service header. */
   preAttendance?: ReactNode
+  /** Collapsed call history, rendered at the very bottom (below the completion action). */
+  callHistory?: ReactNode
   /** CDO route context: "call X of Y" position + next call to jump to on completion. */
   routeProgress?: RouteProgress | null
   /** Saved client sign-off (name + signature) for redisplay on a completed call. */
@@ -115,6 +118,7 @@ export function McpTaskExecution({
   lastTestedDate,
   nimbusUrl,
   preAttendance,
+  callHistory,
   routeProgress,
   existingSignature = null,
   existingSignatureName = null,
@@ -131,6 +135,11 @@ export function McpTaskExecution({
   const [submitting, setSubmitting] = useState(false)
   const [clientSignature, setClientSignature] = useState<string | null>(existingSignature)
   const [clientSignatureName, setClientSignatureName] = useState(existingSignatureName ?? '')
+  // Editable end time — auto-set to now on completion, adjustable via the End
+  // time card. Feeds the task's completed_at on submit.
+  const [endTime, setEndTime] = useState<Date | null>(
+    task.completed_at ? new Date(task.completed_at) : null,
+  )
   const [showPassAll, setShowPassAll] = useState(false)
   // Quick weekly close-out: mark the call point due this week as all-OK and finish.
   const [showAllOk, setShowAllOk] = useState(false)
@@ -336,7 +345,9 @@ export function McpTaskExecution({
       await supabase.from('task_results').insert(resultData)
     }
 
-    const completedAt = new Date()
+    // End time defaults to now if the engineer didn't set one, still adjustable.
+    const completedAt = endTime ?? new Date()
+    if (!endTime) setEndTime(completedAt)
     await supabase
       .from('tasks')
       .update({ status: 'completed', completed_at: completedAt.toISOString(), updated_at: completedAt.toISOString() })
@@ -625,6 +636,14 @@ export function McpTaskExecution({
 
       {(status === 'in_progress' || status === 'completed') && (
         <>
+          {/* Start time — before the test body. */}
+          <CallTimeCard
+            taskId={task.id}
+            mode="start"
+            initialValue={task.started_at}
+            canEdit={canEdit}
+          />
+
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -723,6 +742,14 @@ export function McpTaskExecution({
               ))}
             </div>
           )}
+          {/* End time — after the test body, at completion. */}
+          <CallTimeCard
+            taskId={task.id}
+            mode="end"
+            initialValue={task.completed_at}
+            canEdit={canEdit}
+            onChange={setEndTime}
+          />
         </>
       )}
 
@@ -779,6 +806,9 @@ export function McpTaskExecution({
 
       {/* Attachments */}
       <TaskAttachments taskId={task.id} profile={profile} />
+
+      {/* Call history — collapsed, at the very bottom below the completion action. */}
+      {callHistory}
 
       {/* Add call point — lets engineers register a call point found on site */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>

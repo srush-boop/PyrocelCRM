@@ -15,6 +15,7 @@ import { TaskHeader } from '@/components/dashboard/tasks/task-header'
 import { PauseResumeControls } from '@/components/dashboard/tasks/pause-resume-controls'
 import { CompletedReportActions } from '@/components/dashboard/reports/completed-report-actions'
 import { ClientSignOffCard } from '@/components/dashboard/tasks/client-sign-off-card'
+import { CallTimeCard } from '@/components/dashboard/tasks/call-times-card'
 import { resolveCallKind } from '@/lib/call-kinds'
 import { Progress } from '@/components/ui/progress'
 import {
@@ -65,6 +66,8 @@ interface EmergencyLightTaskExecutionProps {
   existingInspections: EmergencyLightInspection[]
   /** Shared "Before you attend" panel, rendered beneath the site/service header. */
   preAttendance?: ReactNode
+  /** Collapsed call history, rendered at the very bottom (below the completion action). */
+  callHistory?: ReactNode
   /** CDO route context: "call X of Y" position + next call to jump to on completion. */
   routeProgress?: RouteProgress | null
   /** Saved client sign-off (name + signature) for redisplay on a completed call. */
@@ -92,6 +95,7 @@ export function EmergencyLightTaskExecution({
   lights,
   existingInspections,
   preAttendance,
+  callHistory,
   routeProgress,
   existingSignature = null,
   existingSignatureName = null,
@@ -108,6 +112,11 @@ export function EmergencyLightTaskExecution({
   const [submitting, setSubmitting] = useState(false)
   const [clientSignature, setClientSignature] = useState<string | null>(existingSignature)
   const [clientSignatureName, setClientSignatureName] = useState(existingSignatureName ?? '')
+  // Editable end time — auto-set to now on completion, adjustable via the End
+  // time card. Feeds the task's completed_at on submit.
+  const [endTime, setEndTime] = useState<Date | null>(
+    task.completed_at ? new Date(task.completed_at) : null,
+  )
   const router = useRouter()
   const supabase = createClient()
   const { ensureOnShift, checking: checkingShift, shiftGateDialog } = useShiftGate()
@@ -315,7 +324,9 @@ export function EmergencyLightTaskExecution({
       await supabase.from('task_results').insert(resultData)
     }
 
-    const completedAt = new Date()
+    // End time defaults to now if the engineer didn't set one, still adjustable.
+    const completedAt = endTime ?? new Date()
+    if (!endTime) setEndTime(completedAt)
     await supabase
       .from('tasks')
       .update({
@@ -430,6 +441,14 @@ export function EmergencyLightTaskExecution({
 
       {(status === 'in_progress' || status === 'completed') && (
         <>
+          {/* Start time — before the inspection body. */}
+          <CallTimeCard
+            taskId={task.id}
+            mode="start"
+            initialValue={task.started_at}
+            canEdit={canEdit}
+          />
+
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -518,6 +537,16 @@ export function EmergencyLightTaskExecution({
         </>
       )}
 
+      {(status === 'in_progress' || status === 'completed') && (
+        <CallTimeCard
+          taskId={task.id}
+          mode="end"
+          initialValue={task.completed_at}
+          canEdit={canEdit}
+          onChange={setEndTime}
+        />
+      )}
+
       {(status === 'in_progress' || status === 'completed') && isNonRecurring && (
         <ClientSignOffCard
           name={clientSignatureName}
@@ -559,6 +588,9 @@ export function EmergencyLightTaskExecution({
 
       {/* Attachments */}
       <TaskAttachments taskId={task.id} profile={profile} />
+
+      {/* Call history — collapsed, at the very bottom below the completion action. */}
+      {callHistory}
 
       {/* Add fitting — lets engineers register a fitting found on site */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>

@@ -25,9 +25,12 @@ import type { OpenRemedialCall } from '@/lib/remedial'
 export function OutstandingRemedialCard({
   calls,
   currentUserId,
+  canTakeOwnership = false,
 }: {
   calls: OpenRemedialCall[]
   currentUserId: string
+  /** Whether the viewer may claim/reassign the remedial call to themselves. */
+  canTakeOwnership?: boolean
 }) {
   if (calls.length === 0) return null
 
@@ -44,7 +47,12 @@ export function OutstandingRemedialCard({
           This site has remedial work outstanding. Review the work and parts required below.
         </p>
         {calls.map((call) => (
-          <RemedialItem key={call.id} call={call} currentUserId={currentUserId} />
+          <RemedialItem
+            key={call.id}
+            call={call}
+            currentUserId={currentUserId}
+            canTakeOwnership={canTakeOwnership}
+          />
         ))}
       </CardContent>
     </Card>
@@ -54,9 +62,11 @@ export function OutstandingRemedialCard({
 function RemedialItem({
   call,
   currentUserId,
+  canTakeOwnership,
 }: {
   call: OpenRemedialCall
   currentUserId: string
+  canTakeOwnership: boolean
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -151,7 +161,7 @@ function RemedialItem({
             View remedial call
           </Link>
         </Button>
-        {!ownedByMe && (
+        {!ownedByMe && canTakeOwnership && (
           <Button size="sm" onClick={handleTakeOwnership} disabled={pending || claimed}>
             <UserCheck className="mr-1.5 h-3.5 w-3.5" />
             {pending || claimed ? 'Taking ownership…' : 'Take ownership'}

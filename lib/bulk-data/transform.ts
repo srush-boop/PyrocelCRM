@@ -23,17 +23,42 @@ function isBlank(raw: unknown): boolean {
 const TRUE_SET = new Set(['true', 'yes', 'y', '1', 'active', 'x'])
 const FALSE_SET = new Set(['false', 'no', 'n', '0', 'inactive'])
 
+/** Optional per-column config for enum validation/canonicalisation. */
+export interface EnumSpec {
+  /** Canonical DB-accepted values (exact strings the DB check allows). */
+  values: string[]
+  /** Alias -> canonical map (keys are matched case-insensitively). */
+  aliases?: Record<string, string>
+}
+
 /**
  * Convert a raw spreadsheet cell into a database-ready scalar value.
  * Returns `empty: true` for blank cells (caller decides insert-default vs skip).
  * Does NOT handle fk_name (needs a lookup) — callers must branch on that first.
+ * `enumSpec` is required when kind === 'enum'.
  */
-export function parseScalarCell(raw: unknown, kind: ColumnKind): CellParseResult {
+export function parseScalarCell(raw: unknown, kind: ColumnKind, enumSpec?: EnumSpec): CellParseResult {
   if (isBlank(raw)) return { value: null, empty: true }
 
   switch (kind) {
     case 'text':
       return { value: String(raw).trim(), empty: false }
+
+    case 'enum': {
+      const key = String(raw).trim().toLowerCase()
+      const values = enumSpec?.values ?? []
+      // Alias (e.g. UI label "Active" -> "live") takes priority.
+      const aliased = enumSpec?.aliases?.[key]
+      if (aliased) return { value: aliased, empty: false }
+      // Otherwise accept a case-insensitive match to a canonical value.
+      const match = values.find((v) => v.toLowerCase() === key)
+      if (match) return { value: match, empty: false }
+      return {
+        value: null,
+        empty: false,
+        error: `"${raw}" must be one of: ${values.join(', ')}`,
+      }
+    }
 
     case 'integer': {
       const n = Number(String(raw).trim())

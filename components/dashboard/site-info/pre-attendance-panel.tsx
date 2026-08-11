@@ -1,6 +1,6 @@
 'use client'
 
-import { AlertTriangle, FolderOpen, Info, MessageSquare } from 'lucide-react'
+import { FolderOpen, Info, MessageSquare } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Accordion,
@@ -74,28 +74,10 @@ export function PreAttendancePanel({
           </p>
         )}
 
-        {/* Remedial callout */}
-        {flags.remedial_required && (
-          <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-            <div>
-              <p className="text-sm font-semibold text-destructive">Remedial works required</p>
-              {flags.remedial_notes ? (
-                <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
-                  {flags.remedial_notes}
-                </p>
-              ) : (
-                <p className="mt-1 text-sm text-muted-foreground">
-                  A remedial call is outstanding for this site — check with the office for details
-                  before attending.
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* If remedial notes exist without the remedial flag, still surface them */}
-        {!flags.remedial_required && flags.remedial_notes && (
+        {/* Outstanding-remedial detail is now shown in one consolidated
+            OutstandingRemedialCard on the call view. Here we only surface the
+            site's own remedial / parts notes when present. */}
+        {flags.remedial_notes && (
           <div className="rounded-md border bg-muted/50 p-3">
             <p className="text-sm font-medium">Site / parts notes</p>
             <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">

@@ -72,7 +72,6 @@ import {
   Send,
   Play,
   Building2,
-  Clock,
   StopCircle,
   Link2,
   ExternalLink,
@@ -114,6 +113,8 @@ interface TaskExecutionProps {
   panelChecklists?: Record<string, { template: ChecklistTemplate; level: string }>
   /** Shared "Before you attend" panel, rendered beneath the site/service header. */
   preAttendance?: ReactNode
+  /** Collapsed call history, rendered at the very bottom (below the completion action). */
+  callHistory?: ReactNode
   /** CDO route context: "call X of Y" position + next call to jump to on completion. */
   routeProgress?: RouteProgress | null
 }
@@ -342,6 +343,7 @@ export function TaskExecution({
   panels = [],
   panelChecklists = {},
   preAttendance,
+  callHistory,
   routeProgress,
 }: TaskExecutionProps) {
   const [status, setStatus] = useState(task.status)
@@ -693,6 +695,11 @@ export function TaskExecution({
 
     setSubmitting(true)
 
+    // End time auto-sets to now on completion if the engineer didn't set one,
+    // and is still adjustable beforehand. Reflect it in the UI too.
+    const endTime = testingEndTime ?? new Date()
+    if (!testingEndTime) setTestingEndTime(endTime)
+
     const overallStatus = calculateOverallStatus()
     const resultData = {
       task_id: task.id,
@@ -702,7 +709,7 @@ export function TaskExecution({
       client_signature: clientSignature,
       client_signature_name: clientSignatureName.trim() || null,
       testing_start_time: testingStartTime?.toISOString(),
-      testing_end_time: testingEndTime?.toISOString(),
+      testing_end_time: endTime.toISOString(),
       photos: existingResult?.photos || [],
       updated_at: new Date().toISOString(),
     }
@@ -1241,75 +1248,42 @@ export function TaskExecution({
       {/* Checklist */}
       {(status === 'in_progress' || status === 'completed') && (
         <>
-          {/* Time Recording */}
+          {/* Call start time — sits BEFORE the checklist. Auto-set when the
+              call is started, still adjustable. */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Testing Time
+                <Play className="h-5 w-5" />
+                Start time
               </CardTitle>
+              <CardDescription>When you began work on site.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                  <Label>Start Time</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      type="datetime-local"
-                      value={toDatetimeLocalValue(testingStartTime)}
-                      onChange={(e) => setTestingStartTime(e.target.value ? new Date(e.target.value) : null)}
-                      disabled={!canEdit}
-                      className="min-w-0 flex-1"
-                    />
-                    {canEdit && (
-                      <Button
-                        type="button"
-                        variant={testingStartTime ? 'outline' : 'default'}
-                        size="sm"
-                        onClick={() => setTestingStartTime(new Date())}
-                        title="Set to now"
-                        className="h-10 shrink-0 gap-1.5 px-3 text-xs"
-                      >
-                        <Play className="h-3.5 w-3.5" />
-                        Now
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>End Time</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      type="datetime-local"
-                      value={toDatetimeLocalValue(testingEndTime)}
-                      onChange={(e) => setTestingEndTime(e.target.value ? new Date(e.target.value) : null)}
-                      disabled={!canEdit}
-                      className="min-w-0 flex-1"
-                    />
-                    {canEdit && (
-                      <Button
-                        type="button"
-                        variant={testingEndTime ? 'outline' : 'default'}
-                        size="sm"
-                        onClick={() => setTestingEndTime(new Date())}
-                        title="Set to now"
-                        className="h-10 shrink-0 gap-1.5 px-3 text-xs"
-                      >
-                        <StopCircle className="h-3.5 w-3.5" />
-                        Now
-                      </Button>
-                    )}
-                  </div>
+            <CardContent>
+              <div className="space-y-2">
+                <Label>Start time</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="datetime-local"
+                    value={toDatetimeLocalValue(testingStartTime)}
+                    onChange={(e) => setTestingStartTime(e.target.value ? new Date(e.target.value) : null)}
+                    disabled={!canEdit}
+                    className="min-w-0 flex-1"
+                  />
+                  {canEdit && (
+                    <Button
+                      type="button"
+                      variant={testingStartTime ? 'outline' : 'default'}
+                      size="sm"
+                      onClick={() => setTestingStartTime(new Date())}
+                      title="Set to now"
+                      className="h-10 shrink-0 gap-1.5 px-3 text-xs"
+                    >
+                      <Play className="h-3.5 w-3.5" />
+                      Now
+                    </Button>
+                  )}
                 </div>
               </div>
-              {testingStartTime && testingEndTime && (
-                <div className="p-3 bg-muted rounded-md">
-                  <p className="text-sm">
-                    <strong>Duration:</strong>{' '}
-                    {Math.round((testingEndTime.getTime() - testingStartTime.getTime()) / 60000)} minutes
-                  </p>
-                </div>
-              )}
             </CardContent>
           </Card>
 
@@ -1739,6 +1713,53 @@ export function TaskExecution({
           </CardContent>
         </Card>
 
+        {/* Call end time — sits AFTER the checklist. Auto-set on completion,
+            still adjustable. */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <StopCircle className="h-5 w-5" />
+              End time
+            </CardTitle>
+            <CardDescription>When you finished on site.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>End time</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="datetime-local"
+                  value={toDatetimeLocalValue(testingEndTime)}
+                  onChange={(e) => setTestingEndTime(e.target.value ? new Date(e.target.value) : null)}
+                  disabled={!canEdit}
+                  className="min-w-0 flex-1"
+                />
+                {canEdit && (
+                  <Button
+                    type="button"
+                    variant={testingEndTime ? 'outline' : 'default'}
+                    size="sm"
+                    onClick={() => setTestingEndTime(new Date())}
+                    title="Set to now"
+                    className="h-10 shrink-0 gap-1.5 px-3 text-xs"
+                  >
+                    <StopCircle className="h-3.5 w-3.5" />
+                    Now
+                  </Button>
+                )}
+              </div>
+            </div>
+            {testingStartTime && testingEndTime && (
+              <div className="p-3 bg-muted rounded-md">
+                <p className="text-sm">
+                  <strong>Duration:</strong>{' '}
+                  {Math.round((testingEndTime.getTime() - testingStartTime.getTime()) / 60000)} minutes
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Suggested parts (internal) — shown when a defect/failure is present.
             Hidden from external sub-contractors. */}
         {canSeeInternal &&
@@ -1981,6 +2002,9 @@ export function TaskExecution({
 
       {/* Attachments */}
       <TaskAttachments taskId={task.id} profile={profile} />
+
+      {/* Call history — collapsed, at the very bottom below the completion action. */}
+      {callHistory}
 
       {/* Submit Confirmation Dialog */}
       {/* Lone-worker shift gate — blocks starting a call until on shift. */}

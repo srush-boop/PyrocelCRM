@@ -29,12 +29,16 @@ export function CallTimeCard({
   initialValue,
   canEdit,
   autoSetOnMount = false,
+  onChange,
 }: {
   taskId: string
   mode: 'start' | 'end'
   initialValue: string | null
   canEdit: boolean
   autoSetOnMount?: boolean
+  /** Notified whenever the value changes, so a parent can feed it into its
+      own completion handler (used for the end time). */
+  onChange?: (value: Date | null) => void
 }) {
   const [value, setValue] = useState<Date | null>(initialValue ? new Date(initialValue) : null)
   const didAutoSet = useRef(false)
@@ -50,6 +54,7 @@ export function CallTimeCard({
 
   const update = (next: Date | null) => {
     setValue(next)
+    onChange?.(next)
     persist(next)
   }
 

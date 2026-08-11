@@ -17,6 +17,7 @@ export type ColumnKind =
   | 'number' // decimal stored as-is (e.g. numeric pounds, percentages)
   | 'money_gbp' // shown in £ in the sheet, stored as integer pence in the DB
   | 'boolean'
+  | 'enum' // constrained to a fixed set of DB values (e.g. a status check constraint)
   | 'fk_name' // shown as a human name in the sheet, stored as a resolved uuid
 
 export interface ForeignKeyConfig {
@@ -38,6 +39,10 @@ export interface ColumnSpec {
   required?: boolean
   /** For fk_name columns: how to resolve the name to an id. */
   fk?: ForeignKeyConfig
+  /** For enum columns: the canonical DB values accepted (matched case-insensitively). */
+  enumValues?: string[]
+  /** For enum columns: alias -> canonical map (keys lowercased), e.g. UI labels. */
+  enumAliases?: Record<string, string>
   /** Example value shown in the blank template's sample row. */
   example?: string | number | boolean
   /** Optional helper note shown under the dataset. */
@@ -79,7 +84,16 @@ export const DATASETS: DatasetDef[] = [
       { header: 'contact_email', field: 'contact_email', kind: 'text', example: 'jane@acme.co.uk' },
       { header: 'contact_phone', field: 'contact_phone', kind: 'text', example: '020 7946 0000' },
       { header: 'address', field: 'address', kind: 'text', example: '1 High Street, London' },
-      { header: 'status', field: 'status', kind: 'text', example: 'live', note: "'live', 'new' or 'dead'." },
+      {
+        header: 'status',
+        field: 'status',
+        kind: 'enum',
+        enumValues: ['live', 'new', 'dead'],
+        // Accept the UI-facing labels too (Active/Engaged/Dormant), any casing.
+        enumAliases: { active: 'live', engaged: 'new', dormant: 'dead' },
+        example: 'live',
+        note: "'live' (Active), 'new' (Engaged) or 'dead' (Dormant).",
+      },
       { header: 'requires_po', field: 'requires_po', kind: 'boolean', example: false, note: 'Whether a PO is required before invoicing.' },
       { header: 'po_number', field: 'po_number', kind: 'text', note: 'Standing/blanket PO number, if any.' },
       { header: 'invoice_calls_individually', field: 'invoice_calls_individually', kind: 'boolean', example: false },
@@ -112,7 +126,16 @@ export const DATASETS: DatasetDef[] = [
       { header: 'contact_name', field: 'contact_name', kind: 'text' },
       { header: 'contact_email', field: 'contact_email', kind: 'text' },
       { header: 'contact_phone', field: 'contact_phone', kind: 'text' },
-      { header: 'status', field: 'status', kind: 'text', example: 'live', note: "'live', 'new' or 'dead'." },
+      {
+        header: 'status',
+        field: 'status',
+        kind: 'enum',
+        enumValues: ['live', 'new', 'dead'],
+        // Accept the UI-facing labels too (Active/Engaged/Dormant), any casing.
+        enumAliases: { active: 'live', engaged: 'new', dormant: 'dead' },
+        example: 'live',
+        note: "'live' (Active), 'new' (Engaged) or 'dead' (Dormant).",
+      },
       {
         header: 'branch',
         field: 'branch_id',
@@ -189,7 +212,14 @@ export const DATASETS: DatasetDef[] = [
       { header: 'portal_url', field: 'portal_url', kind: 'text', note: 'Ordering portal login URL.' },
       { header: 'portal_username', field: 'portal_username', kind: 'text' },
       { header: 'portal_password', field: 'portal_password', kind: 'text' },
-      { header: 'status', field: 'status', kind: 'text', example: 'active', note: "'active' or 'inactive'." },
+      {
+        header: 'status',
+        field: 'status',
+        kind: 'enum',
+        enumValues: ['active', 'inactive'],
+        example: 'active',
+        note: "'active' or 'inactive'.",
+      },
       { header: 'notes', field: 'notes', kind: 'text' },
     ],
   },

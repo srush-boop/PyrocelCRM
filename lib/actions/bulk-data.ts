@@ -207,7 +207,11 @@ function buildRow(
       continue
     }
 
-    const parsed = parseScalarCell(raw, col.kind)
+    const parsed = parseScalarCell(
+      raw,
+      col.kind,
+      col.kind === 'enum' ? { values: col.enumValues ?? [], aliases: col.enumAliases } : undefined,
+    )
     if (parsed.error) {
       issues.push(`${col.header}: ${parsed.error}`)
       continue

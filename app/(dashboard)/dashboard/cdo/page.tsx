@@ -25,7 +25,6 @@ type CdoTaskRow = {
   reference_number: string | null
   is_emergency: boolean | null
   assigned_engineer_id: string | null
-  route_id: string | null
   site_service_id: string | null
   site_service?: {
     id: string
@@ -128,7 +127,7 @@ export default async function CdoManagementPage() {
   const cdoServiceIds = services.map((s) => s.id)
   const taskSelect = `
     id, status, scheduled_date, completed_at, reference_number, is_emergency,
-    assigned_engineer_id, route_id, site_service_id,
+    assigned_engineer_id, site_service_id,
     site_service:site_services!inner(
       id, route_id, assigned_engineer_id, worker_type,
       frequency_value, frequency_unit, client_tolerance_value, client_tolerance_unit,
@@ -191,7 +190,8 @@ export default async function CdoManagementPage() {
     serviceName: t.site_service?.service_type?.name ?? null,
     engineerId: t.assigned_engineer_id ?? t.site_service?.assigned_engineer_id ?? null,
     engineerName: t.assigned_engineer?.full_name ?? null,
-    routeId: t.route_id ?? t.site_service?.route_id ?? null,
+    // tasks has no route_id column — the route lives on the site_service.
+    routeId: t.site_service?.route_id ?? null,
   })
 
   const openCalls = openTasks.map(toCall)

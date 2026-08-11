@@ -160,7 +160,10 @@ export const DATASETS: DatasetDef[] = [
       { header: 'access_required', field: 'access_required', kind: 'boolean', example: false },
       { header: 'keys_required', field: 'keys_required', kind: 'boolean', example: false },
       { header: 'two_engineers_required', field: 'two_engineers_required', kind: 'boolean', example: false },
-      { header: 'remedial_required', field: 'remedial_required', kind: 'boolean', example: false },
+      // NOTE: `remedial_required` is intentionally NOT importable/exportable. It
+      // is a derived flag, set automatically when a site/service has an open
+      // remedial call (see lib/site-flags.ts `remedialOpen`), not a manual
+      // setup field. `remedial_notes` below is a genuine pre-attendance field.
       { header: 'remedial_notes', field: 'remedial_notes', kind: 'text' },
       { header: 'notes', field: 'notes', kind: 'text' },
     ],

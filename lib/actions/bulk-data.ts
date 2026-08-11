@@ -55,7 +55,20 @@ export interface MergeResult {
   skipped: number
 }
 
-/** Build a lookup of matchValue(lowercased) -> id for a foreign-key table. */
+/**
+ * Normalise a foreign-key match value for tolerant comparison: trim, lowercase,
+ * and collapse any internal runs of whitespace to a single space. This means a
+ * sheet value like "Friday  01" (double space) or " friday 01 " still matches
+ * the stored "Friday 01", instead of silently failing to resolve.
+ */
+function normaliseFkValue(raw: unknown): string {
+  return String(raw ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+}
+
+/** Build a lookup of normalised matchValue -> id for a foreign-key table. */
 async function buildFkMap(
   supabase: Supa,
   table: string,
@@ -66,7 +79,7 @@ async function buildFkMap(
   for (const row of (data as Record<string, unknown>[] | null) ?? []) {
     const key = row[matchColumn]
     if (key != null && String(key).trim() !== '') {
-      map.set(String(key).trim().toLowerCase(), String(row.id))
+      map.set(normaliseFkValue(key), String(row.id))
     }
   }
   return map
@@ -170,9 +183,19 @@ function buildRow(
         if (col.required) issues.push(`Missing ${col.header}`)
         continue
       }
-      const resolved = fkMaps.get(col.field)?.get(String(raw).trim().toLowerCase())
+      const resolved = fkMaps.get(col.field)?.get(normaliseFkValue(raw))
       if (!resolved) {
-        issues.push(`${col.fk.label} "${String(raw).trim()}" not found`)
+        const msg = `${col.fk.label} "${String(raw).trim()}" not found`
+        // Only a REQUIRED foreign key is fatal to the whole row. An optional one
+        // (e.g. branch / route / property type on a site) must NOT cause the
+        // entire row to be skipped — that would silently drop every other field
+        // update for that record. Instead warn and leave just this column
+        // unchanged, so the rest of the row still merges.
+        if (col.required) {
+          issues.push(msg)
+        } else {
+          warnings.push(`${msg} — left unchanged`)
+        }
         continue
       }
       dbValues[col.field] = resolved

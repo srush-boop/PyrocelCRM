@@ -109,6 +109,9 @@ export function GenerateCallsButton() {
   const defaultValue = monthOptions[7]?.value ?? monthOptions[0]?.value ?? ''
   const [selected, setSelected] = useState(defaultValue)
 
+  // Optional engineer to assign every generated call to (batch-wide).
+  const [assignEngineerId, setAssignEngineerId] = useState<string>(ALL)
+
   // Filters
   const [filters, setFilters] = useState<GenerateCallsFilters>({})
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -194,6 +197,7 @@ export function GenerateCallsButton() {
         selectedOption.year,
         selectedOption.month,
         filters,
+        assignEngineerId === ALL ? null : assignEngineerId,
       )
       if (!result.ok) {
         toast.error(result.error ?? 'Could not generate calls.')
@@ -204,8 +208,14 @@ export function GenerateCallsButton() {
           `No new calls needed for ${result.monthLabel} — everything due is already scheduled.`,
         )
       } else {
+        const engineerName =
+          assignEngineerId !== ALL
+            ? options?.engineers.find((e) => e.id === assignEngineerId)?.name
+            : null
         toast.success(
-          `Created ${result.created} call${result.created === 1 ? '' : 's'} for ${result.monthLabel}.` +
+          `Created ${result.created} call${result.created === 1 ? '' : 's'} for ${result.monthLabel}` +
+            (engineerName ? `, assigned to ${engineerName}` : '') +
+            '.' +
             (result.skipped > 0 ? ` (${result.skipped} already scheduled)` : ''),
         )
       }
@@ -229,6 +239,7 @@ export function GenerateCallsButton() {
         if (!o) {
           setPreview(null)
           setPreviewSkipped(0)
+          setAssignEngineerId(ALL)
         }
       }}
     >
@@ -280,6 +291,28 @@ export function GenerateCallsButton() {
             {selectedOption?.retro
               ? 'Retrospective month. Due dates use each service’s real cadence date, even if it has already passed.'
               : 'Due dates are rolled forward from each service’s fixed visit frequency.'}
+          </p>
+        </div>
+
+        {/* Assign the whole generated batch to one engineer (optional). */}
+        <div className="grid gap-2 py-2">
+          <Label htmlFor="assign-engineer">Assign to engineer</Label>
+          <Select value={assignEngineerId} onValueChange={setAssignEngineerId}>
+            <SelectTrigger id="assign-engineer" disabled={!options || options.engineers.length === 0}>
+              <SelectValue placeholder="Leave unassigned" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>Leave unassigned</SelectItem>
+              {(options?.engineers ?? []).map((e) => (
+                <SelectItem key={e.id} value={e.id}>
+                  {e.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Every call created in this run is assigned to the chosen engineer. Leave unassigned to
+            allocate them later on the schedule.
           </p>
         </div>
 

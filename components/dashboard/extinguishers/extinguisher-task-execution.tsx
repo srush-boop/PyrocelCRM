@@ -67,6 +67,8 @@ interface ExtinguisherTaskExecutionProps {
   existingInspections: ExtinguisherInspection[]
   /** Shared "Before you attend" panel, rendered beneath the site/service header. */
   preAttendance?: ReactNode
+  /** Other open calls at this site (overdue / due soon), rendered beneath Start Task. */
+  otherSiteCalls?: ReactNode
   /** Collapsed call history, rendered at the very bottom (below the completion action). */
   callHistory?: ReactNode
   /** CDO route context: "call X of Y" position + next call to jump to on completion. */
@@ -154,6 +156,7 @@ export function ExtinguisherTaskExecution({
   extinguishers: initialExtinguishers,
   existingInspections,
   preAttendance,
+  otherSiteCalls,
   callHistory,
   routeProgress,
   existingSignature = null,
@@ -520,6 +523,9 @@ export function ExtinguisherTaskExecution({
         )}
         <ScanQrButton onScan={handleScanToExtinguisher} />
       </div>
+
+      {/* Other calls at this site (overdue / due soon) — beneath Start Task. */}
+      {otherSiteCalls}
 
       {preAttendance}
 

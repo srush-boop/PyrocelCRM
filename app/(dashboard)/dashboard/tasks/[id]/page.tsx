@@ -18,6 +18,8 @@ import { RemedialCallPanel } from '@/components/dashboard/tasks/remedial-call-pa
 import { resolveSiteFlags } from '@/lib/site-flags'
 import { getOpenRemedialCallsForSite } from '@/lib/remedial'
 import { OutstandingRemedialCard } from '@/components/dashboard/tasks/outstanding-remedial-card'
+import { getOtherOpenCallsForSite } from '@/lib/site-open-calls'
+import { OtherSiteCallsCard } from '@/components/dashboard/tasks/other-site-calls-card'
 import { DeadlineFailedPanel } from '@/components/dashboard/tasks/deadline-failed-panel'
 import { CallNotesCard } from '@/components/dashboard/tasks/call-notes-card'
 import { CallHistoryCard, type CallHistoryEntry } from '@/components/dashboard/tasks/call-history-card'
@@ -286,6 +288,20 @@ export default async function TaskPage({ params }: PageProps) {
     }
   }
 
+  // ─── Other open calls at this site ────────────────────────────────────────
+  // Directly beneath "Start Task", surface the other calls at the SAME site that
+  // are overdue or due soon, so the attending engineer can pick up nearby work
+  // in the same visit. Rendered by each execution flow via `otherSiteCalls`.
+  let otherSiteCallsNode: ReactNode = null
+  if (preAttendanceSiteId) {
+    const otherOpenCalls = await getOtherOpenCallsForSite(supabase, preAttendanceSiteId, id)
+    if (otherOpenCalls.length > 0) {
+      otherSiteCallsNode = (
+        <OtherSiteCallsCard calls={otherOpenCalls} currentUserId={user.id} />
+      )
+    }
+  }
+
   // Commissioning calls booked from a job: give the engineer the job context +
   // read-only access to the job's documents folder, shown above the shared
   // pre-attendance panel. Both are passed through the single `preAttendance`
@@ -511,6 +527,7 @@ export default async function TaskPage({ params }: PageProps) {
         dampers={(dampersData || []) as Damper[]}
         existingInspections={(inspectionsData || []) as DamperInspection[]}
         preAttendance={preAttendancePanel}
+        otherSiteCalls={otherSiteCallsNode}
         callHistory={callHistory}
         routeProgress={routeProgress}
         existingSignature={existingSignature}
@@ -534,6 +551,7 @@ export default async function TaskPage({ params }: PageProps) {
         extinguishers={(extinguishersData || []) as Extinguisher[]}
         existingInspections={(inspectionsData || []) as ExtinguisherInspection[]}
         preAttendance={preAttendancePanel}
+        otherSiteCalls={otherSiteCallsNode}
         callHistory={callHistory}
         routeProgress={routeProgress}
         existingSignature={existingSignature}
@@ -604,6 +622,7 @@ export default async function TaskPage({ params }: PageProps) {
         lastTestedDate={lastTestedDate}
         nimbusUrl={nimbusUrl}
         preAttendance={preAttendancePanel}
+        otherSiteCalls={otherSiteCallsNode}
         callHistory={callHistory}
         routeProgress={routeProgress}
         existingSignature={existingSignature}
@@ -631,6 +650,7 @@ export default async function TaskPage({ params }: PageProps) {
         lights={(lightsData || []) as EmergencyLight[]}
         existingInspections={(inspectionsData || []) as EmergencyLightInspection[]}
         preAttendance={preAttendancePanel}
+        otherSiteCalls={otherSiteCallsNode}
         callHistory={callHistory}
         routeProgress={routeProgress}
         existingSignature={existingSignature}
@@ -822,6 +842,7 @@ export default async function TaskPage({ params }: PageProps) {
       panels={panels}
       panelChecklists={panelChecklists}
       preAttendance={preAttendancePanel}
+      otherSiteCalls={otherSiteCallsNode}
       callHistory={callHistory}
       routeProgress={routeProgress}
     />

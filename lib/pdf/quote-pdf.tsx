@@ -157,8 +157,11 @@ function QuotePdfDocument({
   return (
     <Document title={documentTitle || 'Quotation'}>
       <Page size="A4" style={styles.page}>
-        {/* Header */}
-        <View style={styles.header} fixed>
+        {/* Header — a page-1 banner that bleeds to the page edges via negative
+            margins. It must stay in normal flow (NOT `fixed`): a `fixed` view is
+            pulled out of flow and repeated on every page, which caused the meta
+            row, title, summary and systems to render underneath it (overlapping). */}
+        <View style={styles.header}>
           <View>
             <Text style={styles.companyName}>{companyName}</Text>
             {headerAddress ? <Text style={styles.headerSub}>{headerAddress}</Text> : null}
@@ -242,7 +245,7 @@ function QuotePdfDocument({
           ]
 
           return (
-            <View key={system.id} style={styles.system} wrap={false}>
+            <View key={system.id} style={styles.system}>
               <View style={styles.systemHead}>
                 <Text style={styles.systemName}>
                   {system.system_name}
@@ -310,7 +313,7 @@ function QuotePdfDocument({
                               <Text style={[styles.th, styles.cTotal]}>Total</Text>
                             </View>
                             {group.rows.map((line) => (
-                              <View key={line.id} style={styles.tRow}>
+                              <View key={line.id} style={styles.tRow} wrap={false}>
                                 <View style={styles.cDesc}>
                                   <Text style={styles.bold}>{line.description}</Text>
                                   {line.detail ? (
@@ -348,7 +351,7 @@ function QuotePdfDocument({
                         <Text style={[styles.th, styles.cTotal]}>Selected</Text>
                       </View>
                       {optionalLines.map((line) => (
-                        <View key={line.id} style={styles.tRow}>
+                        <View key={line.id} style={styles.tRow} wrap={false}>
                           <View style={styles.cDesc}>
                             <Text style={styles.bold}>{line.description}</Text>
                             {line.detail ? (
@@ -399,7 +402,11 @@ function QuotePdfDocument({
               Official part numbers and specifications for the equipment supplied.
             </Text>
             {equipmentSpecSections.map(({ system, rows }) => (
-              <View key={system.id} style={styles.specGroup} wrap={false}>
+              // NOTE: do NOT set `wrap={false}` on this container — a long
+              // equipment list can exceed a page, and @react-pdf corrupts the
+              // layout (overlapping content) when a no-wrap block is taller than
+              // one page. Let it flow; individual rows below are kept intact.
+              <View key={system.id} style={styles.specGroup}>
                 <Text style={styles.specGroupTitle}>
                   {system.system_name || quoteTypeLabel(quote.quote_type)}
                 </Text>
@@ -409,7 +416,7 @@ function QuotePdfDocument({
                   <Text style={[styles.th, styles.cSpecQty]}>Qty</Text>
                 </View>
                 {rows.map((row) => (
-                  <View key={row.id} style={styles.tRow}>
+                  <View key={row.id} style={styles.tRow} wrap={false}>
                     <Text style={styles.cPart}>{row.partNumber}</Text>
                     <View style={styles.cSpec}>
                       <Text style={styles.bold}>{row.standardDescription}</Text>

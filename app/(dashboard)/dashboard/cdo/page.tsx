@@ -25,7 +25,6 @@ type CdoTaskRow = {
   reference_number: string | null
   is_emergency: boolean | null
   assigned_engineer_id: string | null
-  route_id: string | null
   site_service_id: string | null
   site_service?: {
     id: string
@@ -128,7 +127,7 @@ export default async function CdoManagementPage() {
   const cdoServiceIds = services.map((s) => s.id)
   const taskSelect = `
     id, status, scheduled_date, completed_at, reference_number, is_emergency,
-    assigned_engineer_id, route_id, site_service_id,
+    assigned_engineer_id, site_service_id,
     site_service:site_services!inner(
       id, route_id, assigned_engineer_id, worker_type,
       frequency_value, frequency_unit, client_tolerance_value, client_tolerance_unit,
@@ -138,7 +137,7 @@ export default async function CdoManagementPage() {
     assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(id, full_name)
   `
 
-  const [{ data: openRows }, { data: completedCountRes }, { data: completedRecentRows }] =
+  const [{ data: openRows, error: openErr }, { data: completedCountRes, error: completedErr }] =
     await Promise.all([
       cdoServiceIds.length
         ? supabase
@@ -148,7 +147,7 @@ export default async function CdoManagementPage() {
             .in('status', ['pending', 'in_progress'])
             .order('scheduled_date', { ascending: true })
             .limit(1000)
-        : Promise.resolve({ data: [] }),
+        : Promise.resolve({ data: [], error: null }),
       // Completed CDO calls in the trailing 90 days (compliance sample).
       cdoServiceIds.length
         ? supabase
@@ -159,10 +158,12 @@ export default async function CdoManagementPage() {
             .gte('completed_at', new Date(today.getTime() - 90 * 86_400_000).toISOString())
             .order('completed_at', { ascending: false })
             .limit(1000)
-        : Promise.resolve({ data: [] }),
-      Promise.resolve({ data: [] }),
+        : Promise.resolve({ data: [], error: null }),
     ])
-  void completedRecentRows
+  // Surface query failures instead of silently rendering zero calls — a broken
+  // embed/column previously made the whole calls list disappear with no signal.
+  if (openErr) console.error('[v0] CDO open-calls query failed:', openErr.message)
+  if (completedErr) console.error('[v0] CDO completed-calls query failed:', completedErr.message)
 
   const openTasks = (openRows ?? []) as unknown as CdoTaskRow[]
   const completedTasks = (completedCountRes ?? []) as unknown as CdoTaskRow[]
@@ -191,7 +192,8 @@ export default async function CdoManagementPage() {
     serviceName: t.site_service?.service_type?.name ?? null,
     engineerId: t.assigned_engineer_id ?? t.site_service?.assigned_engineer_id ?? null,
     engineerName: t.assigned_engineer?.full_name ?? null,
-    routeId: t.route_id ?? t.site_service?.route_id ?? null,
+    // tasks has no route_id column — the route lives on the site_service.
+    routeId: t.site_service?.route_id ?? null,
   })
 
   const openCalls = openTasks.map(toCall)

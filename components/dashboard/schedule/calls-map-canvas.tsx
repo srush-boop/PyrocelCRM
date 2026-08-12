@@ -24,6 +24,12 @@ const URGENCY_COLOR: Record<MapCall['urgency'], string> = {
   unscheduled: '#6b7280',
 }
 
+// Site markers use a distinct teal so every site reads as background context,
+// visually separate from the urgency-coloured call pins and discipline-coloured
+// engineer markers. The selected site darkens + enlarges.
+const SITE_COLOR = '#0d9488'
+const SITE_COLOR_SELECTED = '#0f766e'
+
 // Centre of Great Britain-ish, used as a sensible default view.
 const DEFAULT_CENTER: [number, number] = [52.8, -1.8]
 const DEFAULT_ZOOM = 6
@@ -50,6 +56,27 @@ function pinIcon(color: string, glyph = ''): L.DivIcon {
     iconSize: [22, 22],
     iconAnchor: [4, 22],
     popupAnchor: [7, -20],
+  })
+}
+
+// A site marker — a small teal building pin. Smaller + semi-transparent so it
+// sits behind the colour-coded call pins as context; the selected site enlarges
+// and turns solid to stand out.
+function siteIcon(selected: boolean): L.DivIcon {
+  const size = selected ? 24 : 18
+  return L.divIcon({
+    className: 'calls-map-site',
+    html: `<span style="
+      display:flex;align-items:center;justify-content:center;
+      width:${size}px;height:${size}px;border-radius:9999px 9999px 9999px 0;
+      background:${selected ? SITE_COLOR_SELECTED : SITE_COLOR};transform:rotate(-45deg);
+      border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.35);
+      opacity:${selected ? 1 : 0.85};">
+      <span style="transform:rotate(45deg);line-height:1;">${BUILDING_SVG}</span>
+    </span>`,
+    iconSize: [size, size],
+    iconAnchor: [selected ? 4 : 3, size],
+    popupAnchor: [selected ? 8 : 6, -size + 2],
   })
 }
 
@@ -140,6 +167,52 @@ function MapController({
 
   return null
 }
+
+// Site markers — one per site, memoised so they only rebuild when the site list
+// or the selected site changes (not on every dispatch/filter interaction).
+const SiteMarkers = memo(function SiteMarkers({
+  sites,
+  selectedSiteId,
+}: {
+  sites: MapSite[]
+  selectedSiteId?: string | null
+}) {
+  return (
+    <>
+      {sites.map((s) => {
+        const selected = s.id === selectedSiteId
+        return (
+          <Marker
+            key={s.id}
+            position={[s.latitude, s.longitude]}
+            icon={siteIcon(selected)}
+            // Sit beneath calls/engineers; lift the selected site above siblings.
+            zIndexOffset={selected ? 400 : -600}
+          >
+            <Tooltip direction="top" offset={[0, -16]}>
+              <span className="text-xs">
+                <strong>{s.name}</strong>
+                {s.postcode ? ` · ${s.postcode}` : ''}
+              </span>
+            </Tooltip>
+            <Popup>
+              <div className="min-w-[180px] space-y-1 text-[13px] leading-snug">
+                <p className="font-semibold">{s.name}</p>
+                {s.postcode && <p className="text-muted-foreground">{s.postcode}</p>}
+                <a
+                  href={`/dashboard/sites/${s.id}`}
+                  className="font-medium text-primary underline"
+                >
+                  Open site
+                </a>
+              </div>
+            </Popup>
+          </Marker>
+        )
+      })}
+    </>
+  )
+})
 
 // Call markers, split out and memoised so they only rebuild when the call list
 // (or the dispatch callback) actually changes. Dispatch-mode state — radius,
@@ -303,6 +376,8 @@ const EngineerMarkers = memo(function EngineerMarkers({
 export const CallsMapCanvas = memo(function CallsMapCanvas({
   calls,
   engineers,
+  sites = [],
+  selectedSiteId = null,
   route,
   focusSite,
   branchCenter = null,
@@ -314,6 +389,10 @@ export const CallsMapCanvas = memo(function CallsMapCanvas({
 }: {
   calls: MapCall[]
   engineers: MapEngineer[]
+  // Every site to plot as a background layer (empty when the layer is toggled off).
+  sites?: MapSite[]
+  // The currently selected site, drawn larger/solid.
+  selectedSiteId?: string | null
   route: EngineerRoute | null
   focusSite: MapSite | null
   // Geocoded centre of the active branch; frames a ~20-mile area on load.
@@ -371,6 +450,9 @@ export const CallsMapCanvas = memo(function CallsMapCanvas({
           pathOptions={{ color: '#dc2626', weight: 1, fillColor: '#dc2626', fillOpacity: 0.06 }}
         />
       )}
+
+      {/* Site layer — drawn first so it sits beneath the colour-coded calls. */}
+      <SiteMarkers sites={sites} selectedSiteId={selectedSiteId} />
 
       {/* Call + engineer markers (memoised so dispatch-mode state changes don't
           rebuild them — see CallMarkers/EngineerMarkers above). */}

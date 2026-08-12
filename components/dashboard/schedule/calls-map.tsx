@@ -134,6 +134,8 @@ export function CallsMap({
   // (status in_progress/paused). Emergencies still always render.
   const [startedOnly, setStartedOnly] = useState(false)
   const [showEngineers, setShowEngineers] = useState(true)
+  // Show a marker for every site (background context layer). On by default.
+  const [showSites, setShowSites] = useState(true)
   // Emergency-call filters (assigned status + specific engineer).
   const [emergencyAssignedFilter, setEmergencyAssignedFilter] = useState<'all' | 'assigned' | 'unassigned'>('all')
   const [emergencyEngineerFilter, setEmergencyEngineerFilter] = useState<string>('all')
@@ -185,6 +187,13 @@ export function CallsMap({
   const canvasEngineers = useMemo(
     () => (showEngineers ? filteredEngineers : []),
     [showEngineers, filteredEngineers],
+  )
+
+  // Stable sites array for the memoised canvas (avoids a fresh `[]` literal each
+  // render when the sites layer is toggled off).
+  const canvasSites = useMemo(
+    () => (showSites ? sites : []),
+    [showSites, sites],
   )
 
   function handleEngineerChange(id: string) {
@@ -927,6 +936,20 @@ export function CallsMap({
                   onCheckedChange={setShowEngineers}
                 />
               </div>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="show-sites" className="flex items-center gap-1.5">
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ background: '#0d9488' }}
+                      aria-hidden
+                    />
+                    Sites
+                  </Label>
+                  <p className="text-xs text-muted-foreground">{sites.length} located</p>
+                </div>
+                <Switch id="show-sites" checked={showSites} onCheckedChange={setShowSites} />
+              </div>
 
               {/* Discipline filter */}
               <div className="space-y-1.5">
@@ -1086,6 +1109,8 @@ export function CallsMap({
           <CallsMapCanvas
             calls={visibleCalls}
             engineers={canvasEngineers}
+            sites={canvasSites}
+            selectedSiteId={selectedSiteId}
             route={route}
             focusSite={selectedSite}
             branchCenter={branchCenter}

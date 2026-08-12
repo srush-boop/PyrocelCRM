@@ -137,7 +137,7 @@ export default async function CdoManagementPage() {
     assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(id, full_name)
   `
 
-  const [{ data: openRows }, { data: completedCountRes }, { data: completedRecentRows }] =
+  const [{ data: openRows, error: openErr }, { data: completedCountRes, error: completedErr }] =
     await Promise.all([
       cdoServiceIds.length
         ? supabase
@@ -147,7 +147,7 @@ export default async function CdoManagementPage() {
             .in('status', ['pending', 'in_progress'])
             .order('scheduled_date', { ascending: true })
             .limit(1000)
-        : Promise.resolve({ data: [] }),
+        : Promise.resolve({ data: [], error: null }),
       // Completed CDO calls in the trailing 90 days (compliance sample).
       cdoServiceIds.length
         ? supabase
@@ -158,10 +158,12 @@ export default async function CdoManagementPage() {
             .gte('completed_at', new Date(today.getTime() - 90 * 86_400_000).toISOString())
             .order('completed_at', { ascending: false })
             .limit(1000)
-        : Promise.resolve({ data: [] }),
-      Promise.resolve({ data: [] }),
+        : Promise.resolve({ data: [], error: null }),
     ])
-  void completedRecentRows
+  // Surface query failures instead of silently rendering zero calls — a broken
+  // embed/column previously made the whole calls list disappear with no signal.
+  if (openErr) console.error('[v0] CDO open-calls query failed:', openErr.message)
+  if (completedErr) console.error('[v0] CDO completed-calls query failed:', completedErr.message)
 
   const openTasks = (openRows ?? []) as unknown as CdoTaskRow[]
   const completedTasks = (completedCountRes ?? []) as unknown as CdoTaskRow[]

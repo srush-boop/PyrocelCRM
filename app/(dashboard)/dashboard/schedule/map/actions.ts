@@ -448,25 +448,71 @@ export async function getCallsMapData(
   })
 
   // --- Site list for the search/select control ------------------------------
+  // Load ALL sites (branch-scoped), including any still missing coordinates, so
+  // they can be geocoded on demand and appear on the map — previously sites that
+  // had never been geocoded were silently dropped by a `latitude is not null`
+  // filter, so only a subset of sites ever showed.
+  type SiteListRow = {
+    id: string
+    name: string
+    address: string | null
+    postcode: string | null
+    latitude: number | null
+    longitude: number | null
+    branch_id: string | null
+  }
   let siteQuery = supabase
     .from('sites')
-    .select('id, name, postcode, latitude, longitude, branch_id')
-    .not('latitude', 'is', null)
+    .select('id, name, address, postcode, latitude, longitude, branch_id')
     .order('name')
   if (input.branchId) siteQuery = siteQuery.eq('branch_id', input.branchId)
   const { data: siteRows } = await siteQuery
-  const sites: MapSite[] = (siteRows || [])
-    .filter((s) => (s as MapSite).latitude != null && (s as MapSite).longitude != null)
-    .map((s) => {
-      const row = s as { id: string; name: string; postcode: string | null; latitude: number; longitude: number }
-      return {
-        id: row.id,
-        name: row.name,
-        postcode: row.postcode,
-        latitude: row.latitude,
-        longitude: row.longitude,
+  const allSites = (siteRows || []) as SiteListRow[]
+
+  // Geocode + persist any site missing coordinates but with an address/postcode,
+  // then apply the results in-memory so they plot on this same load.
+  const siteListNeedingGeocode = allSites.filter(
+    (s) => (s.latitude == null || s.longitude == null) && (s.address || s.postcode),
+  )
+  if (siteListNeedingGeocode.length > 0) {
+    const geocoded = await geocodeSites(
+      siteListNeedingGeocode.map((s) => ({ id: s.id, address: s.address, postcode: s.postcode })),
+    )
+    if (geocoded.size > 0) {
+      const admin = createAdminClient()
+      await Promise.all(
+        Array.from(geocoded, ([id, hit]) =>
+          admin
+            .from('sites')
+            .update({
+              latitude: hit.latitude,
+              longitude: hit.longitude,
+              geocoded_at: new Date().toISOString(),
+            })
+            .eq('id', id),
+        ),
+      )
+      for (const s of allSites) {
+        const hit = geocoded.get(s.id)
+        if (hit) {
+          s.latitude = hit.latitude
+          s.longitude = hit.longitude
+        }
       }
-    })
+    }
+  }
+
+  const sites: MapSite[] = allSites
+    .filter((s): s is SiteListRow & { latitude: number; longitude: number } =>
+      s.latitude != null && s.longitude != null,
+    )
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      postcode: s.postcode,
+      latitude: s.latitude,
+      longitude: s.longitude,
+    }))
 
   return { ok: true, data: { calls, engineers, sites } }
 }

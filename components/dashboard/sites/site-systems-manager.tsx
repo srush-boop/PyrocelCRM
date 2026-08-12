@@ -487,6 +487,9 @@ export function SiteSystemsManager({
       const isRecurring = st?.is_recurring !== false && systemRequiresVisits
       return {
         site_id: siteId,
+        // Always link the new service to the system it was added under, so it
+        // appears beneath that system rather than falling into "Unassigned".
+        site_system_id: serviceSystemId,
         service_type_id: serviceTypeId,
         frequency_value: st?.default_frequency_value ?? 12,
         frequency_unit: st?.default_frequency_unit ?? 'months',

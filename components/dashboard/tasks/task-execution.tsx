@@ -113,6 +113,8 @@ interface TaskExecutionProps {
   panelChecklists?: Record<string, { template: ChecklistTemplate; level: string }>
   /** Shared "Before you attend" panel, rendered beneath the site/service header. */
   preAttendance?: ReactNode
+  /** Other open calls at this site (overdue / due soon), rendered beneath Start Task. */
+  otherSiteCalls?: ReactNode
   /** Collapsed call history, rendered at the very bottom (below the completion action). */
   callHistory?: ReactNode
   /** CDO route context: "call X of Y" position + next call to jump to on completion. */
@@ -343,6 +345,7 @@ export function TaskExecution({
   panels = [],
   panelChecklists = {},
   preAttendance,
+  otherSiteCalls,
   callHistory,
   routeProgress,
 }: TaskExecutionProps) {
@@ -1024,6 +1027,10 @@ export function TaskExecution({
       )}
 
       <PauseResumeControls task={task} status={status} onStatusChange={setStatus} />
+
+      {/* Other calls at this site (overdue / due soon) — shown directly beneath
+          Start Task so the engineer can pick up nearby work in the same visit. */}
+      {otherSiteCalls}
 
       {preAttendance}
 

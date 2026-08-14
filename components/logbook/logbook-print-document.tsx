@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { Fragment, useMemo } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -9,7 +9,10 @@ import {
   getLogbookEntryMeta,
   getLogbookSystemMeta,
   systemForEntryType,
-  systemForServiceName,
+  systemForReport,
+  LOGBOOK_CATEGORY_LABELS,
+  LOGBOOK_CATEGORY_ORDER,
+  type LogbookCategory,
 } from '@/lib/logbook'
 import type { LogbookEntry } from '@/lib/types/database'
 import type { ReportTimelineItem } from '@/components/logbook/logbook-timeline'
@@ -33,6 +36,7 @@ type Row = {
   id: string
   sortKey: number
   date: string
+  category: LogbookCategory
   systemLabel: string
   record: string
   callPoint: string
@@ -59,16 +63,27 @@ export function LogbookPrintDocument({
   const hasRange = Boolean(fromDate || toDate)
 
   const rows = useMemo<Row[]>(() => {
-    const reportRows: Row[] = reports.map((r) => ({
-      id: `report-${r.id}`,
-      sortKey: new Date(r.date).getTime(),
-      date: r.date,
-      systemLabel: getLogbookSystemMeta(systemForServiceName(r.serviceName)).label,
-      record: r.serviceName,
-      callPoint: '—',
-      result: statusLabel(r.status),
-      by: r.engineerName || '—',
-    }))
+    const reportRows: Row[] = reports.map((r) => {
+      // Classify from the master-level category first; the fire sub-system is
+      // only name-guessed within the fire section (see systemForReport).
+      const category: LogbookCategory = r.logbookCategory ?? 'fire'
+      const system = systemForReport({ category, serviceName: r.serviceName })
+      const systemLabel =
+        system === 'security'
+          ? r.systemTypeName || getLogbookSystemMeta(system).label
+          : getLogbookSystemMeta(system).label
+      return {
+        id: `report-${r.id}`,
+        sortKey: new Date(r.date).getTime(),
+        date: r.date,
+        category,
+        systemLabel,
+        record: r.serviceName,
+        callPoint: '—',
+        result: statusLabel(r.status),
+        by: r.engineerName || '—',
+      }
+    })
 
     const entryRows: Row[] = entries.map((e) => {
       const isAlarmTest = e.entry_type === 'weekly_alarm_test'
@@ -81,6 +96,8 @@ export function LogbookPrintDocument({
         id: `entry-${e.id}`,
         sortKey: new Date(e.entry_date).getTime(),
         date: e.entry_date,
+        // Occupier/staff routine entries are all fire-safety duties.
+        category: 'fire' as LogbookCategory,
         systemLabel: getLogbookSystemMeta(systemForEntryType(e.entry_type)).label,
         record: e.title ? `${recordLabel} — ${e.title}` : recordLabel,
         callPoint,
@@ -101,6 +118,19 @@ export function LogbookPrintDocument({
         : all
     return filtered.sort((a, b) => b.sortKey - a.sortKey)
   }, [reports, entries, fromDate, toDate])
+
+  // Group into master-level sections (Fire safety / Security / Other), keeping
+  // date-descending order within each. Section headings only appear once more
+  // than one section is present.
+  const sections = useMemo(
+    () =>
+      LOGBOOK_CATEGORY_ORDER.map((category) => ({
+        category,
+        rows: rows.filter((r) => r.category === category),
+      })).filter((s) => s.rows.length > 0),
+    [rows],
+  )
+  const showSectionHeadings = sections.length > 1
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8 print:p-0">
@@ -163,15 +193,29 @@ export function LogbookPrintDocument({
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.id} className="border-b align-top">
-                  <td className="py-2 pr-3 whitespace-nowrap">{formatDateUK(row.date)}</td>
-                  <td className="py-2 pr-3">{row.systemLabel}</td>
-                  <td className="py-2 pr-3">{row.record}</td>
-                  <td className="py-2 pr-3">{row.callPoint}</td>
-                  <td className="py-2 pr-3">{row.result}</td>
-                  <td className="py-2">{row.by}</td>
-                </tr>
+              {sections.map((section) => (
+                <Fragment key={section.category}>
+                  {showSectionHeadings && (
+                    <tr className="border-b bg-muted/50 print:bg-transparent">
+                      <th
+                        colSpan={6}
+                        className="py-2 pr-3 text-left text-xs font-bold tracking-wide text-foreground uppercase"
+                      >
+                        {LOGBOOK_CATEGORY_LABELS[section.category]}
+                      </th>
+                    </tr>
+                  )}
+                  {section.rows.map((row) => (
+                    <tr key={row.id} className="border-b align-top">
+                      <td className="py-2 pr-3 whitespace-nowrap">{formatDateUK(row.date)}</td>
+                      <td className="py-2 pr-3">{row.systemLabel}</td>
+                      <td className="py-2 pr-3">{row.record}</td>
+                      <td className="py-2 pr-3">{row.callPoint}</td>
+                      <td className="py-2 pr-3">{row.result}</td>
+                      <td className="py-2">{row.by}</td>
+                    </tr>
+                  ))}
+                </Fragment>
               ))}
             </tbody>
           </table>

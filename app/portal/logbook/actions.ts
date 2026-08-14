@@ -48,6 +48,8 @@ export interface ClientLogbookData {
     engineerName: string | null
     status: 'pass' | 'partial' | 'fail' | null
     href: string
+    logbookCategory: 'fire' | 'security' | 'other' | null
+    systemTypeName: string | null
   }[]
   entries: LogbookEntry[]
 }
@@ -84,7 +86,7 @@ export async function getClientLogbook(
     .from('tasks')
     .select(
       `id, status, completed_at, scheduled_date,
-       site_service:site_services!inner(site_id, service_type:service_types(name)),
+       site_service:site_services!inner(site_id, service_type:service_types(name, system_type:system_types(name, logbook_category))),
        engineer:profiles!tasks_assigned_engineer_id_fkey(full_name)`,
     )
     .eq('site_service.site_id', siteId)
@@ -99,6 +101,13 @@ export async function getClientLogbook(
     status: null,
     // Login-safe report route for portal users.
     href: `/portal/reports/${t.id}`,
+    logbookCategory:
+      (t.site_service?.service_type?.system_type?.logbook_category as
+        | 'fire'
+        | 'security'
+        | 'other'
+        | undefined) ?? null,
+    systemTypeName: (t.site_service?.service_type?.system_type?.name as string) || null,
   }))
 
   const { data: entries } = await supabase

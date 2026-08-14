@@ -35,6 +35,7 @@ export async function saveSystemType(input: {
   description: string
   color: string
   requiresRecurringVisits?: boolean
+  logbookCategory?: 'fire' | 'security' | 'other'
 }): Promise<Result> {
   const { supabase, error } = await requireStaff()
   if (!supabase) return { ok: false, error }
@@ -45,6 +46,7 @@ export async function saveSystemType(input: {
     description: input.description || null,
     color: input.color || null,
     requires_recurring_visits: input.requiresRecurringVisits ?? true,
+    logbook_category: input.logbookCategory ?? 'fire',
   }
 
   const query = input.id
@@ -55,6 +57,8 @@ export async function saveSystemType(input: {
   if (dbError) return { ok: false, error: dbError.message }
   revalidatePath('/dashboard/sales/system-types')
   revalidatePath('/dashboard/service-types')
+  // Log book grouping keys off logbook_category, so refresh site log books too.
+  revalidatePath('/dashboard/sites', 'layout')
   return { ok: true }
 }
 

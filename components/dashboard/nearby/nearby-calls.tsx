@@ -32,6 +32,8 @@ import {
   CheckCircle2,
   Building2,
   Utensils,
+  Siren,
+  Wrench,
 } from 'lucide-react'
 import { PartLocator } from '@/components/dashboard/stock/part-locator'
 import { findNearbyCalls, requestTransfer, cancelTransfer, type NearbyCall } from '@/app/(dashboard)/dashboard/nearby/actions'
@@ -139,6 +141,11 @@ export function NearbyCalls({ serviceTypes }: { serviceTypes: ServiceType[] }) {
     window.open(url, '_blank', 'noopener,noreferrer')
   }
 
+  // Headline priority counts for the results summary.
+  const emergencyCount = calls?.filter((c) => c.isEmergency).length ?? 0
+  const overdueCount = calls?.filter((c) => c.isOverdue && !c.isEmergency).length ?? 0
+  const remedialCount = calls?.filter((c) => c.isRemedial).length ?? 0
+
   return (
     <div className="space-y-6">
       <Card>
@@ -212,6 +219,156 @@ export function NearbyCalls({ serviceTypes }: { serviceTypes: ServiceType[] }) {
               </Button>
             )}
           </div>
+
+          {/* Results live directly beneath the search controls so an engineer
+              sees them the moment a search returns. */}
+          {searching && (
+            <div className="flex items-center justify-center py-10 text-muted-foreground">
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              Searching for nearby calls…
+            </div>
+          )}
+
+          {!searching && calls && calls.length === 0 && (
+            <p className="rounded-md border border-dashed py-8 text-center text-sm text-muted-foreground">
+              No incomplete calls found within {radius} miles.
+            </p>
+          )}
+
+          {!searching && calls && calls.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-medium">
+                  {calls.length} call{calls.length === 1 ? '' : 's'} found within {radius} miles
+                </p>
+                {(emergencyCount > 0 || overdueCount > 0 || remedialCount > 0) && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {emergencyCount > 0 && (
+                      <Badge variant="destructive" className="gap-1">
+                        <Siren className="h-3 w-3" />
+                        {emergencyCount} emergency
+                      </Badge>
+                    )}
+                    {overdueCount > 0 && (
+                      <Badge className="gap-1 bg-amber-500 text-white hover:bg-amber-500">
+                        <Clock className="h-3 w-3" />
+                        {overdueCount} overdue
+                      </Badge>
+                    )}
+                    {remedialCount > 0 && (
+                      <Badge variant="secondary" className="gap-1">
+                        <Wrench className="h-3 w-3" />
+                        {remedialCount} remedial
+                      </Badge>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Cap the visible area at ~5 cards and scroll the rest, so the
+                  list never pushes the stock/food cards far down the page. */}
+              <div
+                className={
+                  calls.length > 5
+                    ? 'max-h-[30rem] space-y-3 overflow-y-auto pr-1'
+                    : 'space-y-3'
+                }
+              >
+                {calls.map((call) => (
+                  <Card
+                    key={call.taskId}
+                    className={
+                      call.isEmergency
+                        ? 'border-l-4 border-l-destructive'
+                        : call.isOverdue
+                          ? 'border-l-4 border-l-amber-500'
+                          : call.isRemedial
+                            ? 'border-l-4 border-l-muted-foreground'
+                            : undefined
+                    }
+                  >
+                    <CardContent className="space-y-3 p-4">
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <span className="font-medium">{call.siteName}</span>
+                          {call.isEmergency && (
+                            <Badge variant="destructive" className="gap-1">
+                              <Siren className="h-3 w-3" />
+                              Emergency
+                            </Badge>
+                          )}
+                          {call.isOverdue && !call.isEmergency && (
+                            <Badge className="gap-1 bg-amber-500 text-white hover:bg-amber-500">
+                              <Clock className="h-3 w-3" />
+                              Overdue
+                            </Badge>
+                          )}
+                          {call.isRemedial && (
+                            <Badge variant="secondary" className="gap-1">
+                              <Wrench className="h-3 w-3" />
+                              Remedial
+                            </Badge>
+                          )}
+                          {call.systemTypeName && (
+                            <Badge variant="outline" className="text-xs font-normal">
+                              {call.systemTypeName}
+                            </Badge>
+                          )}
+                          <Badge variant="secondary" className="gap-1">
+                            <MapPin className="h-3 w-3" />
+                            {call.distanceMiles} mi
+                          </Badge>
+                        </div>
+                        {call.clientName && (
+                          <p className="text-sm text-muted-foreground">{call.clientName}</p>
+                        )}
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                          {call.postcode && <span>{call.postcode}</span>}
+                          {call.serviceTypeName && (
+                            <Badge variant="outline">{call.serviceTypeName}</Badge>
+                          )}
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {call.status === 'in_progress' ? 'In progress' : 'Pending'}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <User className="h-3 w-3" />
+                            {call.assignedEngineerName
+                              ? `Assigned: ${call.assignedEngineerName}`
+                              : 'Unassigned'}
+                          </span>
+                        </div>
+                      </div>
+                      {call.pendingRequestId ? (
+                        <Button
+                          variant="outline"
+                          className="h-11 w-full gap-2"
+                          onClick={() => handleCancel(call)}
+                          disabled={isPending}
+                        >
+                          <CheckCircle2 className="h-4 w-4" />
+                          Transfer requested — tap to cancel
+                        </Button>
+                      ) : (
+                        <Button
+                          className="h-11 w-full gap-2"
+                          onClick={() => {
+                            setTransferTarget(call)
+                            setMessage('')
+                          }}
+                          disabled={isPending}
+                        >
+                          <ArrowLeftRight className="h-4 w-4" />
+                          Request transfer
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -243,92 +400,6 @@ export function NearbyCalls({ serviceTypes }: { serviceTypes: ServiceType[] }) {
           </Button>
         </CardContent>
       </Card>
-
-      {searching && (
-        <div className="flex items-center justify-center py-12 text-muted-foreground">
-          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-          Searching for nearby calls…
-        </div>
-      )}
-
-      {!searching && calls && calls.length === 0 && (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            No incomplete calls found within {radius} miles.
-          </CardContent>
-        </Card>
-      )}
-
-      {!searching && calls && calls.length > 0 && (
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            {calls.length} call{calls.length === 1 ? '' : 's'} within {radius} miles
-          </p>
-          {calls.map((call) => (
-            <Card key={call.taskId}>
-              <CardContent className="space-y-3 p-4">
-                <div className="min-w-0 space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    <span className="font-medium">{call.siteName}</span>
-                    {call.systemTypeName && (
-                      <Badge variant="outline" className="text-xs font-normal">
-                        {call.systemTypeName}
-                      </Badge>
-                    )}
-                    <Badge variant="secondary" className="gap-1">
-                      <MapPin className="h-3 w-3" />
-                      {call.distanceMiles} mi
-                    </Badge>
-                  </div>
-                  {call.clientName && (
-                    <p className="text-sm text-muted-foreground">{call.clientName}</p>
-                  )}
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                    {call.postcode && <span>{call.postcode}</span>}
-                    {call.serviceTypeName && (
-                      <Badge variant="outline">{call.serviceTypeName}</Badge>
-                    )}
-                    <span className="flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {call.status === 'in_progress' ? 'In progress' : 'Pending'}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <User className="h-3 w-3" />
-                      {call.assignedEngineerName
-                        ? `Assigned: ${call.assignedEngineerName}`
-                        : 'Unassigned'}
-                    </span>
-                  </div>
-                </div>
-                {call.pendingRequestId ? (
-                  <Button
-                    variant="outline"
-                    className="h-11 w-full gap-2"
-                    onClick={() => handleCancel(call)}
-                    disabled={isPending}
-                  >
-                    <CheckCircle2 className="h-4 w-4" />
-                    Transfer requested — tap to cancel
-                  </Button>
-                ) : (
-                  <Button
-                    className="h-11 w-full gap-2"
-                    onClick={() => {
-                      setTransferTarget(call)
-                      setMessage('')
-                    }}
-                    disabled={isPending}
-                  >
-                    <ArrowLeftRight className="h-4 w-4" />
-                    Request transfer
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
 
       <Dialog open={!!transferTarget} onOpenChange={(open) => !open && setTransferTarget(null)}>
         <DialogContent>

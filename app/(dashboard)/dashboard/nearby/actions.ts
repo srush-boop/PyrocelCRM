@@ -234,6 +234,11 @@ export interface NearbyCall {
   distanceMiles: number
   /** A pending transfer request by the current engineer for this task, if any. */
   pendingRequestId: string | null
+  /** Priority flags used to surface and sort the most urgent calls first. */
+  isEmergency: boolean
+  isRemedial: boolean
+  /** Past its scheduled date or reactive respond-by deadline. */
+  isOverdue: boolean
 }
 
 interface FindNearbyInput {
@@ -272,7 +277,7 @@ export async function findNearbyCalls(
   let query = supabase
     .from('tasks')
     .select(
-      `id, status, scheduled_date, assigned_engineer_id,
+      `id, status, scheduled_date, respond_by, is_emergency, is_remedial, assigned_engineer_id,
        assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(id, full_name),
        site_service:site_services(
          service_type_id, worker_type,
@@ -295,6 +300,9 @@ export async function findNearbyCalls(
     id: string
     status: string
     scheduled_date: string | null
+    respond_by: string | null
+    is_emergency: boolean | null
+    is_remedial: boolean | null
     assigned_engineer_id: string | null
     assigned_engineer: { id: string; full_name: string | null } | null
     site_service: {
@@ -387,6 +395,11 @@ export async function findNearbyCalls(
     }
   }
 
+  // "Now" markers for overdue detection: a call is overdue if its scheduled date
+  // is on/before today, or its reactive respond-by deadline has passed.
+  const nowIso = new Date().toISOString()
+  const todayStr = nowIso.split('T')[0]
+
   const calls: NearbyCall[] = []
   for (const r of usable) {
     const site = r.site_service?.site
@@ -396,6 +409,9 @@ export async function findNearbyCalls(
       longitude: site.longitude,
     })
     if (dist > input.radiusMiles) continue
+    const isOverdue =
+      (r.scheduled_date != null && r.scheduled_date <= todayStr) ||
+      (r.respond_by != null && r.respond_by <= nowIso)
     calls.push({
       taskId: r.id,
       status: r.status,
@@ -412,10 +428,17 @@ export async function findNearbyCalls(
       assignedEngineerName: r.assigned_engineer?.full_name ?? null,
       distanceMiles: Math.round(dist * 10) / 10,
       pendingRequestId: pendingByTask.get(r.id) ?? null,
+      isEmergency: !!r.is_emergency,
+      isRemedial: !!r.is_remedial,
+      isOverdue,
     })
   }
 
-  calls.sort((a, b) => a.distanceMiles - b.distanceMiles)
+  // Surface the most urgent work first: emergency → overdue → remedial → the
+  // rest, and within each tier the closest call wins.
+  const priorityRank = (c: NearbyCall) =>
+    c.isEmergency ? 0 : c.isOverdue ? 1 : c.isRemedial ? 2 : 3
+  calls.sort((a, b) => priorityRank(a) - priorityRank(b) || a.distanceMiles - b.distanceMiles)
   return { ok: true, calls }
 }
 

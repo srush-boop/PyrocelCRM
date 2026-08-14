@@ -686,6 +686,9 @@ export function TaskExecution({
   }
 
   const handleSubmit = async () => {
+    // Re-entrancy guard: a fast double-tap can land before the disabled state
+    // commits, so bail if a submission is already running.
+    if (submitting) return
     // Safety net: never run the completion cascade with unmet conditional
     // requirements, even if the dialog was somehow opened.
     const blockers = collectSubmitBlockers()

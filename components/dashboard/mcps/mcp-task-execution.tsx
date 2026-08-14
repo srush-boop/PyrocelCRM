@@ -447,6 +447,9 @@ export function McpTaskExecution({
   }
 
   const handleSubmit = async () => {
+    // Re-entrancy guard: a fast double-tap can land before the disabled state
+    // commits, so bail if a submission is already running.
+    if (submitting) return
     setSubmitting(true)
     await persistInspections()
 

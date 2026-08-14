@@ -369,6 +369,9 @@ export function ExtinguisherTaskExecution({
   }
 
   const handleSubmit = async () => {
+    // Re-entrancy guard: a fast double-tap can land before the disabled state
+    // commits, so bail if a submission is already running.
+    if (submitting) return
     setSubmitting(true)
     const rows = await persistInspections(true)
     const today = new Date().toISOString().split('T')[0]
@@ -483,9 +486,11 @@ export function ExtinguisherTaskExecution({
     }).catch((err) => console.log('[v0] Visit billing request error:', err))
 
     setStatus('completed')
-    setSubmitting(false)
-    // No success screen / confirm — return to Calls (via nearby-calls prompt),
-    // or jump straight to the next call when working a CDO route.
+    // Keep `submitting` true through runExit: it navigates away (or shows the
+    // nearby-calls prompt), and the nearby lookup can take a moment. Resetting
+    // here would re-enable the button during that gap, so engineers tap
+    // "Complete Inspection" again thinking nothing happened. The spinner stays
+    // until the page actually changes.
     await runExit(task.id, routeProgress?.nextTaskId)
   }
 

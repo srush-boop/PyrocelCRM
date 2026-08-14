@@ -34,6 +34,13 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Plus, Pencil, Trash2, Layers } from 'lucide-react'
 import { toast } from 'sonner'
@@ -57,6 +64,7 @@ export function SystemTypesManager({
   const [description, setDescription] = useState('')
   const [color, setColor] = useState('#b91c1c')
   const [requiresRecurringVisits, setRequiresRecurringVisits] = useState(true)
+  const [logbookCategory, setLogbookCategory] = useState<'fire' | 'security' | 'other'>('fire')
 
   function openNew() {
     setEditing(null)
@@ -65,6 +73,7 @@ export function SystemTypesManager({
     setDescription('')
     setColor('#b91c1c')
     setRequiresRecurringVisits(true)
+    setLogbookCategory('fire')
     setOpen(true)
   }
 
@@ -75,6 +84,7 @@ export function SystemTypesManager({
     setDescription(st.description ?? '')
     setColor(st.color ?? '#b91c1c')
     setRequiresRecurringVisits(st.requires_recurring_visits ?? true)
+    setLogbookCategory(st.logbook_category ?? 'fire')
     setOpen(true)
   }
 
@@ -91,6 +101,7 @@ export function SystemTypesManager({
         description,
         color,
         requiresRecurringVisits,
+        logbookCategory,
       })
       if (res.ok) {
         toast.success(editing ? 'System type updated' : 'System type added')
@@ -161,6 +172,16 @@ export function SystemTypesManager({
                       {st.requires_recurring_visits === false && (
                         <span className="rounded-full border border-zinc-500/25 bg-zinc-500/12 px-2 py-0.5 text-xs font-normal text-zinc-600 dark:text-zinc-300">
                           Charge-only
+                        </span>
+                      )}
+                      {st.logbook_category === 'security' && (
+                        <span className="rounded-full border border-violet-500/25 bg-violet-500/12 px-2 py-0.5 text-xs font-normal text-violet-600 dark:text-violet-300">
+                          Security
+                        </span>
+                      )}
+                      {st.logbook_category === 'other' && (
+                        <span className="rounded-full border border-zinc-500/25 bg-zinc-500/12 px-2 py-0.5 text-xs font-normal text-zinc-600 dark:text-zinc-300">
+                          Other
                         </span>
                       )}
                     </span>
@@ -241,6 +262,27 @@ export function SystemTypesManager({
                 rows={3}
                 placeholder="Optional description of this system type"
               />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="st-logbook-category">Log book section</Label>
+              <Select
+                value={logbookCategory}
+                onValueChange={(v) => setLogbookCategory(v as 'fire' | 'security' | 'other')}
+              >
+                <SelectTrigger id="st-logbook-category">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="fire">Fire safety</SelectItem>
+                  <SelectItem value="security">Security</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Which section of the site log book this system&apos;s service history appears under.
+                Fire-safety systems (fire alarm, emergency lighting, extinguishers, dampers) stay
+                under Fire safety; intruder alarm, CCTV and access control belong under Security.
+              </p>
             </div>
             <div className="flex items-start justify-between gap-4 rounded-md border p-3">
               <div className="grid gap-0.5">

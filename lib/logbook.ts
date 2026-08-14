@@ -81,8 +81,23 @@ export function logbookEntryLabel(type: LogbookEntryType): string {
   return getLogbookEntryMeta(type).label
 }
 
+// Top-level section a record belongs to. Mirrors system_types.logbook_category,
+// set at master level. 'fire' is the default so untouched/legacy systems keep
+// appearing in the fire safety section.
+export type LogbookCategory = 'fire' | 'security' | 'other'
+
+export const LOGBOOK_CATEGORY_LABELS: Record<LogbookCategory, string> = {
+  fire: 'Fire safety',
+  security: 'Security',
+  other: 'Other',
+}
+
+// Order sections are rendered/printed in.
+export const LOGBOOK_CATEGORY_ORDER: LogbookCategory[] = ['fire', 'security', 'other']
+
 // Fire safety "systems" used to group/filter log book records so an occupier
-// can quickly find everything relating to a particular asset type.
+// can quickly find everything relating to a particular asset type. 'security'
+// and 'general' are catch-alls for the Security and Other sections.
 export type LogbookSystemId =
   | 'fire_alarm'
   | 'emergency_lighting'
@@ -91,6 +106,7 @@ export type LogbookSystemId =
   | 'fire_doors'
   | 'fire_drill'
   | 'training'
+  | 'security'
   | 'general'
 
 export interface LogbookSystemMeta {
@@ -106,8 +122,16 @@ export const LOGBOOK_SYSTEMS: LogbookSystemMeta[] = [
   { id: 'fire_doors', label: 'Fire doors & escape routes' },
   { id: 'fire_drill', label: 'Fire drills' },
   { id: 'training', label: 'Training' },
+  { id: 'security', label: 'Security' },
   { id: 'general', label: 'General' },
 ]
+
+/** Which section a given system id belongs to. */
+export function categoryForSystem(id: LogbookSystemId): LogbookCategory {
+  if (id === 'security') return 'security'
+  if (id === 'general') return 'other'
+  return 'fire'
+}
 
 export function getLogbookSystemMeta(id: LogbookSystemId): LogbookSystemMeta {
   return LOGBOOK_SYSTEMS.find((s) => s.id === id) ?? LOGBOOK_SYSTEMS[LOGBOOK_SYSTEMS.length - 1]
@@ -143,4 +167,21 @@ export function systemForServiceName(name: string): LogbookSystemId {
   if (n.includes('alarm') || n.includes('detection') || n.includes('fire alarm')) return 'fire_alarm'
   if (n.includes('drill') || n.includes('evacuat')) return 'fire_drill'
   return 'general'
+}
+
+/**
+ * Resolve the log book system for a professional service report using the
+ * master-level system category first (authoritative) and only falling back to
+ * name-guessing WITHIN the fire section. This is what stops e.g. "Annual
+ * Intruder Alarm Maintenance" (a Security system) being mislabelled as a fire
+ * alarm just because its name contains the word "alarm".
+ */
+export function systemForReport(input: {
+  category?: LogbookCategory | null
+  serviceName: string
+}): LogbookSystemId {
+  const category = input.category ?? 'fire'
+  if (category === 'security') return 'security'
+  if (category === 'other') return 'general'
+  return systemForServiceName(input.serviceName)
 }

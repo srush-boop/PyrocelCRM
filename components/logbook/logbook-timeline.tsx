@@ -12,9 +12,12 @@ import {
   getLogbookEntryMeta,
   getLogbookSystemMeta,
   systemForEntryType,
-  systemForServiceName,
+  systemForReport,
   LOGBOOK_SYSTEMS,
+  LOGBOOK_CATEGORY_LABELS,
+  LOGBOOK_CATEGORY_ORDER,
   type LogbookSystemId,
+  type LogbookCategory,
 } from '@/lib/logbook'
 import type { LogbookEntry } from '@/lib/types/database'
 import {
@@ -28,6 +31,7 @@ import {
   DoorClosed,
   GraduationCap,
   Printer,
+  Shield,
   X,
   type LucideIcon,
 } from 'lucide-react'
@@ -40,6 +44,7 @@ const SYSTEM_ICONS: Record<LogbookSystemId, LucideIcon> = {
   fire_doors: DoorClosed,
   fire_drill: Users,
   training: GraduationCap,
+  security: Shield,
   general: ClipboardList,
 }
 
@@ -51,6 +56,14 @@ export interface ReportTimelineItem {
   status: 'pass' | 'partial' | 'fail' | null
   /** Optional deep link to the full report (staff view only). */
   href?: string
+  /**
+   * Master-level classification of the parent system type. Drives which section
+   * (Fire safety / Security / Other) the record appears under. Defaults to
+   * 'fire' when absent so legacy data stays in the fire section.
+   */
+  logbookCategory?: LogbookCategory | null
+  /** Parent system type name (e.g. "Intruder Alarm"), used as the Security label. */
+  systemTypeName?: string | null
 }
 
 export interface LogbookTimelineProps {
@@ -64,8 +77,24 @@ export interface LogbookTimelineProps {
 }
 
 type MergedItem =
-  | { kind: 'report'; date: string; sortKey: number; system: LogbookSystemId; data: ReportTimelineItem }
-  | { kind: 'entry'; date: string; sortKey: number; system: LogbookSystemId; data: LogbookEntry }
+  | {
+      kind: 'report'
+      date: string
+      sortKey: number
+      system: LogbookSystemId
+      category: LogbookCategory
+      label: string
+      data: ReportTimelineItem
+    }
+  | {
+      kind: 'entry'
+      date: string
+      sortKey: number
+      system: LogbookSystemId
+      category: LogbookCategory
+      label: string
+      data: LogbookEntry
+    }
 
 function statusBadge(status: ReportTimelineItem['status']) {
   if (status === 'pass') return <Badge className="bg-green-600 text-white hover:bg-green-600/90">Pass</Badge>
@@ -83,20 +112,38 @@ export function LogbookTimeline({ reports, entries, printHrefBase }: LogbookTime
   const merged: MergedItem[] = useMemo(
     () =>
       [
-        ...reports.map((r) => ({
-          kind: 'report' as const,
-          date: r.date,
-          sortKey: new Date(r.date).getTime(),
-          system: systemForServiceName(r.serviceName),
-          data: r,
-        })),
-        ...entries.map((e) => ({
-          kind: 'entry' as const,
-          date: e.entry_date,
-          sortKey: new Date(e.entry_date).getTime(),
-          system: systemForEntryType(e.entry_type),
-          data: e,
-        })),
+        ...reports.map((r) => {
+          // Classify from the master-level system category first; only guess the
+          // fire sub-system from the service name WITHIN the fire section.
+          const category: LogbookCategory = r.logbookCategory ?? 'fire'
+          const system = systemForReport({ category, serviceName: r.serviceName })
+          const label =
+            system === 'security'
+              ? r.systemTypeName || getLogbookSystemMeta(system).label
+              : getLogbookSystemMeta(system).label
+          return {
+            kind: 'report' as const,
+            date: r.date,
+            sortKey: new Date(r.date).getTime(),
+            system,
+            category,
+            label,
+            data: r,
+          }
+        }),
+        ...entries.map((e) => {
+          // Occupier/staff routine entries are all fire-safety duties.
+          const system = systemForEntryType(e.entry_type)
+          return {
+            kind: 'entry' as const,
+            date: e.entry_date,
+            sortKey: new Date(e.entry_date).getTime(),
+            system,
+            category: 'fire' as LogbookCategory,
+            label: getLogbookSystemMeta(system).label,
+            data: e,
+          }
+        }),
       ].sort((a, b) => b.sortKey - a.sortKey),
     [reports, entries],
   )
@@ -151,6 +198,15 @@ export function LogbookTimeline({ reports, entries, printHrefBase }: LogbookTime
     const qs = params.toString()
     return qs ? `${printHrefBase}?${qs}` : printHrefBase
   }, [printHrefBase, fromDate, toDate])
+
+  // Split the visible records into their master-level sections (Fire safety /
+  // Security / Other), keeping the date-descending order within each. Headings
+  // only appear once more than one section is present.
+  const visibleByCategory = LOGBOOK_CATEGORY_ORDER.map((category) => ({
+    category,
+    items: visible.filter((item) => item.category === category),
+  })).filter((group) => group.items.length > 0)
+  const showSectionHeadings = visibleByCategory.length > 1
 
   return (
     <div className="space-y-4">
@@ -243,12 +299,22 @@ export function LogbookTimeline({ reports, entries, printHrefBase }: LogbookTime
         </div>
       )}
 
-      <ol className="relative space-y-3 border-l border-border pl-6">
-        {visible.map((item) => {
-          const SystemIcon = SYSTEM_ICONS[item.system]
-          const systemLabel = getLogbookSystemMeta(item.system).label
-          return (
-          <li key={`${item.kind}-${item.data.id}`} className="relative">
+      {visibleByCategory.map((group) => (
+        <section key={group.category} className="space-y-3">
+          {showSectionHeadings && (
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              {LOGBOOK_CATEGORY_LABELS[group.category]}
+              <Badge variant="secondary" className="px-1.5 py-0 text-xs">
+                {group.items.length}
+              </Badge>
+            </h3>
+          )}
+          <ol className="relative space-y-3 border-l border-border pl-6">
+            {group.items.map((item) => {
+              const SystemIcon = SYSTEM_ICONS[item.system]
+              const systemLabel = item.label
+              return (
+              <li key={`${item.kind}-${item.data.id}`} className="relative">
             <span
               className={cn(
                 'absolute -left-[31px] flex h-6 w-6 items-center justify-center rounded-full ring-4 ring-background',
@@ -325,10 +391,12 @@ export function LogbookTimeline({ reports, entries, printHrefBase }: LogbookTime
               </CardContent>
             </Card>
           )}
-          </li>
-          )
-        })}
-      </ol>
+              </li>
+              )
+            })}
+          </ol>
+        </section>
+      ))}
 
       {visible.length === 0 && (
         <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">

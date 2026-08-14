@@ -700,6 +700,13 @@ export interface SystemType {
   // generate recurring PPM visits (e.g. Remote Monitoring). Effective recurrence
   // of a service = service_type.is_recurring AND this flag.
   requires_recurring_visits: boolean
+  /**
+   * Which section of the Fire Safety Log Book this system's service history
+   * appears under. 'fire' = fire-safety systems (Fire Alarm, EL, extinguishers,
+   * dampers, water); 'security' = intruder alarm, CCTV, access control;
+   * 'other' = everything else (e.g. Remote Monitoring). Set at master level.
+   */
+  logbook_category: 'fire' | 'security' | 'other'
   position: number
   created_at: string
   updated_at: string

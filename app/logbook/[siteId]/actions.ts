@@ -92,6 +92,8 @@ export interface PublicLogbookData {
     serviceName: string
     engineerName: string | null
     status: 'pass' | 'partial' | 'fail' | null
+    logbookCategory: 'fire' | 'security' | 'other' | null
+    systemTypeName: string | null
   }[]
   entries: LogbookEntry[]
 }
@@ -120,7 +122,7 @@ export async function getPublicLogbook(siteId: string): Promise<PublicLogbookDat
     .from('tasks')
     .select(
       `id, status, completed_at, scheduled_date,
-       site_service:site_services!inner(site_id, service_type:service_types(name)),
+       site_service:site_services!inner(site_id, service_type:service_types(name, system_type:system_types(name, logbook_category))),
        engineer:profiles!tasks_assigned_engineer_id_fkey(full_name)`,
     )
     .eq('site_service.site_id', siteId)
@@ -133,6 +135,13 @@ export async function getPublicLogbook(siteId: string): Promise<PublicLogbookDat
     serviceName: (t.site_service?.service_type?.name as string) || 'Service',
     engineerName: (t.engineer?.full_name as string) || null,
     status: null,
+    logbookCategory:
+      (t.site_service?.service_type?.system_type?.logbook_category as
+        | 'fire'
+        | 'security'
+        | 'other'
+        | undefined) ?? null,
+    systemTypeName: (t.site_service?.service_type?.system_type?.name as string) || null,
   }))
 
   const { data: entries } = await admin

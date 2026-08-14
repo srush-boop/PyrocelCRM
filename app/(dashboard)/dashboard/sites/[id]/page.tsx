@@ -357,9 +357,9 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
         .from('tasks')
         .select(`
           *,
-          site_service:site_services(*, service_type:service_types(*, system_type:system_types(id, name, code, color))),
-          service_type:service_types(id, name, system_type:system_types(id, name, code, color)),
-          system_type:system_types(id, name, code, color),
+          site_service:site_services(*, service_type:service_types(*, system_type:system_types(id, name, code, color, logbook_category))),
+          service_type:service_types(id, name, system_type:system_types(id, name, code, color, logbook_category)),
+          system_type:system_types(id, name, code, color, logbook_category),
           assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(*),
           task_result:task_results(reference_number, overall_status, email_sent_at),
           call_parts(unit_cost_pence, quantity),
@@ -617,7 +617,9 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
   const buildingInfo = (buildingInfoResult.data as SiteBuildingInfo | null) ?? null
 
   const logbookReports: ReportTimelineItem[] = completedTasks.map((task) => {
-    const serviceName = task.site_service?.service_type?.name || 'Service'
+    const serviceType = task.site_service?.service_type
+    const serviceName = serviceType?.name || 'Service'
+    const systemType = serviceType?.system_type
     const reportHref = isDamperService(serviceName)
       ? `/dashboard/dampers/report/${task.id}`
       : isExtinguisherService(serviceName)
@@ -630,6 +632,9 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
       engineerName: task.assigned_engineer?.full_name ?? null,
       status: (task.task_result?.overall_status as ReportTimelineItem['status']) ?? null,
       href: reportHref,
+      logbookCategory:
+        (systemType?.logbook_category as 'fire' | 'security' | 'other' | undefined) ?? null,
+      systemTypeName: systemType?.name ?? null,
     }
   })
 

@@ -49,7 +49,7 @@ import { emptyPhotoCategories, generateUrn } from '@/lib/dampers'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import { DamperInspectionCard, type InspectionState } from './damper-inspection-card'
 import { SizeCombobox } from './size-combobox'
-import { ScanQrButton } from './scan-qr-button'
+import { AssetQrScanAssign } from '@/components/dashboard/tasks/asset-qr-scan-assign'
 import type { ReactNode } from 'react'
 import type { Profile, TaskWithDetails, Damper, DamperType, DamperInspection, DamperResult } from '@/lib/types/database'
 
@@ -170,7 +170,6 @@ export function DamperTaskExecution({
   const [addForm, setAddForm] = useState(emptyDamperForm)
   const [addingDamper, setAddingDamper] = useState(false)
   const [highlightId, setHighlightId] = useState<string | null>(null)
-  const [scanError, setScanError] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
   const { ensureOnShift, checking: checkingShift, shiftGateDialog } = useShiftGate()
@@ -224,27 +223,37 @@ export function DamperTaskExecution({
       .map((entry) => entry.d)
   }, [dampers, search, states])
 
-  // Locate a scanned damper in the current list, clearing any search filter and
-  // scrolling/highlighting its card. Used by the QR scanner during inspection.
-  const handleScanToDamper = (urn: string) => {
-    const target = dampers.find(
-      (d) =>
-        d.urn.toLowerCase() === urn.toLowerCase() ||
-        (d.reference || '').toLowerCase() === urn.toLowerCase(),
-    )
-    if (!target) {
-      setScanError(`No damper matching "${urn}" on this site's register.`)
-      setTimeout(() => setScanError(null), 5000)
-      return
-    }
+  // Locate a damper (matched by the QR scanner) in the current list: clear any
+  // search filter, then scroll to and highlight its card.
+  const locateDamper = (id: string) => {
     setSearch('')
-    setHighlightId(target.id)
+    setHighlightId(id)
     requestAnimationFrame(() => {
-      const el = document.getElementById(`damper-${target.id}`)
+      const el = document.getElementById(`damper-${id}`)
       el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     })
     setTimeout(() => setHighlightId(null), 2500)
   }
+
+  // Link a scanned physical QR sticker to a damper (stored alongside its URN).
+  const assignDamperQr = async (id: string, code: string) => {
+    const { error } = await supabase.from('dampers').update({ qr_code: code }).eq('id', id)
+    if (error) throw error
+    setDampers((prev) => prev.map((d) => (d.id === id ? { ...d, qr_code: code } : d)))
+  }
+
+  // Assets offered to the QR scan/link tool (matched on qr_code, urn, reference).
+  const damperQrItems = useMemo(
+    () =>
+      dampers.map((d) => ({
+        id: d.id,
+        label: [d.reference || d.urn, d.location, d.floor].filter(Boolean).join(' · ') || d.urn,
+        urn: d.urn,
+        reference: d.reference,
+        qr_code: d.qr_code,
+      })),
+    [dampers],
+  )
 
   const handleStart = async () => {
     if (!(await ensureOnShift())) return
@@ -503,7 +512,14 @@ export function DamperTaskExecution({
             canSendReport={profile.role === 'admin' || profile.role === 'office'}
           />
         )}
-        <ScanQrButton onScan={handleScanToDamper} />
+        <AssetQrScanAssign
+          assets={damperQrItems}
+          assetNoun="damper"
+          urlPath="dampers"
+          canAssign={canEdit}
+          onLocate={locateDamper}
+          onAssign={assignDamperQr}
+        />
       </div>
 
       {/* Other calls at this site (overdue / due soon) — beneath Start Task. */}
@@ -588,11 +604,6 @@ export function DamperTaskExecution({
                   </Button>
                 )}
               </div>
-              {scanError && (
-                <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                  {scanError}
-                </p>
-              )}
               {filtered.map((damper) => (
                 <div
                   key={damper.id}

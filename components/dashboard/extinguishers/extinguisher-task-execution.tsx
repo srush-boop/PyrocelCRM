@@ -48,7 +48,7 @@ import { CallPartsPicker } from '@/components/dashboard/tasks/call-parts-picker'
 import { emptyPhotoCategories, generateUrn, EXTINGUISHER_TYPE_LABELS, CAPACITY_SUGGESTIONS } from '@/lib/extinguishers'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
 import { ExtinguisherInspectionCard, type InspectionState } from './extinguisher-inspection-card'
-import { ScanQrButton } from './scan-qr-button'
+import { AssetQrScanAssign } from '@/components/dashboard/tasks/asset-qr-scan-assign'
 import { TaskAttachments } from '@/components/dashboard/tasks/task-attachments'
 import type { ReactNode } from 'react'
 import type {
@@ -185,7 +185,6 @@ export function ExtinguisherTaskExecution({
   const [addForm, setAddForm] = useState(emptyExtinguisherForm)
   const [addingExtinguisher, setAddingExtinguisher] = useState(false)
   const [highlightId, setHighlightId] = useState<string | null>(null)
-  const [scanError, setScanError] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
   const { ensureOnShift, checking: checkingShift, shiftGateDialog } = useShiftGate()
@@ -240,27 +239,37 @@ export function ExtinguisherTaskExecution({
       .map((entry) => entry.e)
   }, [extinguishers, search, states])
 
-  // Locate a scanned extinguisher in the current list, clearing any search filter
-  // and scrolling/highlighting its card. Used by the QR scanner during service.
-  const handleScanToExtinguisher = (urn: string) => {
-    const target = extinguishers.find(
-      (e) =>
-        e.urn.toLowerCase() === urn.toLowerCase() ||
-        (e.reference || '').toLowerCase() === urn.toLowerCase(),
-    )
-    if (!target) {
-      setScanError(`No extinguisher matching "${urn}" on this site's register.`)
-      setTimeout(() => setScanError(null), 5000)
-      return
-    }
+  // Locate an extinguisher (matched by the QR scanner) in the current list: clear
+  // any search filter, then scroll to and highlight its card.
+  const locateExtinguisher = (id: string) => {
     setSearch('')
-    setHighlightId(target.id)
+    setHighlightId(id)
     requestAnimationFrame(() => {
-      const el = document.getElementById(`extinguisher-${target.id}`)
+      const el = document.getElementById(`extinguisher-${id}`)
       el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     })
     setTimeout(() => setHighlightId(null), 2500)
   }
+
+  // Link a scanned physical QR sticker to an extinguisher (alongside its URN).
+  const assignExtinguisherQr = async (id: string, code: string) => {
+    const { error } = await supabase.from('extinguishers').update({ qr_code: code }).eq('id', id)
+    if (error) throw error
+    setExtinguishers((prev) => prev.map((e) => (e.id === id ? { ...e, qr_code: code } : e)))
+  }
+
+  // Assets offered to the QR scan/link tool (matched on qr_code, urn, reference).
+  const extinguisherQrItems = useMemo(
+    () =>
+      extinguishers.map((e) => ({
+        id: e.id,
+        label: [e.reference || e.urn, e.location, e.floor].filter(Boolean).join(' · ') || e.urn,
+        urn: e.urn,
+        reference: e.reference,
+        qr_code: e.qr_code,
+      })),
+    [extinguishers],
+  )
 
   const handleStart = async () => {
     if (!(await ensureOnShift())) return
@@ -521,7 +530,14 @@ export function ExtinguisherTaskExecution({
             canReview={profile.role === 'admin' || profile.role === 'office'}
           />
         )}
-        <ScanQrButton onScan={handleScanToExtinguisher} />
+        <AssetQrScanAssign
+          assets={extinguisherQrItems}
+          assetNoun="extinguisher"
+          urlPath="extinguishers"
+          canAssign={canEdit}
+          onLocate={locateExtinguisher}
+          onAssign={assignExtinguisherQr}
+        />
       </div>
 
       {/* Other calls at this site (overdue / due soon) — beneath Start Task. */}
@@ -606,11 +622,6 @@ export function ExtinguisherTaskExecution({
                   </Button>
                 )}
               </div>
-              {scanError && (
-                <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                  {scanError}
-                </p>
-              )}
               {filtered.map((extinguisher) => (
                 <div
                   key={extinguisher.id}

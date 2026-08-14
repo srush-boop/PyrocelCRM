@@ -157,6 +157,7 @@ export function McpTaskExecution({
   // Engineers can register new call points during the test, so keep a local
   // copy of the register that we can append to without losing in-progress state.
   const [mcpList, setMcpList] = useState<Mcp[]>(mcps)
+  const [highlightId, setHighlightId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [addSaving, setAddSaving] = useState(false)
   const [addForm, setAddForm] = useState({
@@ -236,6 +237,40 @@ export function McpTaskExecution({
     [m.map_reference ? `Map ${m.map_reference}` : null, m.location, m.floor]
       .filter(Boolean)
       .join(' · ') || m.urn || 'Call point'
+
+  // Locate a call point (matched by the QR scanner) in the current list: clear
+  // any search filter, then scroll to and highlight its card.
+  const locateMcp = (id: string) => {
+    setSearch('')
+    setHighlightId(id)
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`mcp-${id}`)
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+    setTimeout(() => setHighlightId(null), 2500)
+  }
+
+  // Link a scanned physical QR sticker to a call point (alongside its URN).
+  const assignMcpQr = async (id: string, code: string) => {
+    const { error } = await supabase.from('mcps').update({ qr_code: code }).eq('id', id)
+    if (error) throw error
+    setMcpList((prev) => prev.map((m) => (m.id === id ? { ...m, qr_code: code } : m)))
+  }
+
+  // Assets offered to the QR scan/link tool (matched on qr_code, urn, map_reference).
+  const mcpQrItems = useMemo(
+    () =>
+      mcpList.map((m) => ({
+        id: m.id,
+        label: describeMcp(m),
+        urn: m.urn,
+        reference: m.map_reference,
+        qr_code: m.qr_code,
+      })),
+    // describeMcp is a stable pure helper over each item
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mcpList],
+  )
 
   // For the weekly rotation, only the call point due this week must be tested
   // or marked not accessible before the test can be submitted.
@@ -703,6 +738,16 @@ export function McpTaskExecution({
                     className="pl-9"
                   />
                 </div>
+                <AssetQrScanAssign
+                  assets={mcpQrItems}
+                  assetNoun="call point"
+                  urlPath="mcps"
+                  canAssign={canEdit}
+                  onLocate={locateMcp}
+                  onAssign={assignMcpQr}
+                  size="default"
+                  className="shrink-0 bg-transparent"
+                />
                 {canEdit && (
                   <>
                     <Button
@@ -727,10 +772,12 @@ export function McpTaskExecution({
               {filtered.map((mcp) => (
                 <div
                   key={mcp.id}
+                  id={`mcp-${mcp.id}`}
                   className={
-                    nextMcp && mcp.id === nextMcp.id && !states[mcp.id]?.touched
-                      ? 'rounded-lg ring-2 ring-primary ring-offset-2'
-                      : undefined
+                    (nextMcp && mcp.id === nextMcp.id && !states[mcp.id]?.touched) ||
+                    highlightId === mcp.id
+                      ? 'rounded-lg ring-2 ring-primary ring-offset-2 transition-all'
+                      : 'transition-all'
                   }
                 >
                   {nextMcp && mcp.id === nextMcp.id && !states[mcp.id]?.touched && (

@@ -1951,6 +1951,8 @@ export interface Damper {
   id: string
   site_id: string
   urn: string
+  /** Optional pre-existing physical QR sticker linked in the field (alias for urn). */
+  qr_code: string | null
   reference: string | null
   floor: string | null
   location: string | null
@@ -2015,6 +2017,8 @@ export interface Extinguisher {
   id: string
   site_id: string
   urn: string
+  /** Optional pre-existing physical QR sticker linked in the field (alias for urn). */
+  qr_code: string | null
   reference: string | null
   floor: string | null
   location: string | null
@@ -2162,6 +2166,8 @@ export interface Mcp {
   id: string
   site_id: string
   urn: string | null
+  /** Optional pre-existing physical QR sticker linked in the field (alias for urn). */
+  qr_code: string | null
   map_reference: string | null
   location: string | null
   floor: string | null
@@ -2200,6 +2206,8 @@ export interface EmergencyLight {
   id: string
   site_id: string
   urn: string | null
+  /** Optional pre-existing physical QR sticker linked in the field (alias for urn). */
+  qr_code: string | null
   map_reference: string | null
   location: string | null
   floor: string | null
@@ -3377,7 +3385,7 @@ export interface AssetAssignment {
   assigner?: Pick<Profile, 'id' | 'full_name'> | null
 }
 
-// ── Inbound request inbox ──────────────────���─────────────────────────────────
+// ── Inbound request inbox ──────────────────���─────────────────────���───────────
 // A request that arrived by email (forwarded to the system address) or was added
 // manually by a staff member. AI triages it, matching it to an existing
 // client/site/service and proposing actions that a human approves.

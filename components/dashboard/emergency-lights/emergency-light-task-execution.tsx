@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useShiftGate } from '@/components/dashboard/tasks/use-shift-gate'
 import { useCompletionExit } from '@/components/dashboard/tasks/use-completion-exit'
+import { AssetQrScanAssign } from '@/components/dashboard/tasks/asset-qr-scan-assign'
 import { RouteProgressBanner } from '@/components/dashboard/tasks/route-progress-banner'
 import type { RouteProgress } from '@/lib/routes/route-progress'
 import { useRouter } from 'next/navigation'
@@ -128,6 +129,7 @@ export function EmergencyLightTaskExecution({
   // Engineers can register new fittings during the inspection, so keep a local
   // copy of the register that we can append to without losing in-progress state.
   const [lightList, setLightList] = useState<EmergencyLight[]>(lights)
+  const [highlightId, setHighlightId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [addSaving, setAddSaving] = useState(false)
   const [addForm, setAddForm] = useState({
@@ -212,6 +214,41 @@ export function EmergencyLightTaskExecution({
       .map((entry) => entry.l)
   }, [lightList, search, states])
 
+  // Locate a fitting (matched by the QR scanner) in the current list: clear any
+  // search filter, then scroll to and highlight its card.
+  const locateLight = (id: string) => {
+    setSearch('')
+    setHighlightId(id)
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`light-${id}`)
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+    setTimeout(() => setHighlightId(null), 2500)
+  }
+
+  // Link a scanned physical QR sticker to a fitting (alongside its URN).
+  const assignLightQr = async (id: string, code: string) => {
+    const { error } = await supabase.from('emergency_lights').update({ qr_code: code }).eq('id', id)
+    if (error) throw error
+    setLightList((prev) => prev.map((l) => (l.id === id ? { ...l, qr_code: code } : l)))
+  }
+
+  // Assets offered to the QR scan/link tool (matched on qr_code, urn, map_reference).
+  const lightQrItems = useMemo(
+    () =>
+      lightList.map((l) => ({
+        id: l.id,
+        label:
+          [l.map_reference ? `Map ${l.map_reference}` : null, l.location, l.floor]
+            .filter(Boolean)
+            .join(' · ') || l.urn || 'Fitting',
+        urn: l.urn,
+        reference: l.map_reference,
+        qr_code: l.qr_code,
+      })),
+    [lightList],
+  )
+
   const handleStart = async () => {
     if (!(await ensureOnShift())) return
     await supabase
@@ -293,6 +330,9 @@ export function EmergencyLightTaskExecution({
   }
 
   const handleSubmit = async () => {
+    // Re-entrancy guard: a fast double-tap can land before the disabled state
+    // commits, so bail if a submission is already running.
+    if (submitting) return
     setSubmitting(true)
     await persistInspections()
     const today = new Date().toISOString().split('T')[0]
@@ -387,9 +427,11 @@ export function EmergencyLightTaskExecution({
     }).catch((err) => console.log('[v0] Visit billing request error:', err))
 
     setStatus('completed')
-    setSubmitting(false)
-    // No success screen / confirm — return to Calls (via nearby-calls prompt),
-    // or jump straight to the next call when working a CDO route.
+    // Keep `submitting` true through runExit: it navigates away (or shows the
+    // nearby-calls prompt), and the nearby lookup can take a moment. Resetting
+    // here would re-enable the button during that gap, so engineers tap
+    // "Complete Inspection" again thinking nothing happened. The spinner stays
+    // until the page actually changes.
     await runExit(task.id, routeProgress?.nextTaskId)
   }
 
@@ -508,6 +550,15 @@ export function EmergencyLightTaskExecution({
                     className="pl-9"
                   />
                 </div>
+                <AssetQrScanAssign
+                  assets={lightQrItems}
+                  assetNoun="fitting"
+                  urlPath="emergency-lights"
+                  canAssign={canEdit}
+                  onLocate={locateLight}
+                  onAssign={assignLightQr}
+                  className="shrink-0 bg-transparent"
+                />
                 {canEdit && (
                   <>
                     <Button
@@ -530,13 +581,22 @@ export function EmergencyLightTaskExecution({
                 )}
               </div>
               {filtered.map((light) => (
-                <EmergencyLightInspectionCard
+                <div
                   key={light.id}
-                  light={light}
-                  state={states[light.id]}
-                  disabled={!canEdit}
-                  onChange={(next) => setStates((prev) => ({ ...prev, [light.id]: next }))}
-                />
+                  id={`light-${light.id}`}
+                  className={
+                    highlightId === light.id
+                      ? 'rounded-lg ring-2 ring-primary ring-offset-2 transition-all'
+                      : 'transition-all'
+                  }
+                >
+                  <EmergencyLightInspectionCard
+                    light={light}
+                    state={states[light.id]}
+                    disabled={!canEdit}
+                    onChange={(next) => setStates((prev) => ({ ...prev, [light.id]: next }))}
+                  />
+                </div>
               ))}
             </div>
           )}

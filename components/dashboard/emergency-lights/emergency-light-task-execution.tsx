@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useShiftGate } from '@/components/dashboard/tasks/use-shift-gate'
 import { useCompletionExit } from '@/components/dashboard/tasks/use-completion-exit'
+import { AssetQrScanAssign } from '@/components/dashboard/tasks/asset-qr-scan-assign'
 import { RouteProgressBanner } from '@/components/dashboard/tasks/route-progress-banner'
 import type { RouteProgress } from '@/lib/routes/route-progress'
 import { useRouter } from 'next/navigation'
@@ -128,6 +129,7 @@ export function EmergencyLightTaskExecution({
   // Engineers can register new fittings during the inspection, so keep a local
   // copy of the register that we can append to without losing in-progress state.
   const [lightList, setLightList] = useState<EmergencyLight[]>(lights)
+  const [highlightId, setHighlightId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [addSaving, setAddSaving] = useState(false)
   const [addForm, setAddForm] = useState({
@@ -211,6 +213,41 @@ export function EmergencyLightTaskExecution({
       })
       .map((entry) => entry.l)
   }, [lightList, search, states])
+
+  // Locate a fitting (matched by the QR scanner) in the current list: clear any
+  // search filter, then scroll to and highlight its card.
+  const locateLight = (id: string) => {
+    setSearch('')
+    setHighlightId(id)
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`light-${id}`)
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+    setTimeout(() => setHighlightId(null), 2500)
+  }
+
+  // Link a scanned physical QR sticker to a fitting (alongside its URN).
+  const assignLightQr = async (id: string, code: string) => {
+    const { error } = await supabase.from('emergency_lights').update({ qr_code: code }).eq('id', id)
+    if (error) throw error
+    setLightList((prev) => prev.map((l) => (l.id === id ? { ...l, qr_code: code } : l)))
+  }
+
+  // Assets offered to the QR scan/link tool (matched on qr_code, urn, map_reference).
+  const lightQrItems = useMemo(
+    () =>
+      lightList.map((l) => ({
+        id: l.id,
+        label:
+          [l.map_reference ? `Map ${l.map_reference}` : null, l.location, l.floor]
+            .filter(Boolean)
+            .join(' · ') || l.urn || 'Fitting',
+        urn: l.urn,
+        reference: l.map_reference,
+        qr_code: l.qr_code,
+      })),
+    [lightList],
+  )
 
   const handleStart = async () => {
     if (!(await ensureOnShift())) return
@@ -508,6 +545,15 @@ export function EmergencyLightTaskExecution({
                     className="pl-9"
                   />
                 </div>
+                <AssetQrScanAssign
+                  assets={lightQrItems}
+                  assetNoun="fitting"
+                  urlPath="emergency-lights"
+                  canAssign={canEdit}
+                  onLocate={locateLight}
+                  onAssign={assignLightQr}
+                  className="shrink-0 bg-transparent"
+                />
                 {canEdit && (
                   <>
                     <Button
@@ -530,13 +576,22 @@ export function EmergencyLightTaskExecution({
                 )}
               </div>
               {filtered.map((light) => (
-                <EmergencyLightInspectionCard
+                <div
                   key={light.id}
-                  light={light}
-                  state={states[light.id]}
-                  disabled={!canEdit}
-                  onChange={(next) => setStates((prev) => ({ ...prev, [light.id]: next }))}
-                />
+                  id={`light-${light.id}`}
+                  className={
+                    highlightId === light.id
+                      ? 'rounded-lg ring-2 ring-primary ring-offset-2 transition-all'
+                      : 'transition-all'
+                  }
+                >
+                  <EmergencyLightInspectionCard
+                    light={light}
+                    state={states[light.id]}
+                    disabled={!canEdit}
+                    onChange={(next) => setStates((prev) => ({ ...prev, [light.id]: next }))}
+                  />
+                </div>
               ))}
             </div>
           )}

@@ -23,7 +23,14 @@ export function MfaChallenge({ onVerified }: MfaChallengeProps) {
   const [error, setError] = useState<string | null>(null)
 
   const verify = async () => {
-    if (code.length !== 6) return
+    // Re-entrancy guard: the OTP field auto-submits via onComplete AND the
+    // button can be clicked. TOTP codes are single-use, so a double-submit
+    // would consume the code on the first request and fail the second — which
+    // used to surface as "fails first time every time". Never run twice.
+    if (loading) return
+    // Authenticator apps (and paste) can include spaces; keep digits only.
+    const cleanCode = code.replace(/\D/g, '')
+    if (cleanCode.length !== 6) return
     setLoading(true)
     setError(null)
 
@@ -33,34 +40,46 @@ export function MfaChallenge({ onVerified }: MfaChallengeProps) {
       setError(listError.message)
       return
     }
-    const factor = (factors?.totp ?? []).find((f) => f.status === 'verified')
-    if (!factor) {
+    // Try EVERY verified factor, not just the first. A user may have more than
+    // one authenticator enrolled (e.g. Google + Microsoft), and the code only
+    // matches the factor it was generated from. Only challenging the first
+    // factor meant codes from any additional authenticator never verified.
+    const verifiedFactors = (factors?.totp ?? []).filter((f) => f.status === 'verified')
+    if (verifiedFactors.length === 0) {
       setLoading(false)
       setError('No authenticator is set up on this account.')
       return
     }
 
-    const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
-      factorId: factor.id,
-    })
-    if (challengeError) {
-      setLoading(false)
-      setError(challengeError.message)
-      return
+    let lastError: string | null = null
+    for (const factor of verifiedFactors) {
+      const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
+        factorId: factor.id,
+      })
+      if (challengeError) {
+        lastError = challengeError.message
+        continue
+      }
+      const { error: verifyError } = await supabase.auth.mfa.verify({
+        factorId: factor.id,
+        challengeId: challenge.id,
+        code: cleanCode,
+      })
+      if (!verifyError) {
+        // Matched this factor — session is now aal2.
+        onVerified()
+        return
+      }
+      lastError = verifyError.message
     }
 
-    const { error: verifyError } = await supabase.auth.mfa.verify({
-      factorId: factor.id,
-      challengeId: challenge.id,
-      code,
-    })
+    // None of the enrolled authenticators accepted the code.
     setLoading(false)
-    if (verifyError) {
-      setError('That code was not accepted. Check your authenticator app and try again.')
-      setCode('')
-      return
-    }
-    onVerified()
+    setError(
+      'That code was not accepted. Enter the current code from your authenticator app. If it keeps failing, check that your phone\u2019s date & time is set to automatic.',
+    )
+    setCode('')
+    void lastError
   }
 
   return (

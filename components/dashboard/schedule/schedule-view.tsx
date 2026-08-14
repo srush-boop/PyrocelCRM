@@ -74,7 +74,7 @@ import type { CallEstimate } from '@/lib/task-duration'
 import { GridViewsBar } from '@/components/dashboard/grid-views-bar'
 import { WORKER_TYPE_LABELS } from '@/lib/assignment'
 import { SystemIcon, SystemBadge, getSystemColors } from '@/lib/system-types'
-import { Building2 } from 'lucide-react'
+import { Building2, Users, Filter } from 'lucide-react'
 import { SiteFlagBadges } from '@/components/dashboard/site-info/site-flag-badges'
 import { resolveSiteFlags } from '@/lib/site-flags'
 import { CallTile } from '@/components/dashboard/calls/call-tile'
@@ -234,6 +234,54 @@ function BookingEditor({
   )
 }
 
+// Colour system for the toolbar's filter sections — each filter GROUP gets one
+// hue so the eye can chunk the bar at a glance. Light tints + a coloured label
+// keep it subordinate to the brand red (reserved for urgency / primary actions).
+const FILTER_SECTION = {
+  attention: {
+    label: 'text-amber-700 dark:text-amber-400',
+    wrap: 'bg-amber-50/60 ring-amber-200/70 dark:bg-amber-950/20 dark:ring-amber-900/50',
+  },
+  classify: {
+    label: 'text-sky-700 dark:text-sky-400',
+    wrap: 'bg-sky-50/60 ring-sky-200/70 dark:bg-sky-950/20 dark:ring-sky-900/50',
+  },
+  people: {
+    label: 'text-violet-700 dark:text-violet-400',
+    wrap: 'bg-violet-50/60 ring-violet-200/70 dark:bg-violet-950/20 dark:ring-violet-900/50',
+  },
+  time: {
+    label: 'text-emerald-700 dark:text-emerald-400',
+    wrap: 'bg-emerald-50/60 ring-emerald-200/70 dark:bg-emerald-950/20 dark:ring-emerald-900/50',
+  },
+} as const
+
+// A labelled, colour-coded filter section for the two-tier toolbar.
+function FilterGroup({
+  tone,
+  icon: Icon,
+  label,
+  className,
+  children,
+}: {
+  tone: keyof typeof FILTER_SECTION
+  icon: React.ElementType
+  label: string
+  className?: string
+  children: React.ReactNode
+}) {
+  const s = FILTER_SECTION[tone]
+  return (
+    <section className={cn('space-y-1.5 rounded-lg p-2 ring-1 ring-inset', s.wrap, className)}>
+      <span className={cn('flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide', s.label)}>
+        <Icon className="h-3 w-3" />
+        {label}
+      </span>
+      {children}
+    </section>
+  )
+}
+
 export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initialTab, estimates = {}, serviceTypes = [], systemTypes = [], savedViews, sharedViews, currentUserId }: ScheduleViewProps) {
   const router = useRouter()
   const supabase = createClient()
@@ -262,12 +310,9 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
   const [needsBookingOnly, setNeedsBookingOnly] = useState(false)
   // Quick filter: only show overdue (past scheduled_date, still pending) calls.
   const [showOverdueOnly, setShowOverdueOnly] = useState(false)
-  // Quick filter: only show remedial calls (one-off remedial works raised from a
-  // defect or accepted quote). They share a recurring service's type, so the
-  // service filter can't isolate them — this can.
-  const [remedialOnly, setRemedialOnly] = useState(false)
-  const [selectedEngineer, setSelectedEngineer] = useState<string>('all')
-  // Multi-select filters: empty array = "all" (no restriction).
+  // Multi-select filters: empty array = "all" (no restriction). Engineers accept
+  // the sentinel 'unassigned' alongside real engineer ids.
+  const [selectedEngineers, setSelectedEngineers] = useState<string[]>([])
   const [selectedSystems, setSelectedSystems] = useState<string[]>([])
   const [selectedServices, setSelectedServices] = useState<string[]>([])
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined)
@@ -533,8 +578,6 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
   }
 
   const needsBookingCount = tasks.filter(taskNeedsBooking).length
-  const remedialCount = tasks.filter((t) => t.is_remedial).length
-
   // Weekly recurring calls (a recurring service repeating every 1 week, e.g.
   // weekly fire-alarm tests) are too routine to book an individual appointment
   // for, so the booking option is hidden for them.
@@ -544,45 +587,50 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
   }
 
   const hasActiveFilters =
-    search || selectedEngineer !== 'all' || selectedSystems.length > 0 || selectedServices.length > 0 || dateFrom || dateTo || needsBookingOnly || showOverdueOnly || remedialOnly
+    search || selectedEngineers.length > 0 || selectedSystems.length > 0 || selectedServices.length > 0 || dateFrom || dateTo || needsBookingOnly || showOverdueOnly
 
   const clearFilters = () => {
     setSearch('')
-    setSelectedEngineer('all')
+    setSelectedEngineers([])
     setSelectedSystems([])
     setSelectedServices([])
     setDateFrom(undefined)
     setDateTo(undefined)
     setNeedsBookingOnly(false)
     setShowOverdueOnly(false)
-    setRemedialOnly(false)
   }
 
   // ---- Saved / shared views (office/admin) ----------------------------------
   const showViews = !!currentUserId
   const viewFilters = {
     search,
-    selectedEngineer,
+    selectedEngineers,
     selectedSystems,
     selectedServices,
     dateFrom: dateFrom ? dateFrom.toISOString() : null,
     dateTo: dateTo ? dateTo.toISOString() : null,
     needsBookingOnly,
     showOverdueOnly,
-    remedialOnly,
     activeTab,
     sortBy,
   }
   function applyViewFilters(f: Record<string, unknown>) {
     setSearch((f.search as string) ?? '')
-    setSelectedEngineer((f.selectedEngineer as string) ?? 'all')
+    // Engineers is now multi-select; migrate any legacy single-value saved views.
+    const eng = f.selectedEngineers
+    if (Array.isArray(eng)) {
+      setSelectedEngineers(eng as string[])
+    } else if (typeof f.selectedEngineer === 'string' && f.selectedEngineer !== 'all') {
+      setSelectedEngineers([f.selectedEngineer])
+    } else {
+      setSelectedEngineers([])
+    }
     setSelectedSystems((f.selectedSystems as string[]) ?? [])
     setSelectedServices((f.selectedServices as string[]) ?? [])
     setDateFrom(f.dateFrom ? new Date(f.dateFrom as string) : undefined)
     setDateTo(f.dateTo ? new Date(f.dateTo as string) : undefined)
     setNeedsBookingOnly(!!f.needsBookingOnly)
     setShowOverdueOnly(!!f.showOverdueOnly)
-    setRemedialOnly(!!f.remedialOnly)
     if (typeof f.activeTab === 'string') setActiveTab(f.activeTab)
     if (typeof f.sortBy === 'string') setSortBy(f.sortBy as SortKey)
   }
@@ -598,9 +646,12 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
       task.assigned_engineer?.full_name?.toLowerCase().includes(search.toLowerCase()) ||
       (task.reference_number ?? task.task_result?.reference_number ?? '').toLowerCase().includes(search.toLowerCase())
     
-    // Engineer filter (only for admin/office)
-    const matchesEngineer = selectedEngineer === 'all' || 
-      (selectedEngineer === 'unassigned' ? !task.assigned_engineer_id : task.assigned_engineer_id === selectedEngineer)
+    // Engineer filter (admin/office) — multi-select; empty = all. The sentinel
+    // 'unassigned' matches calls with no assigned engineer.
+    const matchesEngineer = selectedEngineers.length === 0 ||
+      selectedEngineers.some((sel) =>
+        sel === 'unassigned' ? !task.assigned_engineer_id : task.assigned_engineer_id === sel,
+      )
 
     // Resolve the task's service/system type. Recurring calls carry it on the
     // site_service; reactive/remedial calls anchored straight to a site carry it
@@ -619,9 +670,6 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
     const matchesService = selectedServices.length === 0 ||
       (!!taskServiceId && selectedServices.includes(taskServiceId))
 
-    // Remedial quick filter — only one-off remedial calls.
-    const matchesRemedial = !remedialOnly || !!task.is_remedial
-    
     // Date range filter
     const taskDate = new Date(task.scheduled_date)
     const matchesDateFrom = !dateFrom || taskDate >= dateFrom
@@ -648,7 +696,6 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
       matchesDateTo &&
       matchesNeedsBooking &&
       matchesOverdue &&
-      matchesRemedial &&
       matchesRoute
     )
   })
@@ -1189,17 +1236,17 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
       <Tabs value={effectiveTab} onValueChange={setActiveTab} className="no-print">
       {!showRichCompleted ? (
         <>
-      {/* Row 1: search | quick-filter pill buttons | engineer select | dates | clear */}
-      <div className="flex items-center gap-2 overflow-x-auto scrollbar-none [-webkit-overflow-scrolling:touch] [scrollbar-width:none]">
+      {/* Tier 1 — "what am I looking at": search · status · sort · view. */}
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 p-2">
         <GridSearch
           value={search}
           onChange={setSearch}
           placeholder="Search calls or ref number..."
-          className="shrink-0 w-[200px] max-w-none sm:w-[240px]"
+          className="w-full sm:w-[240px]"
         />
 
         {loadingAll && (
-          <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             Searching all calls...
           </span>
@@ -1209,7 +1256,7 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
             the schedule to that route's calls in planned visiting order. */}
         {isCdo && routeOptions.length > 0 && (
           <Select value={selectedRouteId} onValueChange={setSelectedRouteId}>
-            <SelectTrigger className="w-[180px] shrink-0">
+            <SelectTrigger className="w-[170px]">
               <RouteIcon className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
               <SelectValue placeholder="Select route" />
             </SelectTrigger>
@@ -1224,175 +1271,21 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
           </Select>
         )}
 
-        {(needsBookingCount > 0 || needsBookingOnly) && (
-          <Button
-            type="button"
-            variant={needsBookingOnly ? 'default' : 'outline'}
-            onClick={() => setNeedsBookingOnly((v) => !v)}
-            aria-pressed={needsBookingOnly}
-            className="gap-1.5 shrink-0"
-          >
-            <CalendarClock className="h-4 w-4" />
-            {isEngineer ? 'To book' : 'Needs booking'}
-            <Badge
-              variant={needsBookingOnly ? 'secondary' : 'outline'}
-              className="ml-0.5 px-1.5 py-0"
+        {/* Upcoming / Overdue / Completed switcher, centred between the two sides. */}
+        <div className="mx-auto flex items-center justify-center">{tabTriggers}</div>
+
+        <div className="flex items-center gap-1.5">
+          {hasActiveFilters && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearFilters}
+              className="gap-1.5 text-muted-foreground hover:text-foreground"
             >
-              {needsBookingCount}
-            </Badge>
-          </Button>
-        )}
-
-        {(overdueTasks.length > 0 || showOverdueOnly) && (
-          <Button
-            type="button"
-            variant={showOverdueOnly ? 'destructive' : 'outline'}
-            onClick={() => setShowOverdueOnly((v) => !v)}
-            aria-pressed={showOverdueOnly}
-            className="gap-1.5 shrink-0"
-          >
-            <Clock className="h-4 w-4" />
-            Overdue
-            <Badge
-              variant={showOverdueOnly ? 'secondary' : 'destructive'}
-              className="ml-0.5 px-1.5 py-0"
-            >
-              {overdueTasks.length}
-            </Badge>
-          </Button>
-        )}
-
-        {(remedialCount > 0 || remedialOnly) && (
-          <Button
-            type="button"
-            variant={remedialOnly ? 'default' : 'outline'}
-            onClick={() => setRemedialOnly((v) => !v)}
-            aria-pressed={remedialOnly}
-            className="gap-1.5 shrink-0"
-          >
-            <Wrench className="h-4 w-4" />
-            Remedial
-            <Badge
-              variant={remedialOnly ? 'secondary' : 'outline'}
-              className="ml-0.5 px-1.5 py-0"
-            >
-              {remedialCount}
-            </Badge>
-          </Button>
-        )}
-
-        {isAdminOrOffice && engineers.length > 0 && (
-          <Select value={selectedEngineer} onValueChange={setSelectedEngineer}>
-            <SelectTrigger className="w-[160px] shrink-0">
-              <SelectValue placeholder="All Engineers" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Engineers</SelectItem>
-              <SelectItem value="unassigned">Unassigned</SelectItem>
-              {engineers.map((eng) => (
-                <SelectItem key={eng.id} value={eng.id}>
-                  {eng.full_name || eng.email}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-
-        {/* Date range — admin/office only */}
-        {!isEngineer && (
-          <>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    'w-[120px] shrink-0 justify-start text-left font-normal',
-                    !dateFrom && 'text-muted-foreground',
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-                  {dateFrom ? format(dateFrom, 'dd/MM/yy') : 'From'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <CalendarComponent mode="single" selected={dateFrom} onSelect={setDateFrom} initialFocus />
-              </PopoverContent>
-            </Popover>
-
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    'w-[120px] shrink-0 justify-start text-left font-normal',
-                    !dateTo && 'text-muted-foreground',
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-                  {dateTo ? format(dateTo, 'dd/MM/yy') : 'To'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <CalendarComponent mode="single" selected={dateTo} onSelect={setDateTo} initialFocus />
-              </PopoverContent>
-            </Popover>
-          </>
-        )}
-
-        {hasActiveFilters && (
-          <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1.5 shrink-0 text-muted-foreground hover:text-foreground">
-            <X className="h-4 w-4" />
-            Clear
-          </Button>
-        )}
-      </div>
-
-      {/* Row 2: system/service selects | → sort + view toggle */}
-      <div className="flex items-center gap-2 overflow-x-auto scrollbar-none [-webkit-overflow-scrolling:touch] [scrollbar-width:none]">
-        {systemOptions.length > 0 && (
-          <div className="w-[160px] shrink-0">
-            <SearchMultiSelect
-              values={selectedSystems}
-              onChange={(vals) => {
-                setSelectedSystems(vals)
-                // Drop any selected services that no longer belong to the chosen
-                // systems so the two filters stay consistent.
-                if (vals.length > 0) {
-                  setSelectedServices((prev) =>
-                    prev.filter((svcId) => {
-                      const opt = serviceOptions.find((s) => s.id === svcId)
-                      return !opt || opt.sysId === null || vals.includes(opt.sysId)
-                    }),
-                  )
-                }
-              }}
-              options={systemOptions.map((sys) => ({ value: sys.id, label: sys.name }))}
-              placeholder="All Systems"
-              searchPlaceholder="Search systems…"
-              emptyText="No systems found."
-            />
-          </div>
-        )}
-
-        {serviceOptions.length > 1 && (
-          <div className="w-[160px] shrink-0">
-            <SearchMultiSelect
-              values={selectedServices}
-              onChange={setSelectedServices}
-              options={serviceOptions.map((svc) => ({ value: svc.id, label: svc.name }))}
-              placeholder="All Services"
-              searchPlaceholder="Search services…"
-              emptyText="No services found."
-            />
-          </div>
-        )}
-
-        {/* Centre: Upcoming / Overdue / Completed switcher, in line with filters */}
-        <div className="mx-auto flex shrink-0 items-center justify-center">
-          {tabTriggers}
-        </div>
-
-        <div className="flex shrink-0 items-center gap-1.5">
+              <X className="h-4 w-4" />
+              Clear
+            </Button>
+          )}
           <Select value={sortBy} onValueChange={(v) => handleSortChange(v as SortKey)}>
             <SelectTrigger className="w-[140px]">
               {locating ? (
@@ -1415,6 +1308,148 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
           </Select>
           {viewToggle}
         </div>
+      </div>
+
+      {/* Tier 2 — "narrow it down": colour-coded, labelled filter sections. Each
+          section only renders when it has something to offer, so engineers (no
+          Who/When) simply see fewer columns. */}
+      <div className="mt-2 flex flex-wrap gap-2">
+        {(needsBookingCount > 0 || needsBookingOnly || overdueTasks.length > 0 || showOverdueOnly) && (
+          <FilterGroup tone="attention" icon={Filter} label="Flags" className="flex-none">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(needsBookingCount > 0 || needsBookingOnly) && (
+                <Button
+                  type="button"
+                  variant={needsBookingOnly ? 'default' : 'outline'}
+                  onClick={() => setNeedsBookingOnly((v) => !v)}
+                  aria-pressed={needsBookingOnly}
+                  className={cn('h-9 gap-1.5', !needsBookingOnly && 'bg-background')}
+                >
+                  <CalendarClock className="h-4 w-4" />
+                  {isEngineer ? 'To book' : 'Needs booking'}
+                  <Badge variant={needsBookingOnly ? 'secondary' : 'outline'} className="ml-0.5 px-1.5 py-0">
+                    {needsBookingCount}
+                  </Badge>
+                </Button>
+              )}
+              {(overdueTasks.length > 0 || showOverdueOnly) && (
+                <Button
+                  type="button"
+                  variant={showOverdueOnly ? 'destructive' : 'outline'}
+                  onClick={() => setShowOverdueOnly((v) => !v)}
+                  aria-pressed={showOverdueOnly}
+                  className={cn('h-9 gap-1.5', !showOverdueOnly && 'bg-background')}
+                >
+                  <Clock className="h-4 w-4" />
+                  Overdue
+                  <Badge variant={showOverdueOnly ? 'secondary' : 'destructive'} className="ml-0.5 px-1.5 py-0">
+                    {overdueTasks.length}
+                  </Badge>
+                </Button>
+              )}
+            </div>
+          </FilterGroup>
+        )}
+
+        {(systemOptions.length > 0 || serviceOptions.length > 1) && (
+          <FilterGroup tone="classify" icon={Building2} label="Type" className="min-w-[260px] flex-[2]">
+            <div className="flex flex-wrap gap-1.5">
+              {systemOptions.length > 0 && (
+                <div className="min-w-[150px] flex-1">
+                  <SearchMultiSelect
+                    values={selectedSystems}
+                    onChange={(vals) => {
+                      setSelectedSystems(vals)
+                      // Drop any selected services that no longer belong to the
+                      // chosen systems so the two filters stay consistent.
+                      if (vals.length > 0) {
+                        setSelectedServices((prev) =>
+                          prev.filter((svcId) => {
+                            const opt = serviceOptions.find((s) => s.id === svcId)
+                            return !opt || opt.sysId === null || vals.includes(opt.sysId)
+                          }),
+                        )
+                      }
+                    }}
+                    options={systemOptions.map((sys) => ({ value: sys.id, label: sys.name }))}
+                    placeholder="All systems"
+                    searchPlaceholder="Search systems…"
+                    emptyText="No systems found."
+                  />
+                </div>
+              )}
+              {serviceOptions.length > 1 && (
+                <div className="min-w-[150px] flex-1">
+                  <SearchMultiSelect
+                    values={selectedServices}
+                    onChange={setSelectedServices}
+                    options={serviceOptions.map((svc) => ({ value: svc.id, label: svc.name }))}
+                    placeholder="All services"
+                    searchPlaceholder="Search services…"
+                    emptyText="No services found."
+                  />
+                </div>
+              )}
+            </div>
+          </FilterGroup>
+        )}
+
+        {isAdminOrOffice && engineers.length > 0 && (
+          <FilterGroup tone="people" icon={Users} label="Who" className="min-w-[190px] flex-1">
+            <SearchMultiSelect
+              values={selectedEngineers}
+              onChange={setSelectedEngineers}
+              options={[
+                { value: 'unassigned', label: 'Unassigned' },
+                ...engineers.map((eng) => ({ value: eng.id, label: eng.full_name || eng.email })),
+              ]}
+              placeholder="All engineers"
+              searchPlaceholder="Search engineers…"
+              emptyText="No engineers found."
+            />
+          </FilterGroup>
+        )}
+
+        {!isEngineer && (
+          <FilterGroup tone="time" icon={CalendarIcon} label="When" className="flex-none">
+            <div className="flex items-center gap-1.5">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      'h-9 w-[118px] justify-start bg-background text-left font-normal',
+                      !dateFrom && 'text-muted-foreground',
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                    {dateFrom ? format(dateFrom, 'dd/MM/yy') : 'From'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <CalendarComponent mode="single" selected={dateFrom} onSelect={setDateFrom} initialFocus />
+                </PopoverContent>
+              </Popover>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      'h-9 w-[118px] justify-start bg-background text-left font-normal',
+                      !dateTo && 'text-muted-foreground',
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                    {dateTo ? format(dateTo, 'dd/MM/yy') : 'To'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <CalendarComponent mode="single" selected={dateTo} onSelect={setDateTo} initialFocus />
+                </PopoverContent>
+              </Popover>
+            </div>
+          </FilterGroup>
+        )}
       </div>
         </>
       ) : (

@@ -1,6 +1,7 @@
 import 'server-only'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import type { Profile } from '@/lib/types/database'
 
 // Shared shape for a call surfaced in the subcontractor portal. Deliberately
@@ -93,12 +94,15 @@ const CALL_SELECT = `
  * short-circuit to an empty list without an `in ()` query).
  */
 async function getCompanyServiceIds(ctx: SubcontractorContext): Promise<string[]> {
-  const supabase = await createClient()
-  const { data, error } = await supabase
+  // Uses the admin client: subcontractors are NOT is_staff(), and a RESTRICTIVE
+  // RLS policy (client_scope_select) blocks them from reading site_services via
+  // the anon client. Scoping is enforced in app code by ctx.supplierId, which
+  // is derived from the authenticated session in getSubcontractorContext.
+  const supabase = createAdminClient()
+  const { data } = await supabase
     .from('site_services')
     .select('id')
     .eq('subcontractor_id', ctx.supplierId)
-  console.log('[v0] getCompanyServiceIds supplierId=', ctx.supplierId, 'ids=', data, 'err=', error)
   return (data ?? []).map((r) => (r as { id: string }).id)
 }
 
@@ -110,7 +114,7 @@ async function getCompanyServiceIds(ctx: SubcontractorContext): Promise<string[]
 export async function getMyCalls(ctx: SubcontractorContext): Promise<PortalCall[]> {
   const serviceIds = await getCompanyServiceIds(ctx)
   if (serviceIds.length === 0) return []
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   let query = supabase
     .from('tasks')
     .select(CALL_SELECT)
@@ -120,8 +124,7 @@ export async function getMyCalls(ctx: SubcontractorContext): Promise<PortalCall[
 
   if (!ctx.isLead) query = query.eq('assigned_engineer_id', ctx.profile.id)
 
-  const { data, error } = await query
-  console.log('[v0] getMyCalls serviceIds=', serviceIds, 'rows=', data?.length, 'err=', error)
+  const { data } = await query
   return (data ?? []).map(toPortalCall)
 }
 
@@ -133,7 +136,7 @@ export async function getMyCalls(ctx: SubcontractorContext): Promise<PortalCall[
 export async function getFutureWorks(ctx: SubcontractorContext): Promise<PortalCall[]> {
   const serviceIds = await getCompanyServiceIds(ctx)
   if (serviceIds.length === 0) return []
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const today = new Date().toISOString().split('T')[0]
   const { data } = await supabase
     .from('tasks')
@@ -159,7 +162,9 @@ export interface CompanyWorker {
  * picker and the Workers page.
  */
 export async function getCompanyWorkers(ctx: SubcontractorContext): Promise<CompanyWorker[]> {
-  const supabase = await createClient()
+  // Admin client: reading other profiles in the company is blocked by RLS for a
+  // subcontractor. Scoped strictly to ctx.supplierId.
+  const supabase = createAdminClient()
   const { data: workers } = await supabase
     .from('profiles')
     .select('id, full_name, email, is_subcontractor_lead')

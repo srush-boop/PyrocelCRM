@@ -171,6 +171,8 @@ interface EngineersTableProps {
    * "Can view labour costs" toggle in the edit dialog.
    */
   canGrantLabourCosts?: boolean
+  /** Subcontractor companies available to link new subcontractor logins to. */
+  subcontractors?: SubcontractorOption[]
 }
 
 const roleColors: Record<UserRole, string> = {
@@ -188,6 +190,7 @@ export function EngineersTable({
   roles = [],
   leaveBalances = {},
   canGrantLabourCosts = false,
+  subcontractors = [],
 }: EngineersTableProps) {
   const departmentName = (id: string | null) =>
     id ? departments.find((d) => d.id === id)?.name ?? null : null

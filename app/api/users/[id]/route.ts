@@ -94,6 +94,8 @@ export async function PUT(
       can_view_labour_costs,
       can_use_query_tools,
       can_edit_invoices,
+      supplier_id,
+      is_subcontractor_lead,
     } = body as {
       full_name?: string
       email?: string
@@ -118,6 +120,8 @@ export async function PUT(
       can_view_labour_costs?: boolean
       can_use_query_tools?: boolean
       can_edit_invoices?: boolean
+      supplier_id?: string | null
+      is_subcontractor_lead?: boolean
     }
 
     // Verify the caller is an authenticated admin
@@ -316,6 +320,37 @@ export async function PUT(
   if (can_edit_invoices !== undefined) {
     profilePatch.can_edit_invoices = Boolean(can_edit_invoices)
   }
+    // Subcontractor portal linkage. A subcontractor login is tied to a
+    // subcontractor company (suppliers row); the lead flag governs whether they
+    // can see all company works + reassign to workers. If the role is being
+    // moved away from subcontractor, clear the link entirely.
+    const effectiveRole = role !== undefined ? role : beforeProfile?.role
+    if (effectiveRole !== undefined && effectiveRole !== 'subcontractor') {
+      profilePatch.supplier_id = null
+      profilePatch.is_subcontractor_lead = false
+    } else {
+      if (supplier_id !== undefined) {
+        if (!supplier_id) {
+          profilePatch.supplier_id = null
+        } else {
+          const { data: supplier } = await adminClient
+            .from('suppliers')
+            .select('id, supplier_type')
+            .eq('id', supplier_id)
+            .single()
+          if (!supplier || supplier.supplier_type !== 'subcontractor') {
+            return NextResponse.json(
+              { error: 'Please choose a valid subcontractor company.' },
+              { status: 400 },
+            )
+          }
+          profilePatch.supplier_id = supplier.id
+        }
+      }
+      if (is_subcontractor_lead !== undefined) {
+        profilePatch.is_subcontractor_lead = Boolean(is_subcontractor_lead)
+      }
+    }
     // Engineer home postcode: store it and (re)geocode to coordinates so the
     // calls map can anchor the engineer's route. Clearing the postcode clears
     // the cached coordinates too.

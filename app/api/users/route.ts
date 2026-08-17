@@ -43,7 +43,17 @@ export async function POST(req: NextRequest) {
     if (guard.error) return guard.error
 
     const body = await req.json()
-    const { email, password, fullName, role, discipline, departmentId, branchId } = body as {
+    const {
+      email,
+      password,
+      fullName,
+      role,
+      discipline,
+      departmentId,
+      branchId,
+      supplierId,
+      isSubcontractorLead,
+    } = body as {
       email?: string
       password?: string
       fullName?: string
@@ -51,6 +61,8 @@ export async function POST(req: NextRequest) {
       discipline?: string | null
       departmentId?: string | null
       branchId?: string | null
+      supplierId?: string | null
+      isSubcontractorLead?: boolean
     }
 
     const trimmedEmail = typeof email === 'string' ? email.trim().toLowerCase() : ''
@@ -82,7 +94,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid discipline.' }, { status: 400 })
     }
 
+    // Subcontractor portal linkage: a subcontractor login is tied to a
+    // subcontractor company (suppliers row). Validate the supplier exists and is
+    // a subcontractor. Non-subcontractor roles never carry these fields.
     const adminClient = createAdminClient()
+    let cleanSupplierId: string | null = null
+    let cleanIsLead = false
+    if (role === 'subcontractor' && supplierId) {
+      const { data: supplier } = await adminClient
+        .from('suppliers')
+        .select('id, supplier_type')
+        .eq('id', supplierId)
+        .single()
+      if (!supplier || supplier.supplier_type !== 'subcontractor') {
+        return NextResponse.json(
+          { error: 'Please choose a valid subcontractor company.' },
+          { status: 400 },
+        )
+      }
+      cleanSupplierId = supplier.id
+      cleanIsLead = isSubcontractorLead === true
+    }
 
     // Create the auth user with the admin-supplied password. email_confirm
     // is set so the user can sign in straight away without confirming email.
@@ -113,6 +145,8 @@ export async function POST(req: NextRequest) {
       discipline: cleanDiscipline,
       department_id: departmentId || null,
       branch_id: branchId || null,
+      supplier_id: cleanSupplierId,
+      is_subcontractor_lead: cleanIsLead,
       status: 'active',
       accepted_at: now,
       updated_at: now,

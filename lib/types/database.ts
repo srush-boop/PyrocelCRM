@@ -491,6 +491,15 @@ export interface Profile {
   role: UserRole
   status: 'active' | 'inactive'
   client_id: string | null
+  // Subcontractor portal: the subcontractor company (suppliers row) this login
+  // belongs to. The lead AND every worker for a company share the same
+  // supplier_id. NULL for all non-subcontractor accounts. Anchors "services
+  // allocated to this subcontractor" and worker grouping.
+  supplier_id: string | null
+  // Subcontractor portal: whether this login is the company "lead" — the lead
+  // sees every call for services allocated to the company and can re-issue them
+  // to workers; a plain worker only sees calls assigned directly to them.
+  is_subcontractor_lead: boolean
   department_id: string | null
   // Branch this user belongs to; their views default to this branch.
   branch_id: string | null

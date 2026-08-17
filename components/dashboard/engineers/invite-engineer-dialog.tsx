@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { Loader2, RefreshCw, Copy, Check, UserPlus } from 'lucide-react'
 import type { UserRole, Department, Branch } from '@/lib/types/database'
 import { DISCIPLINES } from '@/lib/disciplines'
@@ -27,12 +28,21 @@ import { DISCIPLINES } from '@/lib/disciplines'
 const NO_DEPARTMENT = '__none__'
 const NO_BRANCH = '__none__'
 const NO_DISCIPLINE = '__none__'
+const NO_SUPPLIER = '__none__'
+
+/** A subcontractor company a login can be linked to. */
+export interface SubcontractorOption {
+  id: string
+  name: string
+}
 
 interface InviteEngineerDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   departments: Department[]
   branches?: Branch[]
+  /** Subcontractor companies, shown when creating a subcontractor login. */
+  subcontractors?: SubcontractorOption[]
 }
 
 /** Generates a readable but strong temporary password. */
@@ -49,6 +59,7 @@ export function InviteEngineerDialog({
   onOpenChange,
   departments,
   branches = [],
+  subcontractors = [],
 }: InviteEngineerDialogProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -62,6 +73,8 @@ export function InviteEngineerDialog({
     discipline: NO_DISCIPLINE as string,
     department_id: NO_DEPARTMENT,
     branch_id: NO_BRANCH,
+    supplier_id: NO_SUPPLIER as string,
+    is_subcontractor_lead: false,
     password: generatePassword(),
   })
   const router = useRouter()
@@ -74,6 +87,8 @@ export function InviteEngineerDialog({
       discipline: NO_DISCIPLINE,
       department_id: NO_DEPARTMENT,
       branch_id: NO_BRANCH,
+      supplier_id: NO_SUPPLIER,
+      is_subcontractor_lead: false,
       password: generatePassword(),
     })
     setError(null)
@@ -103,6 +118,11 @@ export function InviteEngineerDialog({
       setError('Password must be at least 12 characters.')
       return
     }
+    // A subcontractor login must be tied to a company so it can be scoped.
+    if (formData.role === 'subcontractor' && formData.supplier_id === NO_SUPPLIER) {
+      setError('Please choose the subcontractor company this login belongs to.')
+      return
+    }
 
     setLoading(true)
     try {
@@ -117,6 +137,12 @@ export function InviteEngineerDialog({
           discipline: formData.discipline === NO_DISCIPLINE ? null : formData.discipline,
           departmentId: formData.department_id === NO_DEPARTMENT ? null : formData.department_id,
           branchId: formData.branch_id === NO_BRANCH ? null : formData.branch_id,
+          supplierId:
+            formData.role === 'subcontractor' && formData.supplier_id !== NO_SUPPLIER
+              ? formData.supplier_id
+              : null,
+          isSubcontractorLead:
+            formData.role === 'subcontractor' ? formData.is_subcontractor_lead : false,
         }),
       })
       const data = await res.json()
@@ -290,6 +316,51 @@ export function InviteEngineerDialog({
                   Sets the trade. Choose CDO for route-based engineers.
                 </p>
               </div>
+
+              {formData.role === 'subcontractor' && (
+                <div className="space-y-4 rounded-md border bg-muted/30 p-3">
+                  <div className="grid gap-2">
+                    <Label htmlFor="supplier">Subcontractor company *</Label>
+                    <Select
+                      value={formData.supplier_id}
+                      onValueChange={(value) => setFormData({ ...formData, supplier_id: value })}
+                    >
+                      <SelectTrigger id="supplier" disabled={loading}>
+                        <SelectValue placeholder="Choose a company" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NO_SUPPLIER}>Choose a company</SelectItem>
+                        {subcontractors.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {subcontractors.length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        No subcontractor companies exist yet. Add one under Suppliers first.
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="portal-lead">Portal lead</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Leads see all company calls and can issue them to workers.
+                      </p>
+                    </div>
+                    <Switch
+                      id="portal-lead"
+                      checked={formData.is_subcontractor_lead}
+                      onCheckedChange={(checked) =>
+                        setFormData({ ...formData, is_subcontractor_lead: checked })
+                      }
+                      disabled={loading}
+                    />
+                  </div>
+                </div>
+              )}
 
               <div className="grid gap-2">
                 <Label htmlFor="department">Department</Label>

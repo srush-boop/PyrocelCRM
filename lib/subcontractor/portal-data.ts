@@ -74,13 +74,13 @@ function toPortalCall(t: any): PortalCall {
   }
 }
 
-// Shared select for portal calls. `!inner` on site_service means only calls
-// whose service is allocated to a subcontractor company come back, and lets us
-// filter the parent task by the embedded subcontractor_id.
+// Shared select for portal calls. The task is filtered by site_service_id (a
+// direct column on tasks), NOT by an embedded column — filtering an embedded
+// PostgREST resource is fragile, so we resolve the company's service ids first.
 const CALL_SELECT = `
   id, status, scheduled_date, is_emergency, is_remedial, assigned_engineer_id,
   assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(id, full_name),
-  site_service:site_services!inner(
+  site_service:site_services(
     subcontractor_id,
     site:sites(id, name, postcode, client:clients(id, name)),
     service_type:service_types(id, name, system_type:system_types(id, name))
@@ -88,22 +88,40 @@ const CALL_SELECT = `
 `
 
 /**
+ * Resolve the ids of every site_service currently allocated to the company.
+ * Returns null when the company has no allocated services (so callers can
+ * short-circuit to an empty list without an `in ()` query).
+ */
+async function getCompanyServiceIds(ctx: SubcontractorContext): Promise<string[]> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('site_services')
+    .select('id')
+    .eq('subcontractor_id', ctx.supplierId)
+  console.log('[v0] getCompanyServiceIds supplierId=', ctx.supplierId, 'ids=', data, 'err=', error)
+  return (data ?? []).map((r) => (r as { id: string }).id)
+}
+
+/**
  * Calls to show on the portal home. A lead sees every open call for a service
  * allocated to their company; a worker sees only open calls assigned to them
  * (still constrained to their company's allocated services).
  */
 export async function getMyCalls(ctx: SubcontractorContext): Promise<PortalCall[]> {
+  const serviceIds = await getCompanyServiceIds(ctx)
+  if (serviceIds.length === 0) return []
   const supabase = await createClient()
   let query = supabase
     .from('tasks')
     .select(CALL_SELECT)
-    .eq('site_service.subcontractor_id', ctx.supplierId)
+    .in('site_service_id', serviceIds)
     .in('status', OPEN_STATUSES)
     .order('scheduled_date', { ascending: true })
 
   if (!ctx.isLead) query = query.eq('assigned_engineer_id', ctx.profile.id)
 
-  const { data } = await query
+  const { data, error } = await query
+  console.log('[v0] getMyCalls serviceIds=', serviceIds, 'rows=', data?.length, 'err=', error)
   return (data ?? []).map(toPortalCall)
 }
 
@@ -113,12 +131,14 @@ export async function getMyCalls(ctx: SubcontractorContext): Promise<PortalCall[
  * see the full company picture here per the agreed scope.
  */
 export async function getFutureWorks(ctx: SubcontractorContext): Promise<PortalCall[]> {
+  const serviceIds = await getCompanyServiceIds(ctx)
+  if (serviceIds.length === 0) return []
   const supabase = await createClient()
   const today = new Date().toISOString().split('T')[0]
   const { data } = await supabase
     .from('tasks')
     .select(CALL_SELECT)
-    .eq('site_service.subcontractor_id', ctx.supplierId)
+    .in('site_service_id', serviceIds)
     .in('status', OPEN_STATUSES)
     .gte('scheduled_date', today)
     .order('scheduled_date', { ascending: true })

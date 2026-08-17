@@ -74,7 +74,7 @@ import type {
 import { DISCIPLINES } from '@/lib/disciplines'
 import type { LeaveBalance } from '@/lib/leave-utils'
 import { formatDateUK } from '@/lib/utils'
-import { InviteEngineerDialog } from './invite-engineer-dialog'
+import { InviteEngineerDialog, type SubcontractorOption } from './invite-engineer-dialog'
 import { MenuAccessDialog } from './menu-access-dialog'
 import { VehicleDialog } from './vehicle-dialog'
 import { PrintButton } from '@/components/ui/print-button'
@@ -752,6 +752,7 @@ export function EngineersTable({
         onOpenChange={setInviteOpen}
         departments={departments}
         branches={branches}
+        subcontractors={subcontractors}
       />
 
       <Dialog

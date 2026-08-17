@@ -16,9 +16,11 @@ export default async function SubcontractorLayout({
   } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
+  // profiles has TWO FKs to suppliers (supplier_id + a legacy subcontractor_id),
+  // so the embed must name the constraint or PostgREST returns 300 (ambiguous).
   const { data: profile } = await supabase
     .from('profiles')
-    .select('*, supplier:suppliers(name)')
+    .select('*, supplier:suppliers!profiles_supplier_id_fkey(name)')
     .eq('id', user.id)
     .single()
 

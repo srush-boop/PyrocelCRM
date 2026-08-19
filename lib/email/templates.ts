@@ -439,3 +439,50 @@ export const generateInternalAlertEmail = (data: EmailData): { subject: string; 
     html: emailShell({ ribbonLabel: 'Internal alert: failed inspection items', ribbonColor: BRAND.charcoal, body }),
   }
 }
+
+// ─── New staff account: login details ──────────────────────────────────────
+// Sent (optionally) when an admin creates a staff account. Carries the link to
+// the site, the user's email, and their initial password. The account is
+// flagged must_change_password, so the copy tells them they'll set their own
+// password on first sign-in.
+export const generateNewUserCredentialsEmail = (opts: {
+  fullName?: string | null
+  email: string
+  password: string
+  loginUrl: string
+}): { subject: string; html: string } => {
+  const greetingName = opts.fullName?.trim() ? esc(opts.fullName.trim()) : 'there'
+  const cred = (label: string, value: string) => `
+    <tr>
+      <td style="padding:6px 0;font-size:14px;color:${BRAND.muted};width:34%;vertical-align:top;">${label}</td>
+      <td style="padding:6px 0;font-size:14px;color:${BRAND.ink};font-weight:700;font-family:'Courier New',Courier,monospace;word-break:break-all;">${value}</td>
+    </tr>`
+  const body = `
+    <p style="margin:0 0 14px;">Hi ${greetingName},</p>
+    <p style="margin:0 0 14px;">
+      An account has been created for you on the Pyrocel CRM. You can sign in with the details below.
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${BRAND.border};border-radius:8px;border-collapse:separate;overflow:hidden;margin:4px 0 8px;">
+      <tr><td style="background:#f9fafb;padding:10px 14px;font-size:13px;font-weight:700;color:${BRAND.slate};border-bottom:1px solid ${BRAND.border};">Your sign-in details</td></tr>
+      <tr><td style="padding:8px 14px 12px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+          ${cred('Email', esc(opts.email))}
+          ${cred('Temporary password', esc(opts.password))}
+        </table>
+      </td></tr>
+    </table>
+    ${ctaButton(opts.loginUrl, 'Sign in')}
+    ${nextStepCard({
+      heading: 'You will be asked to set your own password',
+      body: 'For security, the first time you sign in you will be prompted to replace this temporary password with one only you know.',
+      tint: 'amber',
+    })}
+    <p style="margin:14px 0 0;font-size:13px;color:${BRAND.muted};">
+      If you did not expect this email, please contact your administrator.
+    </p>
+    <p style="margin:18px 0 0;">Kind regards,<br/><strong>The Pyrocel Team</strong></p>`
+  return {
+    subject: 'Your Pyrocel CRM account',
+    html: emailShell({ ribbonLabel: 'Welcome to Pyrocel CRM', ribbonColor: BRAND.charcoal, body }),
+  }
+}

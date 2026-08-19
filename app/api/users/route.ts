@@ -3,6 +3,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { enforceRateLimit, clientIp } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
+import { sendEmail } from '@/lib/email/send-email'
+import { generateNewUserCredentialsEmail } from '@/lib/email/templates'
+import { getPublicBaseUrl } from '@/lib/rams/base-url'
 
 /** Ensure the caller is an authenticated admin. Returns an error response or null. */
 async function requireAdmin() {
@@ -53,6 +56,7 @@ export async function POST(req: NextRequest) {
       branchId,
       supplierId,
       isSubcontractorLead,
+      sendCredentialsEmail,
     } = body as {
       email?: string
       password?: string
@@ -63,6 +67,7 @@ export async function POST(req: NextRequest) {
       branchId?: string | null
       supplierId?: string | null
       isSubcontractorLead?: boolean
+      sendCredentialsEmail?: boolean
     }
 
     const trimmedEmail = typeof email === 'string' ? email.trim().toLowerCase() : ''
@@ -150,6 +155,9 @@ export async function POST(req: NextRequest) {
       status: 'active',
       accepted_at: now,
       updated_at: now,
+      // The admin set this initial password, so force the user to choose their
+      // own on first sign-in (gated in the dashboard layout).
+      must_change_password: true,
     })
 
     if (profileError) {
@@ -166,12 +174,37 @@ export async function POST(req: NextRequest) {
       entityType: 'profile',
       entityId: userId,
       targetLabel: trimmedEmail,
-      metadata: { role, departmentId: departmentId || null, branchId: branchId || null },
+      metadata: {
+        role,
+        departmentId: departmentId || null,
+        branchId: branchId || null,
+        credentialsEmailed: sendCredentialsEmail === true,
+      },
       request: req,
     })
 
+    // Optionally email the new user their sign-in link, email and temporary
+    // password. Failure here must not fail account creation — the admin can
+    // always share the credentials shown in the UI.
+    let emailSent = false
+    let emailError: string | null = null
+    if (sendCredentialsEmail === true) {
+      const { subject, html } = generateNewUserCredentialsEmail({
+        fullName: fullName || null,
+        email: trimmedEmail,
+        password,
+        loginUrl: `${getPublicBaseUrl()}/auth/login`,
+      })
+      const res = await sendEmail(trimmedEmail, subject, html)
+      emailSent = res.success === true
+      if (!res.success) {
+        emailError = res.error || 'Email could not be sent.'
+        console.warn('[v0] new-user credentials email failed:', emailError)
+      }
+    }
+
     return NextResponse.json(
-      { message: 'User created successfully.', userId },
+      { message: 'User created successfully.', userId, emailSent, emailError },
       { status: 201 },
     )
   } catch (err) {

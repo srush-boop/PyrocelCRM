@@ -21,7 +21,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { Loader2, RefreshCw, Copy, Check, UserPlus } from 'lucide-react'
+import { Loader2, RefreshCw, Copy, Check, UserPlus, Mail, MailWarning, KeyRound } from 'lucide-react'
 import type { UserRole, Department, Branch } from '@/lib/types/database'
 import { DISCIPLINES } from '@/lib/disciplines'
 
@@ -64,8 +64,15 @@ export function InviteEngineerDialog({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  // When set, the account was created — show the shareable credentials.
-  const [created, setCreated] = useState<{ email: string; password: string } | null>(null)
+  // When set, the account was created — show the shareable credentials plus
+  // whether the login-details email went out.
+  const [created, setCreated] = useState<{
+    email: string
+    password: string
+    emailRequested: boolean
+    emailSent: boolean
+    emailError: string | null
+  } | null>(null)
   const [formData, setFormData] = useState({
     email: '',
     full_name: '',
@@ -76,6 +83,8 @@ export function InviteEngineerDialog({
     supplier_id: NO_SUPPLIER as string,
     is_subcontractor_lead: false,
     password: generatePassword(),
+    // Email the sign-in link, email and temporary password to the new user.
+    send_credentials_email: true,
   })
   const router = useRouter()
 
@@ -90,6 +99,7 @@ export function InviteEngineerDialog({
       supplier_id: NO_SUPPLIER,
       is_subcontractor_lead: false,
       password: generatePassword(),
+      send_credentials_email: true,
     })
     setError(null)
     setCreated(null)
@@ -143,13 +153,20 @@ export function InviteEngineerDialog({
               : null,
           isSubcontractorLead:
             formData.role === 'subcontractor' ? formData.is_subcontractor_lead : false,
+          sendCredentialsEmail: formData.send_credentials_email,
         }),
       })
       const data = await res.json()
       if (!res.ok) {
         setError(data.error || 'Failed to create user.')
       } else {
-        setCreated({ email: formData.email.trim(), password: formData.password })
+        setCreated({
+          email: formData.email.trim(),
+          password: formData.password,
+          emailRequested: formData.send_credentials_email,
+          emailSent: data.emailSent === true,
+          emailError: data.emailError ?? null,
+        })
       }
     } catch {
       setError('An unexpected error occurred.')
@@ -184,6 +201,26 @@ export function InviteEngineerDialog({
             </DialogHeader>
 
             <div className="space-y-3">
+              {created.emailRequested &&
+                (created.emailSent ? (
+                  <div className="flex items-start gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
+                    <Mail className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <p className="text-foreground">
+                      Login details were emailed to{' '}
+                      <span className="font-medium break-all">{created.email}</span>.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+                    <MailWarning className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                    <p className="text-foreground">
+                      We couldn&apos;t email the login details
+                      {created.emailError ? ` (${created.emailError})` : ''}. Please share them
+                      manually below.
+                    </p>
+                  </div>
+                ))}
+
               <div className="rounded-md border bg-muted/40 p-4 font-mono text-sm">
                 <div className="flex justify-between gap-4">
                   <span className="text-muted-foreground">Email</span>
@@ -198,6 +235,10 @@ export function InviteEngineerDialog({
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 {copied ? 'Copied' : 'Copy details'}
               </Button>
+              <div className="flex items-start gap-2 rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+                <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <p>They&apos;ll be asked to set their own password the first time they sign in.</p>
+              </div>
             </div>
 
             <DialogFooter className="gap-2 sm:gap-2">
@@ -214,8 +255,9 @@ export function InviteEngineerDialog({
             <DialogHeader>
               <DialogTitle>Add Team Member</DialogTitle>
               <DialogDescription>
-                Create a staff account and set their password. You&apos;ll then share the sign-in
-                details with them directly — no email invitation is sent.
+                Create a staff account and set their password. You can email the sign-in details to
+                them, or share the credentials directly. Either way, they&apos;ll set their own
+                password on first login.
               </DialogDescription>
             </DialogHeader>
 
@@ -274,6 +316,27 @@ export function InviteEngineerDialog({
                 <p className="text-xs text-muted-foreground">
                   You&apos;ll be shown these details to share after the account is created.
                 </p>
+              </div>
+
+              <div className="flex items-start justify-between gap-4 rounded-md border p-3">
+                <div className="space-y-0.5">
+                  <Label htmlFor="email-credentials" className="flex items-center gap-1.5">
+                    <Mail className="h-4 w-4" />
+                    Email login details to the user
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Sends a sign-in link, their email and this temporary password. They&apos;ll be
+                    asked to change it on first login.
+                  </p>
+                </div>
+                <Switch
+                  id="email-credentials"
+                  checked={formData.send_credentials_email}
+                  onCheckedChange={(checked) =>
+                    setFormData({ ...formData, send_credentials_email: checked })
+                  }
+                  disabled={loading}
+                />
               </div>
 
               <div className="grid gap-2">

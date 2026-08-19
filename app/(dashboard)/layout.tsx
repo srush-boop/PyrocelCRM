@@ -57,6 +57,14 @@ export default async function DashboardLayout({
     redirect('/auth/mfa-setup')
   }
 
+  // Forced first-login password change: admin-created accounts start on an
+  // admin-set (and possibly emailed) temporary password. Until the user sets
+  // their own, keep them on the dedicated change-password screen. Runs after MFA
+  // so the change happens inside a fully authenticated (aal2) session.
+  if ((profile as Profile).must_change_password) {
+    redirect('/auth/change-password')
+  }
+
   // Sub-contractors get the same mobile-first field UI as engineers (bottom
   // nav, extra padding) but a heavily restricted navigation.
   const isEngineer = role === 'engineer' || role === 'subcontractor'

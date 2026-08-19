@@ -627,6 +627,10 @@ export interface Profile {
   // walkthrough. NULL = never seen it → the wizard is shown once. Backfilled to
   // now() for all pre-existing users so it only ever surfaces for new accounts.
   onboarded_at: string | null
+  // True when the user is still on an admin-set initial password. While set, the
+  // dashboard redirects them to a forced change-password screen. Cleared once
+  // they choose their own password. Default false so existing users never see it.
+  must_change_password: boolean
   created_at: string
   updated_at: string
   department?: Department | null

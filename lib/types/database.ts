@@ -3196,6 +3196,13 @@ export interface CalendarEntry {
   approved_by: string | null
   approved_at: string | null
   rejection_reason: string | null
+  // Soft-cancellation of a leave booking. When cancelled_at is set the record is
+  // kept for audit but no longer counts as time off anywhere; the approver is
+  // notified. Only leave entries are soft-cancelled — other entry types are
+  // hard-deleted, so these stay null for them.
+  cancelled_at: string | null
+  cancelled_by: string | null
+  cancellation_reason: string | null
   created_at: string
   updated_at: string
   entry_type?: CalendarEntryType

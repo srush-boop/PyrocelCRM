@@ -154,6 +154,13 @@ export function CalendarEntryDialog({
   // Approval status of the loaded leave entry (null for new/non-leave entries).
   const [approvalStatus, setApprovalStatus] = useState<LeaveApprovalStatus | null>(null)
   const [rejectionReason, setRejectionReason] = useState<string | null>(null)
+  // Cancellation state of the loaded leave entry (record kept when cancelled).
+  const [cancelledAt, setCancelledAt] = useState<string | null>(null)
+  const [cancellationReason, setCancellationReason] = useState<string | null>(null)
+  const [cancelledByName, setCancelledByName] = useState<string | null>(null)
+  // The reason typed into the "Cancel leave" prompt.
+  const [cancelReasonInput, setCancelReasonInput] = useState('')
+  const [cancelling, setCancelling] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Reset / load whenever the dialog opens.
@@ -166,6 +173,10 @@ export function CalendarEntryDialog({
       setEditable(true)
       setApprovalStatus(null)
       setRejectionReason(null)
+      setCancelledAt(null)
+      setCancellationReason(null)
+      setCancelledByName(null)
+      setCancelReasonInput('')
       return
     }
 
@@ -227,10 +238,27 @@ export function CalendarEntryDialog({
       })
       setApprovalStatus((data.approval_status as LeaveApprovalStatus | null) ?? null)
       setRejectionReason((data.rejection_reason as string | null) ?? null)
-      // Managers can edit anything; engineers only their own entries they created.
+      const cAt = (data.cancelled_at as string | null) ?? null
+      setCancelledAt(cAt)
+      setCancellationReason((data.cancellation_reason as string | null) ?? null)
+      setCancelReasonInput('')
+      // Resolve who cancelled it (for the banner) only when needed.
+      if (cAt && data.cancelled_by) {
+        const { data: canceller } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', data.cancelled_by as string)
+          .maybeSingle()
+        if (!cancelled) setCancelledByName((canceller?.full_name as string | null) ?? null)
+      } else {
+        setCancelledByName(null)
+      }
+      // A cancelled booking is a locked record — view only, never editable.
+      // Otherwise managers can edit anything; engineers only their own entries.
       setEditable(
-        canManageOthers ||
-          (data.user_id === profile.id && data.created_by === profile.id),
+        !cAt &&
+          (canManageOthers ||
+            (data.user_id === profile.id && data.created_by === profile.id)),
       )
     })()
 
@@ -486,6 +514,37 @@ export function CalendarEntryDialog({
     router.refresh()
   }
 
+  // Soft-cancel a leave booking: the record is kept and stamped with who/why,
+  // and the approver is notified server-side. A reason is required.
+  const handleCancelLeave = async () => {
+    if (!entryId) return
+    const reason = cancelReasonInput.trim()
+    if (reason.length < 3) {
+      setError('Please give a reason for cancelling this leave.')
+      return
+    }
+    setCancelling(true)
+    try {
+      const res = await fetch(`/api/leave/${entryId}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(data.error || 'Could not cancel this leave')
+        setCancelling(false)
+        return
+      }
+      toast.success('Leave cancelled — your approver has been notified')
+      onOpenChange(false)
+      router.refresh()
+    } catch {
+      toast.error('Could not cancel this leave')
+      setCancelling(false)
+    }
+  }
+
   const readOnly = !editable
   const attendeeCount = form.attendee_ids.length
   const isAnnualLeaveType = form.entry_type_id === ANNUAL_LEAVE_TYPE_ID
@@ -510,7 +569,19 @@ export function CalendarEntryDialog({
             </div>
           ) : (
             <fieldset disabled={readOnly} className="grid gap-4 py-4">
-              {approvalStatus && (
+              {cancelledAt && (
+                <div className="flex flex-col gap-1 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  <span className="font-medium">
+                    Cancelled
+                    {cancelledByName ? ` by ${cancelledByName}` : ''} on{' '}
+                    {format(new Date(cancelledAt), 'd MMM yyyy')}
+                  </span>
+                  {cancellationReason && (
+                    <span className="text-muted-foreground">Reason: {cancellationReason}</span>
+                  )}
+                </div>
+              )}
+              {approvalStatus && !cancelledAt && (
                 <div
                   className={
                     'flex items-start gap-2 rounded-md border px-3 py-2 text-sm ' +
@@ -865,7 +936,55 @@ export function CalendarEntryDialog({
           {error && <p className="pb-2 text-sm text-destructive">{error}</p>}
 
           <DialogFooter className="gap-2 sm:justify-between">
-            {entryId && editable ? (
+            {entryId && editable && isAnnualLeaveType ? (
+              <AlertDialog
+                onOpenChange={(o) => {
+                  if (!o) {
+                    setCancelReasonInput('')
+                    setError(null)
+                  }
+                }}
+              >
+                <AlertDialogTrigger asChild>
+                  <Button type="button" variant="outline" className="text-destructive">
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Cancel leave
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Cancel this leave</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      The booking is kept for the record but no longer counts as time off, and
+                      your approver is notified. A reason is required.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <div className="grid gap-2 py-2">
+                    <Label htmlFor="cancel-leave-reason">Reason for cancelling</Label>
+                    <Textarea
+                      id="cancel-leave-reason"
+                      value={cancelReasonInput}
+                      onChange={(e) => setCancelReasonInput(e.target.value)}
+                      rows={3}
+                      placeholder="e.g. Plans changed, no longer taking this leave"
+                    />
+                  </div>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Keep leave</AlertDialogCancel>
+                    <AlertDialogAction
+                      disabled={cancelReasonInput.trim().length < 3 || cancelling}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        handleCancelLeave()
+                      }}
+                      className="bg-destructive text-destructive-foreground"
+                    >
+                      {cancelling ? 'Cancelling...' : 'Cancel leave'}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            ) : entryId && editable ? (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button type="button" variant="outline" className="text-destructive">

@@ -76,6 +76,7 @@ export async function evaluateEligibility(
     .from('calendar_entries')
     .select('id, entry_type:calendar_entry_types!inner(name)')
     .eq('user_id', userId)
+    .is('cancelled_at', null)
     .lte('start_at', atIso)
     .gte('end_at', atIso)
 

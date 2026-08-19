@@ -257,6 +257,7 @@ export async function getCalendarData(branchId?: string | null): Promise<Calenda
            user:profiles!calendar_entries_user_id_fkey(id, full_name, email, branch_id),
            attendees:calendar_entry_attendees(user:profiles(id, full_name, email, branch_id))`,
       )
+      .is('cancelled_at', null)
       .order('start_at', { ascending: true }),
     supabase
       .from('calendar_entry_types')

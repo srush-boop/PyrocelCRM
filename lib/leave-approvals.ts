@@ -80,6 +80,7 @@ export async function getVisibleLeaveRequests(): Promise<{
       )
       .eq('entry_type_id', ANNUAL_LEAVE_TYPE_ID)
       .not('approval_status', 'is', null)
+      .is('cancelled_at', null)
       .order('start_at', { ascending: false }),
     getBankHolidaySet(supabase),
   ])

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
 import {
   Card,
   CardContent,
@@ -36,6 +37,9 @@ import { tileIconStyle, tileAccentStyle, tileCardStyle } from '@/lib/dashboard-t
 import { getVisibleLeaveRequests } from '@/lib/leave-approvals'
 import { getPendingApprovals } from '@/lib/actions/internal-tasks'
 import { EngineerHome } from '@/components/dashboard/home/engineer-home'
+import { SimpleHome } from '@/components/dashboard/simple/simple-home'
+import { getSimpleSectionsForUser } from '@/lib/config/simple-app'
+import { getSimpleHomeCounts } from '@/lib/dashboard/simple-counts'
 import { getDailyFact } from '@/lib/system-facts'
 import { YourTasksTile } from '@/components/dashboard/internal-tasks/your-tasks-tile'
 import { Suspense, type ReactNode } from 'react'
@@ -68,6 +72,20 @@ export default async function DashboardPage() {
   if (role === 'engineer' || role === 'subcontractor') {
     return <EngineerHome profile={profile as Profile} isSubcontractor={role === 'subcontractor'} />
   }
+
+  // Simplified "on-the-go" home (phone/tablet): a compact big-tile screen for
+  // the user's enabled sections, shown alongside the full manager dashboard and
+  // toggled purely by CSS breakpoint / the `app_view` override cookie (read in
+  // the layout). We compute its live tile counts only when it will actually be
+  // shown (capable user, not forced to the full site).
+  const simpleSections = getSimpleSectionsForUser(role, (profile as Profile).menu_permissions)
+  const simpleCapable = simpleSections.length > 0
+  const forcedFull = (await cookies()).get('app_view')?.value === 'full'
+  const showSimpleHome = simpleCapable && !forcedFull
+  const simpleKeys = simpleSections.map((s) => s.key)
+  const simpleCounts = showSimpleHome
+    ? await getSimpleHomeCounts(profile as Profile, simpleKeys)
+    : {}
 
   const today = new Date()
   const todayStr = format(today, 'yyyy-MM-dd')
@@ -380,7 +398,7 @@ export default async function DashboardPage() {
     hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
   const firstName = ((profile as Profile).full_name || 'there').split(' ')[0]
 
-  return (
+  const managerDashboard = (
     // `isolate` creates a stacking context so the negative-z background layer
     // below stays contained here instead of slipping behind the opaque app
     // background (which made it invisible).
@@ -524,6 +542,24 @@ export default async function DashboardPage() {
         })}
       />
     </div>
+  )
+
+  return (
+    <>
+      {showSimpleHome && (
+        <div className="lg:hidden">
+          <SimpleHome
+            firstName={firstName}
+            dateLabel={format(today, 'EEEE, d MMMM yyyy')}
+            enabledKeys={simpleKeys}
+            counts={simpleCounts}
+          />
+        </div>
+      )}
+      {/* Full manager dashboard: shown at all sizes normally, but hidden on
+          mobile when the Simple-Mode home is taking over. */}
+      <div className={showSimpleHome ? 'hidden lg:block' : ''}>{managerDashboard}</div>
+    </>
   )
 }
 

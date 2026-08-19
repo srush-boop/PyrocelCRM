@@ -4,22 +4,35 @@ import { Badge } from '@/components/ui/badge'
 import { ClipboardCheck, ChevronRight, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getOutstandingTasks } from '@/lib/actions/internal-tasks'
+import { getMyAssetChecks } from '@/lib/asset-checks'
 
-// Home-screen tile summarising the signed-in user's outstanding internal tasks
-// with a count + soonest deadline. Rendered on every user's home. Server
-// component — generates + reads the user's own instances via the action.
+// Home-screen tile summarising the signed-in user's outstanding work — their
+// recurring internal tasks plus any due/overdue asset checks they're
+// responsible for — with a count + soonest deadline. Rendered on every user's
+// home. Server component.
 export async function YourTasksTile() {
-  const result = await getOutstandingTasks()
+  const [result, assetChecks] = await Promise.all([getOutstandingTasks(), getMyAssetChecks()])
   const instances = result.instances ?? []
 
   const now = Date.now()
-  const overdue = instances.filter((i) => new Date(i.due_at ?? 0).getTime() < now)
-  const soonest = instances
-    .slice()
-    .sort((a, b) => new Date(a.due_at ?? 0).getTime() - new Date(b.due_at ?? 0).getTime())[0]
+  // Merge tasks + asset checks into one list of {name, dueMs} so the tile
+  // summarises both in a single count and "next due" line.
+  const items = [
+    ...instances.map((i) => ({
+      name: i.template?.name ?? 'Task',
+      dueMs: new Date(i.due_at ?? 0).getTime(),
+    })),
+    ...assetChecks.map((c) => ({
+      name: c.asset?.name ?? 'Asset check',
+      dueMs: c.next_due_date ? new Date(c.next_due_date + 'T00:00:00Z').getTime() : 0,
+    })),
+  ]
+
+  const overdue = items.filter((i) => i.dueMs < now)
+  const soonest = items.slice().sort((a, b) => a.dueMs - b.dueMs)[0]
 
   const hasOverdue = overdue.length > 0
-  const count = instances.length
+  const count = items.length
 
   return (
     <Link href="/dashboard/my-tasks" className="block h-full">
@@ -62,10 +75,10 @@ export async function YourTasksTile() {
               {count === 0
                 ? 'All complete — nice work.'
                 : hasOverdue
-                  ? `${overdue.length} overdue · ${soonest?.template?.name ?? ''}`
-                  : `Next: ${soonest?.template?.name ?? ''} due ${
-                      soonest?.due_at
-                        ? new Date(soonest.due_at).toLocaleDateString('en-GB', {
+                  ? `${overdue.length} overdue · ${soonest?.name ?? ''}`
+                  : `Next: ${soonest?.name ?? ''} due ${
+                      soonest?.dueMs
+                        ? new Date(soonest.dueMs).toLocaleDateString('en-GB', {
                             weekday: 'short',
                             day: 'numeric',
                             month: 'short',

@@ -6,6 +6,7 @@ import {
   getMyFormSubmissions,
   getPendingApprovals,
 } from '@/lib/actions/internal-tasks'
+import { getMyAssetChecks } from '@/lib/asset-checks'
 import { TasksAndForms } from '@/components/dashboard/internal-tasks/tasks-and-forms'
 
 export const metadata = {
@@ -23,11 +24,12 @@ export default async function MyTasksPage() {
   } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  const [tasksRes, formsRes, submissionsRes, approvalsRes] = await Promise.all([
+  const [tasksRes, formsRes, submissionsRes, approvalsRes, assetChecks] = await Promise.all([
     getMyTasks(),
     getOnDemandForms(),
     getMyFormSubmissions(),
     getPendingApprovals(),
+    getMyAssetChecks(),
   ])
 
   return (
@@ -46,6 +48,7 @@ export default async function MyTasksPage() {
           forms={formsRes.forms ?? []}
           submissions={submissionsRes.instances ?? []}
           approvals={approvalsRes.instances ?? []}
+          assetChecks={assetChecks}
         />
       ) : (
         <p className="text-sm text-destructive">

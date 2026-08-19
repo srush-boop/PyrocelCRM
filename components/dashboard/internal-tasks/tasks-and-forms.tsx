@@ -18,6 +18,7 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import type { InternalTaskInstance, InternalTaskTemplate } from '@/lib/types/database'
+import type { MyAssetCheck } from '@/lib/asset-checks'
 import { MyTasksList } from './my-tasks-list'
 import { InternalTaskSheet } from './internal-task-sheet'
 import { startOnDemandInstance } from '@/lib/actions/internal-tasks'
@@ -27,9 +28,11 @@ interface Props {
   forms: InternalTaskTemplate[]
   submissions: InternalTaskInstance[]
   approvals: InternalTaskInstance[]
+  /** Due/overdue asset checks the user is responsible for. */
+  assetChecks?: MyAssetCheck[]
 }
 
-export function TasksAndForms({ tasks, forms, submissions, approvals }: Props) {
+export function TasksAndForms({ tasks, forms, submissions, approvals, assetChecks = [] }: Props) {
   const router = useRouter()
   const [active, setActive] = useState<InternalTaskInstance | null>(null)
   const [reviewMode, setReviewMode] = useState(false)
@@ -39,7 +42,8 @@ export function TasksAndForms({ tasks, forms, submissions, approvals }: Props) {
   const [startingId, setStartingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const outstandingCount = tasks.filter((t) => t.status !== 'completed').length
+  const outstandingCount =
+    tasks.filter((t) => t.status !== 'completed').length + assetChecks.length
   const showApprovals = approvals.length > 0
 
   function openFill(instance: InternalTaskInstance) {
@@ -103,7 +107,7 @@ export function TasksAndForms({ tasks, forms, submissions, approvals }: Props) {
         {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
 
         <TabsContent value="tasks" className="mt-4">
-          <MyTasksList instances={tasks} />
+          <MyTasksList instances={tasks} assetChecks={assetChecks} />
         </TabsContent>
 
         <TabsContent value="forms" className="mt-4">

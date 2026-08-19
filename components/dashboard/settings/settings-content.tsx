@@ -47,6 +47,8 @@ interface SettingsContentProps {
   company: CompanyInfo | null
   branches: Branch[]
   departments: Department[]
+  /** Active internal users who can be picked as a department's default approver. */
+  departmentManagerCandidates: { id: string; full_name: string | null; email: string }[]
   roles: Role[]
   propertyTypes: PropertyType[]
   documentTemplates: DocumentTemplate[]
@@ -77,7 +79,7 @@ interface SettingsContentProps {
   canManageGlobalFooter: boolean
 }
 
-export function SettingsContent({ user, profile, company, branches, departments, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, deadlineExcludedReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards, chargeTemplates, nominalCodes, canManageTags, documentTags, openingHours, canManageInternalTasks, internalTaskTemplates, internalTaskUsers, internalTaskDepartments, internalTaskRoles, internalTaskDocuments, mfaFactors, mfaRequired, myEmailFooter, globalEmailFooter, canManageGlobalFooter }: SettingsContentProps) {
+export function SettingsContent({ user, profile, company, branches, departments, departmentManagerCandidates, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, deadlineExcludedReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards, chargeTemplates, nominalCodes, canManageTags, documentTags, openingHours, canManageInternalTasks, internalTaskTemplates, internalTaskUsers, internalTaskDepartments, internalTaskRoles, internalTaskDocuments, mfaFactors, mfaRequired, myEmailFooter, globalEmailFooter, canManageGlobalFooter }: SettingsContentProps) {
   const isAdmin = profile.role === 'admin'
   // Templates are managed by office/admin (mail-merge letters for client correspondence).
   const canManageTemplates = profile.role === 'admin' || profile.role === 'office'
@@ -427,7 +429,11 @@ export function SettingsContent({ user, profile, company, branches, departments,
               <CompanySettings company={company} branches={branches} />
             </TabsContent>
             <TabsContent value="departments" className="space-y-4">
-              <DepartmentsSettings departments={departments} nominalCodes={nominalCodes} />
+              <DepartmentsSettings
+                departments={departments}
+                nominalCodes={nominalCodes}
+                managerCandidates={departmentManagerCandidates}
+              />
             </TabsContent>
             <TabsContent value="roles" className="space-y-4">
               <RolesSettings roles={roles} users={internalTaskUsers} />

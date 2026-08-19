@@ -669,10 +669,16 @@ export interface Department {
   default_margin_percent: number
   /** Default nominal code for anything under this department (first fallback). */
   nominal_code_id: string | null
+  /**
+   * Department manager — the default leave approver for users in this
+   * department, UNLESS the user has their own nominated manager
+   * (Profile.manager_id) which overrides it. See getLeaveApprovers().
+   */
+  manager_id: string | null
   active: boolean
   created_at: string
   updated_at: string
-}
+  }
 
 // An admin-configurable property/building type that a site can be tagged with.
 export interface PropertyType {

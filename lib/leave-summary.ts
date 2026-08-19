@@ -120,6 +120,7 @@ export async function getSummaryEntries(filters: SummaryFilters): Promise<Summar
          branch:branches(name)
        )`,
     )
+    .is('cancelled_at', null)
     .order('start_at', { ascending: false })
     .limit(500)
 

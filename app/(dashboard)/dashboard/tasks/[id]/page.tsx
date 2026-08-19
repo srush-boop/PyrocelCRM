@@ -29,6 +29,7 @@ import { profileCanViewLabourCosts } from '@/lib/auth/labour-costs'
 import { getRouteProgressForTask, type RouteProgress } from '@/lib/routes/route-progress'
 import { getGlobalConfig } from '@/lib/actions/global-config'
 import { getAllDocumentTags, getOwnerDocuments } from '@/lib/documents/data'
+import { SubcontractorUploadsPanel } from '@/components/dashboard/tasks/subcontractor-uploads-panel'
 import type { SiteInternalNote } from '@/lib/types/database'
 import type {
   Profile,
@@ -144,6 +145,15 @@ export default async function TaskPage({ params }: PageProps) {
   const canModerateNotes = role === 'admin' || role === 'office'
 
   let preAttendancePanel: ReactNode = null
+  // Documents the subcontractor attached to this call (quotes, photos, info).
+  // Shown to office/admin at the top of the call view. Uploaded via the
+  // subcontractor portal as owner_type='task' documents keyed by task id.
+  if (role === 'admin' || role === 'office') {
+    const taskDocs = await getOwnerDocuments('task', task.id)
+    if (taskDocs.files.length > 0) {
+      preAttendancePanel = <SubcontractorUploadsPanel files={taskDocs.files} />
+    }
+  }
   // Call history is rendered separately at the very BOTTOM of the call view
   // (below the completion action), collapsed by default — not in the
   // pre-attendance slot. Each execution flow receives it via `callHistory`.

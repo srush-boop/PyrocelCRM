@@ -67,12 +67,14 @@ export async function computeLeaveBalances(
     }
   }
 
-  // Only APPROVED annual leave counts towards taken balances.
+  // Only APPROVED, non-cancelled annual leave counts towards taken balances.
+  // A cancelled booking keeps its record but frees the days back up.
   const { data: entries } = await admin
     .from('calendar_entries')
     .select('user_id, start_at, end_at, start_portion, end_portion, start_hours, end_hours')
     .eq('entry_type_id', ANNUAL_LEAVE_TYPE_ID)
     .eq('approval_status', 'approved')
+    .is('cancelled_at', null)
     .lte('start_at', rangeEnd)
     .gte('end_at', rangeStart)
 

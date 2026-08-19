@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
   import { geocodeSites } from '@/lib/geocode'
 import { computeRespondBy, notifyEmergencyAssignment } from '@/lib/dispatch'
 import { getMyCurrentOncall } from '@/lib/oncall/queries'
+import { logAudit } from '@/lib/audit'
 
 export interface BookCallInput {
   /** 'recurring' = scheduled PPM against an existing site_service. */
@@ -284,6 +285,19 @@ export async function bookCall(input: BookCallInput): Promise<BookCallResult> {
 
   const taskId = (inserted as { id: string }).id
 
+  await logAudit({
+    action: 'call.book',
+    entityType: 'call',
+    entityId: taskId,
+    targetLabel: [callTypeName, siteName].filter(Boolean).join(' — ') || 'Call',
+    metadata: {
+      mode: input.mode,
+      scheduledDate: input.scheduledDate,
+      emergency: isEmergency,
+      assigned: Boolean(input.assignedEngineerId),
+    },
+  })
+
   // Emergency + assigned at booking → notify the engineer immediately.
   if (isEmergency && input.assignedEngineerId) {
     try {
@@ -457,6 +471,91 @@ export async function bookExistingCall(
 
   revalidatePath('/dashboard/schedule')
   revalidatePath('/dashboard/schedule/map')
+  if (t.site_id) revalidatePath(`/dashboard/sites/${t.site_id}`)
+
+  return { ok: true, taskId: input.taskId }
+}
+
+export interface CancelCallInput {
+  taskId: string
+  /** Mandatory free-text reason for the cancellation. */
+  reason: string
+}
+
+/**
+ * Cancel a call. Office/admin only, and the reason is REQUIRED — the call can't
+ * be cancelled without one (validated here as well as in the UI). Records who
+ * cancelled it and when, and refuses to cancel calls that are already completed
+ * or cancelled.
+ */
+export async function cancelCall(input: CancelCallInput): Promise<BookCallResult> {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: 'Not authenticated.' }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+  const role = (profile as { role?: string } | null)?.role
+  if (role !== 'admin' && role !== 'office') {
+    return { ok: false, error: 'You do not have permission to cancel calls.' }
+  }
+
+  const reason = (input.reason ?? '').trim()
+  if (reason.length < 3) {
+    return { ok: false, error: 'Please give a reason for cancelling this call.' }
+  }
+
+  const { data: task } = await supabase
+    .from('tasks')
+    .select('id, site_id, status, reference_number')
+    .eq('id', input.taskId)
+    .single()
+  const t = task as {
+    id: string
+    site_id: string | null
+    status: string
+    reference_number: string | null
+  } | null
+  if (!t) return { ok: false, error: 'Call not found.' }
+  if (t.status === 'completed') {
+    return { ok: false, error: 'A completed call cannot be cancelled.' }
+  }
+  if (t.status === 'cancelled') {
+    return { ok: false, error: 'This call is already cancelled.' }
+  }
+
+  const { error } = await supabase
+    .from('tasks')
+    .update({
+      status: 'cancelled',
+      cancelled_at: new Date().toISOString(),
+      cancelled_by: user.id,
+      cancellation_reason: reason,
+    })
+    .eq('id', input.taskId)
+
+  if (error) {
+    console.log('[v0] cancelCall update failed:', error.message)
+    return { ok: false, error: 'Failed to cancel the call. Please try again.' }
+  }
+
+  await logAudit({
+    action: 'call.cancel',
+    entityType: 'call',
+    entityId: input.taskId,
+    targetLabel: t.reference_number ?? 'Call',
+    metadata: { reason },
+  })
+
+  revalidatePath('/dashboard/schedule')
+  revalidatePath('/dashboard/schedule/map')
+  revalidatePath(`/dashboard/tasks/${input.taskId}`)
   if (t.site_id) revalidatePath(`/dashboard/sites/${t.site_id}`)
 
   return { ok: true, taskId: input.taskId }

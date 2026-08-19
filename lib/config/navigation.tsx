@@ -396,7 +396,7 @@ const adminCompanyNavItem: NavItem = {
     { title: 'Users', href: '/dashboard/engineers', icon: Users },
     companyAssetsChild,
     { title: 'Notifications', href: '/dashboard/notifications', icon: Bell },
-    { title: 'Audit Log', href: '/dashboard/audit-log', icon: ScrollText },
+    { title: 'Activity Log', href: '/dashboard/audit-log', icon: ScrollText },
   ],
 }
 
@@ -407,6 +407,7 @@ const officeCompanyNavItem: NavItem = {
   children: [
     companyAssetsChild,
     { title: 'Notifications', href: '/dashboard/notifications', icon: Bell },
+    { title: 'Activity Log', href: '/dashboard/audit-log', icon: ScrollText },
   ],
 }
 

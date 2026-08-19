@@ -60,6 +60,8 @@ export function LoginForm({
         .eq('id', userId)
         .single()
       if (profile?.role === 'client') destination = '/portal'
+      // Subcontractors get their own focused portal, not the internal dashboard.
+      else if (profile?.role === 'subcontractor') destination = '/subcontractor'
     }
     router.push(destination)
     router.refresh()

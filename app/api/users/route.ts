@@ -3,6 +3,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { enforceRateLimit, clientIp } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
+import { sendEmail } from '@/lib/email/send-email'
+import { generateNewUserCredentialsEmail } from '@/lib/email/templates'
+import { getPublicBaseUrl } from '@/lib/rams/base-url'
 
 /** Ensure the caller is an authenticated admin. Returns an error response or null. */
 async function requireAdmin() {
@@ -43,7 +46,18 @@ export async function POST(req: NextRequest) {
     if (guard.error) return guard.error
 
     const body = await req.json()
-    const { email, password, fullName, role, discipline, departmentId, branchId } = body as {
+    const {
+      email,
+      password,
+      fullName,
+      role,
+      discipline,
+      departmentId,
+      branchId,
+      supplierId,
+      isSubcontractorLead,
+      sendCredentialsEmail,
+    } = body as {
       email?: string
       password?: string
       fullName?: string
@@ -51,6 +65,9 @@ export async function POST(req: NextRequest) {
       discipline?: string | null
       departmentId?: string | null
       branchId?: string | null
+      supplierId?: string | null
+      isSubcontractorLead?: boolean
+      sendCredentialsEmail?: boolean
     }
 
     const trimmedEmail = typeof email === 'string' ? email.trim().toLowerCase() : ''
@@ -82,7 +99,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid discipline.' }, { status: 400 })
     }
 
+    // Subcontractor portal linkage: a subcontractor login is tied to a
+    // subcontractor company (suppliers row). Validate the supplier exists and is
+    // a subcontractor. Non-subcontractor roles never carry these fields.
     const adminClient = createAdminClient()
+    let cleanSupplierId: string | null = null
+    let cleanIsLead = false
+    if (role === 'subcontractor' && supplierId) {
+      const { data: supplier } = await adminClient
+        .from('suppliers')
+        .select('id, supplier_type')
+        .eq('id', supplierId)
+        .single()
+      if (!supplier || supplier.supplier_type !== 'subcontractor') {
+        return NextResponse.json(
+          { error: 'Please choose a valid subcontractor company.' },
+          { status: 400 },
+        )
+      }
+      cleanSupplierId = supplier.id
+      cleanIsLead = isSubcontractorLead === true
+    }
 
     // Create the auth user with the admin-supplied password. email_confirm
     // is set so the user can sign in straight away without confirming email.
@@ -113,9 +150,14 @@ export async function POST(req: NextRequest) {
       discipline: cleanDiscipline,
       department_id: departmentId || null,
       branch_id: branchId || null,
+      supplier_id: cleanSupplierId,
+      is_subcontractor_lead: cleanIsLead,
       status: 'active',
       accepted_at: now,
       updated_at: now,
+      // The admin set this initial password, so force the user to choose their
+      // own on first sign-in (gated in the dashboard layout).
+      must_change_password: true,
     })
 
     if (profileError) {
@@ -132,12 +174,37 @@ export async function POST(req: NextRequest) {
       entityType: 'profile',
       entityId: userId,
       targetLabel: trimmedEmail,
-      metadata: { role, departmentId: departmentId || null, branchId: branchId || null },
+      metadata: {
+        role,
+        departmentId: departmentId || null,
+        branchId: branchId || null,
+        credentialsEmailed: sendCredentialsEmail === true,
+      },
       request: req,
     })
 
+    // Optionally email the new user their sign-in link, email and temporary
+    // password. Failure here must not fail account creation — the admin can
+    // always share the credentials shown in the UI.
+    let emailSent = false
+    let emailError: string | null = null
+    if (sendCredentialsEmail === true) {
+      const { subject, html } = generateNewUserCredentialsEmail({
+        fullName: fullName || null,
+        email: trimmedEmail,
+        password,
+        loginUrl: `${getPublicBaseUrl()}/auth/login`,
+      })
+      const res = await sendEmail(trimmedEmail, subject, html)
+      emailSent = res.success === true
+      if (!res.success) {
+        emailError = res.error || 'Email could not be sent.'
+        console.warn('[v0] new-user credentials email failed:', emailError)
+      }
+    }
+
     return NextResponse.json(
-      { message: 'User created successfully.', userId },
+      { message: 'User created successfully.', userId, emailSent, emailError },
       { status: 201 },
     )
   } catch (err) {

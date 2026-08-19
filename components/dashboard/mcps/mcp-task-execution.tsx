@@ -576,7 +576,7 @@ export function McpTaskExecution({
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-72 md:pb-6">
-      <TaskHeader task={task} status={status} canCreateDocument={profile.role === 'admin' || profile.role === 'office'} />
+        <TaskHeader task={task} status={status} canCreateDocument={profile.role === 'admin' || profile.role === 'office'} canCancel={profile.role === 'admin' || profile.role === 'office'} />
 
       <RouteProgressBanner progress={routeProgress} />
 

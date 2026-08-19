@@ -21,18 +21,30 @@ export default async function EngineersPage() {
     redirect('/dashboard')
   }
 
-  const [{ data: users }, { data: departments }, { data: branches }, { data: roles }, leaveMap] =
-    await Promise.all([
-      supabase
-        .from('profiles')
-        .select('*, role_ref:roles(*)')
-        .neq('role', 'client')
-        .order('full_name'),
-      supabase.from('departments').select('*').order('name'),
-      supabase.from('branches').select('*').order('name'),
-      supabase.from('roles').select('*').order('name'),
-      computeLeaveBalances(),
-    ])
+  const [
+    { data: users },
+    { data: departments },
+    { data: branches },
+    { data: roles },
+    { data: subcontractorCompanies },
+    leaveMap,
+  ] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('*, role_ref:roles(*)')
+      .neq('role', 'client')
+      .order('full_name'),
+    supabase.from('departments').select('*').order('name'),
+    supabase.from('branches').select('*').order('name'),
+    supabase.from('roles').select('*').order('name'),
+    // Subcontractor companies a subcontractor login can be tied to.
+    supabase
+      .from('suppliers')
+      .select('id, name')
+      .eq('supplier_type', 'subcontractor')
+      .order('name'),
+    computeLeaveBalances(),
+  ])
 
   // Serialise the Map to a plain object for the client component.
   const leaveBalances: Record<string, LeaveBalance> = Object.fromEntries(leaveMap)
@@ -55,6 +67,7 @@ export default async function EngineersPage() {
         roles={(roles || []) as Role[]}
         leaveBalances={leaveBalances}
         canGrantLabourCosts={canGrantLabourCosts((profile as Profile).email)}
+        subcontractors={(subcontractorCompanies || []) as { id: string; name: string }[]}
       />
     </div>
   )

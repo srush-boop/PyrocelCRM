@@ -74,7 +74,7 @@ import type {
 import { DISCIPLINES } from '@/lib/disciplines'
 import type { LeaveBalance } from '@/lib/leave-utils'
 import { formatDateUK } from '@/lib/utils'
-import { InviteEngineerDialog } from './invite-engineer-dialog'
+import { InviteEngineerDialog, type SubcontractorOption } from './invite-engineer-dialog'
 import { MenuAccessDialog } from './menu-access-dialog'
 import { VehicleDialog } from './vehicle-dialog'
 import { PrintButton } from '@/components/ui/print-button'
@@ -83,7 +83,8 @@ const NO_DEPARTMENT = '__none__'
 const NO_BRANCH = '__none__'
 const NO_MANAGER = '__none__'
 const NO_ROLE = '__none__'
-const NO_DISCIPLINE = '__none__'
+  const NO_DISCIPLINE = '__none__'
+  const NO_SUPPLIER = '__none__'
 
 // ISO weekday numbers (1 = Monday ... 7 = Sunday) used for working patterns.
 const WEEKDAYS: { value: number; label: string }[] = [
@@ -171,6 +172,8 @@ interface EngineersTableProps {
    * "Can view labour costs" toggle in the edit dialog.
    */
   canGrantLabourCosts?: boolean
+  /** Subcontractor companies available to link new subcontractor logins to. */
+  subcontractors?: SubcontractorOption[]
 }
 
 const roleColors: Record<UserRole, string> = {
@@ -188,6 +191,7 @@ export function EngineersTable({
   roles = [],
   leaveBalances = {},
   canGrantLabourCosts = false,
+  subcontractors = [],
 }: EngineersTableProps) {
   const departmentName = (id: string | null) =>
     id ? departments.find((d) => d.id === id)?.name ?? null : null
@@ -236,6 +240,9 @@ export function EngineersTable({
     can_use_query_tools: false,
     // Invoice edit/send permission (grantable by any admin, office users only).
     can_edit_invoices: false,
+    // Subcontractor portal linkage (only relevant when role === 'subcontractor').
+    supplier_id: NO_SUPPLIER as string,
+    is_subcontractor_lead: false,
   })
   const [editError, setEditError] = useState<string | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
@@ -387,6 +394,8 @@ export function EngineersTable({
       can_view_labour_costs: user.can_view_labour_costs === true,
       can_use_query_tools: user.can_use_query_tools === true,
       can_edit_invoices: user.can_edit_invoices === true,
+      supplier_id: user.supplier_id ?? NO_SUPPLIER,
+      is_subcontractor_lead: user.is_subcontractor_lead === true,
     })
     setEditError(null)
   }
@@ -416,6 +425,11 @@ export function EngineersTable({
     const costPounds = editForm.cost_per_hour_pounds.trim()
     if (costPounds !== '' && (Number.isNaN(Number(costPounds)) || Number(costPounds) < 0)) {
       setEditError('Cost / hour must be a positive number.')
+      return
+    }
+    // A subcontractor login must be tied to a company so its portal work can be scoped.
+    if (editForm.role === 'subcontractor' && editForm.supplier_id === NO_SUPPLIER) {
+      setEditError('Please choose the subcontractor company this login belongs to.')
       return
     }
     setEditError(null)
@@ -449,6 +463,14 @@ export function EngineersTable({
           cost_per_hour_pence: costPounds === '' ? null : Math.round(Number(costPounds) * 100),
           // Invoice edit/send permission — any admin may grant it.
           can_edit_invoices: editForm.can_edit_invoices,
+          // Subcontractor portal linkage. The API clears these automatically when
+          // the role isn't 'subcontractor', so it's safe to always send them.
+          supplier_id:
+            editForm.role === 'subcontractor' && editForm.supplier_id !== NO_SUPPLIER
+              ? editForm.supplier_id
+              : null,
+          is_subcontractor_lead:
+            editForm.role === 'subcontractor' ? editForm.is_subcontractor_lead : false,
           // Only the owner may change this; the API enforces it too.
         ...(canGrantLabourCosts
           ? {
@@ -749,6 +771,7 @@ export function EngineersTable({
         onOpenChange={setInviteOpen}
         departments={departments}
         branches={branches}
+        subcontractors={subcontractors}
       />
 
       <Dialog
@@ -880,6 +903,50 @@ export function EngineersTable({
                 <p className="text-xs text-muted-foreground">Overrides the role&apos;s default for this user.</p>
               </div>
             </div>
+            {editForm.role === 'subcontractor' && (
+              <div className="space-y-4 rounded-lg border bg-muted/30 p-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-supplier">Subcontractor company</Label>
+                  <Select
+                    value={editForm.supplier_id}
+                    onValueChange={(value) => setEditForm({ ...editForm, supplier_id: value })}
+                  >
+                    <SelectTrigger id="edit-supplier">
+                      <SelectValue placeholder="Choose a company" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_SUPPLIER}>Choose a company</SelectItem>
+                      {subcontractors.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {subcontractors.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      No subcontractor companies exist yet. Add one under Suppliers first.
+                    </p>
+                  )}
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-input"
+                    checked={editForm.is_subcontractor_lead}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, is_subcontractor_lead: e.target.checked })
+                    }
+                  />
+                  <span>
+                    Portal lead
+                    <span className="block text-xs text-muted-foreground">
+                      Leads see all company calls and can issue them to workers.
+                    </span>
+                  </span>
+                </label>
+              </div>
+            )}
             {editForm.timesheet_required !== 'no' && (
               <div className="grid gap-4 rounded-lg border p-3 sm:grid-cols-2">
                 <div className="sm:col-span-2">

@@ -1006,6 +1006,7 @@ export function TaskExecution({
         task={task}
         status={status}
         canCreateDocument={isAdminOrOffice}
+        canCancel={isAdminOrOffice}
         referenceNumber={existingResult?.reference_number ?? null}
       />
 

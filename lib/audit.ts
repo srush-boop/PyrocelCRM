@@ -14,6 +14,7 @@ import { clientIp } from '@/lib/rate-limit'
  */
 
 export type AuditAction =
+  // Security / account events.
   | 'user.create'
   | 'user.update'
   | 'user.delete'
@@ -26,6 +27,22 @@ export type AuditAction =
   | 'client_user.create'
   | 'client_user.update'
   | 'client_user.delete'
+  // Business / operational events.
+  | 'call.book'
+  | 'call.reassign'
+  | 'call.cancel'
+  | 'quote.create'
+  | 'quote.update'
+  | 'quote.status_change'
+  | 'invoice.create'
+  | 'invoice.issue'
+  | 'invoice.void'
+  | 'client.create'
+  | 'client.update'
+  | 'site.create'
+  | 'site.update'
+  | 'site_service.create'
+  | 'site_service.update'
 
 interface AuditInput {
   action: AuditAction

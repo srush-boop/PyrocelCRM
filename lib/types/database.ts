@@ -491,6 +491,15 @@ export interface Profile {
   role: UserRole
   status: 'active' | 'inactive'
   client_id: string | null
+  // Subcontractor portal: the subcontractor company (suppliers row) this login
+  // belongs to. The lead AND every worker for a company share the same
+  // supplier_id. NULL for all non-subcontractor accounts. Anchors "services
+  // allocated to this subcontractor" and worker grouping.
+  supplier_id: string | null
+  // Subcontractor portal: whether this login is the company "lead" — the lead
+  // sees every call for services allocated to the company and can re-issue them
+  // to workers; a plain worker only sees calls assigned directly to them.
+  is_subcontractor_lead: boolean
   department_id: string | null
   // Branch this user belongs to; their views default to this branch.
   branch_id: string | null
@@ -618,6 +627,10 @@ export interface Profile {
   // walkthrough. NULL = never seen it → the wizard is shown once. Backfilled to
   // now() for all pre-existing users so it only ever surfaces for new accounts.
   onboarded_at: string | null
+  // True when the user is still on an admin-set initial password. While set, the
+  // dashboard redirects them to a forced change-password screen. Cleared once
+  // they choose their own password. Default false so existing users never see it.
+  must_change_password: boolean
   created_at: string
   updated_at: string
   department?: Department | null
@@ -1717,6 +1730,11 @@ export interface Task {
   paused_at: string | null
   pause_note: string | null
   paused_by: string | null
+  // Cancellation audit. When a call is cancelled, office/admin MUST supply a
+  // reason (enforced in the server action + UI). These capture why/who/when.
+  cancelled_at: string | null
+  cancelled_by: string | null
+  cancellation_reason: string | null
   notes: string | null
   public_token: string
   created_at: string
@@ -3178,6 +3196,13 @@ export interface CalendarEntry {
   approved_by: string | null
   approved_at: string | null
   rejection_reason: string | null
+  // Soft-cancellation of a leave booking. When cancelled_at is set the record is
+  // kept for audit but no longer counts as time off anywhere; the approver is
+  // notified. Only leave entries are soft-cancelled — other entry types are
+  // hard-deleted, so these stay null for them.
+  cancelled_at: string | null
+  cancelled_by: string | null
+  cancellation_reason: string | null
   created_at: string
   updated_at: string
   entry_type?: CalendarEntryType

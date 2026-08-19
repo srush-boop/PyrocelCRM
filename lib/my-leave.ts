@@ -10,10 +10,13 @@ export interface MyLeaveRequest {
   endAt: string
   allDay: boolean
   notes: string | null
-  status: 'requested' | 'approved' | 'rejected'
+  status: 'requested' | 'approved' | 'rejected' | 'cancelled'
   approverName: string | null
   approvedAt: string | null
   rejectionReason: string | null
+  // Set when the booking was cancelled after being made (record kept).
+  cancelledAt: string | null
+  cancellationReason: string | null
   // Fractional working days (0.5 for a half-day, etc.) and net hours consumed.
   workingDays: number
   workingHours: number
@@ -38,6 +41,8 @@ interface MyLeaveQueryRow {
   approval_status: 'requested' | 'approved' | 'rejected' | null
   approved_at: string | null
   rejection_reason: string | null
+  cancelled_at: string | null
+  cancellation_reason: string | null
   start_portion: LeavePortion | null
   end_portion: LeavePortion | null
   start_hours: number | null
@@ -59,6 +64,7 @@ export async function getMyLeave(): Promise<MyLeaveData | null> {
       .from('calendar_entries')
       .select(
         `id, start_at, end_at, all_day, notes, approval_status, approved_at, rejection_reason,
+         cancelled_at, cancellation_reason,
          start_portion, end_portion, start_hours, end_hours,
          approver:profiles!calendar_entries_approved_by_fkey(full_name)`,
       )
@@ -90,10 +96,15 @@ export async function getMyLeave(): Promise<MyLeaveData | null> {
       endAt: r.end_at,
       allDay: r.all_day,
       notes: r.notes,
-      status: (r.approval_status ?? 'requested') as MyLeaveRequest['status'],
+      // A cancelled booking outranks its previous approval state for display.
+      status: r.cancelled_at
+        ? 'cancelled'
+        : ((r.approval_status ?? 'requested') as MyLeaveRequest['status']),
       approverName: r.approver?.full_name ?? null,
       approvedAt: r.approved_at,
       rejectionReason: r.rejection_reason,
+      cancelledAt: r.cancelled_at,
+      cancellationReason: r.cancellation_reason,
       workingDays: days,
       workingHours: hours,
       startPortion,

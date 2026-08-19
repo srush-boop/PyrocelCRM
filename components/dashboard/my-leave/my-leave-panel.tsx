@@ -122,6 +122,12 @@ export function MyLeavePanel({ data }: { data: MyLeaveData }) {
                     {r.status === 'rejected' && r.rejectionReason && (
                       <p className="text-sm text-destructive">Reason: {r.rejectionReason}</p>
                     )}
+                    {r.status === 'cancelled' && (
+                      <p className="text-sm text-muted-foreground">
+                        Cancelled{r.cancelledAt ? ` on ${formatDateUK(r.cancelledAt)}` : ''}
+                        {r.cancellationReason ? ` · ${r.cancellationReason}` : ''}
+                      </p>
+                    )}
                     {r.status === 'approved' && r.approverName && (
                       <p className="text-xs text-muted-foreground">
                         Approved by {r.approverName}
@@ -199,5 +205,6 @@ function StatusBadge({ status }: { status: MyLeaveData['requests'][number]['stat
   if (status === 'approved')
     return <Badge className="bg-emerald-600 text-white hover:bg-emerald-600/90">Approved</Badge>
   if (status === 'requested') return <Badge variant="secondary">Pending</Badge>
+  if (status === 'cancelled') return <Badge variant="outline">Cancelled</Badge>
   return <Badge variant="destructive">Declined</Badge>
 }

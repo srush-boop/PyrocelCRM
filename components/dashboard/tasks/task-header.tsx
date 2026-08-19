@@ -18,7 +18,9 @@ import {
 import type { TaskWithDetails, TaskStatus } from '@/lib/types/database'
 import { CreateDocumentButton } from '@/components/documents/create-document-dialog'
 import { RespondByCountdown } from '@/components/dashboard/tasks/respond-by-countdown'
+import { CancelCallDialog } from '@/components/dashboard/calls/cancel-call-dialog'
 import { getCallTargetDate } from '@/lib/kpi'
+import { useRouter } from 'next/navigation'
 
 // Visual treatment for each task status so the banner is scannable at a glance.
 const STATUS_STYLES: Record<TaskStatus, { label: string; className: string }> = {
@@ -45,16 +47,20 @@ export function TaskHeader({
   task,
   status,
   canCreateDocument = false,
+  canCancel = false,
   referenceNumber = null,
 }: {
   task: TaskWithDetails
   status: TaskStatus
   // Office/admin only: exposes the "Create document" action for this call.
   canCreateDocument?: boolean
+  // Office/admin only: exposes the "Cancel call" action (open calls only).
+  canCancel?: boolean
   // Call reference (from the task result, e.g. "PYR-2026-000121"). Shown to
   // everyone — incl. engineers — once a result row exists for the call.
   referenceNumber?: string | null
 }) {
+  const router = useRouter()
   const { goBack: handleBack, label: backLabel } = useBackNavigation('/dashboard/schedule')
 
   const site = task.site_service?.site
@@ -151,6 +157,13 @@ export function TaskHeader({
               ownerId={task.id}
               entityLabel={`Call — ${site?.name ?? 'Site'}`}
               revalidatePath={`/dashboard/tasks/${task.id}`}
+            />
+          )}
+          {canCancel && !isClosed && (
+            <CancelCallDialog
+              taskId={task.id}
+              referenceNumber={referenceNumber}
+              onCancelled={() => router.refresh()}
             />
           )}
           <Badge className={cn('capitalize', statusStyle.className)}>{statusStyle.label}</Badge>

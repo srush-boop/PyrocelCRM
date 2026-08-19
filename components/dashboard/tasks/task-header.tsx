@@ -13,6 +13,7 @@ import {
   CalendarClock,
   Clock,
   User,
+  XCircle,
 } from 'lucide-react'
 import type { TaskWithDetails, TaskStatus } from '@/lib/types/database'
 import { CreateDocumentButton } from '@/components/documents/create-document-dialog'
@@ -175,6 +176,19 @@ export function TaskHeader({
           </p>
         </div>
       </div>
+
+      {/* Cancelled banner — shows the forced cancellation reason prominently. */}
+      {status === 'cancelled' && task.cancellation_reason && (
+        <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+          <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+          <div className="min-w-0">
+            <p className="font-medium text-destructive">Call cancelled</p>
+            <p className="whitespace-pre-wrap text-muted-foreground">
+              {task.cancellation_reason}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Row 3: address (tap for directions) */}
       {(address || postcode) &&

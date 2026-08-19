@@ -78,6 +78,7 @@ import { Building2, Users, Filter } from 'lucide-react'
 import { SiteFlagBadges } from '@/components/dashboard/site-info/site-flag-badges'
 import { resolveSiteFlags } from '@/lib/site-flags'
 import { CallTile } from '@/components/dashboard/calls/call-tile'
+import { CancelCallDialog } from '@/components/dashboard/calls/cancel-call-dialog'
 import { GridSearch } from '@/components/dashboard/grid-header'
 import {
   taskRoute,
@@ -1680,6 +1681,18 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
                     </p>
                   )}
 
+                  {viewTask.status === 'cancelled' && viewTask.cancellation_reason && (
+                    <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+                      <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                      <div>
+                        <p className="font-medium text-destructive">Cancelled</p>
+                        <p className="whitespace-pre-wrap text-muted-foreground">
+                          {viewTask.cancellation_reason}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   {isAdminOrOffice && engineers.length > 0 && isReassignable(viewTask) && (
                     <div className="space-y-1.5">
                       <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
@@ -1787,18 +1800,39 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
                   )}
                 </div>
 
-                <DialogFooter className="gap-2 sm:gap-2">
-                  <Button variant="outline" onClick={() => setViewTask(null)}>
-                    Close
-                  </Button>
-                  {/* Navigation only — starting/continuing a call happens on the task
-                      overview page, gated to the assigned engineer. */}
-                  <Button asChild>
-                    <Link href={`/dashboard/tasks/${viewTask.id}?from=/dashboard/schedule`}>
-                      Open call
-                      <ArrowRight className="ml-1 h-4 w-4" />
-                    </Link>
-                  </Button>
+                <DialogFooter className="gap-2 sm:justify-between sm:gap-2">
+                  {/* Cancel is destructive and left-aligned, away from the primary
+                      actions. Office/admin only, and only for calls that aren't
+                      already completed/cancelled. A reason is forced in the dialog. */}
+                  {isAdminOrOffice && isReassignable(viewTask) ? (
+                    <CancelCallDialog
+                      taskId={viewTask.id}
+                      referenceNumber={viewTask.reference_number}
+                      onCancelled={(reason) => {
+                        setViewTask({
+                          ...viewTask,
+                          status: 'cancelled',
+                          cancellation_reason: reason,
+                        })
+                        router.refresh()
+                      }}
+                    />
+                  ) : (
+                    <span />
+                  )}
+                  <div className="flex flex-col gap-2 sm:flex-row sm:gap-2">
+                    <Button variant="outline" onClick={() => setViewTask(null)}>
+                      Close
+                    </Button>
+                    {/* Navigation only — starting/continuing a call happens on the task
+                        overview page, gated to the assigned engineer. */}
+                    <Button asChild>
+                      <Link href={`/dashboard/tasks/${viewTask.id}?from=/dashboard/schedule`}>
+                        Open call
+                        <ArrowRight className="ml-1 h-4 w-4" />
+                      </Link>
+                    </Button>
+                  </div>
                 </DialogFooter>
               </>
             )

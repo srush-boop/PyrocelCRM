@@ -1726,6 +1726,11 @@ export interface Task {
   paused_at: string | null
   pause_note: string | null
   paused_by: string | null
+  // Cancellation audit. When a call is cancelled, office/admin MUST supply a
+  // reason (enforced in the server action + UI). These capture why/who/when.
+  cancelled_at: string | null
+  cancelled_by: string | null
+  cancellation_reason: string | null
   notes: string | null
   public_token: string
   created_at: string

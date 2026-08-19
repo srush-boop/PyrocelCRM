@@ -462,6 +462,78 @@ export async function bookExistingCall(
   return { ok: true, taskId: input.taskId }
 }
 
+export interface CancelCallInput {
+  taskId: string
+  /** Mandatory free-text reason for the cancellation. */
+  reason: string
+}
+
+/**
+ * Cancel a call. Office/admin only, and the reason is REQUIRED — the call can't
+ * be cancelled without one (validated here as well as in the UI). Records who
+ * cancelled it and when, and refuses to cancel calls that are already completed
+ * or cancelled.
+ */
+export async function cancelCall(input: CancelCallInput): Promise<BookCallResult> {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: 'Not authenticated.' }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+  const role = (profile as { role?: string } | null)?.role
+  if (role !== 'admin' && role !== 'office') {
+    return { ok: false, error: 'You do not have permission to cancel calls.' }
+  }
+
+  const reason = (input.reason ?? '').trim()
+  if (reason.length < 3) {
+    return { ok: false, error: 'Please give a reason for cancelling this call.' }
+  }
+
+  const { data: task } = await supabase
+    .from('tasks')
+    .select('id, site_id, status')
+    .eq('id', input.taskId)
+    .single()
+  const t = task as { id: string; site_id: string | null; status: string } | null
+  if (!t) return { ok: false, error: 'Call not found.' }
+  if (t.status === 'completed') {
+    return { ok: false, error: 'A completed call cannot be cancelled.' }
+  }
+  if (t.status === 'cancelled') {
+    return { ok: false, error: 'This call is already cancelled.' }
+  }
+
+  const { error } = await supabase
+    .from('tasks')
+    .update({
+      status: 'cancelled',
+      cancelled_at: new Date().toISOString(),
+      cancelled_by: user.id,
+      cancellation_reason: reason,
+    })
+    .eq('id', input.taskId)
+
+  if (error) {
+    console.log('[v0] cancelCall update failed:', error.message)
+    return { ok: false, error: 'Failed to cancel the call. Please try again.' }
+  }
+
+  revalidatePath('/dashboard/schedule')
+  revalidatePath('/dashboard/schedule/map')
+  revalidatePath(`/dashboard/tasks/${input.taskId}`)
+  if (t.site_id) revalidatePath(`/dashboard/sites/${t.site_id}`)
+
+  return { ok: true, taskId: input.taskId }
+}
+
 /** Format a yyyy-MM-dd date as e.g. "Tuesday, 14 July 2026" (UK). */
 function formatDateLabel(date: string): string {
   const d = new Date(`${date}T12:00:00Z`)

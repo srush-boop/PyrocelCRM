@@ -35,6 +35,7 @@ import { formatDateUK, formatBookedSlot, cn } from '@/lib/utils'
 import { SystemIcon, getSystemColors } from '@/lib/system-types'
 import { bookExistingCall } from '@/app/(dashboard)/dashboard/schedule/book-call-actions'
 import { assignCall } from '@/app/(dashboard)/dashboard/schedule/map/actions'
+import { CallStatusBadge } from '@/components/dashboard/calls/call-tile'
 
 export interface UpcomingVisit {
   /** Stable list key (task id for created calls, synthetic for forecasts). */
@@ -43,6 +44,8 @@ export interface UpcomingVisit {
   taskId: string | null
   /** 'created' = a task row exists; 'forecast' = due to be generated. */
   status: 'created' | 'forecast'
+  /** True when the created call for this occurrence has been cancelled. */
+  cancelled: boolean
   serviceName: string
   systemName: string | null
   systemColor: string | null
@@ -394,7 +397,7 @@ export function SiteCallsOverviewCard({
                           </>
                         )}
                       </p>
-                      {visit.status === 'created' && (
+                      {visit.status === 'created' && !visit.cancelled && (
                         <p className="mt-0.5 flex items-center gap-1 text-xs">
                           <User className="h-3 w-3 text-muted-foreground" />
                           {visit.assignedEngineerName ? (
@@ -427,7 +430,11 @@ export function SiteCallsOverviewCard({
                         )
                       )}
                     </div>
-                    {visit.isWeeklyRecurring ? (
+                    {visit.cancelled ? (
+                      <span className="shrink-0">
+                        <CallStatusBadge status="cancelled" />
+                      </span>
+                    ) : visit.isWeeklyRecurring ? (
                       <Badge variant="outline" className="shrink-0 text-xs font-normal">
                         Weekly PPM
                       </Badge>
@@ -444,6 +451,7 @@ export function SiteCallsOverviewCard({
                     )}
                     {canAssign &&
                       visit.status === 'created' &&
+                      !visit.cancelled &&
                       !visit.isWeeklyRecurring &&
                       visit.taskId &&
                       engineers.length > 0 && (

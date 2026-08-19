@@ -249,6 +249,36 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // ─── Idempotency guard (auto-send only) ──────────────────────────────────
+    // Completing a call fires this route once, but a perceived delay makes
+    // engineers re-tap "Complete Inspection", and the same task can be submitted
+    // from more than one place (back-navigation, multiple execution components).
+    // To guarantee the client report is emailed AT MOST ONCE per completion, we
+    // atomically "claim" the send: stamp email_sent_at only where it is still
+    // null. If the conditional update claims no row, another request already sent
+    // (or is sending) the report, so we return an idempotent success WITHOUT
+    // sending again. A manual resend (resend === true) deliberately bypasses this.
+    if (!resend) {
+      const { data: claimedRows, error: claimError } = await supabase
+        .from('task_results')
+        .update({ email_sent_at: new Date().toISOString() })
+        .eq('id', taskResult.id)
+        .is('email_sent_at', null)
+        .select('id')
+      if (claimError) {
+        console.error('[v0] Could not claim report send:', claimError.message)
+        return NextResponse.json({ error: 'Failed to send report' }, { status: 500 })
+      }
+      if (!claimedRows || claimedRows.length === 0) {
+        // Already sent by an earlier request — treat as success, do not re-send.
+        return NextResponse.json({
+          success: true,
+          alreadySent: true,
+          message: 'Report already sent for this call.',
+        })
+      }
+    }
+
     // Defects routing: when the report contains defects (not a clean pass), CC the
     // "Defects to" addresses so problems also reach the relevant departments.
     //  - service_types.defects_to_email: company-wide default from the service master template
@@ -291,6 +321,14 @@ export async function POST(request: NextRequest) {
 
     const failed = results.filter((r) => !r.success)
     if (failed.length > 0) {
+      // Release the idempotency claim so the report can be genuinely retried —
+      // the auto-send stamped email_sent_at up-front to reserve the send.
+      if (!resend) {
+        await supabase
+          .from('task_results')
+          .update({ email_sent_at: null })
+          .eq('id', taskResult.id)
+      }
       const firstError = failed[0]?.error || 'Unknown error'
       return NextResponse.json(
         { error: `Failed to send report: ${firstError}` },
@@ -312,13 +350,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Mark email as sent (preserve original send time on resend)
-    if (!resend) {
-      await supabase
-        .from('task_results')
-        .update({ email_sent_at: new Date().toISOString() })
-        .eq('id', taskResult.id)
-    }
+    // Note: email_sent_at was already stamped up-front by the idempotency claim
+    // for auto-sends. A manual resend deliberately preserves the original send
+    // time, so we do not touch it here.
 
     return NextResponse.json({
       success: true,

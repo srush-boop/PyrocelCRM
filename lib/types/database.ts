@@ -2980,6 +2980,12 @@ export interface Part {
   supplier_id: string | null
   /** Nominal code override for this product/part (wins over dept/service). */
   nominal_code_id: string | null
+  /**
+   * Optional link to the quote catalogue item this part corresponds to. Set
+   * when a part is created from a catalogue item, or resolved by matching SKU.
+   * Edits to the part (cost + core details) are pushed to this catalogue item.
+   */
+  catalogue_item_id: string | null
   created_at: string
   supplier?: Supplier | null
 }

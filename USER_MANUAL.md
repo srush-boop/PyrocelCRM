@@ -8,7 +8,9 @@ section that applies to you.
 - [Administrator](#administrator)
 - [Office](#office)
 - [Engineer](#engineer)
+- [Sub-contractor](#sub-contractor)
 - [Client](#client-portal)
+- [Section-by-section guide (every area of the app)](#section-by-section-guide)
 - [Public QR Log Book (anyone on site)](#public-qr-log-book)
 - [Glossary](#glossary)
 
@@ -26,6 +28,7 @@ screen easier to use.
 | **Admin** | Dashboard | Full access — manages everything, including users, service types and checklists. |
 | **Office** | Dashboard | Day-to-day operations — clients, sites, scheduling, reporting. No user/service-type administration. |
 | **Engineer** | Schedule | Carries out and records on-site services. |
+| **Sub-contractor** | Schedule | External engineer with a restricted view — only their assigned work. |
 | **Client** | Portal | Views their own reports, performance and digital log book. |
 
 ### How work flows through the system
@@ -201,6 +204,34 @@ This closes the visit as **No Access** — it is **not** recorded as a failure,
 no defect alert is raised, and the next scheduled visit is still created. The
 client receives a neutral "visit could not be completed" notice.
 
+### First sign-in
+
+If your account was created for you, the first time you sign in you will be
+asked to **set your own password** before you can continue. Choose a new
+password (at least 12 characters) and you will be taken straight to your work.
+
+---
+
+## Sub-contractor
+
+Sub-contractors are external engineers with a deliberately **restricted** view.
+You sign in to the **Schedule** and see only the work assigned to you —
+internal-only tools, pricing, parts and reporting extras are hidden.
+
+### What you can do
+
+- See your assigned calls in the **Upcoming**, **Overdue** and **Completed**
+  tabs.
+- Open a call, work through its checklist and record each item's result.
+- Add photos where prompted, then **Complete & Submit**.
+- Use **No Access** if you attend but cannot get in.
+
+### What you will not see
+
+Internal features such as parts requests, further-works pricing, labour costs,
+other engineers' work and office reporting are not available to sub-contractor
+accounts.
+
 ---
 
 ## Client Portal
@@ -217,6 +248,118 @@ The portal has three tabs:
 - **Performance** — your KPI/compliance performance.
 
 Use **Sign out** in the top-right when finished.
+
+---
+
+## Section-by-section guide
+
+Every area of the app, with a short **overview** and a simple **how to use it**
+guide. Your sidebar may show a subset — visibility is controlled per role and
+per page under **Settings → Menu access**.
+
+### Service & scheduling
+
+The day-to-day heart of the system — where recurring service visits (calls) are
+planned, tracked and closed out.
+
+- **All Calls (Schedule)** — the master list of every visit across Upcoming,
+  Overdue and Completed. Pick a view (Grid / List / By route / By area), filter
+  by engineer or date, sort by Due date or Postcode, then click a call to view,
+  reassign, book, cancel (with a reason) or open its report.
+- **Service Dashboard** — a live overview of service health. Scan the tiles for
+  anything overdue or escalated, then click through to the filtered list.
+- **CDO Management** — everything for CDO-delivered services, grouped by route.
+  Review Overdue / Upcoming / Unassigned and assign any unrouted services.
+- **Map** — a geographic view of calls; filter by engineer or date to plan
+  travel.
+- **Chargeable Calls** — reactive/out-of-scope work. Check parts and labour on
+  each completed call, add ad-hoc charges, capture the client reference / PO,
+  then approve for invoicing.
+- **Follow-ups** — return visits raised when a call needs further works. Review
+  the request and parts, then approve to book a linked follow-up call.
+- **Defects** — faults found on visits. Open one to see detail and photos, then
+  raise a remedial quote or call from it.
+- **On-call & Lone Worker** — the out-of-hours emergency rota, and safety
+  monitoring for staff working alone (missed check-ins escalate automatically).
+- **KPIs** — compliance performance, split into Regulatory and Client tiers.
+  Filter by branch/service/system and assign reasons to any misses.
+
+### Clients, sites & assets
+
+- **Clients** — the companies you serve. Add a client, then their site(s), and
+  set a lifecycle status (Active / Engaged / Dormant).
+- **Sites** — individual premises. Add the address and contact email (reports
+  are sent here), then add systems and services under the Systems tab. The Site
+  ID (CASH) doubles as the public log book access code.
+- **Assets** — company registers (dampers, extinguishers, emergency lights and
+  more) with QR labels and reminders. Scan an asset's QR code on site to jump
+  straight to it.
+
+### Service setup
+
+- **Service Types & System Types** — the catalogue of services and the systems
+  they sit under, including the Regulatory KPI and default chargeable flag.
+- **Checklists** — the on-site items engineers record, including conditional and
+  advisory rules.
+- **Routes & Areas** — two ways to group and assign work. Reassigning a route or
+  area automatically moves all its open calls to the new engineer.
+- **Client Logins** — portal accounts that let clients self-serve their reports
+  (admin-only).
+
+### Sales & quoting
+
+- **Quotes & Quote Bank** — build, send and track quotes; on acceptance a quote
+  can auto-create a contract, job or remedial calls. The Quote Bank stores
+  reusable priced items.
+- **Quote Studio** — brief-first, AI-assisted fire-alarm quoting that drafts a
+  device schedule and BS 5839-1 spec, priced live.
+- **Tender AI** — a workspace for responding to tenders using a knowledge and
+  evidence library.
+
+### Jobs, purchasing & stock
+
+- **Jobs** — larger installations run as staged projects with live cost and
+  margin tracking. Use the progress tracker to move through contract review →
+  ordering → in progress → commissioning → handover.
+- **Purchasing & Suppliers** — raise purchase orders against a job or call and
+  manage the suppliers behind them.
+- **Products / Stock** — parts inventory across locations, with transfers and
+  catalogues.
+
+### Invoicing & billing
+
+- **Invoices** — recurring, per-visit and remedial invoices with managed nominal
+  codes and a Sage-ready export. Every line needs a nominal code before issuing.
+- **Purchase Invoices** — upload and allocate supplier invoices to a call or
+  job, then assign an authoriser to approve for payment.
+- **Renewals & Projected Revenue** — upcoming contract renewals and an
+  annualised 12-month revenue forecast by branch and service.
+
+### People & HR
+
+- **Approvals** — a single place for items awaiting a manager decision.
+- **Timesheets** — weekly timesheets with overtime, night-shift and on-call
+  calculation; staff submit, managers approve.
+- **Training & Leave** — training records, plus annual-leave booking (My Leave)
+  and a team Leave Summary; balances update automatically.
+- **Employee Vault** — secure storage for staff documents.
+
+### Communication, quality & oversight
+
+- **Requests inbox** — incoming client requests, AI-triaged and matched to a
+  site/service, ready to turn into booked calls.
+- **Internal tasks / My Tasks** — recurring form-style tasks (toolbox talks,
+  vehicle checks); complete yours by their due date.
+- **Team Chat** — internal messaging between staff, separate from client
+  communication.
+- **Knowledge Centre** — a shared library of reference documents and guidance.
+- **Documents** — shared file storage organised by client, site and service,
+  with tags.
+- **Activity Log** — an audit trail of key changes (admin & office). Filter by
+  user, what changed, where, or a date range.
+- **Users & account (admin)** — manage staff accounts and menu access. You can
+  email a new user their login details, and they set their own password on first
+  sign-in.
 
 ---
 
@@ -242,9 +385,17 @@ other site.
 | --- | --- |
 | **Task / Call** | A single scheduled service visit. |
 | **Service** | A recurring service on a site (with a frequency). |
+| **Job** | A larger, staged piece of work (e.g. an installation) tracked from quote to handover. |
 | **Route** | A geographic round of sites/services, assigned to an engineer. |
 | **Area** | An alternative grouping of services, assigned to an engineer. |
 | **Worker type** | Who performs the work: CDO, Engineer, or Sub-contractor. |
+| **Defect** | A fault found during a visit; can raise a priced remedial quote. |
+| **Follow-up** | A linked return visit raised when a call needs further works. |
+| **Chargeable call** | Reactive/out-of-scope work reviewed, priced and invoiced. |
+| **Remedial** | Corrective work to fix a defect, usually from an approved quote. |
+| **Internal task** | A recurring form/checklist for staff (e.g. toolbox talk, vehicle check). |
+| **Lone worker** | Safety shift check-ins with escalation for staff working alone. |
+| **On-call** | The out-of-hours rota covering emergencies. |
 | **MCP** | Manual Call Point (fire alarm call point). |
 | **UPRN** | Unique Property Reference Number (UK national property identifier). |
 | **Regulatory KPI** | The default/legal deadline tolerance for a service type. |

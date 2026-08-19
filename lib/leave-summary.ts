@@ -2,6 +2,7 @@ import 'server-only'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { LeavePortion } from '@/lib/types/database'
+import { TRAINING_TYPE_ID } from '@/lib/constants/leave'
 
 // Determines whether the current user may view the diary summary (Accounts dept
 // members and admins only). Returns the profile when allowed, else null.
@@ -87,7 +88,11 @@ export async function getSummaryFilterOptions(): Promise<SummaryFilterOptions> {
   const admin = createAdminClient()
   const [{ data: entryTypes }, { data: departments }, { data: branches }, { data: users }] =
     await Promise.all([
-      admin.from('calendar_entry_types').select('id, name').order('name'),
+      admin
+        .from('calendar_entry_types')
+        .select('id, name')
+        .neq('id', TRAINING_TYPE_ID)
+        .order('name'),
       admin.from('departments').select('id, name').order('name'),
       admin.from('branches').select('id, name').order('name'),
       admin.from('profiles').select('id, full_name').neq('role', 'client').order('full_name'),
@@ -121,6 +126,8 @@ export async function getSummaryEntries(filters: SummaryFilters): Promise<Summar
        )`,
     )
     .is('cancelled_at', null)
+    // Training is not a form of leave, so it never appears in the Leave Summary.
+    .neq('entry_type_id', TRAINING_TYPE_ID)
     .order('start_at', { ascending: false })
     .limit(500)
 

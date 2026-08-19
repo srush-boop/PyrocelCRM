@@ -7,3 +7,9 @@ export const ANNUAL_LEAVE_TYPE_ID = '150124a6-481b-43f6-819f-d2d02525ed3a'
 
 /** Company-wide bank holidays, excluded from leave day/hour calculations. */
 export const BANK_HOLIDAY_TYPE_ID = '73267195-2ba7-423b-b642-bc040dcb1840'
+
+/**
+ * Training is a diary/calendar entry type, NOT a form of leave. It never counts
+ * towards leave balances and is excluded from the Leave Summary view.
+ */
+export const TRAINING_TYPE_ID = '6bfd87e7-029b-454a-94c2-bd34bce8eb6a'

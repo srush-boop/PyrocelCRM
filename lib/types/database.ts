@@ -669,10 +669,16 @@ export interface Department {
   default_margin_percent: number
   /** Default nominal code for anything under this department (first fallback). */
   nominal_code_id: string | null
+  /**
+   * Department manager — the default leave approver for users in this
+   * department, UNLESS the user has their own nominated manager
+   * (Profile.manager_id) which overrides it. See getLeaveApprovers().
+   */
+  manager_id: string | null
   active: boolean
   created_at: string
   updated_at: string
-}
+  }
 
 // An admin-configurable property/building type that a site can be tagged with.
 export interface PropertyType {
@@ -2980,6 +2986,12 @@ export interface Part {
   supplier_id: string | null
   /** Nominal code override for this product/part (wins over dept/service). */
   nominal_code_id: string | null
+  /**
+   * Optional link to the quote catalogue item this part corresponds to. Set
+   * when a part is created from a catalogue item, or resolved by matching SKU.
+   * Edits to the part (cost + core details) are pushed to this catalogue item.
+   */
+  catalogue_item_id: string | null
   created_at: string
   supplier?: Supplier | null
 }

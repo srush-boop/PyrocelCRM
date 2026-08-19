@@ -116,19 +116,44 @@ export async function computeLeaveBalances(
 }
 
 /**
- * Resolves who should approve a user's leave request: their nominated manager,
- * or all admins as a fallback when no manager is set. Returns user ids.
+ * Resolves who should approve a user's leave request, in priority order:
+ *   1. the user's own nominated manager (Profile.manager_id) — a per-user override;
+ *   2. otherwise their department's manager (Department.manager_id) — the default;
+ *   3. otherwise all active admins, as a final fallback.
+ * Returns user ids.
  */
 export async function getLeaveApprovers(userId: string): Promise<string[]> {
   const admin = createAdminClient()
   const { data: profile } = await admin
     .from('profiles')
-    .select('manager_id')
+    .select('manager_id, department_id')
     .eq('id', userId)
     .single()
 
+  // 1. Per-user nominated manager wins.
   if (profile?.manager_id) return [profile.manager_id as string]
 
+  // 2. Fall back to the department manager (the department's default approver).
+  if (profile?.department_id) {
+    const { data: dept } = await admin
+      .from('departments')
+      .select('manager_id')
+      .eq('id', profile.department_id as string)
+      .single()
+    // Only use the department manager if they're still an active user, so a
+    // deactivated manager doesn't silently swallow approval requests.
+    if (dept?.manager_id) {
+      const { data: deptManager } = await admin
+        .from('profiles')
+        .select('id')
+        .eq('id', dept.manager_id as string)
+        .eq('status', 'active')
+        .maybeSingle()
+      if (deptManager?.id) return [deptManager.id as string]
+    }
+  }
+
+  // 3. Final fallback: all active admins.
   const { data: admins } = await admin
     .from('profiles')
     .select('id')

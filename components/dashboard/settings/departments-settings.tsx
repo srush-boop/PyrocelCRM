@@ -34,13 +34,31 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Loader2, Plus, Pencil, Trash2 } from 'lucide-react'
 import type { Department, NominalCode } from '@/lib/types/database'
 import { NominalCodeSelect } from '@/components/dashboard/billing/nominal-code-select'
 
+/** Sentinel Select value for "no manager" (Radix Select can't use empty string). */
+const NO_MANAGER = '__none__'
+
+interface ManagerCandidate {
+  id: string
+  full_name: string | null
+  email: string
+}
+
 interface DepartmentsSettingsProps {
   departments: Department[]
   nominalCodes: NominalCode[]
+  /** Active internal users who can be set as a department's default approver. */
+  managerCandidates: ManagerCandidate[]
 }
 
 interface FormState {
@@ -48,16 +66,25 @@ interface FormState {
   name: string
   margin: string
   nominalCodeId: string | null
+  managerId: string | null
   active: boolean
 }
 
 function emptyForm(): FormState {
-  return { name: '', margin: '0', nominalCodeId: null, active: true }
+  return { name: '', margin: '0', nominalCodeId: null, managerId: null, active: true }
 }
 
-export function DepartmentsSettings({ departments, nominalCodes }: DepartmentsSettingsProps) {
+export function DepartmentsSettings({
+  departments,
+  nominalCodes,
+  managerCandidates,
+}: DepartmentsSettingsProps) {
   const router = useRouter()
   const supabase = createClient()
+  const managerLabel = (id: string | null) => {
+    const m = id ? managerCandidates.find((u) => u.id === id) : null
+    return m ? m.full_name || m.email : '—'
+  }
   const codeLabel = (id: string | null) => {
     const c = id ? nominalCodes.find((n) => n.id === id) : null
     return c ? `${c.code} — ${c.name}` : '—'
@@ -80,6 +107,7 @@ export function DepartmentsSettings({ departments, nominalCodes }: DepartmentsSe
       name: dept.name,
       margin: String(dept.default_margin_percent ?? 0),
       nominalCodeId: dept.nominal_code_id ?? null,
+      managerId: dept.manager_id ?? null,
       active: dept.active,
     })
     setMessage(null)
@@ -96,6 +124,7 @@ export function DepartmentsSettings({ departments, nominalCodes }: DepartmentsSe
         name: form.name.trim(),
         default_margin_percent: Number.parseFloat(form.margin) || 0,
         nominal_code_id: form.nominalCodeId,
+        manager_id: form.managerId,
         active: form.active,
         updated_at: new Date().toISOString(),
       }
@@ -156,6 +185,7 @@ export function DepartmentsSettings({ departments, nominalCodes }: DepartmentsSe
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
+                <TableHead>Manager</TableHead>
                 <TableHead className="text-right">Default margin</TableHead>
                 <TableHead>Nominal code</TableHead>
                 <TableHead>Status</TableHead>
@@ -165,7 +195,7 @@ export function DepartmentsSettings({ departments, nominalCodes }: DepartmentsSe
             <TableBody>
               {departments.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                     No departments yet. Add one to set a default sales margin.
                   </TableCell>
                 </TableRow>
@@ -173,6 +203,9 @@ export function DepartmentsSettings({ departments, nominalCodes }: DepartmentsSe
                 departments.map((dept) => (
                   <TableRow key={dept.id}>
                     <TableCell className="font-medium">{dept.name}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {managerLabel(dept.manager_id)}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {dept.default_margin_percent ?? 0}%
                     </TableCell>
@@ -253,6 +286,31 @@ export function DepartmentsSettings({ departments, nominalCodes }: DepartmentsSe
               <p className="text-xs text-muted-foreground">
                 Used as the first fallback when a charge or part on this department has no code of
                 its own.
+              </p>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="d-manager">Department manager</Label>
+              <Select
+                value={form.managerId ?? NO_MANAGER}
+                onValueChange={(value) =>
+                  setForm({ ...form, managerId: value === NO_MANAGER ? null : value })
+                }
+              >
+                <SelectTrigger id="d-manager">
+                  <SelectValue placeholder="No manager" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_MANAGER}>No manager</SelectItem>
+                  {managerCandidates.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.full_name || u.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Default approver for leave requests from users in this department, unless a user has
+                their own nominated manager set in their profile.
               </p>
             </div>
             <label className="flex items-center gap-2 text-sm">

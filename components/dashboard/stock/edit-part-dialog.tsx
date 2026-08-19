@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+import { updatePart } from '@/lib/actions/parts'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -52,34 +53,39 @@ export function EditPartDialog({ part, open, onOpenChange, suppliers = [], nomin
     nominal_code_id: part.nominal_code_id ?? null,
   })
   const router = useRouter()
-  const supabase = createClient()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
-    const { error } = await supabase
-      .from('parts')
-      .update({
-        name: formData.name,
-        sku: formData.sku || null,
-        manufacturer: formData.manufacturer || null,
-        unit: formData.unit || 'each',
-        unit_cost: formData.unit_cost ? Number.parseFloat(formData.unit_cost) : 0,
-        default_min_level: Math.max(0, Number.parseInt(formData.default_min_level, 10) || 0),
-        description: formData.description || null,
-        is_active: formData.is_active,
-        supplier_id: formData.supplier_id || null,
-        nominal_code_id: formData.nominal_code_id,
-      })
-      .eq('id', part.id)
+    const result = await updatePart({
+      id: part.id,
+      name: formData.name,
+      sku: formData.sku || null,
+      manufacturer: formData.manufacturer || null,
+      unit: formData.unit || 'each',
+      unit_cost: formData.unit_cost ? Number.parseFloat(formData.unit_cost) : 0,
+      default_min_level: Math.max(0, Number.parseInt(formData.default_min_level, 10) || 0),
+      description: formData.description || null,
+      is_active: formData.is_active,
+      supplier_id: formData.supplier_id || null,
+      nominal_code_id: formData.nominal_code_id,
+    })
 
     setLoading(false)
 
-    if (!error) {
-      onOpenChange(false)
-      router.refresh()
+    if (!result.ok) {
+      toast.error(result.error || 'Could not save the part.')
+      return
     }
+
+    toast.success(
+      result.catalogueSynced
+        ? 'Part saved and synced to the quotes catalogue'
+        : 'Part saved',
+    )
+    onOpenChange(false)
+    router.refresh()
   }
 
   return (
@@ -141,6 +147,12 @@ export function EditPartDialog({ part, open, onOpenChange, suppliers = [], nomin
                   value={formData.unit_cost}
                   onChange={(e) => setFormData({ ...formData, unit_cost: e.target.value })}
                 />
+                {part.catalogue_item_id && (
+                  <p className="text-xs text-muted-foreground">
+                    Linked to the quotes catalogue — cost and details sync on save (its margin
+                    is kept and sell price recalculated).
+                  </p>
+                )}
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="edit_default_min_level">Default min level</Label>

@@ -32,15 +32,23 @@ export default async function SettingsPage() {
   const canManageTemplates = role === 'admin' || role === 'office'
 
   // Company info, branches, departments + roles are only needed for admin tabs.
-  const [companyResult, branchesResult, departmentsResult, rolesResult, propertyTypesResult] = isAdmin
+  const [companyResult, branchesResult, departmentsResult, rolesResult, propertyTypesResult, deptManagerCandidatesResult] = isAdmin
     ? await Promise.all([
         supabase.from('company_info').select('*').limit(1).maybeSingle(),
         supabase.from('branches').select('*').order('name'),
         supabase.from('departments').select('*').order('name'),
         supabase.from('roles').select('*').order('name'),
         supabase.from('property_types').select('*').order('name'),
+        // Candidate department managers (default leave approvers): active,
+        // internal (non-client) staff.
+        supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .eq('status', 'active')
+          .neq('role', 'client')
+          .order('full_name'),
       ])
-    : [{ data: null }, { data: [] }, { data: [] }, { data: [] }, { data: [] }]
+    : [{ data: null }, { data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }]
 
   const templatesResult = canManageTemplates
     ? await supabase.from('document_templates').select('*').order('name')
@@ -160,6 +168,9 @@ export default async function SettingsPage() {
         company={(companyResult.data as CompanyInfo) || null}
         branches={(branchesResult.data as Branch[]) || []}
         departments={(departmentsResult.data as Department[]) || []}
+        departmentManagerCandidates={
+          (deptManagerCandidatesResult.data as { id: string; full_name: string | null; email: string }[]) || []
+        }
         roles={(rolesResult.data as Role[]) || []}
         propertyTypes={(propertyTypesResult.data as PropertyType[]) || []}
         documentTemplates={(templatesResult.data as DocumentTemplate[]) || []}

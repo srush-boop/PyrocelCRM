@@ -12,6 +12,7 @@ import type {
   Profile,
 } from '@/lib/types/database'
 import { resolveBillingAccount } from '@/lib/billing/resolve-billing-account'
+import { logAudit } from '@/lib/audit'
 import { renderInvoicePdfBuffer } from '@/lib/pdf/invoice-pdf'
 import { resolveInvoiceLineSites } from '@/lib/billing/invoice-line-sites'
 import { resolveBillToAddress } from '@/lib/billing/invoice-bill-to'
@@ -1219,7 +1220,7 @@ export async function issueInvoice(invoiceId: string): Promise<{ error: string |
 
   const { data: inv } = await supabase
     .from('invoices')
-    .select('payment_terms_days, total_pence, on_hold')
+    .select('payment_terms_days, total_pence, on_hold, invoice_number')
     .eq('id', invoiceId)
     .single()
   if ((inv as { on_hold: boolean } | null)?.on_hold) {
@@ -1242,6 +1243,15 @@ export async function issueInvoice(invoiceId: string): Promise<{ error: string |
     })
     .eq('id', invoiceId)
   if (error) return { error: error.message }
+
+  await logAudit({
+    action: 'invoice.issue',
+    entityType: 'invoice',
+    entityId: invoiceId,
+    targetLabel:
+      (inv as { invoice_number: string | null } | null)?.invoice_number ?? 'Invoice',
+    metadata: { dueDate: due.toISOString().slice(0, 10) },
+  })
 
   revalidatePath('/dashboard/invoices')
   revalidatePath(`/dashboard/invoices/${invoiceId}`)
@@ -1290,7 +1300,7 @@ export async function voidInvoice(
 
   const { data } = await supabase
     .from('invoices')
-    .select('status')
+    .select('status, invoice_number')
     .eq('id', invoiceId)
     .single()
   const status = (data as { status: string } | null)?.status
@@ -1314,6 +1324,15 @@ export async function voidInvoice(
     .from('tasks')
     .update({ invoice_id: null, charge_invoiced_at: null, charge_invoiced_by: null })
     .eq('invoice_id', invoiceId)
+
+  await logAudit({
+    action: 'invoice.void',
+    entityType: 'invoice',
+    entityId: invoiceId,
+    targetLabel:
+      (data as { invoice_number: string | null } | null)?.invoice_number ?? 'Invoice',
+    metadata: { reason: reason?.trim() || null, previousStatus: status },
+  })
 
   revalidatePath('/dashboard/invoices')
   revalidatePath(`/dashboard/invoices/${invoiceId}`)

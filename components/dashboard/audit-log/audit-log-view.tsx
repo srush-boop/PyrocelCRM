@@ -4,7 +4,9 @@ import { useMemo, useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -25,7 +27,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import { ScrollText, Search, ChevronDown } from 'lucide-react'
+import { ScrollText, Search, ChevronDown, X } from 'lucide-react'
 
 export interface AuditLogEntry {
   id: string
@@ -42,20 +44,29 @@ export interface AuditLogEntry {
   user_agent: string | null
 }
 
+export interface AuditActor {
+  id: string
+  email: string
+  role: string | null
+}
+
 // Higher-risk actions get a destructive/amber tone so they stand out in the log.
 const ACTION_TONE: Record<string, 'destructive' | 'default' | 'secondary'> = {
   'user.delete': 'destructive',
   'user.role_change': 'destructive',
   'client_user.delete': 'destructive',
+  'call.cancel': 'destructive',
+  'invoice.void': 'destructive',
   'user.status_change': 'default',
   'user.permission_change': 'default',
   'user.password_reset': 'default',
+  'call.reassign': 'default',
+  'quote.status_change': 'default',
+  'invoice.issue': 'default',
 }
 
-function actionLabel(action: string) {
-  return action
-    .replace(/[._]/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase())
+function humanize(value: string) {
+  return value.replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
 function formatWhen(iso: string) {
@@ -72,14 +83,26 @@ function formatWhen(iso: string) {
 export function AuditLogView({
   logs,
   actions,
+  entities,
+  actors,
   pageSize,
   activeAction,
+  activeEntity,
+  activeActor,
+  fromDate,
+  toDate,
   query,
 }: {
   logs: AuditLogEntry[]
   actions: string[]
+  entities: string[]
+  actors: AuditActor[]
   pageSize: number
   activeAction: string
+  activeEntity: string
+  activeActor: string
+  fromDate: string
+  toDate: string
   query: string
 }) {
   const router = useRouter()
@@ -87,15 +110,13 @@ export function AuditLogView({
   const [isPending, startTransition] = useTransition()
   const [term, setTerm] = useState(query)
 
-  const pushParams = (next: { action?: string; q?: string }) => {
+  const pushParams = (next: Record<string, string | undefined>) => {
     const params = new URLSearchParams(searchParams.toString())
-    if (next.action !== undefined) {
-      if (next.action === 'all') params.delete('action')
-      else params.set('action', next.action)
-    }
-    if (next.q !== undefined) {
-      if (!next.q) params.delete('q')
-      else params.set('q', next.q)
+    for (const [key, value] of Object.entries(next)) {
+      if (value === undefined) continue
+      // 'all' and empty string both mean "no filter" → drop the param.
+      if (!value || value === 'all') params.delete(key)
+      else params.set(key, value)
     }
     startTransition(() => router.push(`/dashboard/audit-log?${params.toString()}`))
   }
@@ -104,6 +125,19 @@ export function AuditLogView({
     e.preventDefault()
     pushParams({ q: term })
   }
+
+  const clearAll = () => {
+    setTerm('')
+    startTransition(() => router.push('/dashboard/audit-log'))
+  }
+
+  const hasFilters =
+    activeAction !== 'all' ||
+    activeEntity !== 'all' ||
+    activeActor !== 'all' ||
+    Boolean(fromDate) ||
+    Boolean(toDate) ||
+    Boolean(query)
 
   const rows = useMemo(() => logs, [logs])
 
@@ -114,15 +148,111 @@ export function AuditLogView({
           <ScrollText className="h-5 w-5 text-muted-foreground" />
         </div>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-balance">Audit Log</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-balance">Activity Log</h1>
           <p className="text-sm text-muted-foreground">
-            Security-relevant events: account changes, permission changes and sign-ins.
+            Who changed what, where and when — account, permission and operational events.
           </p>
         </div>
       </header>
 
       <Card>
         <CardHeader className="gap-4">
+          {/* Filter bar: user, what, where, date range, plus free-text search. */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs text-muted-foreground">User</Label>
+              <Select value={activeActor} onValueChange={(v) => pushParams({ actor: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All users" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All users</SelectItem>
+                  {actors.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs text-muted-foreground">What changed</Label>
+              <Select value={activeAction} onValueChange={(v) => pushParams({ action: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All actions" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All actions</SelectItem>
+                  {actions.map((a) => (
+                    <SelectItem key={a} value={a}>
+                      {humanize(a)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs text-muted-foreground">Where (area)</Label>
+              <Select value={activeEntity} onValueChange={(v) => pushParams({ entity: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All areas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All areas</SelectItem>
+                  {entities.map((e) => (
+                    <SelectItem key={e} value={e}>
+                      {humanize(e)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs text-muted-foreground" htmlFor="from-date">
+                From date
+              </Label>
+              <Input
+                id="from-date"
+                type="date"
+                value={fromDate}
+                max={toDate || undefined}
+                onChange={(e) => pushParams({ from: e.target.value })}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs text-muted-foreground" htmlFor="to-date">
+                To date
+              </Label>
+              <Input
+                id="to-date"
+                type="date"
+                value={toDate}
+                min={fromDate || undefined}
+                onChange={(e) => pushParams({ to: e.target.value })}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs text-muted-foreground" htmlFor="q">
+                Search
+              </Label>
+              <form onSubmit={onSearch} className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="q"
+                  value={term}
+                  onChange={(e) => setTerm(e.target.value)}
+                  placeholder="User, target or ID"
+                  className="pl-8"
+                />
+              </form>
+            </div>
+          </div>
+
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-base">
               Recent activity
@@ -130,33 +260,17 @@ export function AuditLogView({
                 showing latest {rows.length} of up to {pageSize}
               </span>
             </CardTitle>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Select
-                value={activeAction}
-                onValueChange={(v) => pushParams({ action: v })}
+            {hasFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearAll}
+                className="self-start text-muted-foreground sm:self-auto"
               >
-                <SelectTrigger className="w-full sm:w-52">
-                  <SelectValue placeholder="All actions" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All actions</SelectItem>
-                  {actions.map((a) => (
-                    <SelectItem key={a} value={a}>
-                      {actionLabel(a)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <form onSubmit={onSearch} className="relative">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={term}
-                  onChange={(e) => setTerm(e.target.value)}
-                  placeholder="Search user, target, ID"
-                  className="w-full pl-8 sm:w-64"
-                />
-              </form>
-            </div>
+                <X className="mr-1 h-4 w-4" />
+                Clear filters
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -164,7 +278,7 @@ export function AuditLogView({
             <div className="flex flex-col items-center gap-2 py-16 text-center">
               <ScrollText className="h-8 w-8 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">
-                No audit events match the current filters.
+                No activity matches the current filters.
               </p>
             </div>
           ) : (
@@ -173,10 +287,10 @@ export function AuditLogView({
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-40">When</TableHead>
-                    <TableHead>Action</TableHead>
-                    <TableHead>Actor</TableHead>
+                    <TableHead>What</TableHead>
+                    <TableHead className="w-32">Where</TableHead>
+                    <TableHead>User</TableHead>
                     <TableHead>Target</TableHead>
-                    <TableHead className="w-36">IP</TableHead>
                     <TableHead className="w-10" />
                   </TableRow>
                 </TableHeader>
@@ -187,16 +301,21 @@ export function AuditLogView({
                     return (
                       <Collapsible key={log.id} asChild>
                         <>
-                          <TableRow
-                            className={isPending ? 'opacity-60' : undefined}
-                          >
+                          <TableRow className={isPending ? 'opacity-60' : undefined}>
                             <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                               {formatWhen(log.created_at)}
                             </TableCell>
                             <TableCell>
                               <Badge variant={ACTION_TONE[log.action] ?? 'secondary'}>
-                                {actionLabel(log.action)}
+                                {humanize(log.action)}
                               </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {log.entity_type ? (
+                                <span className="capitalize">{humanize(log.entity_type)}</span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
                             </TableCell>
                             <TableCell className="text-sm">
                               <div className="font-medium">
@@ -215,9 +334,6 @@ export function AuditLogView({
                                   {log.entity_id.slice(0, 8)}
                                 </div>
                               )}
-                            </TableCell>
-                            <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
-                              {log.ip_address ?? '—'}
                             </TableCell>
                             <TableCell>
                               {hasDetail && (

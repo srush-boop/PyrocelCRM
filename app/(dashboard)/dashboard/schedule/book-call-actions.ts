@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
   import { geocodeSites } from '@/lib/geocode'
 import { computeRespondBy, notifyEmergencyAssignment } from '@/lib/dispatch'
 import { getMyCurrentOncall } from '@/lib/oncall/queries'
+import { logAudit } from '@/lib/audit'
 
 export interface BookCallInput {
   /** 'recurring' = scheduled PPM against an existing site_service. */
@@ -284,6 +285,19 @@ export async function bookCall(input: BookCallInput): Promise<BookCallResult> {
 
   const taskId = (inserted as { id: string }).id
 
+  await logAudit({
+    action: 'call.book',
+    entityType: 'call',
+    entityId: taskId,
+    targetLabel: [callTypeName, siteName].filter(Boolean).join(' — ') || 'Call',
+    metadata: {
+      mode: input.mode,
+      scheduledDate: input.scheduledDate,
+      emergency: isEmergency,
+      assigned: Boolean(input.assignedEngineerId),
+    },
+  })
+
   // Emergency + assigned at booking → notify the engineer immediately.
   if (isEmergency && input.assignedEngineerId) {
     try {
@@ -499,10 +513,15 @@ export async function cancelCall(input: CancelCallInput): Promise<BookCallResult
 
   const { data: task } = await supabase
     .from('tasks')
-    .select('id, site_id, status')
+    .select('id, site_id, status, reference_number')
     .eq('id', input.taskId)
     .single()
-  const t = task as { id: string; site_id: string | null; status: string } | null
+  const t = task as {
+    id: string
+    site_id: string | null
+    status: string
+    reference_number: string | null
+  } | null
   if (!t) return { ok: false, error: 'Call not found.' }
   if (t.status === 'completed') {
     return { ok: false, error: 'A completed call cannot be cancelled.' }
@@ -525,6 +544,14 @@ export async function cancelCall(input: CancelCallInput): Promise<BookCallResult
     console.log('[v0] cancelCall update failed:', error.message)
     return { ok: false, error: 'Failed to cancel the call. Please try again.' }
   }
+
+  await logAudit({
+    action: 'call.cancel',
+    entityType: 'call',
+    entityId: input.taskId,
+    targetLabel: t.reference_number ?? 'Call',
+    metadata: { reason },
+  })
 
   revalidatePath('/dashboard/schedule')
   revalidatePath('/dashboard/schedule/map')

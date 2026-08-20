@@ -509,6 +509,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
         key: r.taskId ?? `${r.siteServiceId}|${r.visitTypeId ?? 'none'}|${r.date}`,
         taskId: r.taskId,
         status: r.status,
+        cancelled: r.cancelled,
         serviceName,
         systemName: r.systemTypeName,
         systemColor: r.systemColor,

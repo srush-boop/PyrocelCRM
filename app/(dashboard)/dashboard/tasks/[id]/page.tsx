@@ -20,6 +20,11 @@ import { getOpenRemedialCallsForSite } from '@/lib/remedial'
 import { OutstandingRemedialCard } from '@/components/dashboard/tasks/outstanding-remedial-card'
 import { getOtherOpenCallsForSite } from '@/lib/site-open-calls'
 import { OtherSiteCallsCard } from '@/components/dashboard/tasks/other-site-calls-card'
+import {
+  RelatedLinksCard,
+  type RelatedJob,
+  type RelatedQuote,
+} from '@/components/dashboard/tasks/related-links-card'
 import { DeadlineFailedPanel } from '@/components/dashboard/tasks/deadline-failed-panel'
 import { CallNotesCard } from '@/components/dashboard/tasks/call-notes-card'
 import { CallHistoryCard, type CallHistoryEntry } from '@/components/dashboard/tasks/call-history-card'
@@ -505,6 +510,74 @@ export default async function TaskPage({ params }: PageProps) {
         </>
       )
     }
+  }
+
+  // ─── Related paperwork (office/admin only) ───────────────────────────────
+  // A compact card near the top linking out to the wider records around this
+  // call: the site, and every job and quote attached to that site. The job or
+  // quote that directly spawned this call (commissioning / remedial) is flagged.
+  // Prepended last so it sits at the very top of the office/admin view.
+  if ((role === 'admin' || role === 'office') && preAttendanceSiteId) {
+    const [{ data: jobRows }, { data: quoteRows }] = await Promise.all([
+      supabase
+        .from('jobs')
+        .select('id, job_number, title, status, created_at')
+        .eq('site_id', preAttendanceSiteId)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('quotes')
+        .select('id, quote_number, reference, title, status, created_at')
+        .eq('site_id', preAttendanceSiteId)
+        .order('created_at', { ascending: false }),
+    ])
+
+    const linkedJobId = (task.source_job_id as string | null) ?? null
+    const linkedQuoteId = (task.source_quote_id as string | null) ?? null
+
+    const jobs: RelatedJob[] = ((jobRows || []) as Array<{
+      id: string
+      job_number: string | null
+      title: string | null
+      status: string | null
+    }>).map((j) => ({
+      id: j.id,
+      jobNumber: j.job_number,
+      title: j.title,
+      status: j.status,
+      linked: j.id === linkedJobId,
+    }))
+
+    const quotes: RelatedQuote[] = ((quoteRows || []) as Array<{
+      id: string
+      quote_number: string | null
+      reference: string | null
+      title: string | null
+      status: string | null
+    }>).map((q) => ({
+      id: q.id,
+      quoteNumber: q.quote_number,
+      reference: q.reference,
+      title: q.title,
+      status: q.status,
+      linked: q.id === linkedQuoteId,
+    }))
+
+    // Sort the directly-linked job/quote to the front so it reads first.
+    jobs.sort((a, b) => Number(b.linked) - Number(a.linked))
+    quotes.sort((a, b) => Number(b.linked) - Number(a.linked))
+
+    preAttendancePanel = (
+      <>
+        <RelatedLinksCard
+          siteId={preAttendanceSiteId}
+          siteName={task.site_service?.site?.name ?? null}
+          clientName={task.site_service?.site?.client?.name ?? null}
+          jobs={jobs}
+          quotes={quotes}
+        />
+        {preAttendancePanel}
+      </>
+    )
   }
 
   // Existing client sign-off (name + signature) for the asset inspection flows,

@@ -154,7 +154,7 @@ export function VaultManager({ sections }: VaultManagerProps) {
     setButtonSectionId(button.section_id)
     setButtonForm({
       label: button.label,
-      url: button.url,
+      url: button.url ?? '',
       description: button.description ?? '',
       icon: button.icon ?? 'link',
       open_in_new_tab: button.open_in_new_tab,
@@ -168,14 +168,11 @@ export function VaultManager({ sections }: VaultManagerProps) {
       toast.error('Please enter a button label')
       return
     }
+    // URL is optional: a button with no URL renders as a plain label. When one
+    // is given, allow relative in-app links (starting with /) or absolute URLs,
+    // prefixing bare domains with https://.
     let url = buttonForm.url.trim()
-    if (!url) {
-      toast.error('Please enter a URL')
-      return
-    }
-    // Allow relative in-app links (starting with /) or absolute URLs; prefix
-    // bare domains with https://.
-    if (!url.startsWith('/') && !/^https?:\/\//i.test(url)) {
+    if (url && !url.startsWith('/') && !/^https?:\/\//i.test(url)) {
       url = `https://${url}`
     }
     if (buttonForm.visible_roles.length === 0) {
@@ -187,7 +184,7 @@ export function VaultManager({ sections }: VaultManagerProps) {
     const payload = {
       section_id: buttonSectionId,
       label: buttonForm.label.trim(),
-      url,
+      url: url || null,
       description: buttonForm.description.trim() || null,
       icon: buttonForm.icon,
       open_in_new_tab: buttonForm.open_in_new_tab,
@@ -301,7 +298,9 @@ export function VaultManager({ sections }: VaultManagerProps) {
                           <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
                         )}
                       </div>
-                      <p className="truncate text-xs text-muted-foreground">{button.url}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {button.url || 'No link'}
+                      </p>
                     </div>
                     <div className="flex shrink-0">
                       <Button
@@ -428,7 +427,7 @@ export function VaultManager({ sections }: VaultManagerProps) {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="button-url">URL</Label>
+              <Label htmlFor="button-url">URL (optional)</Label>
               <Input
                 id="button-url"
                 value={buttonForm.url}

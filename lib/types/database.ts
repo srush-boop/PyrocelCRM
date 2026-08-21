@@ -3319,7 +3319,9 @@ export interface VaultButton {
   id: string
   section_id: string
   label: string
-  url: string
+  // Optional. A button with no URL renders as a plain (non-clickable) label,
+  // useful as a heading or a placeholder alongside folder documents.
+  url: string | null
   description: string | null
   // A lucide icon name (see VAULT_ICONS); null falls back to a default.
   icon: string | null

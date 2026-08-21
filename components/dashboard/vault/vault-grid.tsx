@@ -334,6 +334,40 @@ export function VaultGrid({ sections, isAdmin, departments, staff }: VaultGridPr
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                         {section.buttons.map((button) => {
                           const Icon = getVaultIcon(button.icon)
+                          const inner = (
+                            <>
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                                <Icon className="h-5 w-5" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-medium leading-tight">
+                                    {button.label}
+                                  </span>
+                                  {button.url && button.open_in_new_tab && (
+                                    <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                                  )}
+                                </div>
+                                {button.description && (
+                                  <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground text-pretty">
+                                    {button.description}
+                                  </p>
+                                )}
+                              </div>
+                            </>
+                          )
+                          // Buttons with no URL are just labels/headings, so
+                          // render them as a non-clickable card.
+                          if (!button.url) {
+                            return (
+                              <div
+                                key={button.id}
+                                className="flex items-start gap-3 rounded-lg border bg-card p-4"
+                              >
+                                {inner}
+                              </div>
+                            )
+                          }
                           return (
                             <Link
                               key={button.id}
@@ -344,24 +378,7 @@ export function VaultGrid({ sections, isAdmin, departments, staff }: VaultGridPr
                               }
                               className="group flex items-start gap-3 rounded-lg border bg-card p-4 transition-colors hover:border-primary hover:bg-accent"
                             >
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                                <Icon className="h-5 w-5" />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="font-medium leading-tight">
-                                    {button.label}
-                                  </span>
-                                  {button.open_in_new_tab && (
-                                    <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                                  )}
-                                </div>
-                                {button.description && (
-                                  <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground text-pretty">
-                                    {button.description}
-                                  </p>
-                                )}
-                              </div>
+                              {inner}
                             </Link>
                           )
                         })}

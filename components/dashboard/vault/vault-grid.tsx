@@ -43,8 +43,20 @@ import {
 } from '@/components/ui/alert-dialog'
 import { getVaultIcon } from '@/lib/vault-icons'
 import { createClient } from '@/lib/supabase/client'
-import { formatFileSize } from '@/lib/assets'
 import type { VaultSection, VaultFolder, VaultDocument } from '@/lib/types/database'
+
+// Human-readable file size from a byte count.
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  const units = ['KB', 'MB', 'GB']
+  let value = bytes / 1024
+  let unit = 0
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024
+    unit += 1
+  }
+  return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`
+}
 import {
   VaultNotifyDialog,
   type VaultDepartment,
@@ -113,7 +125,7 @@ export function VaultGrid({ sections, isAdmin, departments, staff }: VaultGridPr
             const keep = !searching || folderMatches || docs.length > 0
             return keep ? { ...folder, documents } : null
           })
-          .filter((f): f is VaultFolder => f !== null)
+          .filter((f) => f !== null) as VaultFolder[]
 
         const sectionMatches = matchText(section.title, section.description)
         const hasContent = buttons.length > 0 || folders.length > 0
@@ -124,7 +136,7 @@ export function VaultGrid({ sections, isAdmin, departments, staff }: VaultGridPr
           ? { ...section, buttons, folders: searching && sectionMatches ? (section.folders ?? []) : folders }
           : null
       })
-      .filter((s): s is VaultSection => s !== null)
+      .filter((s) => s !== null) as VaultSection[]
   }, [sections, q, searching, isAdmin])
 
   function isSectionOpen(id: string) {

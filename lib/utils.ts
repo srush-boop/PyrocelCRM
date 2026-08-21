@@ -99,7 +99,15 @@ export function formatBookedSlot(
   return s || e || ''
 }
 
-// Format a pounds value as GBP currency (client-safe).
+// ── Money helpers (single source of truth, all client-safe) ───────────────
+// Three GBP formatters exist because call sites genuinely need different
+// behaviour; keep them here so there is exactly one definition of each.
+//   formatGBP     — pounds in, always 2 dp (e.g. "£1,234.50")
+//   formatCurrency— pounds in, 0–2 dp, null → em dash (compact summary display)
+//   formatPence   — integer pence in, 2 dp
+// lib/sales.ts and lib/assets.ts re-export these for backwards compatibility.
+
+// Format a pounds value as GBP currency, always 2 decimal places.
 export function formatGBP(value: number): string {
   return new Intl.NumberFormat(UK_LOCALE, {
     style: 'currency',
@@ -107,4 +115,37 @@ export function formatGBP(value: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value || 0)
+}
+
+// Format a pounds value as GBP, trimming trailing zeros (0–2 dp), with a dash
+// placeholder for null/undefined. Used for compact table/summary figures.
+export function formatCurrency(value: number | null | undefined): string {
+  if (value == null) return '—'
+  return new Intl.NumberFormat(UK_LOCALE, {
+    style: 'currency',
+    currency: 'GBP',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(value)
+}
+
+// Format an integer-pence value as GBP currency (2 dp).
+export function formatPence(pence: number, currency = 'GBP'): string {
+  return new Intl.NumberFormat(UK_LOCALE, {
+    style: 'currency',
+    currency,
+  }).format((pence ?? 0) / 100)
+}
+
+// Parse a user-entered pounds string (e.g. "1,234.50") into integer pence.
+export function poundsToPence(value: string | number): number {
+  if (typeof value === 'number') return Math.round(value * 100)
+  const cleaned = value.replace(/[^0-9.-]/g, '')
+  const n = Number.parseFloat(cleaned)
+  return Number.isFinite(n) ? Math.round(n * 100) : 0
+}
+
+// Convert integer pence into a plain pounds string for inputs (no symbol).
+export function penceToPounds(pence: number): string {
+  return ((pence ?? 0) / 100).toFixed(2)
 }

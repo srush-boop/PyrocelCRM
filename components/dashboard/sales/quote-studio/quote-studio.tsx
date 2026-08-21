@@ -30,7 +30,7 @@ import {
   Lightbulb,
   Factory,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, formatPence } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -110,8 +110,8 @@ const PHASES: { id: Phase; label: string; icon: ComponentType<{ className?: stri
 
 // --------------------------------------------------------------- helpers
 
-const gbp = (pence: number) =>
-  new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format((pence || 0) / 100)
+// Canonical GBP-from-pence formatter; see lib/utils.ts.
+const gbp = formatPence
 
 /** Sentinel key for the generic / unbranded default combination (no range). */
 const GENERIC_KEY = '__generic__'

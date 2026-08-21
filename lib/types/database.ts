@@ -3337,6 +3337,37 @@ export interface VaultSection {
   visible_roles: UserRole[]
   created_at: string
   buttons?: VaultButton[]
+  folders?: VaultFolder[]
+}
+
+// A documentation folder that lives inside a vault section. Only admins can
+// create folders or upload documents into them; visibility of the documents
+// inherits the parent section's `visible_roles` (enforced by RLS).
+export interface VaultFolder {
+  id: string
+  section_id: string
+  name: string
+  description: string | null
+  sort_order: number
+  created_by: string | null
+  created_at: string
+  documents?: VaultDocument[]
+}
+
+// A single file uploaded to a vault folder, stored in private Blob storage and
+// served through the /api/vault/documents/[id]/file proxy.
+export interface VaultDocument {
+  id: string
+  folder_id: string
+  name: string
+  description: string | null
+  blob_pathname: string
+  blob_url: string | null
+  content_type: string | null
+  size_bytes: number | null
+  uploaded_by: string | null
+  created_at: string
+  updated_at: string
 }
 
 // ============ Company Asset Management ============

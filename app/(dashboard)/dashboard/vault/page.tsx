@@ -4,7 +4,13 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Settings } from 'lucide-react'
 import { VaultGrid } from '@/components/dashboard/vault/vault-grid'
-import type { Profile, VaultSection, VaultButton } from '@/lib/types/database'
+import type {
+  Profile,
+  VaultSection,
+  VaultButton,
+  VaultFolder,
+  VaultDocument,
+} from '@/lib/types/database'
 
 export const metadata = {
   title: 'Employee Vault | Pyrocel',
@@ -29,9 +35,14 @@ export default async function VaultPage() {
   const typedProfile = profile as Profile
   const isAdmin = typedProfile.role === 'admin'
 
-  // RLS already filters sections/buttons to those visible to this role, so we
-  // simply fetch and group them.
-  const [{ data: sectionData }, { data: buttonData }] = await Promise.all([
+  // RLS already filters sections/buttons/folders/documents to those visible to
+  // this role, so we simply fetch and group them.
+  const [
+    { data: sectionData },
+    { data: buttonData },
+    { data: folderData },
+    { data: documentData },
+  ] = await Promise.all([
     supabase
       .from('vault_sections')
       .select('*')
@@ -42,13 +53,47 @@ export default async function VaultPage() {
       .select('*')
       .order('sort_order', { ascending: true })
       .order('label', { ascending: true }),
+    supabase
+      .from('vault_folders')
+      .select('*')
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true }),
+    supabase
+      .from('vault_documents')
+      .select('*')
+      .order('name', { ascending: true }),
   ])
 
   const buttons = (buttonData || []) as VaultButton[]
+  const documents = (documentData || []) as VaultDocument[]
+  const folders = ((folderData || []) as VaultFolder[]).map((f) => ({
+    ...f,
+    documents: documents.filter((d) => d.folder_id === f.id),
+  }))
   const sections = ((sectionData || []) as VaultSection[]).map((s) => ({
     ...s,
     buttons: buttons.filter((b) => b.section_id === s.id),
+    folders: folders.filter((f) => f.section_id === s.id),
   }))
+
+  // Admins can broadcast an update; load the recipient pickers (departments +
+  // active non-client staff). Non-admins never see the composer.
+  let departments: { id: string; name: string }[] = []
+  let staff: { id: string; full_name: string | null; role: string; department_id: string | null }[] =
+    []
+  if (isAdmin) {
+    const [{ data: deptData }, { data: staffData }] = await Promise.all([
+      supabase.from('departments').select('id, name').order('name'),
+      supabase
+        .from('profiles')
+        .select('id, full_name, role, department_id')
+        .neq('role', 'client')
+        .eq('status', 'active')
+        .order('full_name'),
+    ])
+    departments = (deptData || []) as typeof departments
+    staff = (staffData || []) as typeof staff
+  }
 
   return (
     <div className="space-y-6">
@@ -69,7 +114,12 @@ export default async function VaultPage() {
         )}
       </div>
 
-      <VaultGrid sections={sections} isAdmin={isAdmin} />
+      <VaultGrid
+        sections={sections}
+        isAdmin={isAdmin}
+        departments={departments}
+        staff={staff}
+      />
     </div>
   )
 }

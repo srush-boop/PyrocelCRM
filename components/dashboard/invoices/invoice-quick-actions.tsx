@@ -39,9 +39,11 @@ import {
 } from '@/lib/actions/invoices'
 import { SendInvoiceDialog } from './send-invoice-dialog'
 import type { Invoice, InvoiceLineItem, InvoiceLineKind } from '@/lib/types/database'
+import { formatPence } from '@/lib/utils'
 
-const money = (pence: number) =>
-  `£${(pence / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+// Canonical GBP-from-pence formatter (identical output to the previous inline
+// version); see lib/utils.ts.
+const money = formatPence
 
 interface Props {
   invoice: Invoice

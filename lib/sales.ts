@@ -175,25 +175,9 @@ export const QUOTE_STATUS_META: Record<
 }
 
 // --- Money helpers -----------------------------------------------------
-export function formatPence(pence: number, currency = 'GBP'): string {
-  return new Intl.NumberFormat('en-GB', {
-    style: 'currency',
-    currency,
-  }).format((pence ?? 0) / 100)
-}
-
-// Parse a user-entered pounds string (e.g. "1,234.50") into integer pence.
-export function poundsToPence(value: string | number): number {
-  if (typeof value === 'number') return Math.round(value * 100)
-  const cleaned = value.replace(/[^0-9.-]/g, '')
-  const n = Number.parseFloat(cleaned)
-  return Number.isFinite(n) ? Math.round(n * 100) : 0
-}
-
-// Convert integer pence into a plain pounds string for inputs (no symbol).
-export function penceToPounds(pence: number): string {
-  return ((pence ?? 0) / 100).toFixed(2)
-}
+// Canonical definitions now live in lib/utils.ts; re-exported here so existing
+// `@/lib/sales` importers keep working unchanged.
+export { formatPence, poundsToPence, penceToPounds } from '@/lib/utils'
 
 // --- Margin-based pricing ---------------------------------------------
 // Single source of truth for turning a unit cost + gross margin % into a

@@ -105,12 +105,6 @@ export const DUE_STATUS_LABELS: Record<DueStatus, string> = {
 }
 
 /** Format a GBP value, or an em dash when null. */
-export function formatCurrency(value: number | null | undefined): string {
-  if (value == null) return '—'
-  return new Intl.NumberFormat('en-GB', {
-    style: 'currency',
-    currency: 'GBP',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(value)
-}
+// Canonical definition now lives in lib/utils.ts; re-exported here so existing
+// `@/lib/assets` importers keep working unchanged.
+export { formatCurrency } from '@/lib/utils'

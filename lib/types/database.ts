@@ -935,7 +935,9 @@ export type InternalTaskStatus = 'pending' | 'completed' | 'overdue'
 
 // Recurring internal tasks are scheduled + assigned by the cron. On-demand forms
 // (e.g. uniform request, expense claim) are launched by any user at will.
-export type InternalTaskKind = 'recurring' | 'on_demand'
+// Surveys (admin-only) are one-off opinion polls distributed to targeted staff;
+// their responses are summarised and posted to the creator + nominated staff.
+export type InternalTaskKind = 'recurring' | 'on_demand' | 'survey'
 
 // Approval state for a submitted instance. Null = the template needs no approval.
 export type InternalTaskApprovalStatus = 'pending' | 'approved' | 'rejected'
@@ -1061,6 +1063,20 @@ export interface InternalTaskTemplate {
   // In-app notification to these profile ids, plus an optional email address.
   notify_on_issue_user_ids: string[]
   notify_on_issue_email: string | null
+  // --- Survey-only (task_kind === 'survey') ---------------------------------
+  // When true, the results summary and per-response views never reveal who gave
+  // which answer (identity is hidden at the presentation layer).
+  survey_anonymous: boolean
+  // Optional auto-close deadline; null = stays open until closed manually.
+  survey_closes_at: string | null
+  // Set when the survey has been closed (deadline reached or admin closed it).
+  survey_closed_at: string | null
+  // Set when the survey has been published (distributed to respondents).
+  survey_published_at: string | null
+  // Extra staff (beyond the creator) who receive the results summary.
+  survey_summary_recipient_ids: string[]
+  // Set once the results summary has been sent (idempotency for auto-send).
+  survey_summary_sent_at: string | null
   created_by: string | null
   created_at: string
   updated_at: string

@@ -927,6 +927,12 @@ export async function saveInternalTaskTemplate(
   if ('error' in auth) return { ok: false, error: auth.error }
   const { supabase, userId } = auth
 
+  // Surveys are an admin-only feature; office quality managers may manage
+  // recurring tasks + on-demand forms but not surveys.
+  if (input.task_kind === 'survey' && auth.profile.role !== 'admin') {
+    return { ok: false, error: 'Only admins can create surveys.' }
+  }
+
   const payload = {
     name: input.name,
     description: input.description ?? null,
@@ -934,6 +940,12 @@ export async function saveInternalTaskTemplate(
     active: input.active ?? true,
     sort_order: input.sort_order ?? 0,
     task_kind: input.task_kind ?? 'recurring',
+    // Survey config (ignored for other kinds). State columns
+    // (published/closed/summary_sent) are managed by the dedicated survey
+    // actions, never overwritten here.
+    survey_anonymous: input.survey_anonymous ?? false,
+    survey_closes_at: input.survey_closes_at ?? null,
+    survey_summary_recipient_ids: input.survey_summary_recipient_ids ?? [],
     requires_approval: input.requires_approval ?? false,
     approval_manager: input.approval_manager ?? false,
     approval_user_ids: input.approval_user_ids ?? [],

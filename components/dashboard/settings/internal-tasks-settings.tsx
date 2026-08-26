@@ -67,6 +67,7 @@ import {
 } from '@/lib/actions/internal-tasks'
 import { blobSrc } from '@/lib/blob'
 import { cn } from '@/lib/utils'
+import { SurveyRowActions } from './survey-row-actions'
 
 interface Props {
   templates: InternalTaskTemplate[]
@@ -75,6 +76,8 @@ interface Props {
   users: Pick<Profile, 'id' | 'full_name' | 'role'>[]
   // Company-wide reference documents that can be linked from a doc_link block.
   documents: { id: string; name: string }[]
+  // Surveys are an admin-only feature; office managers see tasks/forms only.
+  isAdmin: boolean
 }
 
 // Question types the user actually answers (support conditional rules).
@@ -97,6 +100,30 @@ const FREQUENCY_LABELS: Record<InternalTaskFrequency, string> = {
   quarterly: 'Quarterly',
   annual: 'Annual',
   one_off: 'One-off',
+}
+
+// ISO timestamp → value for a <input type="datetime-local"> (local time).
+function toLocalInput(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+// Lifecycle badge for a survey template (draft → open → closed).
+function surveyStatusBadge(t: InternalTaskTemplate) {
+  if (t.survey_closed_at) {
+    return <Badge variant="outline">Closed</Badge>
+  }
+  if (t.survey_published_at) {
+    return (
+      <Badge variant="outline" className="border-green-600 text-green-700">
+        Open
+      </Badge>
+    )
+  }
+  return <Badge variant="outline">Draft</Badge>
 }
 
 const ITEM_TYPES = [
@@ -166,6 +193,7 @@ export function InternalTasksSettings({
   roles,
   users,
   documents,
+  isAdmin,
 }: Props) {
   const router = useRouter()
   const [editing, setEditing] = useState<InternalTaskTemplate | null>(null)
@@ -212,11 +240,18 @@ export function InternalTasksSettings({
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="truncate font-medium">{t.name}</p>
-                    {t.task_kind === 'on_demand' ? (
+                    {t.task_kind === 'survey' ? (
+                      <Badge className="bg-primary/10 text-primary hover:bg-primary/10">
+                        Survey
+                      </Badge>
+                    ) : t.task_kind === 'on_demand' ? (
                       <Badge>Form</Badge>
                     ) : (
                       <Badge variant="secondary">{FREQUENCY_LABELS[t.frequency]}</Badge>
                     )}
+                    {t.task_kind === 'survey' ? (
+                      surveyStatusBadge(t)
+                    ) : null}
                     {t.requires_approval ? (
                       <Badge variant="outline">Approval</Badge>
                     ) : null}
@@ -224,7 +259,24 @@ export function InternalTasksSettings({
                     {!t.active ? <Badge variant="outline">Inactive</Badge> : null}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {t.task_kind === 'on_demand'
+                    {t.task_kind === 'survey'
+                      ? [
+                          t.applies_to_all
+                            ? 'All staff'
+                            : [
+                                t.role_names.length ? `${t.role_names.length} role(s)` : null,
+                                t.department_ids.length
+                                  ? `${t.department_ids.length} dept(s)`
+                                  : null,
+                                t.user_ids.length ? `${t.user_ids.length} person(s)` : null,
+                              ]
+                                .filter(Boolean)
+                                .join(' · ') || 'No audience',
+                          t.survey_anonymous ? 'anonymous' : null,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')
+                      : t.task_kind === 'on_demand'
                       ? 'Anyone can submit'
                       : t.applies_to_all
                         ? 'All users'
@@ -242,6 +294,7 @@ export function InternalTasksSettings({
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
+                  {t.task_kind === 'survey' ? <SurveyRowActions template={t} /> : null}
                   <Button variant="ghost" size="icon" onClick={() => startEdit(t)}>
                     <Pencil className="size-4" />
                     <span className="sr-only">Edit</span>
@@ -266,6 +319,7 @@ export function InternalTasksSettings({
           roles={roles}
           users={users}
           documents={documents}
+          isAdmin={isAdmin}
           onSaved={() => {
             setOpen(false)
             setEditing(null)
@@ -330,6 +384,7 @@ function TemplateEditorDialog({
   roles,
   users,
   documents,
+  isAdmin,
   onSaved,
 }: {
   open: boolean
@@ -339,6 +394,7 @@ function TemplateEditorDialog({
   roles: Role[]
   users: Pick<Profile, 'id' | 'full_name' | 'role'>[]
   documents: { id: string; name: string }[]
+  isAdmin: boolean
   onSaved: () => void
 }) {
   const [draft, setDraft] = useState<InternalTaskTemplate>(template)
@@ -350,6 +406,10 @@ function TemplateEditorDialog({
   function patch(updates: Partial<InternalTaskTemplate>) {
     setDraft((d) => ({ ...d, ...updates }))
   }
+
+  // Once a survey is published its type is fixed (responses already exist).
+  const typeLocked = Boolean(template.survey_published_at)
+  const isSurvey = draft.task_kind === 'survey'
 
   // --- Question / block helpers ----------------------------------------------
   function addQuestion() {
@@ -598,12 +658,18 @@ function TemplateEditorDialog({
         <DialogHeader>
           <DialogTitle>
             {draft.id ? 'Edit' : 'New'}{' '}
-            {draft.task_kind === 'on_demand' ? 'form' : 'internal task'}
+            {isSurvey
+              ? 'survey'
+              : draft.task_kind === 'on_demand'
+                ? 'form'
+                : 'internal task'}
           </DialogTitle>
           <DialogDescription>
-            {draft.task_kind === 'on_demand'
-              ? 'Configure the form, its questions and any approval workflow.'
-              : 'Configure the recurring task, its questions and who it applies to.'}
+            {isSurvey
+              ? 'Configure the survey, its questions and who should receive it. Publish it when you are ready.'
+              : draft.task_kind === 'on_demand'
+                ? 'Configure the form, its questions and any approval workflow.'
+                : 'Configure the recurring task, its questions and who it applies to.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -611,11 +677,12 @@ function TemplateEditorDialog({
           {/* Type */}
           <div className="rounded-lg border p-4">
             <Label className="mb-2 block">Type</Label>
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className={`grid gap-2 ${isAdmin ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
               <button
                 type="button"
+                disabled={typeLocked}
                 onClick={() => patch({ task_kind: 'recurring' })}
-                className={`rounded-md border p-3 text-left text-sm transition-colors ${
+                className={`rounded-md border p-3 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                   draft.task_kind === 'recurring'
                     ? 'border-primary bg-primary/5'
                     : 'hover:bg-muted/50'
@@ -628,8 +695,9 @@ function TemplateEditorDialog({
               </button>
               <button
                 type="button"
+                disabled={typeLocked}
                 onClick={() => patch({ task_kind: 'on_demand' })}
-                className={`rounded-md border p-3 text-left text-sm transition-colors ${
+                className={`rounded-md border p-3 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                   draft.task_kind === 'on_demand'
                     ? 'border-primary bg-primary/5'
                     : 'hover:bg-muted/50'
@@ -640,7 +708,29 @@ function TemplateEditorDialog({
                   Anyone can submit anytime (uniform request, expense claim).
                 </span>
               </button>
+              {isAdmin ? (
+                <button
+                  type="button"
+                  disabled={typeLocked}
+                  onClick={() => patch({ task_kind: 'survey' })}
+                  className={`rounded-md border p-3 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                    draft.task_kind === 'survey'
+                      ? 'border-primary bg-primary/5'
+                      : 'hover:bg-muted/50'
+                  }`}
+                >
+                  <span className="font-medium">Survey</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    Gather opinions from staff; results are summarised &amp; shared.
+                  </span>
+                </button>
+              ) : null}
             </div>
+            {typeLocked ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                The type can&apos;t be changed once a survey has been published.
+              </p>
+            ) : null}
           </div>
 
           {/* Basics */}
@@ -684,6 +774,75 @@ function TemplateEditorDialog({
               </div>
             </div>
           </div>
+
+          {/* Survey settings (surveys only) */}
+          {isSurvey ? (
+            <div className="rounded-lg border p-4">
+              <h3 className="mb-3 text-sm font-medium">Survey settings</h3>
+              <div className="space-y-4">
+                <label className="flex items-start gap-2">
+                  <Switch
+                    checked={draft.survey_anonymous}
+                    onCheckedChange={(v) => patch({ survey_anonymous: v })}
+                  />
+                  <span className="text-sm">
+                    Anonymous responses
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                      Results never reveal who gave which answer.
+                    </span>
+                  </span>
+                </label>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <Label htmlFor="survey-close">Close date (optional)</Label>
+                    <Input
+                      id="survey-close"
+                      type="datetime-local"
+                      value={toLocalInput(draft.survey_closes_at)}
+                      onChange={(e) =>
+                        patch({
+                          survey_closes_at: e.target.value
+                            ? new Date(e.target.value).toISOString()
+                            : null,
+                        })
+                      }
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Auto-closes and sends the summary. Leave blank to close it
+                      manually.
+                    </p>
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-2 text-xs font-medium text-muted-foreground">
+                    Also send the results summary to
+                  </p>
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    You (the creator) always receive it. Select anyone else who
+                    should get the summary.
+                  </p>
+                  <div className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-md border p-2">
+                    {users.map((u) => (
+                      <label key={u.id} className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={draft.survey_summary_recipient_ids.includes(u.id)}
+                          onCheckedChange={() =>
+                            patch({
+                              survey_summary_recipient_ids: toggleArray(
+                                draft.survey_summary_recipient_ids,
+                                u.id,
+                              ),
+                            })
+                          }
+                        />
+                        {u.full_name ?? 'Unnamed'}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {/* Recurrence (recurring tasks only) */}
           {draft.task_kind === 'recurring' ? (
@@ -786,8 +945,8 @@ function TemplateEditorDialog({
           </div>
           ) : null}
 
-          {/* Approval workflow */}
-          <div className="rounded-lg border p-4">
+          {/* Approval workflow (not applicable to surveys) */}
+          <div className={cn('rounded-lg border p-4', isSurvey && 'hidden')}>
             <div className="flex items-center gap-2">
               <Switch
                 id="it-approval"
@@ -1204,16 +1363,18 @@ function TemplateEditorDialog({
             )}
           </div>
 
-          {/* Applies to (recurring tasks only; on-demand forms are open to all) */}
-          {draft.task_kind === 'recurring' ? (
+          {/* Applies to (recurring tasks + surveys; on-demand forms are open to all) */}
+          {draft.task_kind !== 'on_demand' ? (
           <div className="rounded-lg border p-4">
-            <h3 className="mb-3 text-sm font-medium">Applies to</h3>
+            <h3 className="mb-3 text-sm font-medium">
+              {isSurvey ? 'Who receives this survey' : 'Applies to'}
+            </h3>
             <label className="mb-3 flex items-center gap-2">
               <Switch
                 checked={draft.applies_to_all}
                 onCheckedChange={(v) => patch({ applies_to_all: v })}
               />
-              <span className="text-sm">Everyone</span>
+              <span className="text-sm">{isSurvey ? 'All staff' : 'Everyone'}</span>
             </label>
             {!draft.applies_to_all ? (
               <div className="grid gap-4 sm:grid-cols-3">
@@ -1276,8 +1437,8 @@ function TemplateEditorDialog({
           </div>
           ) : null}
 
-          {/* Notify on issue */}
-          <div className="rounded-lg border p-4">
+          {/* Notify on issue (not applicable to surveys) */}
+          <div className={cn('rounded-lg border p-4', isSurvey && 'hidden')}>
             <h3 className="mb-1 flex items-center gap-2 text-sm font-medium">
               <BellRing className="size-4" />
               Notify if failure/issue
@@ -1337,7 +1498,7 @@ function TemplateEditorDialog({
           </Button>
           <Button onClick={handleSave} disabled={saving}>
             {saving ? <Loader2 className="size-4 animate-spin" /> : null}
-            {draft.task_kind === 'on_demand' ? 'Save form' : 'Save task'}
+            {isSurvey ? 'Save survey' : draft.task_kind === 'on_demand' ? 'Save form' : 'Save task'}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -596,6 +596,7 @@ export function SettingsContent({ user, profile, company, branches, departments,
             roles={internalTaskRoles}
             users={internalTaskUsers}
             documents={internalTaskDocuments}
+            isAdmin={isAdmin}
           />
         </TabsContent>
       )}

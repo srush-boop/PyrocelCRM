@@ -164,6 +164,28 @@ function QuestionCard({
           )
         ) : null}
 
+        {q.type === 'choice' ? (
+          q.optionCounts && q.optionCounts.length > 0 ? (
+            <div className="space-y-3">
+              {q.choiceMultiSelect ? (
+                <p className="text-xs text-muted-foreground">
+                  Respondents could choose more than one option.
+                </p>
+              ) : null}
+              {q.optionCounts.map((o) => (
+                <Bar
+                  key={o.option}
+                  label={o.option}
+                  count={o.count}
+                  total={q.answered}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No responses yet.</p>
+          )
+        ) : null}
+
         {q.type === 'table' ? (
           <p className="text-sm text-muted-foreground">
             {q.tableRowCount ?? 0} row(s) submitted across {q.answered} response(s).

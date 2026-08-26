@@ -39,6 +39,7 @@ import type {
 } from '@/lib/types/database'
 import { submitInternalTask, decideApproval } from '@/lib/actions/internal-tasks'
 import { blobSrc } from '@/lib/blob'
+import { cn } from '@/lib/utils'
 
 interface Props {
   instance: InternalTaskInstance
@@ -59,6 +60,9 @@ type RowPhoto = { id: string; name: string; url: string }
 type Row = InternalTaskAnswer & {
   photos?: RowPhoto[]
   columns?: InternalTaskItem['columns']
+  // choice questions: the selectable options + whether multiple are allowed.
+  options?: string[]
+  multiSelect?: boolean
   // Author reference image copied from the template item (top-level only).
   imagePathname?: string | null
   imageName?: string | null
@@ -66,7 +70,7 @@ type Row = InternalTaskAnswer & {
 
 // Question block types the user actually answers (produce a Row + can block
 // submit). Display-only blocks (section/doc_link/url_link) are skipped here.
-const ANSWERABLE = new Set(['pass_fail', 'text', 'number', 'checkbox', 'table', 'file'])
+const ANSWERABLE = new Set(['pass_fail', 'text', 'number', 'checkbox', 'choice', 'table', 'file'])
 function isAnswerable(type: InternalTaskItem['type']): boolean {
   return ANSWERABLE.has(type)
 }
@@ -88,7 +92,13 @@ function buildRows(questions: InternalTaskItem[], saved: InternalTaskAnswer[]): 
       type: q.type,
       value:
         prev?.value ??
-        (q.type === 'checkbox' ? false : q.type === 'table' ? [] : ''),
+        (q.type === 'checkbox'
+          ? false
+          : q.type === 'table'
+            ? []
+            : q.type === 'choice' && q.multiSelect
+              ? []
+              : ''),
       passed: prev?.passed ?? null,
       advisory: prev?.advisory,
       na: prev?.na,
@@ -96,6 +106,8 @@ function buildRows(questions: InternalTaskItem[], saved: InternalTaskAnswer[]): 
       photos: (prev as Row | undefined)?.photos ?? [],
       conditions: q.conditions,
       columns: q.columns,
+      options: q.options,
+      multiSelect: q.multiSelect,
       imagePathname: q.imagePathname ?? null,
       imageName: q.imageName ?? null,
     })
@@ -310,6 +322,13 @@ export function InternalTaskSheet({
           out.push(`${row.label}: add at least one row`)
         } else if (row.type === 'file' && (row.photos ?? []).length === 0) {
           out.push(`${row.label}: attach a document`)
+        } else if (
+          row.type === 'choice' &&
+          (Array.isArray(row.value)
+            ? row.value.length === 0
+            : String(row.value ?? '').trim() === '')
+        ) {
+          out.push(`${row.label}: choose an option`)
         }
       }
       // Conditional requirements on visible top-level rows.
@@ -668,6 +687,51 @@ export function InternalTaskSheet({
                         placeholder="Enter a number"
                         className="max-w-[160px]"
                       />
+                    )}
+
+                    {row.type === 'choice' && (
+                      <div className="flex flex-col gap-2">
+                        {(row.options ?? []).map((opt, oi) => {
+                          const selectedValues = Array.isArray(row.value)
+                            ? (row.value as string[])
+                            : []
+                          const selected = row.multiSelect
+                            ? selectedValues.includes(opt)
+                            : row.value === opt
+                          return (
+                            <label
+                              key={oi}
+                              className={cn(
+                                'flex cursor-pointer items-center gap-2 rounded-md border p-2.5 text-sm transition-colors',
+                                selected
+                                  ? 'border-primary bg-primary/5'
+                                  : 'hover:bg-muted/50',
+                                readOnly && 'cursor-default',
+                              )}
+                            >
+                              <input
+                                type={row.multiSelect ? 'checkbox' : 'radio'}
+                                name={`choice-${row.item_id}`}
+                                className="size-4 accent-primary"
+                                checked={selected}
+                                disabled={readOnly}
+                                onChange={() => {
+                                  if (row.multiSelect) {
+                                    update(row.item_id, {
+                                      value: selectedValues.includes(opt)
+                                        ? selectedValues.filter((v) => v !== opt)
+                                        : [...selectedValues, opt],
+                                    })
+                                  } else {
+                                    update(row.item_id, { value: opt })
+                                  }
+                                }}
+                              />
+                              <span>{opt}</span>
+                            </label>
+                          )
+                        })}
+                      </div>
                     )}
 
                     {row.type === 'table' && (

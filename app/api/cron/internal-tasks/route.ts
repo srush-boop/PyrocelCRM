@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { notifyUsers } from '@/lib/notifications'
 import { computePeriod, resolveAssigneeIds, type AssigneeCandidate } from '@/lib/internal-tasks/schedule'
+import { deliverSurveySummary } from '@/lib/surveys/deliver'
 import type { InternalTaskTemplate } from '@/lib/types/database'
 
 // Runs daily (see vercel.json). For every active internal-task template:
@@ -79,12 +80,15 @@ export async function GET(req: Request) {
   //    warns on overdue) → status overdue + one notification per day.
   const { data: overdueRows } = await admin
     .from('internal_task_instances')
-    .select('id, user_id, due_at, template:internal_task_templates(name, warn_overdue)')
+    .select('id, user_id, due_at, template:internal_task_templates(name, warn_overdue, task_kind)')
     .eq('status', 'pending')
     .lt('due_at', now.toISOString())
 
   for (const row of overdueRows ?? []) {
     const template = Array.isArray(row.template) ? row.template[0] : row.template
+    // Surveys close (they don't nag respondents as "overdue") — leave them
+    // pending; the survey sweep below handles closing + summarising.
+    if ((template as { task_kind?: string } | null)?.task_kind === 'survey') continue
     // Flip status regardless; only notify when the template warns.
     await admin.from('internal_task_instances').update({ status: 'overdue' }).eq('id', row.id)
     markedOverdue += 1
@@ -134,7 +138,50 @@ export async function GET(req: Request) {
     reminded += 1
   }
 
-  return NextResponse.json({ ok: true, generated, reminded, markedOverdue })
+  // 4) Surveys: auto-close any past their close date, then post the results
+  //    summary for closed surveys whose summary has not yet been sent.
+  let surveysClosed = 0
+  let surveysSummarised = 0
+  try {
+    // Auto-close: close date reached and not already closed.
+    const { data: toClose } = await admin
+      .from('internal_task_templates')
+      .select('id')
+      .eq('task_kind', 'survey')
+      .not('survey_closes_at', 'is', null)
+      .lte('survey_closes_at', now.toISOString())
+      .is('survey_closed_at', null)
+    for (const s of toClose ?? []) {
+      await admin
+        .from('internal_task_templates')
+        .update({ survey_closed_at: now.toISOString(), updated_at: now.toISOString() })
+        .eq('id', (s as { id: string }).id)
+      surveysClosed += 1
+    }
+
+    // Auto-send summary: closed surveys with no summary sent yet.
+    const { data: toSummarise } = await admin
+      .from('internal_task_templates')
+      .select('id')
+      .eq('task_kind', 'survey')
+      .not('survey_closed_at', 'is', null)
+      .is('survey_summary_sent_at', null)
+    for (const s of toSummarise ?? []) {
+      const res = await deliverSurveySummary(admin, (s as { id: string }).id)
+      if (res.ok) surveysSummarised += 1
+    }
+  } catch (err) {
+    console.log('[v0] survey sweep failed:', (err as Error).message)
+  }
+
+  return NextResponse.json({
+    ok: true,
+    generated,
+    reminded,
+    markedOverdue,
+    surveysClosed,
+    surveysSummarised,
+  })
 }
 
 // Idempotency guard: has this instance already produced a notification of this

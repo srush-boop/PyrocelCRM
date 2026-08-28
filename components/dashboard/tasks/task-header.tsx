@@ -77,6 +77,11 @@ export function TaskHeader({
 
   const isClosed = status === 'completed' || status === 'cancelled'
 
+  // Every task is stamped with a reference at creation (tasks.reference_number),
+  // so show that for pending calls too — the passed-in prop (from the
+  // task_result) only exists once a report has been started/completed.
+  const displayReference = referenceNumber ?? task.reference_number ?? null
+
   // "Complete by" is the client KPI target date (visit date + tolerance, or the
   // due week/month for weekly/monthly recurring PPM) — not the raw visit date.
   const targetDate = getCallTargetDate({
@@ -146,9 +151,9 @@ export function TaskHeader({
           Back to {backLabel}
         </Button>
         <div className="flex items-center gap-2">
-          {referenceNumber && (
+          {displayReference && (
             <span className="rounded-md border bg-muted/60 px-2 py-0.5 font-mono text-xs font-medium text-muted-foreground">
-              {referenceNumber}
+              {displayReference}
             </span>
           )}
           {canCreateDocument && (
@@ -162,7 +167,7 @@ export function TaskHeader({
           {canCancel && !isClosed && (
             <CancelCallDialog
               taskId={task.id}
-              referenceNumber={referenceNumber}
+              referenceNumber={displayReference}
               onCancelled={() => router.refresh()}
             />
           )}

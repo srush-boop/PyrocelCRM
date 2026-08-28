@@ -29,6 +29,10 @@ export interface SurveyQuestionSummary {
   textResponses?: { name: string | null; value: string }[]
   // table
   tableRowCount?: number
+  // choice — count of respondents who picked each defined option. For
+  // multi-select questions the counts can sum to more than `answered`.
+  optionCounts?: { option: string; count: number }[]
+  choiceMultiSelect?: boolean
 }
 
 export interface SurveySummary {
@@ -47,7 +51,7 @@ interface SummaryInstance {
 }
 
 // Block types that produce an answer worth summarising.
-const ANSWERABLE = new Set(['pass_fail', 'text', 'number', 'checkbox', 'table'])
+const ANSWERABLE = new Set(['pass_fail', 'text', 'number', 'checkbox', 'choice', 'table'])
 
 function num(v: unknown): number | null {
   const n = Number(v)
@@ -133,6 +137,20 @@ export function buildSurveySummary(params: {
         )
         break
       }
+      case 'choice': {
+        summary.choiceMultiSelect = q.multiSelect === true
+        const options = q.options ?? []
+        summary.optionCounts = options.map((option) => ({
+          option,
+          count: answers.filter((a) => {
+            const v = a.answer.value
+            return Array.isArray(v)
+              ? v.map(String).includes(option)
+              : String(v ?? '') === option
+          }).length,
+        }))
+        break
+      }
     }
 
     questionSummaries.push(summary)
@@ -177,6 +195,16 @@ export function summaryHeadlines(summary: SurveySummary): { label: string; detai
       case 'table':
         detail = `${q.tableRowCount ?? 0} row(s) across ${q.answered} responses`
         break
+      case 'choice': {
+        const counts = q.optionCounts ?? []
+        if (counts.length === 0 || q.answered === 0) {
+          detail = 'No responses'
+        } else {
+          const top = [...counts].sort((a, b) => b.count - a.count)[0]
+          detail = `Top: ${top.option} (${top.count} of ${q.answered})`
+        }
+        break
+      }
     }
     return { label: q.label, detail }
   })

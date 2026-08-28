@@ -81,12 +81,13 @@ interface Props {
 }
 
 // Question types the user actually answers (support conditional rules).
-type QuestionType = 'pass_fail' | 'checkbox' | 'text' | 'number'
+type QuestionType = 'pass_fail' | 'checkbox' | 'text' | 'number' | 'choice'
 const QUESTION_TYPES: readonly QuestionType[] = [
   'pass_fail',
   'checkbox',
   'text',
   'number',
+  'choice',
 ]
 
 // Whether a block is a question the user answers (vs a display/content block).
@@ -131,6 +132,7 @@ const ITEM_TYPES = [
   { value: 'checkbox', label: 'Checkbox' },
   { value: 'text', label: 'Text' },
   { value: 'number', label: 'Number' },
+  { value: 'choice', label: 'Multiple choice' },
 ] as const
 
 const DOW = [
@@ -520,6 +522,20 @@ function TemplateEditorDialog({
     const cols = draft.questions.find((q) => q.id === qId)?.columns ?? []
     updateQuestion(qId, { columns: cols.filter((c) => c.id !== colId) })
   }
+  // Multiple-choice option helpers (choice questions only).
+  function addOption(qId: string) {
+    const opts = draft.questions.find((q) => q.id === qId)?.options ?? []
+    updateQuestion(qId, { options: [...opts, ''] })
+  }
+  function updateOption(qId: string, index: number, value: string) {
+    const opts = [...(draft.questions.find((q) => q.id === qId)?.options ?? [])]
+    opts[index] = value
+    updateQuestion(qId, { options: opts })
+  }
+  function removeOption(qId: string, index: number) {
+    const opts = draft.questions.find((q) => q.id === qId)?.options ?? []
+    updateQuestion(qId, { options: opts.filter((_, i) => i !== index) })
+  }
   function addCondition(qId: string) {
     patch({
       questions: draft.questions.map((q) => {
@@ -643,7 +659,23 @@ function TemplateEditorDialog({
       setSaving(false)
       return
     }
-    const result = await saveInternalTaskTemplate(draft)
+    // Drop blank options from choice questions and require at least two.
+    const cleanedQuestions = draft.questions.map((q) =>
+      q.type === 'choice'
+        ? { ...q, options: (q.options ?? []).map((o) => o.trim()).filter(Boolean) }
+        : q,
+    )
+    const badChoice = cleanedQuestions.find(
+      (q) => q.type === 'choice' && (q.options ?? []).length < 2,
+    )
+    if (badChoice) {
+      setError(
+        `Multiple-choice question "${badChoice.label || 'Untitled'}" needs at least two options`,
+      )
+      setSaving(false)
+      return
+    }
+    const result = await saveInternalTaskTemplate({ ...draft, questions: cleanedQuestions })
     setSaving(false)
     if (!result.ok) {
       setError(result.error ?? 'Could not save')
@@ -1142,8 +1174,17 @@ function TemplateEditorDialog({
                           value={q.type}
                           onValueChange={(v) =>
                             updateQuestion(q.id, {
-                              type: v as ChecklistItem['type'],
-                              conditions: v === 'text' ? undefined : q.conditions,
+                              type: v as InternalTaskItem['type'],
+                              // Text and choice questions have no conditional rules.
+                              conditions:
+                                v === 'text' || v === 'choice' ? undefined : q.conditions,
+                              // Seed a couple of blank options when switching to choice.
+                              options:
+                                v === 'choice'
+                                  ? q.options && q.options.length > 0
+                                    ? q.options
+                                    : ['', '']
+                                  : q.options,
                             })
                           }
                         >
@@ -1186,8 +1227,55 @@ function TemplateEditorDialog({
                       />
                     </div>
 
-                    {/* Conditional rules (not for text) */}
-                    {q.type !== 'text' ? (
+                    {/* Multiple-choice options */}
+                    {q.type === 'choice' ? (
+                      <div className="mt-3 space-y-2 pl-6">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Answer options
+                        </p>
+                        {(q.options ?? []).map((opt, oi) => (
+                          <div key={oi} className="flex items-center gap-2">
+                            <Input
+                              value={opt}
+                              onChange={(e) => updateOption(q.id, oi, e.target.value)}
+                              placeholder={`Option ${oi + 1}`}
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 shrink-0"
+                              disabled={(q.options ?? []).length <= 1}
+                              onClick={() => removeOption(q.id, oi)}
+                            >
+                              <Trash2 className="size-4 text-destructive" />
+                              <span className="sr-only">Remove option</span>
+                            </Button>
+                          </div>
+                        ))}
+                        <div className="flex items-center justify-between">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => addOption(q.id)}
+                          >
+                            <Plus className="size-4" />
+                            Add option
+                          </Button>
+                          <label className="flex items-center gap-2 text-xs">
+                            <Checkbox
+                              checked={q.multiSelect === true}
+                              onCheckedChange={(v) =>
+                                updateQuestion(q.id, { multiSelect: v === true })
+                              }
+                            />
+                            Allow multiple selections
+                          </label>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {/* Conditional rules (not for text/choice) */}
+                    {q.type !== 'text' && q.type !== 'choice' ? (
                       <div className="mt-3 space-y-2 pl-6">
                         {(q.conditions ?? []).map((c) => (
                           <div key={c.id} className="rounded border border-dashed p-2">
@@ -1324,7 +1412,9 @@ function TemplateEditorDialog({
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {ITEM_TYPES.map((t) => (
+                                    {ITEM_TYPES.filter(
+                                      (t) => t.value !== 'choice',
+                                    ).map((t) => (
                                       <SelectItem key={t.value} value={t.value}>
                                         {t.label}
                                       </SelectItem>

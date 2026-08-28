@@ -301,6 +301,63 @@ function ReviewCard({ row, mode }: { row: ReviewRow; mode: CardMode }) {
   const [pending, startTransition] = useTransition()
   const summary = row.summary as TimesheetSummary | null
 
+  // Once a timesheet has been processed the work is done, so the tile collapses
+  // to a compact one-line row to keep the processed list tidy. It can be
+  // re-opened on demand, and the un-tick control stays reachable.
+  const isProcessed = mode === 'process' && row.processed
+  const [showFull, setShowFull] = useState(false)
+
+  if (isProcessed && !showFull) {
+    return (
+      <Card className="border-chart-2/30 bg-chart-2/5">
+        <CardContent className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3">
+          <ClipboardCheck className="h-4 w-4 shrink-0 text-chart-2" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{row.user_name ?? 'Unknown'}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              Week ending {dateLabel(row.week_ending)}
+              {row.processed_at &&
+                ` · processed ${new Date(row.processed_at).toLocaleString('en-GB', {
+                  day: 'numeric',
+                  month: 'short',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}`}
+            </p>
+          </div>
+          {row.late && (
+            <Badge className="gap-1 bg-destructive/15 text-destructive">
+              <CircleAlert className="h-3 w-3" /> Late
+            </Badge>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowFull(true)}
+            className="text-muted-foreground"
+          >
+            <ChevronDown className="mr-1 h-4 w-4" />
+            Details
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                await setProcessed(row.id, false)
+                router.refresh()
+              })
+            }
+          >
+            {pending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+            Untick
+          </Button>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -330,6 +387,16 @@ function ReviewCard({ row, mode }: { row: ReviewRow; mode: CardMode }) {
               </Badge>
             ) : (
               <Badge className="capitalize">{row.status}</Badge>
+            )}
+            {isProcessed && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowFull(false)}
+                className="text-muted-foreground"
+              >
+                Collapse
+              </Button>
             )}
           </div>
         </div>

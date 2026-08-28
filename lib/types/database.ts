@@ -966,6 +966,8 @@ export interface InternalTaskTableColumn {
 //   - file     : the user uploads one or more documents (PDF/image/Office) as
 //                their answer; files are stored as internal-task attachments and
 //                carried on the answer's `photos` array.
+//   - choice   : a multiple-choice question. The author defines `options`; the
+//                user picks one (radio) or several (when `multiSelect`).
 export interface InternalTaskItem {
   id: string
   label: string
@@ -974,6 +976,7 @@ export interface InternalTaskItem {
     | 'text'
     | 'number'
     | 'checkbox'
+    | 'choice'
     | 'section'
     | 'doc_link'
     | 'url_link'
@@ -981,6 +984,11 @@ export interface InternalTaskItem {
     | 'file'
   required: boolean
   conditions?: ChecklistCondition[]
+  // choice: the selectable answer options (author-defined).
+  options?: string[]
+  // choice: when true, the user may select multiple options (checkboxes);
+  // otherwise it is single-select (radio). Defaults to single-select.
+  multiSelect?: boolean
   // section: optional supporting copy shown beneath the heading.
   description?: string
   // doc_link: the linked company document (documents.id) + cached display name.
@@ -1013,7 +1021,9 @@ export type InternalTaskTableRow = Record<string, string>
 export interface InternalTaskAnswer
   extends Omit<ChecklistResult, 'type' | 'value'> {
   type: InternalTaskItem['type']
-  value: boolean | string | number | InternalTaskTableRow[]
+  // string[] carries a multi-select choice answer; a single-select choice is a
+  // plain string. Table answers are InternalTaskTableRow[].
+  value: boolean | string | number | string[] | InternalTaskTableRow[]
 }
 
 // A recurring internal task definition. `questions` uses InternalTaskItem[] (a

@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/command'
 import { cn } from '@/lib/utils'
 import {
-  SHORTCUT_CATALOGUE,
+  SHORTCUT_GROUPS,
   resolveShortcut,
   normaliseShortcuts,
 } from '@/lib/dashboard/shortcuts'
@@ -194,22 +194,24 @@ function ShortcutPicker({
         <CommandInput placeholder="Find a shortcut..." />
         <CommandList>
           <CommandEmpty>No matches.</CommandEmpty>
-          <CommandGroup>
-            {SHORTCUT_CATALOGUE.map((s) => {
-              const inUse = activeKeys.includes(s.key)
-              return (
-                <CommandItem
-                  key={s.key}
-                  value={s.label}
-                  onSelect={() => onSelect(s.key)}
-                >
-                  <s.icon className="size-4 text-muted-foreground" />
-                  <span className="flex-1">{s.label}</span>
-                  {inUse && <Check className="size-4 text-primary" />}
-                </CommandItem>
-              )
-            })}
-          </CommandGroup>
+          {SHORTCUT_GROUPS.map((group) => (
+            <CommandGroup key={group.section} heading={group.section}>
+              {group.items.map((s) => {
+                const inUse = activeKeys.includes(s.key)
+                return (
+                  <CommandItem
+                    key={s.key}
+                    value={`${group.section} ${s.label}`}
+                    onSelect={() => onSelect(s.key)}
+                  >
+                    <s.icon className="size-4 text-muted-foreground" />
+                    <span className="flex-1">{s.label}</span>
+                    {inUse && <Check className="size-4 text-primary" />}
+                  </CommandItem>
+                )
+              })}
+            </CommandGroup>
+          ))}
           {hasValue && (
             <CommandGroup>
               <CommandItem

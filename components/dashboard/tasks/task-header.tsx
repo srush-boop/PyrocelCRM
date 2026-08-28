@@ -77,6 +77,11 @@ export function TaskHeader({
 
   const isClosed = status === 'completed' || status === 'cancelled'
 
+  // Every task is stamped with a reference at creation (tasks.reference_number),
+  // so show that for pending calls too — the passed-in prop (from the
+  // task_result) only exists once a report has been started/completed.
+  const displayReference = referenceNumber ?? task.reference_number ?? null
+
   // "Complete by" is the client KPI target date (visit date + tolerance, or the
   // due week/month for weekly/monthly recurring PPM) — not the raw visit date.
   const targetDate = getCallTargetDate({
@@ -96,6 +101,22 @@ export function TaskHeader({
     formatDateUK(completeBy) !== formatDateUK(task.scheduled_date)
 
   const diff = now ? daysUntilDate(completeBy, now) : null
+
+  // Whether today is past the scheduled visit date. Independent of the KPI
+  // tolerance window — a call can be past its visit date but still on-time for
+  // "Complete by". We surface this as a subtle amber flag so a slipped visit is
+  // visible without changing overdue/KPI logic. Only meaningful while the call
+  // is still open and the complete-by date differs from the visit date (i.e.
+  // there's a tolerance window that could otherwise hide the slip).
+  const visitDiff = now ? daysUntilDate(new Date(`${task.scheduled_date}T00:00:00`), now) : null
+  const visitDatePassed =
+    !isClosed &&
+    showVisitDate &&
+    visitDiff !== null &&
+    visitDiff < 0 &&
+    // Don't double-signal: if it's already overdue by complete-by, the red
+    // "Overdue" hint above covers it.
+    (diff === null || diff >= 0)
 
   let dueClass = 'text-muted-foreground'
   let dueHint: string | null = null
@@ -146,9 +167,9 @@ export function TaskHeader({
           Back to {backLabel}
         </Button>
         <div className="flex items-center gap-2">
-          {referenceNumber && (
+          {displayReference && (
             <span className="rounded-md border bg-muted/60 px-2 py-0.5 font-mono text-xs font-medium text-muted-foreground">
-              {referenceNumber}
+              {displayReference}
             </span>
           )}
           {canCreateDocument && (
@@ -162,7 +183,7 @@ export function TaskHeader({
           {canCancel && !isClosed && (
             <CancelCallDialog
               taskId={task.id}
-              referenceNumber={referenceNumber}
+              referenceNumber={displayReference}
               onCancelled={() => router.refresh()}
             />
           )}
@@ -241,12 +262,23 @@ export function TaskHeader({
           Complete by {formatDateUK(completeBy)}
           {dueHint && <span className="font-normal opacity-90">({dueHint})</span>}
         </span>
-        {showVisitDate && (
-          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-            <CalendarClock className="h-3.5 w-3.5 shrink-0" />
-            Visit {formatDateUK(task.scheduled_date)}
-          </span>
-        )}
+          {showVisitDate && (
+            <span
+              className={
+                visitDatePassed
+                  ? 'inline-flex items-center gap-1.5 font-medium text-amber-600 dark:text-amber-400'
+                  : 'inline-flex items-center gap-1.5 text-muted-foreground'
+              }
+            >
+              <CalendarClock className="h-3.5 w-3.5 shrink-0" />
+              Visit {formatDateUK(task.scheduled_date)}
+              {visitDatePassed && (
+                <span className="font-normal opacity-90">
+                  (visit date passed)
+                </span>
+              )}
+            </span>
+          )}
         {task.started_at && (
           <span className="inline-flex items-center gap-1.5 text-muted-foreground">
             <Clock className="h-3.5 w-3.5 shrink-0" />

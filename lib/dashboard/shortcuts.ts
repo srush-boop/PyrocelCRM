@@ -20,14 +20,19 @@ import {
   BookOpen,
   QrCode,
 } from 'lucide-react'
+import { getMenuForRole } from '@/lib/config/navigation'
+import type { UserRole } from '@/lib/types/database'
 
 // A single user-selectable dashboard quick-shortcut destination. `key` is the
 // stable identifier persisted on the profile; `href`/`label`/`icon` drive the UI.
+// `section` groups the destination in the picker (undefined = the curated
+// top-level "Main" group).
 export interface ShortcutDef {
   key: string
   label: string
   href: string
   icon: LucideIcon
+  section?: string
 }
 
 // The catalogue of destinations a user can pin to one of their 3 shortcut slots.
@@ -60,7 +65,74 @@ export const MAX_SHORTCUTS = 6
 // Maximum number of micro-icon shortcuts a user can pin to the main header.
 export const MAX_HEADER_SHORTCUTS = 8
 
-const BY_KEY = new Map(SHORTCUT_CATALOGUE.map((s) => [s.key, s]))
+// Roles whose menus we harvest for selectable sub-menu destinations. Combining
+// every role's menu gives one comprehensive, role-agnostic catalogue (the same
+// shortcut list is offered to all users, matching the curated list's behaviour).
+const HARVEST_ROLES: UserRole[] = ['admin', 'office', 'engineer', 'subcontractor']
+
+// Walk every role's navigation tree and collect each sub-menu leaf page as a
+// selectable shortcut, keyed by its href (hrefs are stable + unique). Anything
+// already present in the curated top-level catalogue is skipped so we don't show
+// duplicate destinations. Grouped under their top-level section title.
+function buildSubmenuShortcuts(): ShortcutDef[] {
+  const out: ShortcutDef[] = []
+  const seen = new Set<string>(SHORTCUT_CATALOGUE.map((s) => s.href))
+  const add = (
+    href: string | undefined,
+    label: string,
+    icon: LucideIcon,
+    section: string,
+  ) => {
+    if (!href || seen.has(href)) return
+    seen.add(href)
+    out.push({ key: href, href, label, icon, section })
+  }
+  for (const role of HARVEST_ROLES) {
+    for (const item of getMenuForRole(role)) {
+      if (!item.children?.length) continue
+      const section = item.title
+      for (const child of item.children) {
+        if (child.children?.length) {
+          for (const sub of child.children) add(sub.href, sub.title, sub.icon, section)
+        } else {
+          add(child.href, child.title, child.icon, section)
+        }
+      }
+    }
+  }
+  return out
+}
+
+const SUBMENU_SHORTCUTS = buildSubmenuShortcuts()
+
+// The full flat catalogue: curated top-level destinations followed by every
+// sub-menu page. Used for key resolution (persistence stores keys from here).
+export const ALL_SHORTCUTS: ShortcutDef[] = [...SHORTCUT_CATALOGUE, ...SUBMENU_SHORTCUTS]
+
+// A section of selectable shortcuts, for grouped rendering in the pickers.
+export interface ShortcutGroup {
+  section: string
+  items: ShortcutDef[]
+}
+
+// The catalogue grouped by section for the pickers: the curated set first (as
+// "Main"), then each navigation group with its sub-pages, in menu order.
+export const SHORTCUT_GROUPS: ShortcutGroup[] = (() => {
+  const groups = new Map<string, ShortcutDef[]>()
+  const order: string[] = []
+  const push = (section: string, def: ShortcutDef) => {
+    if (!groups.has(section)) {
+      groups.set(section, [])
+      order.push(section)
+    }
+    groups.get(section)!.push(def)
+  }
+  for (const s of SHORTCUT_CATALOGUE) push(s.section ?? 'Main', s)
+  for (const s of SUBMENU_SHORTCUTS) push(s.section ?? 'More', s)
+  return order.map((section) => ({ section, items: groups.get(section)! }))
+})()
+
+const BY_KEY = new Map(ALL_SHORTCUTS.map((s) => [s.key, s]))
 
 export function resolveShortcut(key: string | null | undefined): ShortcutDef | null {
   if (!key) return null

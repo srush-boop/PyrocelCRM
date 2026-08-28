@@ -5,7 +5,14 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 import {
   Tooltip,
   TooltipContent,
@@ -16,9 +23,10 @@ import { Separator } from '@/components/ui/separator'
 import { Settings2, Check, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
-  SHORTCUT_CATALOGUE,
+  SHORTCUT_GROUPS,
   MAX_HEADER_SHORTCUTS,
   normaliseHeaderShortcutKeys,
+  resolveHeaderShortcuts,
 } from '@/lib/dashboard/shortcuts'
 import { setHeaderShortcuts } from '@/app/(dashboard)/dashboard/tile-color-actions'
 import { toast } from 'sonner'
@@ -40,13 +48,7 @@ export function HeaderShortcuts({ shortcuts }: HeaderShortcutsProps) {
   // Local optimistic copy so toggles feel instant; seeded from the server value.
   const [keys, setKeys] = useState<string[]>(() => normaliseHeaderShortcutKeys(shortcuts))
 
-  const pinned = useMemo(
-    () =>
-      keys
-        .map((k) => SHORTCUT_CATALOGUE.find((s) => s.key === k))
-        .filter((s): s is (typeof SHORTCUT_CATALOGUE)[number] => !!s),
-    [keys],
-  )
+  const pinned = useMemo(() => resolveHeaderShortcuts(keys), [keys])
 
   const persist = (next: string[]) => {
     const clean = normaliseHeaderShortcutKeys(next)
@@ -125,7 +127,7 @@ export function HeaderShortcuts({ shortcuts }: HeaderShortcutsProps) {
               {pinned.length === 0 ? 'Add shortcuts' : 'Edit shortcuts'}
             </TooltipContent>
           </Tooltip>
-          <PopoverContent align="start" className="w-64 p-0">
+          <PopoverContent align="start" className="w-72 p-0">
             <div className="flex items-center justify-between px-3 py-2.5">
               <p className="text-sm font-medium">Header shortcuts</p>
               <span className="text-xs text-muted-foreground">
@@ -133,32 +135,34 @@ export function HeaderShortcuts({ shortcuts }: HeaderShortcutsProps) {
               </span>
             </div>
             <Separator />
-            <ScrollArea className="h-72">
-              <div className="p-1.5">
-                {SHORTCUT_CATALOGUE.map((s) => {
-                  const Icon = s.icon
-                  const on = keys.includes(s.key)
-                  const atCap = !on && keys.length >= MAX_HEADER_SHORTCUTS
-                  return (
-                    <button
-                      key={s.key}
-                      type="button"
-                      disabled={pending || atCap}
-                      onClick={() => toggle(s.key)}
-                      className={cn(
-                        'flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors',
-                        'hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40',
-                        on && 'bg-accent/60',
-                      )}
-                    >
-                      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <span className="flex-1 text-left">{s.label}</span>
-                      {on && <Check className="h-4 w-4 shrink-0 text-primary" />}
-                    </button>
-                  )
-                })}
-              </div>
-            </ScrollArea>
+            <Command>
+              <CommandInput placeholder="Search pages..." />
+              <CommandList className="max-h-72">
+                <CommandEmpty>No matches.</CommandEmpty>
+                {SHORTCUT_GROUPS.map((group) => (
+                  <CommandGroup key={group.section} heading={group.section}>
+                    {group.items.map((s) => {
+                      const Icon = s.icon
+                      const on = keys.includes(s.key)
+                      const atCap = !on && keys.length >= MAX_HEADER_SHORTCUTS
+                      return (
+                        <CommandItem
+                          key={s.key}
+                          value={`${group.section} ${s.label}`}
+                          disabled={pending || atCap}
+                          onSelect={() => toggle(s.key)}
+                          className={cn(on && 'bg-accent/60')}
+                        >
+                          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <span className="flex-1">{s.label}</span>
+                          {on && <Check className="h-4 w-4 shrink-0 text-primary" />}
+                        </CommandItem>
+                      )
+                    })}
+                  </CommandGroup>
+                ))}
+              </CommandList>
+            </Command>
           </PopoverContent>
         </Popover>
       </div>

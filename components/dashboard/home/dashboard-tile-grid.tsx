@@ -22,12 +22,26 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 import { cn } from '@/lib/utils'
 import {
   setTileOrder,
   setTileHidden,
   setCustomTiles,
 } from '@/app/(dashboard)/dashboard/tile-color-actions'
+import { SHORTCUT_GROUPS } from '@/lib/dashboard/shortcuts'
 import { TILE_COLOR_OPTIONS } from '@/lib/service-colors'
 import type { CustomDashboardTile } from '@/lib/types/database'
 import Link from 'next/link'
@@ -300,11 +314,21 @@ function AddCustomTileDialog({
   const [title, setTitle] = useState('')
   const [href, setHref] = useState('')
   const [color, setColor] = useState<string>(TILE_COLOR_OPTIONS[0].value)
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   const reset = () => {
     setTitle('')
     setHref('')
     setColor(TILE_COLOR_OPTIONS[0].value)
+    setPickerOpen(false)
+  }
+
+  // Choosing a page from the menu fills the link and, if the label is still
+  // empty, seeds it with the page name so a tile is ready in one tap.
+  const choosePage = (page: { label: string; href: string }) => {
+    setHref(page.href)
+    setTitle((t) => (t.trim() ? t : page.label))
+    setPickerOpen(false)
   }
 
   const valid = title.trim() !== '' && href.trim().startsWith('/')
@@ -346,7 +370,49 @@ function AddCustomTileDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="tile-href">Link (in-app path)</Label>
+            <Label>Page</Label>
+            <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full justify-between font-normal"
+                >
+                  <span className={cn('truncate', !href && 'text-muted-foreground')}>
+                    {href || 'Choose a page or sub-page…'}
+                  </span>
+                  <Plus className="size-4 shrink-0 opacity-60" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-72 p-0">
+                <Command>
+                  <CommandInput placeholder="Search pages..." />
+                  <CommandList>
+                    <CommandEmpty>No matches.</CommandEmpty>
+                    {SHORTCUT_GROUPS.map((group) => (
+                      <CommandGroup key={group.section} heading={group.section}>
+                        {group.items.map((s) => (
+                          <CommandItem
+                            key={s.key}
+                            value={`${group.section} ${s.label}`}
+                            onSelect={() => choosePage(s)}
+                          >
+                            <s.icon className="size-4 text-muted-foreground" />
+                            <span className="flex-1">{s.label}</span>
+                            {href === s.href && (
+                              <Check className="size-4 text-primary" />
+                            )}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    ))}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="tile-href">Or enter a link (in-app path)</Label>
             <Input
               id="tile-href"
               value={href}
@@ -354,7 +420,8 @@ function AddCustomTileDialog({
               placeholder="/dashboard/schedule"
             />
             <p className="text-xs text-muted-foreground">
-              Must start with “/”. Copy it from the address bar of the page you want to link to.
+              Must start with “/”. Use this for a page not listed above (e.g. copy
+              it from the address bar).
             </p>
           </div>
           <div className="space-y-2">

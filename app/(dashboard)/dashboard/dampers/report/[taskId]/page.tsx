@@ -1,12 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import { DamperReport } from '@/components/dashboard/dampers/damper-report'
+import { fetchResolvedReportTemplate } from '@/lib/reports/resolve-template'
 import type {
   Profile,
   TaskWithDetails,
   DamperInspection,
   Damper,
-  ReportTemplate,
   CompanyInfo,
 } from '@/lib/types/database'
 
@@ -44,14 +44,14 @@ export default async function DamperReportPage({ params }: PageProps) {
 
   const serviceTypeId = task.site_service?.service_type_id
 
-  const [{ data: inspectionsData }, { data: templateData }, { data: resultData }, { data: companyData }] =
+  const [{ data: inspectionsData }, template, { data: resultData }, { data: companyData }] =
     await Promise.all([
       supabase
         .from('damper_inspections')
         .select('*, damper:dampers(*)')
         .eq('task_id', taskId)
         .order('inspection_date', { ascending: false }),
-      supabase.from('report_templates').select('*').eq('service_type_id', serviceTypeId).maybeSingle(),
+      fetchResolvedReportTemplate(supabase, serviceTypeId),
       supabase.from('task_results').select('reference_number').eq('task_id', taskId).maybeSingle(),
       supabase.from('company_info').select('*').limit(1).maybeSingle(),
     ])
@@ -62,7 +62,7 @@ export default async function DamperReportPage({ params }: PageProps) {
     <DamperReport
       task={task as TaskWithDetails}
       inspections={inspections}
-      template={(templateData as ReportTemplate | null) ?? null}
+      template={template}
       referenceNumber={resultData?.reference_number ?? null}
       companyInfo={(companyData as CompanyInfo | null) ?? null}
     />

@@ -2122,12 +2122,49 @@ export interface ExtinguisherInspection {
   inspector?: Profile | null
 }
 
+// A single block in a report's designable body. Data blocks pull from the live
+// task result (rendered by each report component); custom blocks carry authored
+// content in `props`. Header masthead + compliance footer are always-on and are
+// NOT blocks.
+export type ReportBlockType =
+  // data-bound
+  | 'meta_grid'
+  | 'status_ribbon'
+  | 'summary_kpis'
+  | 'results'
+  | 'engineer_notes'
+  | 'photos'
+  | 'engineer_signature'
+  | 'client_signoff'
+  // custom author content
+  | 'heading'
+  | 'text'
+  | 'image'
+  | 'spacer'
+  | 'page_break'
+
+export interface ReportBlock {
+  id: string
+  type: ReportBlockType
+  enabled: boolean
+  // Per-type authoring options:
+  //  heading : { content: string; level?: 1 | 2 }
+  //  text    : { content: string }  // supports {{variables}}
+  //  image   : { imageUrl: string; imageName?: string; caption?: string }
+  //  spacer  : { size?: 'sm' | 'md' | 'lg' }
+  //  meta_grid: { fields?: string[] }  // allow-list; omitted = all
+  props?: Record<string, unknown>
+}
+
 export interface ReportTemplate {
   id: string
-  service_type_id: string
+  // NULL = the company-wide default template that service types inherit.
+  service_type_id: string | null
   name: string
   company_name: string | null
-  company_logo_url?: string | null
+  // The real DB column is `logo_url`. Template logo takes lower precedence than
+  // the company-wide logo in the report components.
+  logo_url?: string | null
   header_color: string | null
   footer_text: string | null
   include_signature: boolean
@@ -2140,6 +2177,9 @@ export interface ReportTemplate {
     standards?: string
     [key: string]: unknown
   } | null
+  // Ordered designable body. NULL = use the built-in default layout for the
+  // report kind (preserves the original hardcoded output for existing rows).
+  layout: ReportBlock[] | null
   created_at?: string
   updated_at?: string
 }

@@ -1,10 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import { ServiceReport } from '@/components/dashboard/reports/service-report'
+import { fetchResolvedReportTemplate } from '@/lib/reports/resolve-template'
 import type {
   TaskWithDetails,
   TaskResult,
-  ReportTemplate,
   CompanyInfo,
 } from '@/lib/types/database'
 
@@ -43,13 +43,9 @@ export default async function ServiceReportPage({ params }: PageProps) {
 
   const serviceTypeId = task.site_service?.service_type_id
 
-  const [{ data: resultData }, { data: templateData }, { data: companyData }] = await Promise.all([
+  const [{ data: resultData }, template, { data: companyData }] = await Promise.all([
     supabase.from('task_results').select('*').eq('task_id', taskId).maybeSingle(),
-    supabase
-      .from('report_templates')
-      .select('*')
-      .eq('service_type_id', serviceTypeId)
-      .maybeSingle(),
+    fetchResolvedReportTemplate(supabase, serviceTypeId),
     supabase.from('company_info').select('*').limit(1).maybeSingle(),
   ])
 
@@ -57,7 +53,7 @@ export default async function ServiceReportPage({ params }: PageProps) {
     <ServiceReport
       task={task as TaskWithDetails}
       result={(resultData as TaskResult | null) ?? null}
-      template={(templateData as ReportTemplate | null) ?? null}
+      template={template}
       companyInfo={(companyData as CompanyInfo | null) ?? null}
     />
   )

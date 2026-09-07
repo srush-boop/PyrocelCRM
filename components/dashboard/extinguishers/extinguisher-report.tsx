@@ -16,6 +16,12 @@ import {
 import { CheckCircle2, XCircle, AlertTriangle, MinusCircle } from 'lucide-react'
 import { getServiceIcon } from '@/lib/service-icons'
 import { PYROCEL_RED } from '@/lib/service-colors'
+import { formatDateUK } from '@/lib/utils'
+import { resolveLayout } from '@/lib/reports/layout'
+import {
+  ReportBlocks,
+  type ReportBlockRegistry,
+} from '@/components/dashboard/reports/report-layout'
 import {
   ReportActionBar,
   ReportHeader,
@@ -68,7 +74,7 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
   const companyPhone = companyInfo?.phone || sections.company_phone || null
   const companyEmail = companyInfo?.email || sections.company_email || null
   const companyWebsite = companyInfo?.website || null
-  const logoUrl = companyInfo?.logo_url || template?.company_logo_url || null
+  const logoUrl = companyInfo?.logo_url || template?.logo_url || null
   const standards = sections.standards || null
   const ServiceIcon = getServiceIcon(serviceType?.name)
 
@@ -134,43 +140,42 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
         ? { label: 'Remedial', color: REPORT_COLORS.remedial }
         : { label: 'Compliant', color: REPORT_COLORS.pass }
 
-  return (
-    <div className="mx-auto max-w-4xl">
-      <ReportActionBar backHref={site ? `/dashboard/sites/${site.id}` : '/dashboard/extinguishers'} />
+  const vars: Record<string, string> = {
+    'site.name': site?.name ?? '',
+    'site.address': site?.address ?? '',
+    'client.name': site?.client?.name ?? '',
+    engineer: engineerName,
+    service: serviceType?.name ?? '',
+    visit: task.visit_type?.name ?? '',
+    reference: referenceNumber ?? '',
+    date: completedDate ? formatDateUK(completedDate) : '',
+    'company.name': companyName,
+  }
 
-      <div className="report-page rounded-lg border bg-card p-8 print:border-0 print:p-0">
-        <ReportHeader
-          headerColor={headerColor}
-          companyName={companyName}
-          logoUrl={logoUrl}
-          address={companyAddress}
-          phone={companyPhone}
-          email={companyEmail}
-          website={companyWebsite}
-          docType="Service Report"
-          docSubtitle={serviceType?.name || 'Fire Extinguishers'}
-          referenceNumber={referenceNumber}
-          reportDate={completedDate}
-          ServiceIcon={ServiceIcon}
-        />
-
-        <ReportMetaGrid>
-          <ReportMeta label="Service Reference" value={referenceNumber} />
-          <ReportMeta label="Site" value={site?.name} />
-          <ReportMeta label="Serviced By" value={engineerName} />
-          <ReportMeta label="Address" value={site?.address} />
-          <ReportMeta label="Service" value={serviceType?.name} />
-          <ReportMeta label="Units Serviced" value={String(stats.tested)} />
-        </ReportMetaGrid>
-
-        <ReportStatusRibbon
-          statusLabel={overall.label}
-          color={overall.color}
-          note={`${stats.tested} extinguishers serviced · ${stats.passRate}% pass rate`}
-        />
-
-        {/* Executive summary */}
-        <SectionHeading index={1} color={headerColor}>
+  // The extinguisher report's bespoke body (summary + charts + remedials +
+  // detail table + service checklist + photos) lives inside `results` so the
+  // designer can reorder/hide it and wrap custom blocks around it.
+  const registry: ReportBlockRegistry = {
+    meta_grid: () => (
+      <ReportMetaGrid>
+        <ReportMeta label="Service Reference" value={referenceNumber} />
+        <ReportMeta label="Site" value={site?.name} />
+        <ReportMeta label="Serviced By" value={engineerName} />
+        <ReportMeta label="Address" value={site?.address} />
+        <ReportMeta label="Service" value={serviceType?.name} />
+        <ReportMeta label="Units Serviced" value={String(stats.tested)} />
+      </ReportMetaGrid>
+    ),
+    status_ribbon: () => (
+      <ReportStatusRibbon
+        statusLabel={overall.label}
+        color={overall.color}
+        note={`${stats.tested} extinguishers serviced · ${stats.passRate}% pass rate`}
+      />
+    ),
+    summary_kpis: (ctx) => (
+      <>
+        <SectionHeading index={ctx.nextSectionIndex()} color={headerColor}>
           Executive Summary
         </SectionHeading>
         <div className="mb-8 grid grid-cols-3 gap-3 sm:grid-cols-6">
@@ -182,7 +187,6 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
           <StatCard label="Pass Rate" value={`${stats.passRate}%`} color={headerColor} />
         </div>
 
-        {/* Charts */}
         <div className="mb-8 grid gap-6 md:grid-cols-2">
           <ReportPanel title="Results Breakdown">
             {pieData.length > 0 ? (
@@ -229,11 +233,13 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
             )}
           </ReportPanel>
         </div>
-
-        {/* Remedial actions */}
+      </>
+    ),
+    results: (ctx) => (
+      <>
         {remedials.length > 0 && (
           <section className="mb-8">
-            <SectionHeading index={2} color={headerColor}>
+            <SectionHeading index={ctx.nextSectionIndex()} color={headerColor}>
               Remedial Actions Required ({remedials.length})
             </SectionHeading>
             <div className="space-y-2">
@@ -256,9 +262,8 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
           </section>
         )}
 
-        {/* Detailed results */}
         <section className="mb-8">
-          <SectionHeading index={3} color={headerColor}>
+          <SectionHeading index={ctx.nextSectionIndex()} color={headerColor}>
             Detailed Results
           </SectionHeading>
           <div className="overflow-hidden rounded-md border">
@@ -307,10 +312,9 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
           </div>
         </section>
 
-        {/* Per-extinguisher service checklist */}
         {inspections.length > 0 && (
           <section className="mb-8">
-            <SectionHeading index={4} color={headerColor}>
+            <SectionHeading index={ctx.nextSectionIndex()} color={headerColor}>
               Service Checklist
             </SectionHeading>
             <div className="space-y-4">
@@ -374,10 +378,9 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
           </section>
         )}
 
-        {/* Photographic evidence */}
         {photoGroups.length > 0 && (
           <section className="mb-8">
-            <SectionHeading index={5} color={headerColor}>
+            <SectionHeading index={ctx.nextSectionIndex()} color={headerColor}>
               Photographic Evidence ({photoCount})
             </SectionHeading>
             <div className="space-y-6">
@@ -432,21 +435,52 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
             </div>
           </section>
         )}
+      </>
+    ),
+    engineer_signature: () =>
+      template?.include_signature !== false ? (
+        <SignatureBlock
+          signatureUrl={engineer?.signature_url}
+          signatoryName={sections.signatory_name || engineerName}
+          signatoryTitle={
+            engineer?.role_ref?.name ||
+            engineer?.job_title ||
+            sections.signatory_title ||
+            'Engineer'
+          }
+          date={completedDate}
+        />
+      ) : null,
+  }
 
-        {/* Signature */}
-        {template?.include_signature !== false && (
-          <SignatureBlock
-            signatureUrl={engineer?.signature_url}
-            signatoryName={sections.signatory_name || engineerName}
-            signatoryTitle={
-              engineer?.role_ref?.name ||
-              engineer?.job_title ||
-              sections.signatory_title ||
-              'Engineer'
-            }
-            date={completedDate}
-          />
-        )}
+  const blocks = resolveLayout(template, 'asset')
+
+  return (
+    <div className="mx-auto max-w-4xl">
+      <ReportActionBar backHref={site ? `/dashboard/sites/${site.id}` : '/dashboard/extinguishers'} />
+
+      <div className="report-page rounded-lg border bg-card p-8 print:border-0 print:p-0">
+        <ReportHeader
+          headerColor={headerColor}
+          companyName={companyName}
+          logoUrl={logoUrl}
+          address={companyAddress}
+          phone={companyPhone}
+          email={companyEmail}
+          website={companyWebsite}
+          docType="Service Report"
+          docSubtitle={serviceType?.name || 'Fire Extinguishers'}
+          referenceNumber={referenceNumber}
+          reportDate={completedDate}
+          ServiceIcon={ServiceIcon}
+        />
+
+        <ReportBlocks
+          blocks={blocks}
+          registry={registry}
+          headerColor={headerColor}
+          vars={vars}
+        />
 
         <ReportFooter
           headerColor={headerColor}

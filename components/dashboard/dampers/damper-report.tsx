@@ -16,6 +16,12 @@ import {
 import { CheckCircle2, XCircle, AlertTriangle, MinusCircle } from 'lucide-react'
 import { getServiceIcon } from '@/lib/service-icons'
 import { PYROCEL_RED } from '@/lib/service-colors'
+import { formatDateUK } from '@/lib/utils'
+import { resolveLayout } from '@/lib/reports/layout'
+import {
+  ReportBlocks,
+  type ReportBlockRegistry,
+} from '@/components/dashboard/reports/report-layout'
 import {
   ReportActionBar,
   ReportHeader,
@@ -55,7 +61,7 @@ export function DamperReport({ task, inspections, template, referenceNumber, com
   const companyPhone = companyInfo?.phone || sections.company_phone || null
   const companyEmail = companyInfo?.email || sections.company_email || null
   const companyWebsite = companyInfo?.website || null
-  const logoUrl = companyInfo?.logo_url || template?.company_logo_url || null
+  const logoUrl = companyInfo?.logo_url || template?.logo_url || null
   const standards = sections.standards || null
   const ServiceIcon = getServiceIcon(serviceType?.name)
 
@@ -128,43 +134,42 @@ export function DamperReport({ task, inspections, template, referenceNumber, com
         ? { label: 'Remedial', color: REPORT_COLORS.remedial }
         : { label: 'Compliant', color: REPORT_COLORS.pass }
 
-  return (
-    <div className="mx-auto max-w-4xl">
-      <ReportActionBar backHref={site ? `/dashboard/sites/${site.id}` : '/dashboard/dampers'} />
+  const vars: Record<string, string> = {
+    'site.name': site?.name ?? '',
+    'site.address': site?.address ?? '',
+    'client.name': site?.client?.name ?? '',
+    engineer: engineerName,
+    service: serviceType?.name ?? '',
+    visit: task.visit_type?.name ?? '',
+    reference: referenceNumber ?? '',
+    date: completedDate ? formatDateUK(completedDate) : '',
+    'company.name': companyName,
+  }
 
-      <div className="report-page rounded-lg border bg-card p-8 print:border-0 print:p-0">
-        <ReportHeader
-          headerColor={headerColor}
-          companyName={companyName}
-          logoUrl={logoUrl}
-          address={companyAddress}
-          phone={companyPhone}
-          email={companyEmail}
-          website={companyWebsite}
-          docType="Inspection Report"
-          docSubtitle={serviceType?.name || 'Fire & Smoke Dampers'}
-          referenceNumber={referenceNumber}
-          reportDate={completedDate}
-          ServiceIcon={ServiceIcon}
-        />
-
-        <ReportMetaGrid>
-          <ReportMeta label="Inspection Reference" value={referenceNumber} />
-          <ReportMeta label="Site" value={site?.name} />
-          <ReportMeta label="Inspected By" value={engineerName} />
-          <ReportMeta label="Address" value={site?.address} />
-          <ReportMeta label="Service" value={serviceType?.name} />
-          <ReportMeta label="Dampers Tested" value={String(stats.tested)} />
-        </ReportMetaGrid>
-
-        <ReportStatusRibbon
-          statusLabel={overall.label}
-          color={overall.color}
-          note={`${stats.tested} dampers inspected · ${stats.passRate}% pass rate`}
-        />
-
-        {/* Executive summary */}
-        <SectionHeading index={1} color={headerColor}>
+  // The damper report's bespoke body (summary + charts + remedials + detail
+  // table + per-damper detail) all live inside the shared `results` block, so
+  // the designer can reorder/hide it and add custom blocks around it.
+  const registry: ReportBlockRegistry = {
+    meta_grid: () => (
+      <ReportMetaGrid>
+        <ReportMeta label="Inspection Reference" value={referenceNumber} />
+        <ReportMeta label="Site" value={site?.name} />
+        <ReportMeta label="Inspected By" value={engineerName} />
+        <ReportMeta label="Address" value={site?.address} />
+        <ReportMeta label="Service" value={serviceType?.name} />
+        <ReportMeta label="Dampers Tested" value={String(stats.tested)} />
+      </ReportMetaGrid>
+    ),
+    status_ribbon: () => (
+      <ReportStatusRibbon
+        statusLabel={overall.label}
+        color={overall.color}
+        note={`${stats.tested} dampers inspected · ${stats.passRate}% pass rate`}
+      />
+    ),
+    summary_kpis: (ctx) => (
+      <>
+        <SectionHeading index={ctx.nextSectionIndex()} color={headerColor}>
           Executive Summary
         </SectionHeading>
         <div className="mb-8 grid grid-cols-3 gap-3 sm:grid-cols-6">
@@ -176,7 +181,6 @@ export function DamperReport({ task, inspections, template, referenceNumber, com
           <StatCard label="Pass Rate" value={`${stats.passRate}%`} color={headerColor} />
         </div>
 
-        {/* Charts */}
         <div className="mb-8 grid gap-6 md:grid-cols-2">
           <ReportPanel title="Results Breakdown">
             {pieData.length > 0 ? (
@@ -223,11 +227,13 @@ export function DamperReport({ task, inspections, template, referenceNumber, com
             )}
           </ReportPanel>
         </div>
-
-        {/* Remedial actions */}
+      </>
+    ),
+    results: (ctx) => (
+      <>
         {remedials.length > 0 && (
           <section className="mb-8">
-            <SectionHeading index={2} color={headerColor}>
+            <SectionHeading index={ctx.nextSectionIndex()} color={headerColor}>
               Remedial Actions Required ({remedials.length})
             </SectionHeading>
             <div className="space-y-2">
@@ -253,7 +259,7 @@ export function DamperReport({ task, inspections, template, referenceNumber, com
         {/* Detailed results — table may span multiple pages, so the section
             itself must not be break-inside: avoid (that would clip rows). */}
         <section className="mb-8">
-          <SectionHeading index={3} color={headerColor}>
+          <SectionHeading index={ctx.nextSectionIndex()} color={headerColor}>
             Detailed Results
           </SectionHeading>
           <div className="overflow-hidden rounded-md border">
@@ -303,7 +309,7 @@ export function DamperReport({ task, inspections, template, referenceNumber, com
         {/* Per-damper inspection details: checklist alongside photo evidence */}
         {inspections.length > 0 && (
           <section className="mb-8">
-            <SectionHeading index={4} color={headerColor}>
+            <SectionHeading index={ctx.nextSectionIndex()} color={headerColor}>
               Inspection Details
             </SectionHeading>
             <div className="space-y-4">
@@ -417,21 +423,52 @@ export function DamperReport({ task, inspections, template, referenceNumber, com
             </div>
           </section>
         )}
+      </>
+    ),
+    engineer_signature: () =>
+      template?.include_signature !== false ? (
+        <SignatureBlock
+          signatureUrl={engineer?.signature_url}
+          signatoryName={sections.signatory_name || engineerName}
+          signatoryTitle={
+            engineer?.role_ref?.name ||
+            engineer?.job_title ||
+            sections.signatory_title ||
+            'Engineer'
+          }
+          date={completedDate}
+        />
+      ) : null,
+  }
 
-        {/* Signature */}
-        {template?.include_signature !== false && (
-          <SignatureBlock
-            signatureUrl={engineer?.signature_url}
-            signatoryName={sections.signatory_name || engineerName}
-            signatoryTitle={
-              engineer?.role_ref?.name ||
-              engineer?.job_title ||
-              sections.signatory_title ||
-              'Engineer'
-            }
-            date={completedDate}
-          />
-        )}
+  const blocks = resolveLayout(template, 'asset')
+
+  return (
+    <div className="mx-auto max-w-4xl">
+      <ReportActionBar backHref={site ? `/dashboard/sites/${site.id}` : '/dashboard/dampers'} />
+
+      <div className="report-page rounded-lg border bg-card p-8 print:border-0 print:p-0">
+        <ReportHeader
+          headerColor={headerColor}
+          companyName={companyName}
+          logoUrl={logoUrl}
+          address={companyAddress}
+          phone={companyPhone}
+          email={companyEmail}
+          website={companyWebsite}
+          docType="Inspection Report"
+          docSubtitle={serviceType?.name || 'Fire & Smoke Dampers'}
+          referenceNumber={referenceNumber}
+          reportDate={completedDate}
+          ServiceIcon={ServiceIcon}
+        />
+
+        <ReportBlocks
+          blocks={blocks}
+          registry={registry}
+          headerColor={headerColor}
+          vars={vars}
+        />
 
         <ReportFooter
           headerColor={headerColor}

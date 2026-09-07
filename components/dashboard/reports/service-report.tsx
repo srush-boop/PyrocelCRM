@@ -12,6 +12,13 @@ import {
 import { CheckCircle2, XCircle, AlertTriangle, MinusCircle, ListChecks } from 'lucide-react'
 import { getServiceIcon } from '@/lib/service-icons'
 import { PYROCEL_RED } from '@/lib/service-colors'
+import { formatDateUK } from '@/lib/utils'
+import { resolveLayout } from '@/lib/reports/layout'
+import {
+  ReportBlocks,
+  NumberedSection,
+  type ReportBlockRegistry,
+} from './report-layout'
 import {
   ReportActionBar,
   ReportHeader,
@@ -19,7 +26,6 @@ import {
   ReportMetaGrid,
   ReportStatusRibbon,
   StatCard,
-  SectionHeading,
   ReportPanel,
   SignatureBlock,
   ReportFooter,
@@ -170,7 +176,7 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
   const companyPhone = companyInfo?.phone || sections.company_phone || null
   const companyEmail = companyInfo?.email || sections.company_email || null
   const companyWebsite = companyInfo?.website || null
-  const logoUrl = companyInfo?.logo_url || template?.company_logo_url || null
+  const logoUrl = companyInfo?.logo_url || template?.logo_url || null
   const standards = sections.standards || null
   const ServiceIcon = getServiceIcon(serviceType?.name)
 
@@ -206,6 +212,269 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
 
   const docSubtitle = [serviceType?.name, task.visit_type?.name].filter(Boolean).join(' — ')
 
+  // Values available to {{variables}} in custom heading/text/image blocks.
+  const vars: Record<string, string> = {
+    'site.name': site?.name ?? '',
+    'site.address': site?.address ?? '',
+    'client.name': site?.client?.name ?? '',
+    engineer: engineerName,
+    service: serviceType?.name ?? '',
+    visit: task.visit_type?.name ?? '',
+    reference: result?.reference_number ?? '',
+    date: completedDate ? formatDateUK(completedDate) : '',
+    'company.name': companyName,
+  }
+
+  // Each data block maps to the section it used to render inline. Custom blocks
+  // (heading/text/image/spacer/page_break) are rendered by <ReportBlocks/>.
+  const registry: ReportBlockRegistry = {
+    meta_grid: () => (
+      <ReportMetaGrid>
+        <ReportMeta label="Inspection Reference" value={result?.reference_number} />
+        <ReportMeta label="Site" value={site?.name} />
+        <ReportMeta label="Engineer" value={engineerName} />
+        <ReportMeta label="Address" value={site?.address} />
+        <ReportMeta label="Service" value={serviceType?.name} />
+        {task.visit_type?.name && <ReportMeta label="Visit" value={task.visit_type.name} />}
+      </ReportMetaGrid>
+    ),
+    status_ribbon: () => (
+      <ReportStatusRibbon statusLabel={statusMeta.label} color={statusMeta.color} />
+    ),
+    summary_kpis: () => (
+      <div className="mb-8 grid gap-6 md:grid-cols-2">
+        <div className="grid grid-cols-2 gap-3 self-start">
+          {stats.mode === 'counts' ? (
+            <>
+              <StatCard label="On Register" value={stats.registerTotal} color={headerColor} icon={<ListChecks className="h-4 w-4" />} />
+              <StatCard label="Tested" value={stats.tested} color={REPORT_COLORS.neutral} />
+              <StatCard label="Passed" value={stats.pass} color={REPORT_COLORS.pass} icon={<CheckCircle2 className="h-4 w-4" />} />
+              <StatCard label="Remedial" value={stats.remedial} color={REPORT_COLORS.remedial} icon={<AlertTriangle className="h-4 w-4" />} />
+              <StatCard label="Failed" value={stats.fail} color={REPORT_COLORS.fail} icon={<XCircle className="h-4 w-4" />} />
+              <StatCard label="Pass Rate" value={`${stats.passRate}%`} color={headerColor} />
+            </>
+          ) : (
+            <>
+              <StatCard label="Checks" value={stats.registerTotal} color={headerColor} icon={<ListChecks className="h-4 w-4" />} />
+              <StatCard label="Passed" value={stats.pass} color={REPORT_COLORS.pass} icon={<CheckCircle2 className="h-4 w-4" />} />
+              <StatCard label="Failed" value={stats.fail} color={REPORT_COLORS.fail} icon={<XCircle className="h-4 w-4" />} />
+              {stats.advisory > 0 ? (
+                <StatCard label="Advisory" value={stats.advisory} color={REPORT_COLORS.advisory} icon={<AlertTriangle className="h-4 w-4" />} />
+              ) : (
+                <StatCard label="Other" value={stats.other} color={REPORT_COLORS.na} icon={<MinusCircle className="h-4 w-4" />} />
+              )}
+              <StatCard label="Pass Rate" value={`${stats.passRate}%`} color={headerColor} />
+            </>
+          )}
+        </div>
+
+        <ReportPanel title="Results Breakdown">
+          {pieData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={45}
+                  outerRadius={85}
+                  paddingAngle={2}
+                  isAnimationActive={false}
+                  label={(entry) => `${entry.value}`}
+                >
+                  {pieData.map((d) => (
+                    <Cell key={d.key} fill={d.color} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="py-12 text-center text-sm text-muted-foreground">No checklist data</p>
+          )}
+        </ReportPanel>
+      </div>
+    ),
+    results: (ctx) => (
+      <NumberedSection ctx={ctx} title="Checklist Results">
+        <div className="overflow-hidden rounded-md border">
+          <table className="w-full text-left text-xs">
+            <thead style={{ backgroundColor: `${headerColor}15` }}>
+              <tr>
+                <th className="px-3 py-2 font-semibold uppercase tracking-wide">Item</th>
+                <th className="px-3 py-2 font-semibold uppercase tracking-wide">Result</th>
+                <th className="px-3 py-2 font-semibold uppercase tracking-wide">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {parentChecklist.map((item, index) => {
+                const prev = index > 0 ? parentChecklist[index - 1] : null
+                const showPanelHeader =
+                  !!item.panel_name && item.panel_id !== (prev?.panel_id ?? null)
+                // Follow-up rows spawned by this item's active conditions, plus
+                // any per-item photos, rendered as indented sub-rows.
+                const followUps = checklist.filter(
+                  (r) => r.parent_item_id === item.item_id,
+                )
+                const photos = item.photos || []
+                return (
+                  <Fragment key={item.item_id || index}>
+                    {showPanelHeader && (
+                      <tr style={{ backgroundColor: `${headerColor}0d` }}>
+                        <td colSpan={3} className="px-3 py-2 text-[11px] font-bold uppercase tracking-wide">
+                          {item.panel_name}
+                          {item.panel_level ? ` — ${item.panel_level}` : ''}
+                        </td>
+                      </tr>
+                    )}
+                    <tr className="border-t align-top odd:bg-muted/30">
+                      <td className="px-3 py-2 font-medium">{item.label}</td>
+                      <td className="px-3 py-2">
+                        {item.na ? (
+                          <span
+                            className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase text-white"
+                            style={{ backgroundColor: REPORT_COLORS.na }}
+                          >
+                            N/A
+                          </span>
+                        ) : item.type === 'pass_fail' ? (
+                          <span
+                            className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase text-white"
+                            style={{
+                              backgroundColor: item.advisory
+                                ? REPORT_COLORS.advisory
+                                : item.passed
+                                  ? REPORT_COLORS.pass
+                                  : REPORT_COLORS.fail,
+                            }}
+                          >
+                            {item.advisory ? 'Advisory' : item.passed ? 'Pass' : 'Fail'}
+                          </span>
+                        ) : (
+                          <span className="font-semibold tabular-nums">{String(item.value)}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">{item.notes || '—'}</td>
+                    </tr>
+                    {followUps.map((child) => (
+                      <tr
+                        key={child.item_id}
+                        className="border-t border-dashed align-top bg-amber-50/50"
+                      >
+                        <td className="px-3 py-2 pl-6 text-muted-foreground">
+                          <span className="mr-1 text-amber-600">↳</span>
+                          {child.label}
+                        </td>
+                        <td className="px-3 py-2">
+                          {child.type === 'pass_fail' ? (
+                            <span
+                              className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase text-white"
+                              style={{
+                                backgroundColor: child.passed
+                                  ? REPORT_COLORS.pass
+                                  : REPORT_COLORS.fail,
+                              }}
+                            >
+                              {child.passed ? 'Pass' : 'Fail'}
+                            </span>
+                          ) : child.type === 'checkbox' ? (
+                            <span className="font-semibold">{child.value ? 'Yes' : 'No'}</span>
+                          ) : (
+                            <span className="font-semibold tabular-nums">
+                              {String(child.value ?? '—')}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">{child.notes || '—'}</td>
+                      </tr>
+                    ))}
+                    {photos.length > 0 && (
+                      <tr className="border-t border-dashed align-top">
+                        <td colSpan={3} className="px-3 py-2 pl-6">
+                          <div className="flex flex-wrap gap-2">
+                            {photos.map((p) => (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                key={p.id}
+                                src={p.url || '/placeholder.svg'}
+                                alt={p.name}
+                                className="h-20 w-20 rounded border object-cover"
+                              />
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
+              {checklist.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="px-3 py-6 text-center text-muted-foreground">
+                    No checklist results recorded for this task.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </NumberedSection>
+    ),
+    engineer_notes: (ctx) =>
+      result?.engineer_notes ? (
+        <NumberedSection ctx={ctx} title="Engineer Notes">
+          <p className="avoid-break whitespace-pre-wrap rounded-md border bg-muted/40 p-3 text-sm leading-relaxed">
+            {result.engineer_notes}
+          </p>
+        </NumberedSection>
+      ) : null,
+    photos: (ctx) =>
+      result?.photos && result.photos.length > 0 ? (
+        <NumberedSection ctx={ctx} title="Photographic Evidence">
+          <div className="grid grid-cols-3 gap-3">
+            {result.photos.map((photo, index) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={index}
+                src={photo || '/placeholder.svg'}
+                alt={`Report photo ${index + 1}`}
+                crossOrigin="anonymous"
+                className="avoid-break h-28 w-full rounded border object-cover"
+              />
+            ))}
+          </div>
+        </NumberedSection>
+      ) : null,
+    engineer_signature: () =>
+      template?.include_signature !== false ? (
+        <SignatureBlock
+          signatureUrl={engineer?.signature_url}
+          signatoryName={sections.signatory_name || engineerName}
+          signatoryTitle={
+            engineer?.role_ref?.name ||
+            engineer?.job_title ||
+            sections.signatory_title ||
+            'Engineer'
+          }
+          date={completedDate}
+        />
+      ) : null,
+    // Client sign-off — only present on non-recurring calls where the on-site
+    // representative signed to confirm the work.
+    client_signoff: () =>
+      result?.client_signature ? (
+        <SignatureBlock
+          signatureUrl={result.client_signature}
+          signatoryName={result.client_signature_name || 'Client'}
+          signatoryTitle="Client / on-site representative"
+          date={completedDate}
+        />
+      ) : null,
+  }
+
+  const blocks = resolveLayout(template, 'service')
+
   return (
     <div className="mx-auto max-w-4xl">
       <ReportActionBar backHref={site ? `/dashboard/sites/${site.id}` : '/dashboard/reports'} />
@@ -226,258 +495,12 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
           ServiceIcon={ServiceIcon}
         />
 
-        <ReportMetaGrid>
-          <ReportMeta label="Inspection Reference" value={result?.reference_number} />
-          <ReportMeta label="Site" value={site?.name} />
-          <ReportMeta label="Engineer" value={engineerName} />
-          <ReportMeta label="Address" value={site?.address} />
-          <ReportMeta label="Service" value={serviceType?.name} />
-          {task.visit_type?.name && <ReportMeta label="Visit" value={task.visit_type.name} />}
-        </ReportMetaGrid>
-
-        <ReportStatusRibbon statusLabel={statusMeta.label} color={statusMeta.color} />
-
-        {/* Summary KPIs + chart */}
-        <div className="mb-8 grid gap-6 md:grid-cols-2">
-          <div className="grid grid-cols-2 gap-3 self-start">
-            {stats.mode === 'counts' ? (
-              <>
-                <StatCard label="On Register" value={stats.registerTotal} color={headerColor} icon={<ListChecks className="h-4 w-4" />} />
-                <StatCard label="Tested" value={stats.tested} color={REPORT_COLORS.neutral} />
-                <StatCard label="Passed" value={stats.pass} color={REPORT_COLORS.pass} icon={<CheckCircle2 className="h-4 w-4" />} />
-                <StatCard label="Remedial" value={stats.remedial} color={REPORT_COLORS.remedial} icon={<AlertTriangle className="h-4 w-4" />} />
-                <StatCard label="Failed" value={stats.fail} color={REPORT_COLORS.fail} icon={<XCircle className="h-4 w-4" />} />
-                <StatCard label="Pass Rate" value={`${stats.passRate}%`} color={headerColor} />
-              </>
-            ) : (
-              <>
-                <StatCard label="Checks" value={stats.registerTotal} color={headerColor} icon={<ListChecks className="h-4 w-4" />} />
-                <StatCard label="Passed" value={stats.pass} color={REPORT_COLORS.pass} icon={<CheckCircle2 className="h-4 w-4" />} />
-                <StatCard label="Failed" value={stats.fail} color={REPORT_COLORS.fail} icon={<XCircle className="h-4 w-4" />} />
-                {stats.advisory > 0 ? (
-                  <StatCard label="Advisory" value={stats.advisory} color={REPORT_COLORS.advisory} icon={<AlertTriangle className="h-4 w-4" />} />
-                ) : (
-                  <StatCard label="Other" value={stats.other} color={REPORT_COLORS.na} icon={<MinusCircle className="h-4 w-4" />} />
-                )}
-                <StatCard label="Pass Rate" value={`${stats.passRate}%`} color={headerColor} />
-              </>
-            )}
-          </div>
-
-          <ReportPanel title="Results Breakdown">
-            {pieData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    dataKey="value"
-                    nameKey="name"
-                    innerRadius={45}
-                    outerRadius={85}
-                    paddingAngle={2}
-                    isAnimationActive={false}
-                    label={(entry) => `${entry.value}`}
-                  >
-                    {pieData.map((d) => (
-                      <Cell key={d.key} fill={d.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="py-12 text-center text-sm text-muted-foreground">No checklist data</p>
-            )}
-          </ReportPanel>
-        </div>
-
-        {/* Detailed checklist */}
-        <section className="mb-8">
-          <SectionHeading index={1} color={headerColor}>
-            Checklist Results
-          </SectionHeading>
-          <div className="overflow-hidden rounded-md border">
-            <table className="w-full text-left text-xs">
-              <thead style={{ backgroundColor: `${headerColor}15` }}>
-                <tr>
-                  <th className="px-3 py-2 font-semibold uppercase tracking-wide">Item</th>
-                  <th className="px-3 py-2 font-semibold uppercase tracking-wide">Result</th>
-                  <th className="px-3 py-2 font-semibold uppercase tracking-wide">Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {parentChecklist.map((item, index) => {
-                  const prev = index > 0 ? parentChecklist[index - 1] : null
-                  const showPanelHeader =
-                    !!item.panel_name && item.panel_id !== (prev?.panel_id ?? null)
-                  // Follow-up rows spawned by this item's active conditions, plus
-                  // any per-item photos, rendered as indented sub-rows.
-                  const followUps = checklist.filter(
-                    (r) => r.parent_item_id === item.item_id,
-                  )
-                  const photos = item.photos || []
-                  return (
-                    <Fragment key={item.item_id || index}>
-                      {showPanelHeader && (
-                        <tr style={{ backgroundColor: `${headerColor}0d` }}>
-                          <td colSpan={3} className="px-3 py-2 text-[11px] font-bold uppercase tracking-wide">
-                            {item.panel_name}
-                            {item.panel_level ? ` — ${item.panel_level}` : ''}
-                          </td>
-                        </tr>
-                      )}
-                      <tr className="border-t align-top odd:bg-muted/30">
-                        <td className="px-3 py-2 font-medium">{item.label}</td>
-                        <td className="px-3 py-2">
-                          {item.na ? (
-                            <span
-                              className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase text-white"
-                              style={{ backgroundColor: REPORT_COLORS.na }}
-                            >
-                              N/A
-                            </span>
-                          ) : item.type === 'pass_fail' ? (
-                            <span
-                              className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase text-white"
-                              style={{
-                                backgroundColor: item.advisory
-                                  ? REPORT_COLORS.advisory
-                                  : item.passed
-                                    ? REPORT_COLORS.pass
-                                    : REPORT_COLORS.fail,
-                              }}
-                            >
-                              {item.advisory ? 'Advisory' : item.passed ? 'Pass' : 'Fail'}
-                            </span>
-                          ) : (
-                            <span className="font-semibold tabular-nums">{String(item.value)}</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-muted-foreground">{item.notes || '—'}</td>
-                      </tr>
-                      {followUps.map((child) => (
-                        <tr
-                          key={child.item_id}
-                          className="border-t border-dashed align-top bg-amber-50/50"
-                        >
-                          <td className="px-3 py-2 pl-6 text-muted-foreground">
-                            <span className="mr-1 text-amber-600">↳</span>
-                            {child.label}
-                          </td>
-                          <td className="px-3 py-2">
-                            {child.type === 'pass_fail' ? (
-                              <span
-                                className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase text-white"
-                                style={{
-                                  backgroundColor: child.passed
-                                    ? REPORT_COLORS.pass
-                                    : REPORT_COLORS.fail,
-                                }}
-                              >
-                                {child.passed ? 'Pass' : 'Fail'}
-                              </span>
-                            ) : child.type === 'checkbox' ? (
-                              <span className="font-semibold">{child.value ? 'Yes' : 'No'}</span>
-                            ) : (
-                              <span className="font-semibold tabular-nums">
-                                {String(child.value ?? '—')}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-muted-foreground">{child.notes || '—'}</td>
-                        </tr>
-                      ))}
-                      {photos.length > 0 && (
-                        <tr className="border-t border-dashed align-top">
-                          <td colSpan={3} className="px-3 py-2 pl-6">
-                            <div className="flex flex-wrap gap-2">
-                              {photos.map((p) => (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  key={p.id}
-                                  src={p.url || '/placeholder.svg'}
-                                  alt={p.name}
-                                  className="h-20 w-20 rounded border object-cover"
-                                />
-                              ))}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  )
-                })}
-                {checklist.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="px-3 py-6 text-center text-muted-foreground">
-                      No checklist results recorded for this task.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        {/* Engineer notes */}
-        {result?.engineer_notes && (
-          <section className="mb-8">
-            <SectionHeading index={2} color={headerColor}>
-              Engineer Notes
-            </SectionHeading>
-            <p className="avoid-break whitespace-pre-wrap rounded-md border bg-muted/40 p-3 text-sm leading-relaxed">
-              {result.engineer_notes}
-            </p>
-          </section>
-        )}
-
-        {/* Photos */}
-        {result?.photos && result.photos.length > 0 && (
-          <section className="mb-8">
-            <SectionHeading index={3} color={headerColor}>
-              Photographic Evidence
-            </SectionHeading>
-            <div className="grid grid-cols-3 gap-3">
-              {result.photos.map((photo, index) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  key={index}
-                  src={photo || '/placeholder.svg'}
-                  alt={`Report photo ${index + 1}`}
-                  crossOrigin="anonymous"
-                  className="avoid-break h-28 w-full rounded border object-cover"
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Signature */}
-        {template?.include_signature !== false && (
-          <SignatureBlock
-            signatureUrl={engineer?.signature_url}
-            signatoryName={sections.signatory_name || engineerName}
-            signatoryTitle={
-              engineer?.role_ref?.name ||
-              engineer?.job_title ||
-              sections.signatory_title ||
-              'Engineer'
-            }
-            date={completedDate}
-          />
-        )}
-
-        {/* Client sign-off — only present on non-recurring calls where the
-            on-site representative signed to confirm the work. */}
-        {result?.client_signature && (
-          <SignatureBlock
-            signatureUrl={result.client_signature}
-            signatoryName={result.client_signature_name || 'Client'}
-            signatoryTitle="Client / on-site representative"
-            date={completedDate}
-          />
-        )}
+        <ReportBlocks
+          blocks={blocks}
+          registry={registry}
+          headerColor={headerColor}
+          vars={vars}
+        />
 
         <ReportFooter
           headerColor={headerColor}

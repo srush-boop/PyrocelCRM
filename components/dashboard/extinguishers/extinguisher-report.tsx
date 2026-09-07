@@ -68,7 +68,7 @@ export function ExtinguisherReport({ task, inspections, template, referenceNumbe
   const companyPhone = companyInfo?.phone || sections.company_phone || null
   const companyEmail = companyInfo?.email || sections.company_email || null
   const companyWebsite = companyInfo?.website || null
-  const logoUrl = companyInfo?.logo_url || template?.company_logo_url || null
+  const logoUrl = companyInfo?.logo_url || template?.logo_url || null
   const standards = sections.standards || null
   const ServiceIcon = getServiceIcon(serviceType?.name)
 

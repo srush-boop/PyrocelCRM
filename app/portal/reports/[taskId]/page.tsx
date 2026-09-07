@@ -7,10 +7,10 @@ import { DamperReport } from '@/components/dashboard/dampers/damper-report'
 import { ExtinguisherReport } from '@/components/dashboard/extinguishers/extinguisher-report'
 import { isDamperService } from '@/lib/dampers'
 import { isExtinguisherService } from '@/lib/extinguishers'
+import { fetchResolvedReportTemplate } from '@/lib/reports/resolve-template'
 import type {
   TaskWithDetails,
   TaskResult,
-  ReportTemplate,
   DamperInspection,
   Damper,
   ExtinguisherInspection,
@@ -66,14 +66,14 @@ export default async function PortalReportPage({ params }: PageProps) {
   )
 
   if (isDamperService(serviceName)) {
-    const [{ data: inspectionsData }, { data: templateData }, { data: resultData }] =
+    const [{ data: inspectionsData }, template, { data: resultData }] =
       await Promise.all([
         supabase
           .from('damper_inspections')
           .select('*, damper:dampers(*)')
           .eq('task_id', taskId)
           .order('inspection_date', { ascending: false }),
-        supabase.from('report_templates').select('*').eq('service_type_id', serviceTypeId).maybeSingle(),
+        fetchResolvedReportTemplate(supabase, serviceTypeId),
         supabase.from('task_results').select('reference_number').eq('task_id', taskId).maybeSingle(),
       ])
 
@@ -83,7 +83,7 @@ export default async function PortalReportPage({ params }: PageProps) {
         <DamperReport
           task={task as TaskWithDetails}
           inspections={(inspectionsData || []) as (DamperInspection & { damper: Damper | null })[]}
-          template={(templateData as ReportTemplate | null) ?? null}
+          template={template}
           referenceNumber={resultData?.reference_number ?? null}
           companyInfo={companyInfo}
         />
@@ -92,14 +92,14 @@ export default async function PortalReportPage({ params }: PageProps) {
   }
 
   if (isExtinguisherService(serviceName)) {
-    const [{ data: inspectionsData }, { data: templateData }, { data: resultData }] =
+    const [{ data: inspectionsData }, template, { data: resultData }] =
       await Promise.all([
         supabase
           .from('extinguisher_inspections')
           .select('*, extinguisher:extinguishers(*)')
           .eq('task_id', taskId)
           .order('inspection_date', { ascending: false }),
-        supabase.from('report_templates').select('*').eq('service_type_id', serviceTypeId).maybeSingle(),
+        fetchResolvedReportTemplate(supabase, serviceTypeId),
         supabase.from('task_results').select('reference_number').eq('task_id', taskId).maybeSingle(),
       ])
 
@@ -111,7 +111,7 @@ export default async function PortalReportPage({ params }: PageProps) {
           inspections={
             (inspectionsData || []) as (ExtinguisherInspection & { extinguisher: Extinguisher | null })[]
           }
-          template={(templateData as ReportTemplate | null) ?? null}
+          template={template}
           referenceNumber={resultData?.reference_number ?? null}
           companyInfo={companyInfo}
         />
@@ -120,9 +120,9 @@ export default async function PortalReportPage({ params }: PageProps) {
   }
 
   // Generic service report (covers fire alarm/MCP, emergency lighting, and others)
-  const [{ data: resultData }, { data: templateData }] = await Promise.all([
+  const [{ data: resultData }, template] = await Promise.all([
     supabase.from('task_results').select('*').eq('task_id', taskId).maybeSingle(),
-    supabase.from('report_templates').select('*').eq('service_type_id', serviceTypeId).maybeSingle(),
+    fetchResolvedReportTemplate(supabase, serviceTypeId),
   ])
 
   return (
@@ -131,7 +131,7 @@ export default async function PortalReportPage({ params }: PageProps) {
       <ServiceReport
         task={task as TaskWithDetails}
         result={(resultData as TaskResult | null) ?? null}
-        template={(templateData as ReportTemplate | null) ?? null}
+        template={template}
         companyInfo={companyInfo}
       />
     </div>

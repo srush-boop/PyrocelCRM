@@ -8,9 +8,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home, Wrench, HardHat, FileText, Database, PhoneCall, ShieldCheck, Receipt, Tags, Coins, Hash, ClipboardCheck, Mail } from 'lucide-react'
+import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home, Wrench, HardHat, FileText, Database, PhoneCall, ShieldCheck, Receipt, Tags, Coins, Hash, ClipboardCheck, Mail, LayoutTemplate } from 'lucide-react'
 import type { User as AuthUser } from '@supabase/supabase-js'
-import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType, DocumentTemplate } from '@/lib/types/database'
+import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType, DocumentTemplate, ReportTemplate } from '@/lib/types/database'
+import { ReportTemplatesSettings } from './report-templates-settings'
 import type { LoneWorkerManagedUser } from '@/app/(dashboard)/dashboard/lone-worker/actions'
 import type { LoneWorkerTimings } from '@/lib/lone-worker/types'
 import { CompanySettings } from './company-settings'
@@ -77,9 +78,12 @@ interface SettingsContentProps {
   myEmailFooter: EmailFooterValues
   globalEmailFooter: EmailFooterValues | null
   canManageGlobalFooter: boolean
+  canManageReports: boolean
+  reportServiceTypes: { id: string; name: string; color: string | null }[]
+  reportTemplates: ReportTemplate[]
 }
 
-export function SettingsContent({ user, profile, company, branches, departments, departmentManagerCandidates, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, deadlineExcludedReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards, chargeTemplates, nominalCodes, canManageTags, documentTags, openingHours, canManageInternalTasks, internalTaskTemplates, internalTaskUsers, internalTaskDepartments, internalTaskRoles, internalTaskDocuments, mfaFactors, mfaRequired, myEmailFooter, globalEmailFooter, canManageGlobalFooter }: SettingsContentProps) {
+export function SettingsContent({ user, profile, company, branches, departments, departmentManagerCandidates, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, deadlineExcludedReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards, chargeTemplates, nominalCodes, canManageTags, documentTags, openingHours, canManageInternalTasks, internalTaskTemplates, internalTaskUsers, internalTaskDepartments, internalTaskRoles, internalTaskDocuments, mfaFactors, mfaRequired, myEmailFooter, globalEmailFooter, canManageGlobalFooter, canManageReports, reportServiceTypes, reportTemplates }: SettingsContentProps) {
   const isAdmin = profile.role === 'admin'
   // Templates are managed by office/admin (mail-merge letters for client correspondence).
   const canManageTemplates = profile.role === 'admin' || profile.role === 'office'
@@ -101,6 +105,7 @@ export function SettingsContent({ user, profile, company, branches, departments,
   const showOperations = isAdmin || canManageLoneWorker
   const showDocuments = canManageTemplates || canManageTags
   const showTasks = canManageInternalTasks
+  const showReports = canManageReports
   const showData = isAdmin
   // First visible sub-tab within each group (gating differs per section).
   const pricingDefault = isAdmin ? 'maintenance' : 'rates'
@@ -199,6 +204,12 @@ export function SettingsContent({ user, profile, company, branches, departments,
           <TabsTrigger value="tasks" className="gap-2">
             <ClipboardCheck className="h-4 w-4" />
             Tasks & Forms
+          </TabsTrigger>
+        )}
+        {showReports && (
+          <TabsTrigger value="reports" className="gap-2">
+            <LayoutTemplate className="h-4 w-4" />
+            Reports
           </TabsTrigger>
         )}
         {showData && (
@@ -597,6 +608,16 @@ export function SettingsContent({ user, profile, company, branches, departments,
             users={internalTaskUsers}
             documents={internalTaskDocuments}
             isAdmin={isAdmin}
+          />
+        </TabsContent>
+      )}
+
+      {/* REPORTS — per-service report designer */}
+      {showReports && (
+        <TabsContent value="reports" className="space-y-4">
+          <ReportTemplatesSettings
+            serviceTypes={reportServiceTypes}
+            templates={reportTemplates}
           />
         </TabsContent>
       )}

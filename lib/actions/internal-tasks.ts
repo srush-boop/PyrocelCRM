@@ -74,6 +74,7 @@ export async function ensureMyInstances(): Promise<{ ok: boolean; error?: string
     period_start: string
     period_end: string
     due_at: string
+    attempt: number
   }> = []
 
   for (const t of (templates ?? []) as InternalTaskTemplate[]) {
@@ -86,6 +87,8 @@ export async function ensureMyInstances(): Promise<{ ok: boolean; error?: string
       period_start: period.periodStart,
       period_end: period.periodEnd,
       due_at: period.dueAt,
+      // attempt 0 = the scheduled instance; extras are created on demand.
+      attempt: 0,
     })
   }
 
@@ -93,11 +96,82 @@ export async function ensureMyInstances(): Promise<{ ok: boolean; error?: string
     // Ignore conflicts on the unique key so re-opening never duplicates.
     const { error } = await supabase
       .from('internal_task_instances')
-      .upsert(rows, { onConflict: 'template_id,user_id,period_start', ignoreDuplicates: true })
+      .upsert(rows, {
+        onConflict: 'template_id,user_id,period_start,attempt',
+        ignoreDuplicates: true,
+      })
     if (error) return { ok: false, error: error.message }
   }
 
   return { ok: true }
+}
+
+/**
+ * Creates an EXTRA instance of a recurring task for the current period, so a
+ * user can submit it again after the scheduled one is done (e.g. a per-vehicle
+ * check completed for a second vehicle). Only allowed when the template opts in
+ * via `allow_multiple`. Returns the fresh draft instance to open the fill sheet.
+ */
+export async function startExtraInstance(
+  templateId: string,
+): Promise<{ ok: boolean; error?: string; instance?: InternalTaskInstance }> {
+  const auth = await getAuth()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase, userId, profile } = auth
+
+  const { data: template } = await supabase
+    .from('internal_task_templates')
+    .select('*')
+    .eq('id', templateId)
+    .single()
+  const t = template as InternalTaskTemplate | null
+  if (!t || !t.active || t.task_kind !== 'recurring') {
+    return { ok: false, error: 'Task not available.' }
+  }
+  if (!t.allow_multiple) {
+    return { ok: false, error: 'This task does not allow additional submissions.' }
+  }
+
+  const me = {
+    id: profile.id,
+    role: profile.role ?? null,
+    department_id: profile.department_id ?? null,
+    status: profile.status ?? 'active',
+  }
+  if (!resolveAssigneeIds(t, [me]).includes(userId)) {
+    return { ok: false, error: 'This task is not assigned to you.' }
+  }
+
+  const period = computePeriod(t)
+
+  // Next attempt number for this user + period (scheduled instance is 0).
+  const { data: existing } = await supabase
+    .from('internal_task_instances')
+    .select('attempt')
+    .eq('template_id', templateId)
+    .eq('user_id', userId)
+    .eq('period_start', period.periodStart)
+    .order('attempt', { ascending: false })
+    .limit(1)
+  const nextAttempt = ((existing?.[0] as { attempt?: number } | undefined)?.attempt ?? 0) + 1
+
+  const { data, error } = await supabase
+    .from('internal_task_instances')
+    .insert({
+      template_id: templateId,
+      user_id: userId,
+      period_start: period.periodStart,
+      period_end: period.periodEnd,
+      due_at: period.dueAt,
+      attempt: nextAttempt,
+      status: 'pending',
+      answers: [],
+    })
+    .select('*, template:internal_task_templates(*)')
+    .single()
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(MY_TASKS_PATH)
+  return { ok: true, instance: data as InternalTaskInstance }
 }
 
 // --- Reads ------------------------------------------------------------------
@@ -972,6 +1046,11 @@ export async function saveInternalTaskTemplate(
     one_off_due_date: input.one_off_due_date ?? null,
     grace_days: input.grace_days ?? 1,
     due_time: input.due_time ?? '09:00',
+    monthly_due_rule: input.monthly_due_rule ?? 'period_end',
+    monthly_due_day: input.monthly_due_day ?? null,
+    monthly_due_week: input.monthly_due_week ?? null,
+    monthly_due_weekday: input.monthly_due_weekday ?? null,
+    allow_multiple: input.allow_multiple ?? false,
     reminder_days_before: input.reminder_days_before ?? [1],
     warn_overdue: input.warn_overdue ?? true,
     questions: input.questions ?? [],

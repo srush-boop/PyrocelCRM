@@ -1070,6 +1070,18 @@ export interface InternalTaskTemplate {
   one_off_due_date: string | null
   grace_days: number // days after period_end the task is due
   due_time: string // 'HH:MM[:SS]' deadline time on the due day
+  // Monthly frequency only: how the completion deadline within the month is set.
+  //  - 'period_end'       → last day of the month (+grace_days) [default]
+  //  - 'day_of_month'     → the given calendar day (monthly_due_day)
+  //  - 'weekday_of_month' → the nth/last weekday (monthly_due_week + _weekday),
+  //                         e.g. the last Monday of the month.
+  monthly_due_rule: 'period_end' | 'day_of_month' | 'weekday_of_month'
+  monthly_due_day: number | null // 1..31 (day_of_month rule)
+  monthly_due_week: 'first' | 'second' | 'third' | 'fourth' | 'last' | null
+  monthly_due_weekday: number | null // 0=Sun..6=Sat (weekday_of_month rule)
+  // When true, a user may submit additional instances for the same period after
+  // the scheduled one is complete (e.g. a per-vehicle check completed twice).
+  allow_multiple: boolean
   reminder_days_before: number[]
   warn_overdue: boolean
   // Content
@@ -1113,6 +1125,9 @@ export interface InternalTaskInstance {
   period_start: string | null
   period_end: string | null
   due_at: string | null
+  // Distinguishes the scheduled instance (0) from any extra user-initiated
+  // submissions for the same period (1, 2, …). Part of the uniqueness key.
+  attempt: number
   status: InternalTaskStatus
   completed_at: string | null
   reference_number: string | null
@@ -1840,7 +1855,7 @@ export interface Task {
   follow_up_to?: Task | null
   }
 
-  // ── Follow-up calls ────────────────��───────────────────────────────────────
+  // ── Follow-up calls ────────────────��───────────────────────────���───────────
   export type FollowUpStatus = 'pending' | 'approved' | 'rejected' | 'cancelled'
   export type FollowUpPartAction = 'none' | 'reserve' | 'order'
   export type FollowUpReservationStatus = 'pending' | 'confirmed'
@@ -3556,7 +3571,7 @@ export interface AssetAssignment {
   assigner?: Pick<Profile, 'id' | 'full_name'> | null
 }
 
-// ── Inbound request inbox ──────────────────���─────────────────────���───────────
+// ── Inbound request inbox ──────────────────���──���──────────────────���───────────
 // A request that arrived by email (forwarded to the system address) or was added
 // manually by a staff member. AI triages it, matching it to an existing
 // client/site/service and proposing actions that a human approves.

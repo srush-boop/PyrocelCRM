@@ -1,16 +1,26 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { CalendarClock, CheckCircle2, ClipboardList, FileText, Wrench } from 'lucide-react'
+import {
+  CalendarClock,
+  CheckCircle2,
+  ClipboardList,
+  FileText,
+  Loader2,
+  Plus,
+  Wrench,
+} from 'lucide-react'
 import { cn, formatDateUK } from '@/lib/utils'
 import type { InternalTaskInstance } from '@/lib/types/database'
 import type { MyAssetCheck } from '@/lib/asset-checks'
 import { CHECK_TYPE_LABELS, daysUntil, dueStatus } from '@/lib/assets'
 import { InternalTaskSheet } from './internal-task-sheet'
+import { startExtraInstance } from '@/lib/actions/internal-tasks'
 
 interface Props {
   instances: InternalTaskInstance[]
@@ -57,8 +67,28 @@ function formatDue(due: string | null): { label: string; tone: 'overdue' | 'soon
 }
 
 export function MyTasksList({ instances, assetChecks = [] }: Props) {
+  const router = useRouter()
   const [active, setActive] = useState<InternalTaskInstance | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [extraPending, startExtra] = useTransition()
+  const [extraId, setExtraId] = useState<string | null>(null)
+  const [extraError, setExtraError] = useState<string | null>(null)
+
+  function submitAnother(templateId: string) {
+    setExtraError(null)
+    setExtraId(templateId)
+    startExtra(async () => {
+      const result = await startExtraInstance(templateId)
+      setExtraId(null)
+      if (!result.ok || !result.instance) {
+        setExtraError(result.error ?? 'Could not start another submission.')
+        return
+      }
+      router.refresh()
+      setActive(result.instance)
+      setSheetOpen(true)
+    })
+  }
 
   const { outstandingRows, outstandingCount, completed } = useMemo(() => {
     const taskRows: OutstandingRow[] = instances
@@ -120,14 +150,20 @@ export function MyTasksList({ instances, assetChecks = [] }: Props) {
             Recently completed
           </h2>
           <div className="flex flex-col divide-y rounded-lg border">
-            {completed.slice(0, 12).map((instance) => (
-              <button
+            {completed.slice(0, 12).map((instance) => {
+              const canRepeat =
+                instance.template?.allow_multiple === true &&
+                instance.template?.task_kind === 'recurring'
+              return (
+              <div
                 key={instance.id}
-                type="button"
-                onClick={() => openInstance(instance)}
-                className="flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/50"
+                className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/50"
               >
-                <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => openInstance(instance)}
+                  className="flex flex-1 items-center gap-3 text-left"
+                >
                   <CheckCircle2 className="size-4 shrink-0 text-primary" />
                   <div>
                     <p className="text-sm font-medium">
@@ -144,11 +180,32 @@ export function MyTasksList({ instances, assetChecks = [] }: Props) {
                       {instance.reference_number ? ` · Ref ${instance.reference_number}` : ''}
                     </p>
                   </div>
+                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                  {canRepeat ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={extraPending && extraId === instance.template_id}
+                      onClick={() => submitAnother(instance.template_id)}
+                    >
+                      {extraPending && extraId === instance.template_id ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Plus className="size-4" />
+                      )}
+                      Submit another
+                    </Button>
+                  ) : null}
+                  <Badge variant="outline">View</Badge>
                 </div>
-                <Badge variant="outline">View</Badge>
-              </button>
-            ))}
+              </div>
+              )
+            })}
           </div>
+          {extraError ? (
+            <p className="text-sm text-destructive">{extraError}</p>
+          ) : null}
         </section>
       ) : null}
 

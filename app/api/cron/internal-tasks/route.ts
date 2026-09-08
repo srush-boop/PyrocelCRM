@@ -61,11 +61,13 @@ export async function GET(req: Request) {
       period_start: period.periodStart,
       period_end: period.periodEnd,
       due_at: period.dueAt,
+      // attempt 0 = the scheduled instance (extras are created on demand).
+      attempt: 0,
     }))
     const { error: upErr, count } = await admin
       .from('internal_task_instances')
       .upsert(rows, {
-        onConflict: 'template_id,user_id,period_start',
+        onConflict: 'template_id,user_id,period_start,attempt',
         ignoreDuplicates: true,
         count: 'exact',
       })

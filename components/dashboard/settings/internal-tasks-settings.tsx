@@ -182,6 +182,11 @@ function blankTemplate(): InternalTaskTemplate {
     one_off_due_date: null,
     grace_days: 1,
     due_time: '09:00',
+    monthly_due_rule: 'period_end',
+    monthly_due_day: null,
+    monthly_due_week: null,
+    monthly_due_weekday: null,
+    allow_multiple: false,
     reminder_days_before: [1],
     warn_overdue: true,
     questions: [],
@@ -976,6 +981,103 @@ function TemplateEditorDialog({
                   />
                 </div>
               ) : null}
+              {draft.frequency === 'monthly' ? (
+                <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
+                  <div>
+                    <Label>Due date each month</Label>
+                    <Select
+                      value={draft.monthly_due_rule}
+                      onValueChange={(v) =>
+                        patch({
+                          monthly_due_rule: v as InternalTaskTemplate['monthly_due_rule'],
+                          // Seed sensible defaults when switching rule.
+                          monthly_due_day:
+                            v === 'day_of_month' ? draft.monthly_due_day ?? 1 : draft.monthly_due_day,
+                          monthly_due_week:
+                            v === 'weekday_of_month'
+                              ? draft.monthly_due_week ?? 'last'
+                              : draft.monthly_due_week,
+                          monthly_due_weekday:
+                            v === 'weekday_of_month'
+                              ? draft.monthly_due_weekday ?? 1
+                              : draft.monthly_due_weekday,
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="period_end">End of month</SelectItem>
+                        <SelectItem value="day_of_month">Specific day of month</SelectItem>
+                        <SelectItem value="weekday_of_month">Weekday of month</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {draft.monthly_due_rule === 'day_of_month' ? (
+                    <div>
+                      <Label htmlFor="it-due-day">Day of month</Label>
+                      <Input
+                        id="it-due-day"
+                        type="number"
+                        min={1}
+                        max={31}
+                        value={draft.monthly_due_day ?? 1}
+                        onChange={(e) =>
+                          patch({
+                            monthly_due_day: Math.min(31, Math.max(1, Number(e.target.value) || 1)),
+                          })
+                        }
+                      />
+                    </div>
+                  ) : null}
+                  {draft.monthly_due_rule === 'weekday_of_month' ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label>Which</Label>
+                        <Select
+                          value={draft.monthly_due_week ?? 'last'}
+                          onValueChange={(v) =>
+                            patch({
+                              monthly_due_week:
+                                v as InternalTaskTemplate['monthly_due_week'],
+                            })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="first">First</SelectItem>
+                            <SelectItem value="second">Second</SelectItem>
+                            <SelectItem value="third">Third</SelectItem>
+                            <SelectItem value="fourth">Fourth</SelectItem>
+                            <SelectItem value="last">Last</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Weekday</Label>
+                        <Select
+                          value={String(draft.monthly_due_weekday ?? 1)}
+                          onValueChange={(v) => patch({ monthly_due_weekday: Number(v) })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {DOW.map((d) => (
+                              <SelectItem key={d.value} value={String(d.value)}>
+                                {d.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <div>
                 <Label htmlFor="it-grace">Grace days after period</Label>
                 <Input
@@ -1018,6 +1120,16 @@ function TemplateEditorDialog({
                   onCheckedChange={(v) => patch({ warn_overdue: v })}
                 />
                 <Label htmlFor="it-warn">Warn when overdue</Label>
+              </div>
+              <div className="flex items-center gap-2 sm:col-span-2">
+                <Switch
+                  id="it-allow-multiple"
+                  checked={draft.allow_multiple}
+                  onCheckedChange={(v) => patch({ allow_multiple: v })}
+                />
+                <Label htmlFor="it-allow-multiple" className="text-pretty">
+                  Allow additional submissions in the same period (e.g. one per vehicle)
+                </Label>
               </div>
             </div>
           </div>

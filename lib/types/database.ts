@@ -2184,6 +2184,22 @@ export interface ReportTemplate {
   updated_at?: string
 }
 
+/**
+ * A report PDF filename convention. Resolution is tiered, most specific wins:
+ *   client + service  →  client default (service NULL)  →
+ *   company + service  →  company default (both NULL)    →  built-in fallback.
+ * `client_id` NULL = company scope; `service_type_id` NULL = that scope's
+ * default across every service.
+ */
+export interface ReportFilenamePattern {
+  id: string
+  client_id: string | null
+  service_type_id: string | null
+  pattern: string
+  created_at?: string
+  updated_at?: string
+}
+
 export interface CompanyInfo {
   id: string
   name: string

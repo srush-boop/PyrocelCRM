@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { User, Lock, LogOut, Loader2, Building2, Users, Briefcase, Home, Wrench, HardHat, FileText, Database, PhoneCall, ShieldCheck, Receipt, Tags, Coins, Hash, ClipboardCheck, Mail, LayoutTemplate } from 'lucide-react'
 import type { User as AuthUser } from '@supabase/supabase-js'
-import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType, DocumentTemplate, ReportTemplate } from '@/lib/types/database'
+import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType, DocumentTemplate, ReportTemplate, ReportFilenamePattern } from '@/lib/types/database'
 import { ReportTemplatesSettings } from './report-templates-settings'
 import type { LoneWorkerManagedUser } from '@/app/(dashboard)/dashboard/lone-worker/actions'
 import type { LoneWorkerTimings } from '@/lib/lone-worker/types'
@@ -81,9 +81,10 @@ interface SettingsContentProps {
   canManageReports: boolean
   reportServiceTypes: { id: string; name: string; color: string | null }[]
   reportTemplates: ReportTemplate[]
+  reportFilenamePatterns: ReportFilenamePattern[]
 }
 
-export function SettingsContent({ user, profile, company, branches, departments, departmentManagerCandidates, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, deadlineExcludedReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards, chargeTemplates, nominalCodes, canManageTags, documentTags, openingHours, canManageInternalTasks, internalTaskTemplates, internalTaskUsers, internalTaskDepartments, internalTaskRoles, internalTaskDocuments, mfaFactors, mfaRequired, myEmailFooter, globalEmailFooter, canManageGlobalFooter, canManageReports, reportServiceTypes, reportTemplates }: SettingsContentProps) {
+export function SettingsContent({ user, profile, company, branches, departments, departmentManagerCandidates, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, deadlineExcludedReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards, chargeTemplates, nominalCodes, canManageTags, documentTags, openingHours, canManageInternalTasks, internalTaskTemplates, internalTaskUsers, internalTaskDepartments, internalTaskRoles, internalTaskDocuments, mfaFactors, mfaRequired, myEmailFooter, globalEmailFooter, canManageGlobalFooter, canManageReports, reportServiceTypes, reportTemplates, reportFilenamePatterns }: SettingsContentProps) {
   const isAdmin = profile.role === 'admin'
   // Templates are managed by office/admin (mail-merge letters for client correspondence).
   const canManageTemplates = profile.role === 'admin' || profile.role === 'office'
@@ -615,10 +616,11 @@ export function SettingsContent({ user, profile, company, branches, departments,
       {/* REPORTS — per-service report designer */}
       {showReports && (
         <TabsContent value="reports" className="space-y-4">
-          <ReportTemplatesSettings
-            serviceTypes={reportServiceTypes}
-            templates={reportTemplates}
-          />
+              <ReportTemplatesSettings
+                serviceTypes={reportServiceTypes}
+                templates={reportTemplates}
+                filenamePatterns={reportFilenamePatterns}
+              />
         </TabsContent>
       )}
 

@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { SettingsContent } from '@/components/dashboard/settings/settings-content'
-import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType, DocumentTemplate, InternalTaskTemplate, ReportTemplate } from '@/lib/types/database'
+import type { Profile, CompanyInfo, Branch, Department, Role, PropertyType, DocumentTemplate, InternalTaskTemplate, ReportTemplate, ReportFilenamePattern } from '@/lib/types/database'
 import { getGlobalConfigs } from '@/lib/actions/global-config'
 import { getMyEmailFooter, getGlobalEmailFooter } from '@/lib/actions/email-footer'
 import { getLoneWorkerAdminData } from '@/app/(dashboard)/dashboard/lone-worker/actions'
@@ -85,6 +85,11 @@ export default async function SettingsPage() {
         .from('profiles')
         .select('id, full_name, role')
         .eq('status', 'active')
+        // Internal tasks are for internal users only. Exclude external
+        // customer-portal accounts (role 'client') — they must never appear as
+        // task assignees or issue-notification targets. This also removes the
+        // duplicate where one person has both a staff and a client account.
+        .neq('role', 'client')
         .order('full_name', { ascending: true }),
       // Company-wide reference documents that can be linked from a task form.
       supabase
@@ -156,15 +161,21 @@ export default async function SettingsPage() {
   // Report designer (admin only): every service type + all template rows
   // (company default + per-service overrides).
   const canManageReports = isAdmin
-  const [reportServiceTypesResult, reportTemplatesResult] = canManageReports
-    ? await Promise.all([
-        supabase.from('service_types').select('id, name, color').order('name'),
-        supabase.from('report_templates').select('*'),
-      ])
-    : [{ data: [] }, { data: [] }]
+  const [reportServiceTypesResult, reportTemplatesResult, filenamePatternsResult] =
+    canManageReports
+      ? await Promise.all([
+          supabase.from('service_types').select('id, name, color').order('name'),
+          supabase.from('report_templates').select('*'),
+          // Company-scope filename patterns (client-specific ones are managed on
+          // the client record).
+          supabase.from('report_filename_patterns').select('*').is('client_id', null),
+        ])
+      : [{ data: [] }, { data: [] }, { data: [] }]
   const reportServiceTypes =
     (reportServiceTypesResult.data as { id: string; name: string; color: string | null }[]) || []
   const reportTemplates = (reportTemplatesResult.data as ReportTemplate[]) || []
+  const reportFilenamePatterns =
+    (filenamePatternsResult.data as ReportFilenamePattern[]) || []
 
   return (
     <div className="space-y-6">
@@ -215,6 +226,7 @@ export default async function SettingsPage() {
         canManageReports={canManageReports}
         reportServiceTypes={reportServiceTypes}
         reportTemplates={reportTemplates}
+        reportFilenamePatterns={reportFilenamePatterns}
       />
     </div>
   )

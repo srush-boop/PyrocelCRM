@@ -49,10 +49,14 @@ import {
   saveReportTemplate,
   resetReportTemplate,
 } from '@/lib/actions/report-templates'
+import { saveFilenamePattern } from '@/lib/actions/report-filename-patterns'
+import { FilenamePatternEditor } from '@/components/dashboard/reports/filename-pattern-editor'
+import { DEFAULT_FILENAME_PATTERN } from '@/lib/reports/pdf-filename'
 import type {
   ReportBlock,
   ReportBlockType,
   ReportTemplate,
+  ReportFilenamePattern,
   TaskWithDetails,
   TaskResult,
 } from '@/lib/types/database'
@@ -66,6 +70,7 @@ interface ReportServiceType {
 interface ReportTemplatesSettingsProps {
   serviceTypes: ReportServiceType[]
   templates: ReportTemplate[]
+  filenamePatterns: ReportFilenamePattern[]
 }
 
 const DEFAULT_TARGET = 'default'
@@ -122,6 +127,7 @@ function buildDraft(template: ReportTemplate | null): Draft {
 export function ReportTemplatesSettings({
   serviceTypes,
   templates,
+  filenamePatterns,
 }: ReportTemplatesSettingsProps) {
   const router = useRouter()
   const [target, setTarget] = useState<string>(DEFAULT_TARGET)
@@ -130,14 +136,45 @@ export function ReportTemplatesSettings({
       ? (templates.find((r) => r.service_type_id === null) ?? null)
       : (templates.find((r) => r.service_type_id === t) ?? null)
 
+  // Company-scope (client_id NULL) filename pattern for a given target.
+  const filenameFor = (t: string): string =>
+    filenamePatterns.find(
+      (p) =>
+        (p.client_id ?? null) === null &&
+        (p.service_type_id ?? null) === (t === DEFAULT_TARGET ? null : t),
+    )?.pattern ?? ''
+  // The company default pattern shown as the inherited placeholder for services.
+  const companyDefaultPattern = filenameFor(DEFAULT_TARGET) || DEFAULT_FILENAME_PATTERN
+
   const [draft, setDraft] = useState<Draft>(() => buildDraft(templateFor(DEFAULT_TARGET)))
+  const [filenameDraft, setFilenameDraft] = useState<string>(() => filenameFor(DEFAULT_TARGET))
+  const [savingFilename, setSavingFilename] = useState(false)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const selectTarget = (t: string) => {
     setTarget(t)
     setDraft(buildDraft(templateFor(t)))
+    setFilenameDraft(filenameFor(t))
     setMessage(null)
+  }
+
+  async function handleSaveFilename(patternOverride?: string) {
+    const pattern = patternOverride ?? filenameDraft
+    setSavingFilename(true)
+    setMessage(null)
+    const result = await saveFilenamePattern({
+      clientId: null,
+      serviceTypeId: target === DEFAULT_TARGET ? null : target,
+      pattern,
+    })
+    setSavingFilename(false)
+    if (result.ok) {
+      setMessage({ type: 'success', text: 'PDF file name saved.' })
+      router.refresh()
+    } else {
+      setMessage({ type: 'error', text: result.error ?? 'Failed to save file name.' })
+    }
   }
 
   const hasRow = !!templateFor(target)
@@ -365,6 +402,46 @@ export function ReportTemplatesSettings({
               {message.text}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Report PDF file name */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Report PDF file name</CardTitle>
+          <CardDescription>
+            {target === DEFAULT_TARGET
+              ? 'The naming convention for the report PDF attached to client emails. Applies to every service unless a specific service or client overrides it.'
+              : 'Override the file name for this service. Leave blank to inherit the company default. Individual clients can override this again on their record.'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <FilenamePatternEditor
+            value={filenameDraft}
+            onChange={setFilenameDraft}
+            placeholder={
+              target === DEFAULT_TARGET ? DEFAULT_FILENAME_PATTERN : companyDefaultPattern
+            }
+          />
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={() => void handleSaveFilename()} disabled={savingFilename}>
+              {savingFilename && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Save file name
+            </Button>
+            {target !== DEFAULT_TARGET && filenameFor(target) && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={savingFilename}
+                onClick={() => {
+                  setFilenameDraft('')
+                  void handleSaveFilename('')
+                }}
+              >
+                Reset to default
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
 

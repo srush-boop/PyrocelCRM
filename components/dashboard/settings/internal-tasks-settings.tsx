@@ -49,6 +49,8 @@ import {
   ImageIcon,
   Upload,
   X,
+  ToggleLeft,
+  PenLine,
 } from 'lucide-react'
 import type {
   Department,
@@ -80,15 +82,27 @@ interface Props {
   isAdmin: boolean
 }
 
-// Question types the user actually answers (support conditional rules).
-type QuestionType = 'pass_fail' | 'checkbox' | 'text' | 'number' | 'choice'
+// Question types the user actually answers (rendered by the inline editor).
+type QuestionType =
+  | 'pass_fail'
+  | 'yes_no'
+  | 'checkbox'
+  | 'text'
+  | 'number'
+  | 'choice'
+  | 'signature'
 const QUESTION_TYPES: readonly QuestionType[] = [
   'pass_fail',
+  'yes_no',
   'checkbox',
   'text',
   'number',
   'choice',
+  'signature',
 ]
+
+// Question types that support conditional follow-up rules.
+const CONDITION_TYPES: readonly string[] = ['pass_fail', 'checkbox', 'number']
 
 // Whether a block is a question the user answers (vs a display/content block).
 function isQuestionType(type: InternalTaskItem['type']): type is QuestionType {
@@ -129,10 +143,12 @@ function surveyStatusBadge(t: InternalTaskTemplate) {
 
 const ITEM_TYPES = [
   { value: 'pass_fail', label: 'Pass / Fail' },
+  { value: 'yes_no', label: 'Yes / No' },
   { value: 'checkbox', label: 'Checkbox' },
   { value: 'text', label: 'Text' },
   { value: 'number', label: 'Number' },
   { value: 'choice', label: 'Multiple choice' },
+  { value: 'signature', label: 'Signature' },
 ] as const
 
 const DOW = [
@@ -166,6 +182,11 @@ function blankTemplate(): InternalTaskTemplate {
     one_off_due_date: null,
     grace_days: 1,
     due_time: '09:00',
+    monthly_due_rule: 'period_end',
+    monthly_due_day: null,
+    monthly_due_week: null,
+    monthly_due_weekday: null,
+    allow_multiple: false,
     reminder_days_before: [1],
     warn_overdue: true,
     questions: [],
@@ -423,6 +444,17 @@ function TemplateEditorDialog({
     }
     patch({ questions: [...draft.questions, q] })
   }
+  // Adds a specific answerable question type (e.g. the Yes/No or Signature
+  // quick-add buttons), seeding any type-specific defaults.
+  function addTypedQuestion(type: 'yes_no' | 'signature') {
+    const q: InternalTaskItem = {
+      id: crypto.randomUUID(),
+      label: '',
+      type,
+      required: true,
+    }
+    patch({ questions: [...draft.questions, q] })
+  }
   // Adds a display/content block (section heading, document link, URL link or
   // fillable table). These carry no answer and no conditional rules.
   function addBlock(type: 'section' | 'doc_link' | 'url_link' | 'table' | 'file') {
@@ -528,13 +560,30 @@ function TemplateEditorDialog({
     updateQuestion(qId, { options: [...opts, ''] })
   }
   function updateOption(qId: string, index: number, value: string) {
-    const opts = [...(draft.questions.find((q) => q.id === qId)?.options ?? [])]
+    const q = draft.questions.find((qq) => qq.id === qId)
+    const opts = [...(q?.options ?? [])]
+    const prev = opts[index]
     opts[index] = value
-    updateQuestion(qId, { options: opts })
+    // Keep the failure list in sync when an option is renamed.
+    const fail = (q?.failOptions ?? []).map((o) => (o === prev ? value : o))
+    updateQuestion(qId, { options: opts, failOptions: fail })
   }
   function removeOption(qId: string, index: number) {
-    const opts = draft.questions.find((q) => q.id === qId)?.options ?? []
-    updateQuestion(qId, { options: opts.filter((_, i) => i !== index) })
+    const q = draft.questions.find((qq) => qq.id === qId)
+    const opts = q?.options ?? []
+    const removed = opts[index]
+    updateQuestion(qId, {
+      options: opts.filter((_, i) => i !== index),
+      failOptions: (q?.failOptions ?? []).filter((o) => o !== removed),
+    })
+  }
+  // Toggles whether a given choice option counts as a failure (flags the answer).
+  function toggleFailOption(qId: string, opt: string) {
+    const q = draft.questions.find((qq) => qq.id === qId)
+    const fail = q?.failOptions ?? []
+    updateQuestion(qId, {
+      failOptions: fail.includes(opt) ? fail.filter((o) => o !== opt) : [...fail, opt],
+    })
   }
   function addCondition(qId: string) {
     patch({
@@ -659,12 +708,14 @@ function TemplateEditorDialog({
       setSaving(false)
       return
     }
-    // Drop blank options from choice questions and require at least two.
-    const cleanedQuestions = draft.questions.map((q) =>
-      q.type === 'choice'
-        ? { ...q, options: (q.options ?? []).map((o) => o.trim()).filter(Boolean) }
-        : q,
-    )
+    // Drop blank options from choice questions and require at least two. Keep
+    // the failure list limited to options that still exist.
+    const cleanedQuestions = draft.questions.map((q) => {
+      if (q.type !== 'choice') return q
+      const options = (q.options ?? []).map((o) => o.trim()).filter(Boolean)
+      const failOptions = (q.failOptions ?? []).filter((o) => options.includes(o))
+      return { ...q, options, failOptions }
+    })
     const badChoice = cleanedQuestions.find(
       (q) => q.type === 'choice' && (q.options ?? []).length < 2,
     )
@@ -686,7 +737,7 @@ function TemplateEditorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+      <DialogContent className="max-h-[95vh] w-[97vw] max-w-6xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {draft.id ? 'Edit' : 'New'}{' '}
@@ -930,6 +981,103 @@ function TemplateEditorDialog({
                   />
                 </div>
               ) : null}
+              {draft.frequency === 'monthly' ? (
+                <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
+                  <div>
+                    <Label>Due date each month</Label>
+                    <Select
+                      value={draft.monthly_due_rule}
+                      onValueChange={(v) =>
+                        patch({
+                          monthly_due_rule: v as InternalTaskTemplate['monthly_due_rule'],
+                          // Seed sensible defaults when switching rule.
+                          monthly_due_day:
+                            v === 'day_of_month' ? draft.monthly_due_day ?? 1 : draft.monthly_due_day,
+                          monthly_due_week:
+                            v === 'weekday_of_month'
+                              ? draft.monthly_due_week ?? 'last'
+                              : draft.monthly_due_week,
+                          monthly_due_weekday:
+                            v === 'weekday_of_month'
+                              ? draft.monthly_due_weekday ?? 1
+                              : draft.monthly_due_weekday,
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="period_end">End of month</SelectItem>
+                        <SelectItem value="day_of_month">Specific day of month</SelectItem>
+                        <SelectItem value="weekday_of_month">Weekday of month</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {draft.monthly_due_rule === 'day_of_month' ? (
+                    <div>
+                      <Label htmlFor="it-due-day">Day of month</Label>
+                      <Input
+                        id="it-due-day"
+                        type="number"
+                        min={1}
+                        max={31}
+                        value={draft.monthly_due_day ?? 1}
+                        onChange={(e) =>
+                          patch({
+                            monthly_due_day: Math.min(31, Math.max(1, Number(e.target.value) || 1)),
+                          })
+                        }
+                      />
+                    </div>
+                  ) : null}
+                  {draft.monthly_due_rule === 'weekday_of_month' ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label>Which</Label>
+                        <Select
+                          value={draft.monthly_due_week ?? 'last'}
+                          onValueChange={(v) =>
+                            patch({
+                              monthly_due_week:
+                                v as InternalTaskTemplate['monthly_due_week'],
+                            })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="first">First</SelectItem>
+                            <SelectItem value="second">Second</SelectItem>
+                            <SelectItem value="third">Third</SelectItem>
+                            <SelectItem value="fourth">Fourth</SelectItem>
+                            <SelectItem value="last">Last</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Weekday</Label>
+                        <Select
+                          value={String(draft.monthly_due_weekday ?? 1)}
+                          onValueChange={(v) => patch({ monthly_due_weekday: Number(v) })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {DOW.map((d) => (
+                              <SelectItem key={d.value} value={String(d.value)}>
+                                {d.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <div>
                 <Label htmlFor="it-grace">Grace days after period</Label>
                 <Input
@@ -972,6 +1120,16 @@ function TemplateEditorDialog({
                   onCheckedChange={(v) => patch({ warn_overdue: v })}
                 />
                 <Label htmlFor="it-warn">Warn when overdue</Label>
+              </div>
+              <div className="flex items-center gap-2 sm:col-span-2">
+                <Switch
+                  id="it-allow-multiple"
+                  checked={draft.allow_multiple}
+                  onCheckedChange={(v) => patch({ allow_multiple: v })}
+                />
+                <Label htmlFor="it-allow-multiple" className="text-pretty">
+                  Allow additional submissions in the same period (e.g. one per vehicle)
+                </Label>
               </div>
             </div>
           </div>
@@ -1101,12 +1259,20 @@ function TemplateEditorDialog({
 
           {/* Questions & content blocks */}
           <div className="rounded-lg border p-4">
-            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-3 flex flex-col gap-2 border-b bg-background px-4 pb-2 pt-4 sm:flex-row sm:items-center sm:justify-between">
               <h3 className="text-sm font-medium">Questions &amp; content</h3>
               <div className="flex flex-wrap items-center gap-1.5">
                 <Button variant="outline" size="sm" onClick={addQuestion}>
                   <Plus className="size-4" />
                   Question
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => addTypedQuestion('yes_no')}>
+                  <ToggleLeft className="size-4" />
+                  Yes/No
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => addTypedQuestion('signature')}>
+                  <PenLine className="size-4" />
+                  Signature
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => addBlock('section')}>
                   <Heading className="size-4" />
@@ -1220,6 +1386,44 @@ function TemplateEditorDialog({
                         </div>
                       </div>
 
+                    {/* Per-question answer settings: allow/disable N/A, and
+                        (Yes/No only) which answer flags as a failure. */}
+                    <div className="mt-2 flex flex-wrap items-center gap-4 pl-6">
+                      {q.type !== 'signature' ? (
+                        <label className="flex items-center gap-2 text-xs">
+                          <Checkbox
+                            checked={q.disableNa !== true}
+                            onCheckedChange={(v) =>
+                              updateQuestion(q.id, { disableNa: v !== true })
+                            }
+                          />
+                          Allow &quot;N/A&quot; answer
+                        </label>
+                      ) : null}
+                      {q.type === 'yes_no' ? (
+                        <label className="flex items-center gap-2 text-xs">
+                          Flag as failure when
+                          <Select
+                            value={q.failValue ?? 'none'}
+                            onValueChange={(v) =>
+                              updateQuestion(q.id, {
+                                failValue: v === 'none' ? undefined : (v as 'yes' | 'no'),
+                              })
+                            }
+                          >
+                            <SelectTrigger className="h-8 w-28">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Neither</SelectItem>
+                              <SelectItem value="yes">Yes</SelectItem>
+                              <SelectItem value="no">No</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </label>
+                      ) : null}
+                    </div>
+
                     <div className="pl-6">
                       <BlockImageField
                         item={q}
@@ -1231,15 +1435,31 @@ function TemplateEditorDialog({
                     {q.type === 'choice' ? (
                       <div className="mt-3 space-y-2 pl-6">
                         <p className="text-xs font-medium text-muted-foreground">
-                          Answer options
+                          Answer options — tick &quot;Fail&quot; to flag an option as a failure
                         </p>
-                        {(q.options ?? []).map((opt, oi) => (
+                        {(q.options ?? []).map((opt, oi) => {
+                          const isFail = (q.failOptions ?? []).includes(opt)
+                          return (
                           <div key={oi} className="flex items-center gap-2">
                             <Input
                               value={opt}
                               onChange={(e) => updateOption(q.id, oi, e.target.value)}
                               placeholder={`Option ${oi + 1}`}
                             />
+                            <button
+                              type="button"
+                              onClick={() => opt.trim() && toggleFailOption(q.id, opt)}
+                              disabled={!opt.trim()}
+                              aria-pressed={isFail}
+                              className={cn(
+                                'shrink-0 rounded-md border px-2 py-1 text-xs transition-colors disabled:opacity-40',
+                                isFail
+                                  ? 'border-destructive bg-destructive/10 text-destructive'
+                                  : 'text-muted-foreground hover:bg-muted',
+                              )}
+                            >
+                              Fail
+                            </button>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -1251,7 +1471,8 @@ function TemplateEditorDialog({
                               <span className="sr-only">Remove option</span>
                             </Button>
                           </div>
-                        ))}
+                          )
+                        })}
                         <div className="flex items-center justify-between">
                           <Button
                             variant="outline"
@@ -1274,8 +1495,8 @@ function TemplateEditorDialog({
                       </div>
                     ) : null}
 
-                    {/* Conditional rules (not for text/choice) */}
-                    {q.type !== 'text' && q.type !== 'choice' ? (
+                    {/* Conditional rules (pass_fail / checkbox / number only) */}
+                    {CONDITION_TYPES.includes(q.type) ? (
                       <div className="mt-3 space-y-2 pl-6">
                         {(q.conditions ?? []).map((c) => (
                           <div key={c.id} className="rounded border border-dashed p-2">

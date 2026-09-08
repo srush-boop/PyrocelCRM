@@ -973,10 +973,12 @@ export interface InternalTaskItem {
   label: string
   type:
     | 'pass_fail'
+    | 'yes_no'
     | 'text'
     | 'number'
     | 'checkbox'
     | 'choice'
+    | 'signature'
     | 'section'
     | 'doc_link'
     | 'url_link'
@@ -989,6 +991,16 @@ export interface InternalTaskItem {
   // choice: when true, the user may select multiple options (checkboxes);
   // otherwise it is single-select (radio). Defaults to single-select.
   multiSelect?: boolean
+  // choice: the option value(s) that count as a failure. When the user selects
+  // any of these, the answer is flagged (passed=false) and flows into the
+  // issue-notification pipeline exactly like a failed pass/fail question.
+  failOptions?: string[]
+  // yes_no: which selection ('yes' | 'no') counts as a failure and flags the
+  // answer. Unset = neither answer flags (informational only).
+  failValue?: 'yes' | 'no'
+  // When true, the "N/A" answer control is hidden for this question, forcing a
+  // real answer (e.g. a legally-required check that can never be N/A).
+  disableNa?: boolean
   // section: optional supporting copy shown beneath the heading.
   description?: string
   // doc_link: the linked company document (documents.id) + cached display name.
@@ -1058,6 +1070,18 @@ export interface InternalTaskTemplate {
   one_off_due_date: string | null
   grace_days: number // days after period_end the task is due
   due_time: string // 'HH:MM[:SS]' deadline time on the due day
+  // Monthly frequency only: how the completion deadline within the month is set.
+  //  - 'period_end'       → last day of the month (+grace_days) [default]
+  //  - 'day_of_month'     → the given calendar day (monthly_due_day)
+  //  - 'weekday_of_month' → the nth/last weekday (monthly_due_week + _weekday),
+  //                         e.g. the last Monday of the month.
+  monthly_due_rule: 'period_end' | 'day_of_month' | 'weekday_of_month'
+  monthly_due_day: number | null // 1..31 (day_of_month rule)
+  monthly_due_week: 'first' | 'second' | 'third' | 'fourth' | 'last' | null
+  monthly_due_weekday: number | null // 0=Sun..6=Sat (weekday_of_month rule)
+  // When true, a user may submit additional instances for the same period after
+  // the scheduled one is complete (e.g. a per-vehicle check completed twice).
+  allow_multiple: boolean
   reminder_days_before: number[]
   warn_overdue: boolean
   // Content
@@ -1101,6 +1125,9 @@ export interface InternalTaskInstance {
   period_start: string | null
   period_end: string | null
   due_at: string | null
+  // Distinguishes the scheduled instance (0) from any extra user-initiated
+  // submissions for the same period (1, 2, …). Part of the uniqueness key.
+  attempt: number
   status: InternalTaskStatus
   completed_at: string | null
   reference_number: string | null
@@ -1828,7 +1855,7 @@ export interface Task {
   follow_up_to?: Task | null
   }
 
-  // ── Follow-up calls ────────────────��───────────────────────────────────────
+  // ── Follow-up calls ────────────────��───────────────────────────���───────────
   export type FollowUpStatus = 'pending' | 'approved' | 'rejected' | 'cancelled'
   export type FollowUpPartAction = 'none' | 'reserve' | 'order'
   export type FollowUpReservationStatus = 'pending' | 'confirmed'
@@ -2180,6 +2207,22 @@ export interface ReportTemplate {
   // Ordered designable body. NULL = use the built-in default layout for the
   // report kind (preserves the original hardcoded output for existing rows).
   layout: ReportBlock[] | null
+  created_at?: string
+  updated_at?: string
+}
+
+/**
+ * A report PDF filename convention. Resolution is tiered, most specific wins:
+ *   client + service  →  client default (service NULL)  →
+ *   company + service  →  company default (both NULL)    →  built-in fallback.
+ * `client_id` NULL = company scope; `service_type_id` NULL = that scope's
+ * default across every service.
+ */
+export interface ReportFilenamePattern {
+  id: string
+  client_id: string | null
+  service_type_id: string | null
+  pattern: string
   created_at?: string
   updated_at?: string
 }
@@ -3528,7 +3571,7 @@ export interface AssetAssignment {
   assigner?: Pick<Profile, 'id' | 'full_name'> | null
 }
 
-// ── Inbound request inbox ──────────────────���─────────────────────���───────────
+// ── Inbound request inbox ──────────────────���──���──────────────────���───────────
 // A request that arrived by email (forwarded to the system address) or was added
 // manually by a staff member. AI triages it, matching it to an existing
 // client/site/service and proposing actions that a human approves.

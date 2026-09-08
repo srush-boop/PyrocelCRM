@@ -3,6 +3,15 @@ import { createClient } from '@/lib/supabase/server'
 import { formatDateUK } from '@/lib/utils'
 import { sendEmail } from '@/lib/email/send-email'
 import { resolveEmailFooter } from '@/lib/email/footer'
+import { fetchResolvedReportTemplate } from '@/lib/reports/resolve-template'
+import { renderReportPdf, type ReportPdfChecklistItem } from '@/lib/pdf/report-pdf'
+import {
+  resolveFilenamePattern,
+  buildReportFilename,
+} from '@/lib/reports/pdf-filename'
+import { blobSrc, signatureSrc } from '@/lib/blob'
+import { getPublicBaseUrl } from '@/lib/rams/base-url'
+import type { ReportFilenamePattern } from '@/lib/types/database'
 import {
   generateClientPassEmail,
   generateClientFailEmail,
@@ -53,12 +62,14 @@ export async function POST(request: NextRequest) {
       .from('tasks')
       .select(`
         *,
+        visit_type:service_visit_types(name),
         site_service:site_services(
           *,
           site:sites(*, client:clients(id, name, requires_po)),
-          service_type:service_types(*)
+          service_type:service_types(*),
+          site_system:site_systems(name, system_type:system_types(name))
         ),
-        assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(*)
+        assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(*, role_ref:roles(name))
       `)
       .eq('id', taskId)
       .single()
@@ -311,11 +322,37 @@ export async function POST(request: NextRequest) {
           ? generateClientNoAccessEmail(emailData)
           : generateClientFailEmail(emailData)
 
-    // Send to every client recipient (CC the defects addresses on the first
-    // recipient only, so the department is looped in without duplicate emails).
+    // ─── Named PDF attachment ────────────────────────────────────────────────
+    // Render a branding-aware PDF of the report and attach it to the client
+    // email, named to the client's configured convention (site/system/service
+    // specific). Best-effort: any failure here degrades to the link-only email
+    // rather than blocking the report from going out.
+    const attachments = await buildReportAttachment({
+      supabase,
+      clientId: (site as { client?: { id?: string } | null })?.client?.id ?? null,
+      serviceTypeId: serviceType?.id ?? null,
+      emailData,
+      task,
+      taskResult,
+      site,
+      serviceType,
+      siteService,
+      engineer,
+      overallStatus,
+    }).catch((e) => {
+      console.error('[v0] Report PDF attachment skipped:', e)
+      return undefined
+    })
+
+    // Send to every client recipient. The named PDF is attached to every copy;
+    // the defects CC only rides on the first recipient so the department is
+    // looped in without duplicate emails.
     const results = await Promise.all(
       recipients.map((to, index) =>
-        sendEmail(to, subject, html, index === 0 ? { cc: defectsCc } : undefined),
+        sendEmail(to, subject, html, {
+          ...(index === 0 ? { cc: defectsCc } : {}),
+          ...(attachments ? { attachments } : {}),
+        }),
       )
     )
 
@@ -366,4 +403,185 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+// Human-readable label for the report's overall outcome (used in {status}).
+const STATUS_LABEL: Record<string, string> = {
+  pass: 'Pass',
+  fail: 'Fail',
+  partial: 'Remedial',
+  no_access: 'No Access',
+}
+
+/**
+ * Fetch an image reference and inline it as a base64 data URL so @react-pdf can
+ * embed it without a live network/session (the private Blob route is
+ * session-gated). Returns null on any failure so the PDF simply omits the logo.
+ */
+async function resolveLogoDataUrl(
+  ref: string | null | undefined,
+): Promise<string | null> {
+  if (!ref) return null
+  if (ref.startsWith('data:')) return ref
+  const url = ref.startsWith('http')
+    ? ref
+    : `${getPublicBaseUrl()}${blobSrc(ref)}`
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const contentType = res.headers.get('content-type') || 'image/png'
+    if (!contentType.startsWith('image/')) return null
+    const buf = Buffer.from(await res.arrayBuffer())
+    return `data:${contentType};base64,${buf.toString('base64')}`
+  } catch {
+    return null
+  }
+}
+
+interface BuildAttachmentArgs {
+  supabase: Awaited<ReturnType<typeof createClient>>
+  clientId: string | null
+  serviceTypeId: string | null
+  emailData: EmailData
+  task: Record<string, unknown> & {
+    completed_at?: string | null
+    scheduled_date?: string | null
+    visit_type?: { name?: string | null } | null
+  }
+  taskResult: {
+    reference_number?: string | null
+    engineer_notes?: string | null
+    checklist_results?: {
+      label: string
+      type?: 'pass_fail' | 'text' | 'number' | 'checkbox'
+      value?: boolean | string | number | null
+      passed: boolean | null
+      advisory?: boolean
+      notes?: string | null
+      parent_item_id?: string | null
+    }[]
+  }
+  site: { name?: string | null; address?: string | null } | null | undefined
+  serviceType: { id?: string; name?: string | null; color?: string | null } | null | undefined
+  siteService:
+    | { site_system?: { name?: string | null; system_type?: { name?: string | null } | null } | null }
+    | null
+    | undefined
+  engineer:
+    | {
+        full_name?: string | null
+        email?: string | null
+        signature_url?: string | null
+        job_title?: string | null
+        role_ref?: { name?: string | null } | null
+      }
+    | null
+    | undefined
+  overallStatus: 'pass' | 'fail' | 'partial' | 'no_access'
+}
+
+/**
+ * Build the named PDF attachment for a completed report. Resolves the effective
+ * report template (service-specific over company default), the company info for
+ * branding, and the effective filename pattern (client+service → client default
+ * → company+service → company default → built-in), then renders the PDF.
+ */
+async function buildReportAttachment(
+  args: BuildAttachmentArgs,
+): Promise<{ filename: string; content: Buffer }[] | undefined> {
+  const {
+    supabase,
+    clientId,
+    serviceTypeId,
+    task,
+    taskResult,
+    site,
+    serviceType,
+    siteService,
+    engineer,
+    overallStatus,
+  } = args
+
+  // Branding: effective template + company info, resolved exactly like the
+  // on-screen report components.
+  const patternQuery = supabase.from('report_filename_patterns').select('*')
+  const [template, companyRes, patternRes] = await Promise.all([
+    fetchResolvedReportTemplate(supabase, serviceTypeId),
+    supabase.from('company_info').select('*').limit(1).maybeSingle(),
+    clientId
+      ? patternQuery.or(`client_id.eq.${clientId},client_id.is.null`)
+      : patternQuery.is('client_id', null),
+  ])
+
+  const companyInfo = (companyRes.data ?? null) as
+    | { name?: string | null; logo_url?: string | null; address?: string | null }
+    | null
+  const patterns = (patternRes.data ?? []) as ReportFilenamePattern[]
+  const sections = (template?.sections ?? {}) as Record<string, string | undefined>
+
+  const systemName =
+    siteService?.site_system?.system_type?.name ||
+    siteService?.site_system?.name ||
+    null
+  const visitName = task.visit_type?.name || null
+  const serviceName = serviceType?.name || null
+  const engineerName = engineer?.full_name || engineer?.email || 'Engineer'
+  const isoDate = (task.completed_at || task.scheduled_date || new Date().toISOString()) as string
+
+  // Resolve + build the filename per the client's convention.
+  const pattern = resolveFilenamePattern(patterns, clientId, serviceTypeId)
+  const filename = buildReportFilename(pattern, {
+    site: site?.name,
+    system: systemName,
+    service: serviceName,
+    visit: visitName,
+    client: args.emailData.clientName,
+    reference: taskResult.reference_number,
+    date: isoDate.slice(0, 10),
+    engineer: engineerName,
+    status: STATUS_LABEL[overallStatus] ?? overallStatus,
+  })
+
+  // Map the stored checklist to the PDF's row model (indent conditional rows).
+  const checklist: ReportPdfChecklistItem[] = (taskResult.checklist_results || []).map(
+    (r) => ({
+      label: r.label,
+      type: r.type,
+      value: r.value,
+      passed: r.passed ?? null,
+      advisory: r.advisory ?? false,
+      notes: r.notes ?? null,
+      indented: !!r.parent_item_id,
+    }),
+  )
+
+  const logoUrl = await resolveLogoDataUrl(companyInfo?.logo_url || template?.logo_url)
+
+  const content = await renderReportPdf({
+    companyName: companyInfo?.name || template?.company_name || 'Pyrocel Ltd',
+    logoUrl,
+    headerColor: serviceType?.color || template?.header_color || null,
+    footerText: template?.footer_text || null,
+    standards: sections.standards || null,
+    docSubtitle: serviceName || 'Service',
+    referenceNumber: taskResult.reference_number || null,
+    reportDate: isoDate,
+    siteName: site?.name || null,
+    siteAddress: site?.address || null,
+    clientName: args.emailData.clientName || null,
+    systemName,
+    serviceName,
+    visitName,
+    engineerName,
+    overallStatus,
+    checklist,
+    engineerNotes: taskResult.engineer_notes || null,
+    includeSignature: template?.include_signature !== false,
+    signatureUrl: signatureSrc(engineer?.signature_url, { absolute: true }),
+    signatoryName: sections.signatory_name || engineerName,
+    signatoryTitle:
+      engineer?.role_ref?.name || engineer?.job_title || sections.signatory_title || 'Engineer',
+  })
+
+  return [{ filename, content: content as Buffer }]
 }

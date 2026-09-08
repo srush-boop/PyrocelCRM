@@ -12,6 +12,41 @@ self.addEventListener('push', (event) => {
 
   const title = payload.title || 'Notification'
   const data = payload.data || {}
+
+  // "Safe now" signal: a check-in landed on some device (the phone, a paired
+  // watch, or the office making contact). Dismiss any outstanding lone-worker
+  // alarm notifications on THIS device so it stops sounding immediately, without
+  // waiting for the app to be opened. We still surface a brief, silent
+  // confirmation (platforms expect a received push to show a notification).
+  if (data.kind === 'lone_worker_clear') {
+    event.waitUntil(
+      (async () => {
+        const notes = await self.registration.getNotifications()
+        for (const n of notes) {
+          const nd = n.data || {}
+          if (
+            n.tag === 'lone_worker' ||
+            nd.kind === 'lone_worker_self' ||
+            nd.kind === 'lone_worker_alert'
+          ) {
+            n.close()
+          }
+        }
+        await self.registration.showNotification(title || 'Safety confirmed', {
+          body: payload.body || "You're checked in — the safety alarm has been cleared.",
+          icon: '/icon-192.png',
+          badge: '/icon-192.png',
+          tag: 'lone_worker',
+          renotify: false,
+          requireInteraction: false,
+          silent: true,
+          data: { url: payload.url || '/dashboard', ...data },
+        })
+      })(),
+    )
+    return
+  }
+
   const options = {
     body: payload.body || '',
     icon: '/icon-192.png',

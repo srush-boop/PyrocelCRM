@@ -146,6 +146,30 @@ async function notifyWorker(
 }
 
 /**
+ * Push a "safe now — clear the alarm" signal to ALL of the worker's devices.
+ * This closes the gap where a check-in made on one device (e.g. a paired watch,
+ * or the office making contact) left the alarm notification still sounding on
+ * the worker's phone until the app was opened. The service worker reacts to
+ * `kind: 'lone_worker_clear'` by dismissing outstanding lone-worker
+ * notifications, so every device stops alarming as soon as the reset lands.
+ * Best-effort: a push failure must never break the reset.
+ */
+async function notifyWorkerClear(session: SessionRow): Promise<void> {
+  try {
+    await notifyUsers({
+      userIds: [session.user_id],
+      title: 'Safety confirmed',
+      body: "You're checked in — the safety alarm has been cleared.",
+      url: '/dashboard',
+      category: 'lone_worker',
+      data: { kind: 'lone_worker_clear', sessionId: session.id },
+    })
+  } catch (err) {
+    console.log('[v0] lone-worker clear push failed:', (err as Error).message)
+  }
+}
+
+/**
  * Advance a single session's state machine to reflect `now`. Idempotent: safe to
  * call repeatedly (from the per-minute cron AND the worker's on-device ticker).
  * Escalations insert one active event per level and notify office/admin once.
@@ -268,4 +292,12 @@ export async function resetSessionCycle(
       red_at: redAt,
     })
     .eq('id', session.id)
+
+  // If an alarm was actually active (the worker was being prompted or had
+  // escalated), tell every one of their devices to stop. Routine early
+  // check-ins (state already 'ok') never alarmed, so we skip the push to avoid
+  // needless "Safety confirmed" notifications.
+  if (session.prompt_state !== 'ok') {
+    await notifyWorkerClear(session)
+  }
 }

@@ -43,6 +43,31 @@ function lastDayOfMonth(year: number, monthIndex0: number): Date {
   return new Date(Date.UTC(year, monthIndex0 + 1, 0))
 }
 
+// The nth (or last) occurrence of a given weekday within a month, as a UTC date.
+// weekday: 0=Sun..6=Sat. which: 'first'|'second'|'third'|'fourth'|'last'.
+function nthWeekdayOfMonth(
+  year: number,
+  monthIndex0: number,
+  weekday: number,
+  which: 'first' | 'second' | 'third' | 'fourth' | 'last',
+): Date {
+  const wd = ((weekday % 7) + 7) % 7
+  if (which === 'last') {
+    const last = lastDayOfMonth(year, monthIndex0)
+    const diff = (last.getUTCDay() - wd + 7) % 7
+    return addDays(last, -diff)
+  }
+  const nth = { first: 1, second: 2, third: 3, fourth: 4 }[which]
+  const first = new Date(Date.UTC(year, monthIndex0, 1))
+  const offset = (wd - first.getUTCDay() + 7) % 7
+  const candidate = addDays(first, offset + (nth - 1) * 7)
+  // Guard: if a 4th-weekday overflows into next month, fall back to the last one.
+  if (candidate.getUTCMonth() !== monthIndex0) {
+    return nthWeekdayOfMonth(year, monthIndex0, wd, 'last')
+  }
+  return candidate
+}
+
 // Combine a date (YYYY-MM-DD) with a wall-clock time (HH:MM[:SS]) as a UTC
 // instant. UK is UTC+0/+1; we store the wall clock as UTC which gives up to an
 // hour of leeway on the deadline during BST — acceptable and documented.
@@ -71,6 +96,10 @@ export function computePeriod(
     | 'one_off_due_date'
     | 'grace_days'
     | 'due_time'
+    | 'monthly_due_rule'
+    | 'monthly_due_day'
+    | 'monthly_due_week'
+    | 'monthly_due_weekday'
   >,
   now: Date = new Date(),
 ): TaskPeriod {
@@ -121,7 +150,27 @@ export function computePeriod(
     }
   }
 
-  const dueDate = addDays(periodEnd, template.grace_days ?? 0)
+  // Deadline: normally period end + grace. For monthly tasks the admin can pin
+  // the due date to a specific calendar day or an nth/last weekday of the month;
+  // in that case the chosen date IS the deadline (grace is not added).
+  let dueDate = addDays(periodEnd, template.grace_days ?? 0)
+  const rule = template.monthly_due_rule ?? 'period_end'
+  if (template.frequency === 'monthly' && rule !== 'period_end') {
+    const y = periodStart.getUTCFullYear()
+    const m = periodStart.getUTCMonth()
+    if (rule === 'day_of_month' && template.monthly_due_day) {
+      const maxDay = lastDayOfMonth(y, m).getUTCDate()
+      const day = Math.min(Math.max(template.monthly_due_day, 1), maxDay)
+      dueDate = new Date(Date.UTC(y, m, day))
+    } else if (
+      rule === 'weekday_of_month' &&
+      template.monthly_due_week != null &&
+      template.monthly_due_weekday != null
+    ) {
+      dueDate = nthWeekdayOfMonth(y, m, template.monthly_due_weekday, template.monthly_due_week)
+    }
+  }
+
   return {
     periodStart: toYMD(periodStart),
     periodEnd: toYMD(periodEnd),

@@ -31,7 +31,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { MoreHorizontal, Pencil, Trash2, Search, Building, Plus, ChevronRight, ChevronDown, MapPin, ExternalLink, ListChecks, Link2, FileText, Wallet, ReceiptText, Repeat } from 'lucide-react'
+import { MoreHorizontal, Pencil, Trash2, Search, Building, Plus, ChevronRight, ChevronDown, MapPin, ExternalLink, ListChecks, Link2, FileText, FileType, Wallet, ReceiptText, Repeat } from 'lucide-react'
 import { PrintButton } from '@/components/ui/print-button'
 import type { Client, Site, SystemType, ServiceType } from '@/lib/types/database'
 import { StatusBadge, effectiveStatus } from '@/lib/entity-status'
@@ -43,6 +43,7 @@ import { ClientInvoicesDialog } from './client-invoices-dialog'
 import { ClientRecurringDialog } from './client-recurring-dialog'
 import { BillingAccountsDialog } from '@/components/dashboard/billing/billing-accounts-dialog'
 import { ClientDocumentsDialog } from './client-documents-dialog'
+import { ClientFilenamesDialog } from './client-filenames-dialog'
 
 interface ClientsTableProps {
   clients: Client[]
@@ -76,6 +77,7 @@ export function ClientsTable({
   const [invoicesClient, setInvoicesClient] = useState<Client | null>(null)
   const [recurringClient, setRecurringClient] = useState<Client | null>(null)
   const [docClient, setDocClient] = useState<Client | null>(null)
+  const [filenamesClient, setFilenamesClient] = useState<Client | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const searchParams = useSearchParams()
   const focusedClientId = searchParams.get('client')
@@ -230,6 +232,10 @@ export function ClientsTable({
                             <DropdownMenuItem onClick={() => setDocClient(client)}>
                               <FileText className="mr-2 h-4 w-4" />
                               Documents
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setFilenamesClient(client)}>
+                              <FileType className="mr-2 h-4 w-4" />
+                              Report file names
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => setDeleteId(client.id)}
@@ -464,6 +470,15 @@ export function ClientsTable({
           client={docClient}
           open={!!docClient}
           onOpenChange={(open) => !open && setDocClient(null)}
+        />
+      )}
+
+      {filenamesClient && (
+        <ClientFilenamesDialog
+          client={filenamesClient}
+          serviceTypes={serviceTypes}
+          open={!!filenamesClient}
+          onOpenChange={(open) => !open && setFilenamesClient(null)}
         />
       )}
 

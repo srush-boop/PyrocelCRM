@@ -973,10 +973,12 @@ export interface InternalTaskItem {
   label: string
   type:
     | 'pass_fail'
+    | 'yes_no'
     | 'text'
     | 'number'
     | 'checkbox'
     | 'choice'
+    | 'signature'
     | 'section'
     | 'doc_link'
     | 'url_link'
@@ -989,6 +991,16 @@ export interface InternalTaskItem {
   // choice: when true, the user may select multiple options (checkboxes);
   // otherwise it is single-select (radio). Defaults to single-select.
   multiSelect?: boolean
+  // choice: the option value(s) that count as a failure. When the user selects
+  // any of these, the answer is flagged (passed=false) and flows into the
+  // issue-notification pipeline exactly like a failed pass/fail question.
+  failOptions?: string[]
+  // yes_no: which selection ('yes' | 'no') counts as a failure and flags the
+  // answer. Unset = neither answer flags (informational only).
+  failValue?: 'yes' | 'no'
+  // When true, the "N/A" answer control is hidden for this question, forcing a
+  // real answer (e.g. a legally-required check that can never be N/A).
+  disableNa?: boolean
   // section: optional supporting copy shown beneath the heading.
   description?: string
   // doc_link: the linked company document (documents.id) + cached display name.

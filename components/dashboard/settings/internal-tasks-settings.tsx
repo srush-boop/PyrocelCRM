@@ -49,6 +49,8 @@ import {
   ImageIcon,
   Upload,
   X,
+  ToggleLeft,
+  PenLine,
 } from 'lucide-react'
 import type {
   Department,
@@ -80,15 +82,27 @@ interface Props {
   isAdmin: boolean
 }
 
-// Question types the user actually answers (support conditional rules).
-type QuestionType = 'pass_fail' | 'checkbox' | 'text' | 'number' | 'choice'
+// Question types the user actually answers (rendered by the inline editor).
+type QuestionType =
+  | 'pass_fail'
+  | 'yes_no'
+  | 'checkbox'
+  | 'text'
+  | 'number'
+  | 'choice'
+  | 'signature'
 const QUESTION_TYPES: readonly QuestionType[] = [
   'pass_fail',
+  'yes_no',
   'checkbox',
   'text',
   'number',
   'choice',
+  'signature',
 ]
+
+// Question types that support conditional follow-up rules.
+const CONDITION_TYPES: readonly string[] = ['pass_fail', 'checkbox', 'number']
 
 // Whether a block is a question the user answers (vs a display/content block).
 function isQuestionType(type: InternalTaskItem['type']): type is QuestionType {
@@ -129,10 +143,12 @@ function surveyStatusBadge(t: InternalTaskTemplate) {
 
 const ITEM_TYPES = [
   { value: 'pass_fail', label: 'Pass / Fail' },
+  { value: 'yes_no', label: 'Yes / No' },
   { value: 'checkbox', label: 'Checkbox' },
   { value: 'text', label: 'Text' },
   { value: 'number', label: 'Number' },
   { value: 'choice', label: 'Multiple choice' },
+  { value: 'signature', label: 'Signature' },
 ] as const
 
 const DOW = [
@@ -423,6 +439,17 @@ function TemplateEditorDialog({
     }
     patch({ questions: [...draft.questions, q] })
   }
+  // Adds a specific answerable question type (e.g. the Yes/No or Signature
+  // quick-add buttons), seeding any type-specific defaults.
+  function addTypedQuestion(type: 'yes_no' | 'signature') {
+    const q: InternalTaskItem = {
+      id: crypto.randomUUID(),
+      label: '',
+      type,
+      required: true,
+    }
+    patch({ questions: [...draft.questions, q] })
+  }
   // Adds a display/content block (section heading, document link, URL link or
   // fillable table). These carry no answer and no conditional rules.
   function addBlock(type: 'section' | 'doc_link' | 'url_link' | 'table' | 'file') {
@@ -528,13 +555,30 @@ function TemplateEditorDialog({
     updateQuestion(qId, { options: [...opts, ''] })
   }
   function updateOption(qId: string, index: number, value: string) {
-    const opts = [...(draft.questions.find((q) => q.id === qId)?.options ?? [])]
+    const q = draft.questions.find((qq) => qq.id === qId)
+    const opts = [...(q?.options ?? [])]
+    const prev = opts[index]
     opts[index] = value
-    updateQuestion(qId, { options: opts })
+    // Keep the failure list in sync when an option is renamed.
+    const fail = (q?.failOptions ?? []).map((o) => (o === prev ? value : o))
+    updateQuestion(qId, { options: opts, failOptions: fail })
   }
   function removeOption(qId: string, index: number) {
-    const opts = draft.questions.find((q) => q.id === qId)?.options ?? []
-    updateQuestion(qId, { options: opts.filter((_, i) => i !== index) })
+    const q = draft.questions.find((qq) => qq.id === qId)
+    const opts = q?.options ?? []
+    const removed = opts[index]
+    updateQuestion(qId, {
+      options: opts.filter((_, i) => i !== index),
+      failOptions: (q?.failOptions ?? []).filter((o) => o !== removed),
+    })
+  }
+  // Toggles whether a given choice option counts as a failure (flags the answer).
+  function toggleFailOption(qId: string, opt: string) {
+    const q = draft.questions.find((qq) => qq.id === qId)
+    const fail = q?.failOptions ?? []
+    updateQuestion(qId, {
+      failOptions: fail.includes(opt) ? fail.filter((o) => o !== opt) : [...fail, opt],
+    })
   }
   function addCondition(qId: string) {
     patch({
@@ -659,12 +703,14 @@ function TemplateEditorDialog({
       setSaving(false)
       return
     }
-    // Drop blank options from choice questions and require at least two.
-    const cleanedQuestions = draft.questions.map((q) =>
-      q.type === 'choice'
-        ? { ...q, options: (q.options ?? []).map((o) => o.trim()).filter(Boolean) }
-        : q,
-    )
+    // Drop blank options from choice questions and require at least two. Keep
+    // the failure list limited to options that still exist.
+    const cleanedQuestions = draft.questions.map((q) => {
+      if (q.type !== 'choice') return q
+      const options = (q.options ?? []).map((o) => o.trim()).filter(Boolean)
+      const failOptions = (q.failOptions ?? []).filter((o) => options.includes(o))
+      return { ...q, options, failOptions }
+    })
     const badChoice = cleanedQuestions.find(
       (q) => q.type === 'choice' && (q.options ?? []).length < 2,
     )
@@ -1108,6 +1154,14 @@ function TemplateEditorDialog({
                   <Plus className="size-4" />
                   Question
                 </Button>
+                <Button variant="ghost" size="sm" onClick={() => addTypedQuestion('yes_no')}>
+                  <ToggleLeft className="size-4" />
+                  Yes/No
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => addTypedQuestion('signature')}>
+                  <PenLine className="size-4" />
+                  Signature
+                </Button>
                 <Button variant="ghost" size="sm" onClick={() => addBlock('section')}>
                   <Heading className="size-4" />
                   Section
@@ -1220,6 +1274,44 @@ function TemplateEditorDialog({
                         </div>
                       </div>
 
+                    {/* Per-question answer settings: allow/disable N/A, and
+                        (Yes/No only) which answer flags as a failure. */}
+                    <div className="mt-2 flex flex-wrap items-center gap-4 pl-6">
+                      {q.type !== 'signature' ? (
+                        <label className="flex items-center gap-2 text-xs">
+                          <Checkbox
+                            checked={q.disableNa !== true}
+                            onCheckedChange={(v) =>
+                              updateQuestion(q.id, { disableNa: v !== true })
+                            }
+                          />
+                          Allow &quot;N/A&quot; answer
+                        </label>
+                      ) : null}
+                      {q.type === 'yes_no' ? (
+                        <label className="flex items-center gap-2 text-xs">
+                          Flag as failure when
+                          <Select
+                            value={q.failValue ?? 'none'}
+                            onValueChange={(v) =>
+                              updateQuestion(q.id, {
+                                failValue: v === 'none' ? undefined : (v as 'yes' | 'no'),
+                              })
+                            }
+                          >
+                            <SelectTrigger className="h-8 w-28">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Neither</SelectItem>
+                              <SelectItem value="yes">Yes</SelectItem>
+                              <SelectItem value="no">No</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </label>
+                      ) : null}
+                    </div>
+
                     <div className="pl-6">
                       <BlockImageField
                         item={q}
@@ -1231,15 +1323,31 @@ function TemplateEditorDialog({
                     {q.type === 'choice' ? (
                       <div className="mt-3 space-y-2 pl-6">
                         <p className="text-xs font-medium text-muted-foreground">
-                          Answer options
+                          Answer options — tick &quot;Fail&quot; to flag an option as a failure
                         </p>
-                        {(q.options ?? []).map((opt, oi) => (
+                        {(q.options ?? []).map((opt, oi) => {
+                          const isFail = (q.failOptions ?? []).includes(opt)
+                          return (
                           <div key={oi} className="flex items-center gap-2">
                             <Input
                               value={opt}
                               onChange={(e) => updateOption(q.id, oi, e.target.value)}
                               placeholder={`Option ${oi + 1}`}
                             />
+                            <button
+                              type="button"
+                              onClick={() => opt.trim() && toggleFailOption(q.id, opt)}
+                              disabled={!opt.trim()}
+                              aria-pressed={isFail}
+                              className={cn(
+                                'shrink-0 rounded-md border px-2 py-1 text-xs transition-colors disabled:opacity-40',
+                                isFail
+                                  ? 'border-destructive bg-destructive/10 text-destructive'
+                                  : 'text-muted-foreground hover:bg-muted',
+                              )}
+                            >
+                              Fail
+                            </button>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -1251,7 +1359,8 @@ function TemplateEditorDialog({
                               <span className="sr-only">Remove option</span>
                             </Button>
                           </div>
-                        ))}
+                          )
+                        })}
                         <div className="flex items-center justify-between">
                           <Button
                             variant="outline"
@@ -1274,8 +1383,8 @@ function TemplateEditorDialog({
                       </div>
                     ) : null}
 
-                    {/* Conditional rules (not for text/choice) */}
-                    {q.type !== 'text' && q.type !== 'choice' ? (
+                    {/* Conditional rules (pass_fail / checkbox / number only) */}
+                    {CONDITION_TYPES.includes(q.type) ? (
                       <div className="mt-3 space-y-2 pl-6">
                         {(q.conditions ?? []).map((c) => (
                           <div key={c.id} className="rounded border border-dashed p-2">

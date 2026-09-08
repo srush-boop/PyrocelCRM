@@ -870,8 +870,16 @@ async function dispatchIssueAlerts(args: {
 
   const issueLines = issues.map((i) => {
     const state = i.passed === false ? 'FAIL' : 'Advisory'
+    // For yes/no + multiple-choice failures, show what was actually answered.
+    const answer =
+      i.type === 'yes_no' || i.type === 'choice'
+        ? Array.isArray(i.value)
+          ? (i.value as string[]).join(', ')
+          : String(i.value ?? '')
+        : ''
+    const answerPart = answer ? ` [${answer}]` : ''
     const note = i.notes?.trim() ? ` — ${i.notes.trim()}` : ''
-    return `${state}: ${i.label}${note}`
+    return `${state}: ${i.label}${answerPart}${note}`
   })
   const summary = `${issues.length} issue${issues.length === 1 ? '' : 's'} flagged`
 

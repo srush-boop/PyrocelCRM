@@ -40,6 +40,7 @@ import type {
 import { submitInternalTask, decideApproval } from '@/lib/actions/internal-tasks'
 import { blobSrc } from '@/lib/blob'
 import { cn } from '@/lib/utils'
+import { SignaturePad } from '@/components/portal/signature-pad'
 
 interface Props {
   instance: InternalTaskInstance
@@ -63,6 +64,12 @@ type Row = InternalTaskAnswer & {
   // choice questions: the selectable options + whether multiple are allowed.
   options?: string[]
   multiSelect?: boolean
+  // choice: options that flag the answer as a failure when selected.
+  failOptions?: string[]
+  // yes_no: which selection flags the answer as a failure.
+  failValue?: 'yes' | 'no'
+  // When true, the N/A answer control is hidden for this question.
+  disableNa?: boolean
   // Author reference image copied from the template item (top-level only).
   imagePathname?: string | null
   imageName?: string | null
@@ -70,7 +77,17 @@ type Row = InternalTaskAnswer & {
 
 // Question block types the user actually answers (produce a Row + can block
 // submit). Display-only blocks (section/doc_link/url_link) are skipped here.
-const ANSWERABLE = new Set(['pass_fail', 'text', 'number', 'checkbox', 'choice', 'table', 'file'])
+const ANSWERABLE = new Set([
+  'pass_fail',
+  'yes_no',
+  'text',
+  'number',
+  'checkbox',
+  'choice',
+  'signature',
+  'table',
+  'file',
+])
 function isAnswerable(type: InternalTaskItem['type']): boolean {
   return ANSWERABLE.has(type)
 }
@@ -108,6 +125,9 @@ function buildRows(questions: InternalTaskItem[], saved: InternalTaskAnswer[]): 
       columns: q.columns,
       options: q.options,
       multiSelect: q.multiSelect,
+      failOptions: q.failOptions,
+      failValue: q.failValue,
+      disableNa: q.disableNa,
       imagePathname: q.imagePathname ?? null,
       imageName: q.imageName ?? null,
     })
@@ -310,9 +330,13 @@ export function InternalTaskSheet({
     for (const row of rows) {
       // Required top-level answers.
       const q = questions.find((x) => x.id === row.item_id)
-      if (q?.required && !row.na) {
+        if (q?.required && !row.na) {
         if (row.type === 'pass_fail' && row.passed == null && !row.advisory) {
           out.push(`${row.label}: choose an answer`)
+        } else if (row.type === 'yes_no' && row.value !== 'yes' && row.value !== 'no') {
+          out.push(`${row.label}: choose Yes or No`)
+        } else if (row.type === 'signature' && String(row.value ?? '').trim() === '') {
+          out.push(`${row.label}: add a signature`)
         } else if (
           (row.type === 'text' || row.type === 'number') &&
           String(row.value ?? '').trim() === ''
@@ -578,8 +602,8 @@ export function InternalTaskSheet({
                     )}
                     <span className="text-pretty">{row.label}</span>
                   </Label>
-                  {/* N/A toggle for top-level rows only. */}
-                  {!isFollowUp && !readOnly && (
+                  {/* N/A toggle for top-level rows only (unless disabled). */}
+                  {!isFollowUp && !readOnly && !row.disableNa && (
                     <button
                       type="button"
                       onClick={() =>
@@ -654,6 +678,52 @@ export function InternalTaskSheet({
                       </div>
                     )}
 
+                    {row.type === 'yes_no' && (
+                      <div className="flex flex-wrap gap-2">
+                        {(['yes', 'no'] as const).map((v) => {
+                          const isFail = row.failValue === v
+                          const selected = row.value === v
+                          return (
+                            <AnswerButton
+                              key={v}
+                              active={selected}
+                              onClick={() =>
+                                update(row.item_id, {
+                                  value: v,
+                                  passed: row.failValue ? (v === row.failValue ? false : true) : null,
+                                })
+                              }
+                              disabled={readOnly}
+                              variant={isFail ? 'fail' : 'pass'}
+                            >
+                              {v === 'yes' ? 'Yes' : 'No'}
+                            </AnswerButton>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {row.type === 'signature' && (
+                      <div className="space-y-2">
+                        {readOnly ? (
+                          row.value ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={String(row.value)}
+                              alt="Signature"
+                              className="max-h-40 w-full rounded-md border bg-white object-contain"
+                            />
+                          ) : (
+                            <p className="text-xs text-muted-foreground">No signature captured.</p>
+                          )
+                        ) : (
+                          <SignaturePad
+                            onChange={(dataUrl) => update(row.item_id, { value: dataUrl ?? '' })}
+                          />
+                        )}
+                      </div>
+                    )}
+
                     {row.type === 'checkbox' && (
                       <div className="flex items-center gap-2">
                         <Checkbox
@@ -716,14 +786,22 @@ export function InternalTaskSheet({
                                 checked={selected}
                                 disabled={readOnly}
                                 onChange={() => {
+                                  const failSet = row.failOptions ?? []
+                                  // Flag the answer (passed=false) when any selected
+                                  // option is marked as a failure; null when none
+                                  // are flagged (informational choice).
+                                  const passedFor = (vals: string[]): boolean | null => {
+                                    if (failSet.length === 0) return null
+                                    if (vals.length === 0) return null
+                                    return vals.some((v) => failSet.includes(v)) ? false : true
+                                  }
                                   if (row.multiSelect) {
-                                    update(row.item_id, {
-                                      value: selectedValues.includes(opt)
-                                        ? selectedValues.filter((v) => v !== opt)
-                                        : [...selectedValues, opt],
-                                    })
+                                    const next = selectedValues.includes(opt)
+                                      ? selectedValues.filter((v) => v !== opt)
+                                      : [...selectedValues, opt]
+                                    update(row.item_id, { value: next, passed: passedFor(next) })
                                   } else {
-                                    update(row.item_id, { value: opt })
+                                    update(row.item_id, { value: opt, passed: passedFor([opt]) })
                                   }
                                 }}
                               />

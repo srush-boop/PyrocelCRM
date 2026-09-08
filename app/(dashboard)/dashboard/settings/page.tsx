@@ -85,6 +85,11 @@ export default async function SettingsPage() {
         .from('profiles')
         .select('id, full_name, role')
         .eq('status', 'active')
+        // Internal tasks are for internal users only. Exclude external
+        // customer-portal accounts (role 'client') — they must never appear as
+        // task assignees or issue-notification targets. This also removes the
+        // duplicate where one person has both a staff and a client account.
+        .neq('role', 'client')
         .order('full_name', { ascending: true }),
       // Company-wide reference documents that can be linked from a task form.
       supabase

@@ -686,7 +686,7 @@ function TemplateEditorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+      <DialogContent className="max-h-[95vh] w-[97vw] max-w-6xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {draft.id ? 'Edit' : 'New'}{' '}
@@ -1101,7 +1101,7 @@ function TemplateEditorDialog({
 
           {/* Questions & content blocks */}
           <div className="rounded-lg border p-4">
-            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-3 flex flex-col gap-2 border-b bg-background px-4 pb-2 pt-4 sm:flex-row sm:items-center sm:justify-between">
               <h3 className="text-sm font-medium">Questions &amp; content</h3>
               <div className="flex flex-wrap items-center gap-1.5">
                 <Button variant="outline" size="sm" onClick={addQuestion}>

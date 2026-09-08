@@ -393,8 +393,10 @@ export async function startOnDemandInstance(
 }
 
 /**
- * The current user's on-demand form submissions (their own), freshest first.
- * Includes drafts, completed, and any approval outcome.
+ * The current user's submission history (their own), freshest first. Includes
+ * every on-demand form (drafts + completed) AND every completed recurring task,
+ * so a user keeps a permanent record of what they've submitted rather than it
+ * vanishing once done. Surveys are excluded to preserve response anonymity.
  */
 export async function getMyFormSubmissions(): Promise<{
   ok: boolean
@@ -410,11 +412,15 @@ export async function getMyFormSubmissions(): Promise<{
     .select('*, template:internal_task_templates(*), approver:profiles!internal_task_instances_approved_by_fkey(id, full_name)')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
-    .limit(100)
+    .limit(200)
   if (error) return { ok: false, error: error.message }
-  const instances = ((data ?? []) as InternalTaskInstance[]).filter(
-    (i) => i.template?.task_kind === 'on_demand',
-  )
+  const instances = ((data ?? []) as InternalTaskInstance[]).filter((i) => {
+    const kind = i.template?.task_kind
+    if (kind === 'survey') return false
+    // On-demand forms show at every stage (draft + submitted); scheduled
+    // recurring tasks only once completed (pending ones live in "My tasks").
+    return kind === 'on_demand' || i.status === 'completed'
+  })
   return { ok: true, instances }
 }
 

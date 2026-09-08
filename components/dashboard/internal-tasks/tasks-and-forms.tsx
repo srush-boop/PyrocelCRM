@@ -163,7 +163,7 @@ export function TasksAndForms({ tasks, forms, submissions, approvals, assetCheck
           {submissions.length === 0 ? (
             <EmptyState
               icon={Send}
-              text="You haven't submitted any forms yet. Start one from the Forms tab."
+              text="You haven't submitted anything yet. Completed tasks and submitted forms will be kept here."
             />
           ) : (
             <div className="flex flex-col divide-y rounded-lg border">
@@ -175,9 +175,14 @@ export function TasksAndForms({ tasks, forms, submissions, approvals, assetCheck
                   className="flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/50"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">
-                      {sub.template?.name ?? 'Form'}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-sm font-medium">
+                        {sub.template?.name ?? 'Form'}
+                      </p>
+                      <Badge variant="outline" className="shrink-0 text-[10px]">
+                        {sub.template?.task_kind === 'on_demand' ? 'Form' : 'Task'}
+                      </Badge>
+                    </div>
                     <p className="text-xs text-muted-foreground">
                       {sub.status === 'completed' ? 'Submitted' : 'Draft'}
                       {sub.completed_at

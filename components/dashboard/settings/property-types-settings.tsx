@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { SETTINGS_DIALOG_CLASS } from '@/components/dashboard/settings/settings-dialog-class'
 import {
   Table,
   TableBody,
@@ -189,7 +190,7 @@ export function PropertyTypesSettings({ propertyTypes }: PropertyTypesSettingsPr
       </CardContent>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent className={SETTINGS_DIALOG_CLASS}>
           <DialogHeader>
             <DialogTitle>{form.id ? 'Edit property type' : 'Add property type'}</DialogTitle>
             <DialogDescription>

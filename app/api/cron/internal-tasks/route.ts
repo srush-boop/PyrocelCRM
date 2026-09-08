@@ -3,6 +3,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { notifyUsers } from '@/lib/notifications'
 import { computePeriod, resolveAssigneeIds, type AssigneeCandidate } from '@/lib/internal-tasks/schedule'
 import { deliverSurveySummary } from '@/lib/surveys/deliver'
+import { computeCompletionReport } from '@/lib/internal-tasks/report-data'
+import { renderCompletionReportHtml } from '@/lib/internal-tasks/completion-report'
+import { sendEmail } from '@/lib/email/send-email'
 import type { InternalTaskTemplate } from '@/lib/types/database'
 
 // Runs daily (see vercel.json). For every active internal-task template:
@@ -176,6 +179,71 @@ export async function GET(req: Request) {
     console.log('[v0] survey sweep failed:', (err as Error).message)
   }
 
+  // 5) Monthly completion report: on the 1st of the month, email last month's
+  //    report to all active admins. Idempotent via a global_config marker so it
+  //    sends once per month even if the daily cron runs repeatedly.
+  let reportSent = false
+  try {
+    if (now.getUTCDate() === 1) {
+      const prevMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
+      const targetKey = `${prevMonthStart.getUTCFullYear()}-${String(
+        prevMonthStart.getUTCMonth() + 1,
+      ).padStart(2, '0')}`
+
+      const { data: marker } = await admin
+        .from('global_config')
+        .select('value')
+        .eq('key', 'internal_task_report_last_sent')
+        .maybeSingle()
+      const lastSent = (marker as { value?: unknown } | null)?.value
+
+      if (lastSent !== targetKey) {
+        const report = await computeCompletionReport(admin, prevMonthStart)
+        const html = renderCompletionReportHtml(report)
+        const subject = `Internal tasks completion report — ${report.monthLabel}`
+
+        const { data: admins } = await admin
+          .from('profiles')
+          .select('id, email')
+          .eq('role', 'admin')
+          .eq('status', 'active')
+        const recipients = (admins ?? []) as Array<{ id: string; email: string | null }>
+
+        for (const r of recipients) {
+          if (!r.email) continue
+          try {
+            await sendEmail(r.email, subject, html)
+          } catch (err) {
+            console.log('[v0] monthly report email failed:', (err as Error).message)
+          }
+        }
+        if (recipients.length > 0) {
+          await notifyUsers({
+            userIds: recipients.map((r) => r.id),
+            title: `Completion report — ${report.monthLabel}`,
+            body: `${report.totalCompleted}/${report.totalAllocated} tasks completed · ${report.nonCompleters.length} people with outstanding tasks · ${report.flags.length} flagged items.`,
+            url: '/dashboard/internal-tasks/submissions',
+            category: 'internal_task_report',
+          })
+        }
+
+        await admin
+          .from('global_config')
+          .upsert(
+            {
+              key: 'internal_task_report_last_sent',
+              value: targetKey,
+              updated_at: now.toISOString(),
+            },
+            { onConflict: 'key' },
+          )
+        reportSent = true
+      }
+    }
+  } catch (err) {
+    console.log('[v0] monthly report sweep failed:', (err as Error).message)
+  }
+
   return NextResponse.json({
     ok: true,
     generated,
@@ -183,6 +251,7 @@ export async function GET(req: Request) {
     markedOverdue,
     surveysClosed,
     surveysSummarised,
+    reportSent,
   })
 }
 

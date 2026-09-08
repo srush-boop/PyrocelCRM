@@ -101,6 +101,15 @@ const myTasksNavItem: NavItem = {
   locked: true,
 }
 
+// Manager-only: every user's task/form submissions + the monthly completion
+// report. Only added to the admin/office menus (the page also hard-gates).
+const internalTaskSubmissionsNavItem: NavItem = {
+  key: 'task-submissions',
+  title: 'Task Submissions',
+  href: '/dashboard/internal-tasks/submissions',
+  icon: ClipboardCheck,
+}
+
 // "Timesheet" — weekly (Sun week-ending) timesheet. Only meaningful for users
 // with timesheet_required (resolved per-user/role); the page hard-gates access,
 // so the link is safe to show to internal field + office/admin roles.
@@ -432,6 +441,7 @@ const adminNavItems: NavItem[] = [
   adminCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   myTasksNavItem,
+  internalTaskSubmissionsNavItem,
   timesheetNavItem,
   chatNavItem,
   salesNavItem,
@@ -453,6 +463,7 @@ const officeNavItems: NavItem[] = [
   officeCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   myTasksNavItem,
+  internalTaskSubmissionsNavItem,
   timesheetNavItem,
   chatNavItem,
   salesNavItem,

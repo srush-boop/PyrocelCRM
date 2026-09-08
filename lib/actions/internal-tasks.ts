@@ -11,6 +11,11 @@ import type {
   ChecklistCondition,
 } from '@/lib/types/database'
 import { computePeriod, resolveAssigneeIds } from '@/lib/internal-tasks/schedule'
+import {
+  renderCompletionReportHtml,
+  type CompletionReport,
+} from '@/lib/internal-tasks/completion-report'
+import { computeCompletionReport } from '@/lib/internal-tasks/report-data'
 
 // Server actions for the Internal Tasks / Quality module. Users generate + view
 // + complete their own recurring task instances; quality managers (admin/office)
@@ -1000,6 +1005,156 @@ function escapeHtml(s: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
+}
+
+// --- Manager visibility + reporting -----------------------------------------
+
+export interface SubmissionFilters {
+  templateId?: string
+  userId?: string
+  status?: 'all' | 'completed' | 'pending'
+  from?: string // YYYY-MM-DD (completed_at lower bound)
+  to?: string // YYYY-MM-DD (completed_at upper bound, inclusive)
+}
+
+/**
+ * Every user's task/form submissions (manager-only) — the central place to find
+ * "where other users' submitted forms are stored". Excludes surveys (anonymity).
+ */
+export async function getAllSubmissions(filters: SubmissionFilters = {}): Promise<{
+  ok: boolean
+  error?: string
+  instances?: InternalTaskInstance[]
+  templates?: { id: string; name: string }[]
+  users?: { id: string; name: string }[]
+}> {
+  const auth = await requireManager()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase } = auth
+
+  let query = supabase
+    .from('internal_task_instances')
+    .select(
+      '*, template:internal_task_templates(*), user:profiles!internal_task_instances_user_id_fkey(id, full_name)',
+    )
+    .order('completed_at', { ascending: false, nullsFirst: false })
+    .limit(400)
+
+  if (filters.templateId) query = query.eq('template_id', filters.templateId)
+  if (filters.userId) query = query.eq('user_id', filters.userId)
+  if (filters.status === 'completed') query = query.eq('status', 'completed')
+  if (filters.status === 'pending') query = query.neq('status', 'completed')
+  if (filters.from) query = query.gte('completed_at', `${filters.from}T00:00:00.000Z`)
+  if (filters.to) query = query.lte('completed_at', `${filters.to}T23:59:59.999Z`)
+
+  const { data, error } = await query
+  if (error) return { ok: false, error: error.message }
+
+  const instances = ((data ?? []) as InternalTaskInstance[]).filter(
+    (i) => i.template?.task_kind !== 'survey',
+  )
+
+  // Filter option lists for the page controls.
+  const { data: tpls } = await supabase
+    .from('internal_task_templates')
+    .select('id, name, task_kind')
+    .neq('task_kind', 'survey')
+    .order('name', { ascending: true })
+  const { data: profs } = await supabase
+    .from('profiles')
+    .select('id, full_name')
+    .eq('status', 'active')
+    .neq('role', 'client')
+    .order('full_name', { ascending: true })
+
+  return {
+    ok: true,
+    instances,
+    templates: (tpls ?? []).map((t) => ({ id: t.id as string, name: t.name as string })),
+    users: (profs ?? []).map((u) => ({
+      id: u.id as string,
+      name: (u.full_name as string) ?? 'Unknown',
+    })),
+  }
+}
+
+/**
+ * Builds the completion report for a given month (YYYY-MM, defaults to the
+ * current month). Manager-only. Returns the structured report for on-screen use.
+ */
+export async function getMonthlyCompletionReport(
+  month?: string,
+): Promise<{ ok: boolean; error?: string; report?: CompletionReport }> {
+  const auth = await requireManager()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const monthStart = monthStartFrom(month)
+  const report = await computeCompletionReport(auth.supabase, monthStart)
+  return { ok: true, report }
+}
+
+/**
+ * Emails the month's completion report to the nominated recipients (manager
+ * profile ids) and notifies them in-app. Defaults to the requesting manager.
+ */
+export async function sendCompletionReport(input: {
+  month?: string
+  recipientIds?: string[]
+}): Promise<{ ok: boolean; error?: string; sent?: number }> {
+  const auth = await requireManager()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase, userId } = auth
+
+  const monthStart = monthStartFrom(input.month)
+  const report = await computeCompletionReport(supabase, monthStart)
+  const html = renderCompletionReportHtml(report)
+
+  const recipientIds =
+    input.recipientIds && input.recipientIds.length > 0 ? input.recipientIds : [userId]
+
+  const { data: recips } = await supabase
+    .from('profiles')
+    .select('id, email')
+    .in('id', recipientIds)
+
+  const { sendEmail } = await import('@/lib/email/send-email')
+  const subject = `Internal tasks completion report — ${report.monthLabel}`
+  let sent = 0
+  for (const r of (recips ?? []) as Array<{ id: string; email: string | null }>) {
+    if (!r.email) continue
+    try {
+      await sendEmail(r.email, subject, html)
+      sent += 1
+    } catch (err) {
+      console.log('[v0] completion report email failed:', (err as Error).message)
+    }
+  }
+
+  try {
+    const { notifyUsers } = await import('@/lib/notifications')
+    await notifyUsers({
+      userIds: recipientIds,
+      title: `Completion report — ${report.monthLabel}`,
+      body: `${report.totalCompleted}/${report.totalAllocated} tasks completed · ${report.nonCompleters.length} people with outstanding tasks · ${report.flags.length} flagged items.`,
+      url: '/dashboard/internal-tasks/submissions',
+      category: 'internal_task_report',
+      createdBy: userId,
+    })
+  } catch (err) {
+    console.log('[v0] completion report notify failed:', (err as Error).message)
+  }
+
+  return { ok: true, sent }
+}
+
+// Resolves a 'YYYY-MM' string (or undefined = current month) to the first day of
+// that month as a UTC Date.
+function monthStartFrom(month?: string): Date {
+  if (month && /^\d{4}-\d{2}$/.test(month)) {
+    const [y, m] = month.split('-').map(Number)
+    return new Date(Date.UTC(y, m - 1, 1))
+  }
+  const now = new Date()
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
 }
 
 // --- Template management (quality managers) ---------------------------------

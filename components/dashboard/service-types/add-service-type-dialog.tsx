@@ -37,6 +37,7 @@ import {
 } from './service-type-checklists-field'
 import { syncServiceTypeChecklists } from '@/lib/service-type-checklists'
 import { CALL_KIND_OPTIONS, callKindFlags } from '@/lib/call-kinds'
+import { SETTINGS_DIALOG_CLASS } from '@/components/dashboard/settings/settings-dialog-class'
 
 export function AddServiceTypeDialog({
   systemTypes,
@@ -174,7 +175,7 @@ export function AddServiceTypeDialog({
           Add Service Type
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className={SETTINGS_DIALOG_CLASS}>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Add Service Type</DialogTitle>

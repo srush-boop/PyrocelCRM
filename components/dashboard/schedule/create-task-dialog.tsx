@@ -14,6 +14,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { SETTINGS_DIALOG_CLASS } from '@/components/dashboard/settings/settings-dialog-class'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -426,7 +427,7 @@ export function CreateTaskDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className={SETTINGS_DIALOG_CLASS}>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Log New Call</DialogTitle>

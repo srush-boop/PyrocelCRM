@@ -31,6 +31,7 @@ import {
 } from './service-type-checklists-field'
 import { syncServiceTypeChecklists } from '@/lib/service-type-checklists'
 import { CALL_KIND_OPTIONS, callKindFlags } from '@/lib/call-kinds'
+import { SETTINGS_DIALOG_CLASS } from '@/components/dashboard/settings/settings-dialog-class'
 import {
   Select,
   SelectContent,
@@ -177,7 +178,7 @@ export function EditServiceTypeDialog({ serviceType, systemTypes, nominalCodes, 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className={SETTINGS_DIALOG_CLASS}>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Edit Service Type</DialogTitle>

@@ -48,6 +48,7 @@ import type {
   DocumentTemplateCategory,
 } from '@/lib/types/database'
 import { OWNER_TYPE_LABELS } from '@/lib/documents/merge-tokens'
+import { SETTINGS_DIALOG_CLASS } from '@/components/dashboard/settings/settings-dialog-class'
 import { saveTemplate, deleteTemplate } from '@/lib/actions/documents-create'
 
 interface DocumentTemplatesSettingsProps {
@@ -269,7 +270,7 @@ export function DocumentTemplatesSettings({ templates }: DocumentTemplatesSettin
       </CardContent>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className={SETTINGS_DIALOG_CLASS}>
           <DialogHeader>
             <DialogTitle>{form.id ? 'Edit template' : 'Add template'}</DialogTitle>
             <DialogDescription>

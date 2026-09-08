@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { SETTINGS_DIALOG_CLASS } from '@/components/dashboard/settings/settings-dialog-class'
 import { Building2, MapPin, Plus, Pencil, Trash2, Loader2 } from 'lucide-react'
 import type { CompanyInfo, Branch } from '@/lib/types/database'
 
@@ -366,7 +367,7 @@ export function CompanySettings({ company, branches }: CompanySettingsProps) {
       </Card>
 
       <Dialog open={branchDialogOpen} onOpenChange={setBranchDialogOpen}>
-        <DialogContent>
+        <DialogContent className={SETTINGS_DIALOG_CLASS}>
           <form onSubmit={handleSaveBranch}>
             <DialogHeader>
               <DialogTitle>{editingBranch ? 'Edit Branch' : 'Add Branch'}</DialogTitle>

@@ -737,7 +737,7 @@ function TemplateEditorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[95vh] w-[97vw] max-w-6xl overflow-y-auto">
+      <DialogContent className="max-h-[95vh] w-[97vw] max-w-6xl resize overflow-auto">
         <DialogHeader>
           <DialogTitle>
             {draft.id ? 'Edit' : 'New'}{' '}

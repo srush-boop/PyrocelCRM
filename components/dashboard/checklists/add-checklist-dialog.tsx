@@ -13,6 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { SETTINGS_DIALOG_CLASS } from '@/components/dashboard/settings/settings-dialog-class'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -72,7 +73,7 @@ export function AddChecklistDialog({ serviceTypes }: AddChecklistDialogProps) {
           Add Checklist
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-lg">
+      <DialogContent className={SETTINGS_DIALOG_CLASS}>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Add Checklist Template</DialogTitle>

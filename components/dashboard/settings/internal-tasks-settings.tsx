@@ -425,6 +425,20 @@ function TemplateEditorDialog({
   const [error, setError] = useState<string | null>(null)
   // Index of the block currently being dragged, for reorder-by-drag.
   const [dragIndex, setDragIndex] = useState<number | null>(null)
+  // Guards against losing work: an accidental outside-click/Escape while the
+  // form has unsaved edits opens a confirmation instead of closing outright.
+  const [confirmClose, setConfirmClose] = useState(false)
+  const isDirty = JSON.stringify(draft) !== JSON.stringify(template)
+
+  // Intercept close requests (Escape, outside click, Cancel). When there are
+  // unsaved changes, ask the user to confirm before discarding them.
+  function requestClose(next: boolean) {
+    if (!next && isDirty && !saving) {
+      setConfirmClose(true)
+      return
+    }
+    onOpenChange(next)
+  }
 
   function patch(updates: Partial<InternalTaskTemplate>) {
     setDraft((d) => ({ ...d, ...updates }))
@@ -736,8 +750,8 @@ function TemplateEditorDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[95vh] w-[97vw] max-w-6xl resize overflow-auto">
+    <Dialog open={open} onOpenChange={requestClose}>
+      <DialogContent className="max-h-[95vh] h-[95vh] w-[97vw] max-w-[97vw] sm:max-w-[97vw] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {draft.id ? 'Edit' : 'New'}{' '}
@@ -1422,6 +1436,29 @@ function TemplateEditorDialog({
                           </Select>
                         </label>
                       ) : null}
+                      {q.type === 'checkbox' ? (
+                        <label className="flex items-center gap-2 text-xs">
+                          Flag as failure when
+                          <Select
+                            value={q.checkboxFailValue ?? 'none'}
+                            onValueChange={(v) =>
+                              updateQuestion(q.id, {
+                                checkboxFailValue:
+                                  v === 'none' ? undefined : (v as 'checked' | 'unchecked'),
+                              })
+                            }
+                          >
+                            <SelectTrigger className="h-8 w-32">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Neither</SelectItem>
+                              <SelectItem value="checked">Checked</SelectItem>
+                              <SelectItem value="unchecked">Unchecked</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </label>
+                      ) : null}
                     </div>
 
                     <div className="pl-6">
@@ -1691,7 +1728,7 @@ function TemplateEditorDialog({
               <div className="grid gap-4 sm:grid-cols-3">
                 <div>
                   <p className="mb-2 text-xs font-medium text-muted-foreground">Roles</p>
-                  <div className="flex flex-col gap-1">
+                  <div className="flex max-h-56 flex-col gap-1 overflow-y-auto rounded-md border p-2">
                     {roles.map((r) => (
                       <label key={r.id} className="flex items-center gap-2 text-sm">
                         <Checkbox
@@ -1709,7 +1746,7 @@ function TemplateEditorDialog({
                   <p className="mb-2 text-xs font-medium text-muted-foreground">
                     Departments
                   </p>
-                  <div className="flex flex-col gap-1">
+                  <div className="flex max-h-56 flex-col gap-1 overflow-y-auto rounded-md border p-2">
                     {departments.map((d) => (
                       <label key={d.id} className="flex items-center gap-2 text-sm">
                         <Checkbox
@@ -1729,7 +1766,7 @@ function TemplateEditorDialog({
                   <p className="mb-2 text-xs font-medium text-muted-foreground">
                     Individuals
                   </p>
-                  <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
+                  <div className="flex max-h-56 flex-col gap-1 overflow-y-auto rounded-md border p-2">
                     {users.map((u) => (
                       <label key={u.id} className="flex items-center gap-2 text-sm">
                         <Checkbox
@@ -1804,7 +1841,7 @@ function TemplateEditorDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => requestClose(false)}>
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={saving}>
@@ -1813,6 +1850,32 @@ function TemplateEditorDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <Dialog open={confirmClose} onOpenChange={setConfirmClose}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Discard unsaved changes?</DialogTitle>
+            <DialogDescription>
+              You have unsaved changes to this {isSurvey ? 'survey' : draft.task_kind === 'on_demand' ? 'form' : 'task'}. If
+              you close now they will be lost.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmClose(false)}>
+              Keep editing
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setConfirmClose(false)
+                onOpenChange(false)
+              }}
+            >
+              Discard changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   )
 }

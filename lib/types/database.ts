@@ -998,6 +998,9 @@ export interface InternalTaskItem {
   // yes_no: which selection ('yes' | 'no') counts as a failure and flags the
   // answer. Unset = neither answer flags (informational only).
   failValue?: 'yes' | 'no'
+  // checkbox: which state ('checked' | 'unchecked') counts as a failure and
+  // flags the answer. Unset = neither state flags (informational only).
+  checkboxFailValue?: 'checked' | 'unchecked'
   // When true, the "N/A" answer control is hidden for this question, forcing a
   // real answer (e.g. a legally-required check that can never be N/A).
   disableNa?: boolean
@@ -1132,6 +1135,12 @@ export interface InternalTaskInstance {
   completed_at: string | null
   reference_number: string | null
   answers: InternalTaskAnswer[]
+  // Snapshot of the template's questions/blocks exactly as they were at submit
+  // time. Populated on completion so later edits to the template never
+  // retroactively change what a completed submission asked. Null on drafts and
+  // on legacy rows submitted before this was introduced (fall back to the
+  // template's current questions in that case).
+  questions_snapshot?: InternalTaskItem[] | null
   // Approval workflow. approval_status is null when the template needs none.
   approval_status: InternalTaskApprovalStatus | null
   // Snapshot of who can approve this submission, resolved at submit time.

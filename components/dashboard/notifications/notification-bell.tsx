@@ -2,10 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react'
 import useSWR from 'swr'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Bell, BellRing, Check, Siren } from 'lucide-react'
+import { Bell, BellRing, Check, Siren, X, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -15,7 +14,11 @@ import {
 } from '@/components/ui/popover'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
-import { markNotificationsRead } from '@/app/(dashboard)/dashboard/notifications/actions'
+import {
+  markNotificationsRead,
+  dismissNotification,
+  clearAllNotifications,
+} from '@/app/(dashboard)/dashboard/notifications/actions'
 import { PushToggle } from './push-toggle'
 
 interface NotificationRow {
@@ -86,6 +89,29 @@ export function NotificationBell() {
     mutate()
   }
 
+  async function handleDismiss(id: string) {
+    // Optimistically drop it, then persist.
+    mutate(
+      (cur) =>
+        cur
+          ? {
+              notifications: cur.notifications.filter((x) => x.id !== id),
+              unread: cur.notifications.find((x) => x.id === id && !x.read_at)
+                ? Math.max(0, cur.unread - 1)
+                : cur.unread,
+            }
+          : cur,
+      { revalidate: false },
+    )
+    await dismissNotification(id)
+    mutate()
+  }
+
+  async function handleClearAll() {
+    await clearAllNotifications()
+    mutate()
+  }
+
   async function handleClick(n: NotificationRow) {
     if (!n.read_at) {
       await markNotificationsRead(n.id)
@@ -131,14 +157,27 @@ export function NotificationBell() {
         collisionPadding={8}
         className="flex max-h-[var(--radix-popover-content-available-height)] w-80 flex-col p-0 sm:w-96"
       >
-        <div className="flex shrink-0 items-center justify-between border-b px-4 py-3">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b px-4 py-3">
           <h3 className="text-sm font-semibold">Notifications</h3>
-          {unread > 0 && (
-            <Button variant="ghost" size="sm" className="h-auto gap-1.5 px-2 py-1 text-xs" onClick={handleMarkAll}>
-              <Check className="h-3.5 w-3.5" />
-              Mark all read
-            </Button>
-          )}
+          <div className="flex items-center gap-1">
+            {unread > 0 && (
+              <Button variant="ghost" size="sm" className="h-auto gap-1.5 px-2 py-1 text-xs" onClick={handleMarkAll}>
+                <Check className="h-3.5 w-3.5" />
+                Mark all read
+              </Button>
+            )}
+            {notifications.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-auto gap-1.5 px-2 py-1 text-xs text-muted-foreground"
+                onClick={handleClearAll}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Clear all
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="shrink-0 border-b px-4 py-3">
@@ -153,17 +192,20 @@ export function NotificationBell() {
           ) : (
             <ul className="divide-y">
               {notifications.map((n) => (
-                <li key={n.id}>
+                <li
+                  key={n.id}
+                  className={cn(
+                    'relative transition-colors hover:bg-muted/60',
+                    !n.read_at && 'bg-muted/40',
+                    n.category === 'emergency_call' &&
+                      !n.read_at &&
+                      'border-l-2 border-destructive bg-destructive/5',
+                  )}
+                >
                   <button
                     type="button"
                     onClick={() => handleClick(n)}
-                    className={cn(
-                      'flex w-full flex-col items-start gap-1 px-4 py-3 text-left transition-colors hover:bg-muted/60',
-                      !n.read_at && 'bg-muted/40',
-                      n.category === 'emergency_call' &&
-                        !n.read_at &&
-                        'border-l-2 border-destructive bg-destructive/5',
-                    )}
+                    className="flex w-full flex-col items-start gap-1 px-4 py-3 pr-9 text-left"
                   >
                     <div className="flex w-full items-start justify-between gap-2">
                       <span
@@ -190,6 +232,15 @@ export function NotificationBell() {
                     )}
                     <span className="text-xs text-muted-foreground">{timeAgo(n.created_at)}</span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDismiss(n.id)}
+                    aria-label="Dismiss notification"
+                    title="Dismiss"
+                    className="absolute right-2 top-2 rounded-md p-1 text-muted-foreground opacity-70 transition-opacity hover:bg-muted hover:opacity-100"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
                 </li>
               ))}
             </ul>
@@ -197,10 +248,16 @@ export function NotificationBell() {
         </ScrollArea>
 
         <div className="shrink-0 border-t px-4 py-2">
-          <Button asChild variant="ghost" size="sm" className="w-full justify-center text-xs">
-            <Link href="/dashboard/notifications" onClick={() => setOpen(false)}>
-              View all notifications
-            </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-center text-xs"
+            onClick={() => {
+              setOpen(false)
+              router.push('/dashboard/notifications')
+            }}
+          >
+            View all notifications
           </Button>
         </div>
       </PopoverContent>

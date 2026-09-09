@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Sheet,
@@ -37,7 +37,11 @@ import type {
   InternalTaskTableRow,
   ChecklistCondition,
 } from '@/lib/types/database'
-import { submitInternalTask, decideApproval } from '@/lib/actions/internal-tasks'
+import {
+  submitInternalTask,
+  decideApproval,
+  discardInternalTaskInstance,
+} from '@/lib/actions/internal-tasks'
 import { blobSrc } from '@/lib/blob'
 import { cn } from '@/lib/utils'
 import { SignaturePad } from '@/components/portal/signature-pad'
@@ -51,6 +55,10 @@ interface Props {
   reviewMode?: boolean
   // Name of the submitter, shown in review mode.
   submitterName?: string | null
+  // When true, this is a freshly-started draft (a launched form or a "Submit
+  // another" instance). Closing it without submitting deletes the empty draft
+  // so abandoned attempts don't stack up as outstanding submissions.
+  discardOnAbandon?: boolean
 }
 
 type RowPhoto = { id: string; name: string; url: string }
@@ -68,6 +76,8 @@ type Row = InternalTaskAnswer & {
   failOptions?: string[]
   // yes_no: which selection flags the answer as a failure.
   failValue?: 'yes' | 'no'
+  // checkbox: which state flags the answer as a failure.
+  checkboxFailValue?: 'checked' | 'unchecked'
   // When true, the N/A answer control is hidden for this question.
   disableNa?: boolean
   // Author reference image copied from the template item (top-level only).
@@ -127,6 +137,7 @@ function buildRows(questions: InternalTaskItem[], saved: InternalTaskAnswer[]): 
       multiSelect: q.multiSelect,
       failOptions: q.failOptions,
       failValue: q.failValue,
+      checkboxFailValue: q.checkboxFailValue,
       disableNa: q.disableNa,
       imagePathname: q.imagePathname ?? null,
       imageName: q.imageName ?? null,
@@ -195,16 +206,41 @@ export function InternalTaskSheet({
   onOpenChange,
   reviewMode = false,
   submitterName = null,
+  discardOnAbandon = false,
 }: Props) {
   const router = useRouter()
   const template = instance.template
-  const questions = useMemo<InternalTaskItem[]>(() => template?.questions ?? [], [template])
+  // Completed submissions render from their baked-in question snapshot (taken at
+  // submit time) so later template edits never change what was asked. Drafts and
+  // legacy rows (no snapshot) fall back to the template's current questions.
+  const questions = useMemo<InternalTaskItem[]>(() => {
+    if (
+      instance.status === 'completed' &&
+      instance.questions_snapshot &&
+      instance.questions_snapshot.length > 0
+    ) {
+      return instance.questions_snapshot
+    }
+    return template?.questions ?? []
+  }, [instance.status, instance.questions_snapshot, template])
   const readOnly = instance.status === 'completed' || reviewMode
 
   const [rows, setRows] = useState<Row[]>(() => buildRows(questions, instance.answers ?? []))
   const [reference, setReference] = useState(instance.reference_number ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Set true once submit succeeds so closing afterwards never discards the row.
+  const submittedRef = useRef(false)
+  // Confirmation overlay shown when closing with unsaved edits.
+  const [confirmClose, setConfirmClose] = useState(false)
+  // After a failed submit, surface every unmet requirement (not just the first)
+  // and highlight the offending fields in red.
+  const [showErrors, setShowErrors] = useState(false)
+  const errorAlertRef = useRef<HTMLDivElement | null>(null)
+  // Snapshot of the initial answers so we can detect unsaved edits on close.
+  const initialSnapshot = useRef(
+    JSON.stringify({ rows: buildRows(questions, instance.answers ?? []), reference: instance.reference_number ?? '' }),
+  )
   const [photoUploadingId, setPhotoUploadingId] = useState<string | null>(null)
   // Key = `${item_id}:${rowIdx}:${colId}` for the table image cell being uploaded.
   const [cellUploading, setCellUploading] = useState<string | null>(null)
@@ -231,6 +267,34 @@ export function InternalTaskSheet({
 
   const update = (itemId: string, patch: Partial<Row>) => {
     setRows((rs) => rs.map((r) => (r.item_id === itemId ? { ...r, ...patch } : r)))
+  }
+
+  // True when the user has made edits that would be lost on close.
+  const isDirty =
+    !readOnly &&
+    JSON.stringify({ rows, reference }) !== initialSnapshot.current &&
+    !submittedRef.current
+
+  // Actually closes: discards an abandoned fresh draft, then notifies the parent.
+  const finishClose = () => {
+    if (discardOnAbandon && !submittedRef.current && instance.status !== 'completed') {
+      void discardInternalTaskInstance(instance.id).then(() => router.refresh())
+    }
+    onOpenChange(false)
+  }
+
+  // Intercepts close requests (Escape, outside click, X). Confirms first when
+  // there are unsaved edits so a stray click can't lose a part-filled form.
+  const requestClose = (next: boolean) => {
+    if (next) {
+      onOpenChange(true)
+      return
+    }
+    if (isDirty && !saving) {
+      setConfirmClose(true)
+      return
+    }
+    finishClose()
   }
 
   // Table helpers: the user adds/edits/removes rows in a table block's value.
@@ -324,35 +388,41 @@ export function InternalTaskSheet({
     update(row.item_id, { photos: (row.photos ?? []).filter((p) => p.id !== photoId) })
   }
 
-  // Collects unmet requirements. Empty = safe to submit.
-  const blockers = useMemo<string[]>(() => {
-    const out: string[] = []
+  // Collects unmet requirements. Empty messages = safe to submit. `ids` are the
+  // top-level item ids to highlight in red (follow-ups map to their parent).
+  const validation = useMemo<{ messages: string[]; ids: Set<string> }>(() => {
+    const messages: string[] = []
+    const ids = new Set<string>()
+    const flag = (id: string | null, msg: string) => {
+      messages.push(msg)
+      if (id) ids.add(id)
+    }
     for (const row of rows) {
       // Required top-level answers.
       const q = questions.find((x) => x.id === row.item_id)
-        if (q?.required && !row.na) {
+      if (q?.required && !row.na) {
         if (row.type === 'pass_fail' && row.passed == null && !row.advisory) {
-          out.push(`${row.label}: choose an answer`)
+          flag(row.item_id, `${row.label}: choose an answer`)
         } else if (row.type === 'yes_no' && row.value !== 'yes' && row.value !== 'no') {
-          out.push(`${row.label}: choose Yes or No`)
+          flag(row.item_id, `${row.label}: choose Yes or No`)
         } else if (row.type === 'signature' && String(row.value ?? '').trim() === '') {
-          out.push(`${row.label}: add a signature`)
+          flag(row.item_id, `${row.label}: add a signature`)
         } else if (
           (row.type === 'text' || row.type === 'number') &&
           String(row.value ?? '').trim() === ''
         ) {
-          out.push(`${row.label}: enter a value`)
+          flag(row.item_id, `${row.label}: enter a value`)
         } else if (row.type === 'table' && tableRows(row).length === 0) {
-          out.push(`${row.label}: add at least one row`)
+          flag(row.item_id, `${row.label}: add at least one row`)
         } else if (row.type === 'file' && (row.photos ?? []).length === 0) {
-          out.push(`${row.label}: attach a document`)
+          flag(row.item_id, `${row.label}: attach a document`)
         } else if (
           row.type === 'choice' &&
           (Array.isArray(row.value)
             ? row.value.length === 0
             : String(row.value ?? '').trim() === '')
         ) {
-          out.push(`${row.label}: choose an option`)
+          flag(row.item_id, `${row.label}: choose an option`)
         }
       }
       // Conditional requirements on visible top-level rows.
@@ -360,35 +430,47 @@ export function InternalTaskSheet({
         for (const cond of row.conditions ?? []) {
           if (!isConditionActive(row, cond)) continue
           if (cond.requireNote && !(row.notes && row.notes.trim())) {
-            out.push(`${row.label}: add a note`)
+            flag(row.item_id, `${row.label}: add a note`)
           }
           if (cond.requirePhoto && !(row.photos && row.photos.length > 0)) {
-            out.push(`${row.label}: attach a photo`)
+            flag(row.item_id, `${row.label}: attach a photo`)
           }
         }
       }
       // Required follow-up rows that are visible.
       if (row.parent_item_id && row.required && isRowVisible(row)) {
         if (row.type === 'pass_fail' && row.passed == null) {
-          out.push(`${row.label}: choose an answer`)
+          flag(row.parent_item_id, `${row.label}: choose an answer`)
         } else if (String(row.value ?? '').trim() === '' && row.type !== 'checkbox') {
-          out.push(`${row.label}: enter a value`)
+          flag(row.parent_item_id, `${row.label}: enter a value`)
         }
       }
     }
     if (template?.requires_reference && !reference.trim()) {
-      out.push(`${template.reference_label || 'Reference number'} is required`)
+      flag(null, `${template.reference_label || 'Reference number'} is required`)
     }
-    return out
+    return { messages, ids }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, reference, questions, template])
+  const blockers = validation.messages
+  const blockingIds = validation.ids
 
   const handleSubmit = async () => {
     setError(null)
     if (blockers.length > 0) {
-      setError(blockers[0])
+      // Show every unmet requirement and scroll to the first offending field so
+      // the user isn't hunting for a single message off the bottom of the sheet.
+      setShowErrors(true)
+      requestAnimationFrame(() => {
+        const firstId = rows.find((r) => blockingIds.has(r.item_id))?.item_id
+        const el = firstId
+          ? document.getElementById(`itrow-${firstId}`)
+          : errorAlertRef.current
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      })
       return
     }
+    submittedRef.current = true
     setSaving(true)
     // Persist only visible rows (hidden follow-ups are dropped).
     const answers: InternalTaskAnswer[] = rows
@@ -416,6 +498,7 @@ export function InternalTaskSheet({
     })
     setSaving(false)
     if (!result.ok) {
+      submittedRef.current = false
       setError(result.error || 'Could not submit.')
       return
     }
@@ -424,14 +507,33 @@ export function InternalTaskSheet({
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-3xl">
+    <Sheet open={open} onOpenChange={requestClose}>
+      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-4xl">
         <SheetHeader>
           <SheetTitle className="text-balance">{template?.name}</SheetTitle>
           {template?.description && (
             <SheetDescription className="text-pretty">{template.description}</SheetDescription>
           )}
         </SheetHeader>
+
+        {showErrors && blockers.length > 0 && !readOnly && (
+          <div ref={errorAlertRef}>
+            <Alert variant="destructive" className="mt-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <p className="font-medium">
+                  Please fix {blockers.length} item{blockers.length === 1 ? '' : 's'} before
+                  submitting:
+                </p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                  {blockers.map((b, i) => (
+                    <li key={i}>{b}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          </div>
+        )}
 
         <div className="mt-6 space-y-5">
           {/* Display-only blocks render straight from the template, interleaved
@@ -578,6 +680,47 @@ export function InternalTaskSheet({
             />
           </div>
         )}
+
+        {/* Unsaved-changes confirmation. A plain overlay (not a nested Radix
+            dialog) to avoid focus-trap conflicts with the Sheet. */}
+        {confirmClose && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Discard unsaved changes"
+            tabIndex={-1}
+            ref={(el) => el?.focus()}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setConfirmClose(false)
+            }}
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4"
+            onClick={() => setConfirmClose(false)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-sm rounded-lg border bg-background p-5 shadow-lg"
+            >
+              <h2 className="text-base font-semibold">Discard unsaved changes?</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                You have unsaved answers on this form. If you close now they will be lost.
+              </p>
+              <div className="mt-4 flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setConfirmClose(false)}>
+                  Keep editing
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    setConfirmClose(false)
+                    finishClose()
+                  }}
+                >
+                  Discard
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </SheetContent>
     </Sheet>
   )
@@ -589,11 +732,16 @@ export function InternalTaskSheet({
     return (
               <div
                 key={row.item_id}
-                className={
+                id={isFollowUp ? undefined : `itrow-${row.item_id}`}
+                className={cn(
                   isFollowUp
                     ? 'ml-3 border-l-2 border-primary/30 pl-3'
-                    : 'rounded-lg border p-3'
-                }
+                    : 'rounded-lg border p-3',
+                  !isFollowUp &&
+                    showErrors &&
+                    blockingIds.has(row.item_id) &&
+                    'border-destructive ring-1 ring-destructive/40',
+                )}
               >
                 <div className="flex items-start justify-between gap-2">
                   <Label className="flex items-start gap-1.5 text-sm font-medium leading-snug">
@@ -730,7 +878,18 @@ export function InternalTaskSheet({
                           id={`cb-${row.item_id}`}
                           checked={row.value === true}
                           disabled={readOnly}
-                          onCheckedChange={(c) => update(row.item_id, { value: c === true })}
+                          onCheckedChange={(c) => {
+                            const checked = c === true
+                            // Flag the answer when its state matches the
+                            // author's "flag as failure when" setting.
+                            const fv = row.checkboxFailValue
+                            const passed = fv
+                              ? (checked ? 'checked' : 'unchecked') === fv
+                                ? false
+                                : true
+                              : null
+                            update(row.item_id, { value: checked, passed })
+                          }}
                         />
                         <Label htmlFor={`cb-${row.item_id}`} className="text-sm">
                           Yes

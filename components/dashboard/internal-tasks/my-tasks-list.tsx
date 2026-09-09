@@ -70,6 +70,9 @@ export function MyTasksList({ instances, assetChecks = [] }: Props) {
   const router = useRouter()
   const [active, setActive] = useState<InternalTaskInstance | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
+  // True when `active` is a freshly-created "Submit another" draft; abandoning
+  // it should discard the empty instance rather than leave it outstanding.
+  const [discardable, setDiscardable] = useState(false)
   const [extraPending, startExtra] = useTransition()
   const [extraId, setExtraId] = useState<string | null>(null)
   const [extraError, setExtraError] = useState<string | null>(null)
@@ -86,6 +89,7 @@ export function MyTasksList({ instances, assetChecks = [] }: Props) {
       }
       router.refresh()
       setActive(result.instance)
+      setDiscardable(true)
       setSheetOpen(true)
     })
   }
@@ -117,6 +121,7 @@ export function MyTasksList({ instances, assetChecks = [] }: Props) {
 
   function openInstance(instance: InternalTaskInstance) {
     setActive(instance)
+    setDiscardable(false)
     setSheetOpen(true)
   }
 
@@ -213,9 +218,13 @@ export function MyTasksList({ instances, assetChecks = [] }: Props) {
         <InternalTaskSheet
           instance={active}
           open={sheetOpen}
+          discardOnAbandon={discardable}
           onOpenChange={(v) => {
             setSheetOpen(v)
-            if (!v) setActive(null)
+            if (!v) {
+              setActive(null)
+              setDiscardable(false)
+            }
           }}
         />
       ) : null}

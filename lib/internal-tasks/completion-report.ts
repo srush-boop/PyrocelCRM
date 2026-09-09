@@ -26,6 +26,8 @@ export interface CompletionReportFlag {
   label: string
   state: 'Fail' | 'Advisory'
   answer: string
+  /** The submitter's note/comment on this flagged item, if any. */
+  note?: string
 }
 
 export interface CompletionReport {
@@ -149,7 +151,11 @@ export function renderCompletionReportHtml(report: CompletionReport): string {
                   f.label,
                 )}${f.answer ? ` [${esc(f.answer)}]` : ''} <span style="color:#666">(${esc(
                   f.userName,
-                )})</span></li>`,
+                )})</span>${
+                  f.note
+                    ? `<br/><span style="color:#666;font-style:italic">“${esc(f.note)}”</span>`
+                    : ''
+                }</li>`,
             )
             .join('')}
         </ul>`

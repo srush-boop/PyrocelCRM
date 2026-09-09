@@ -38,6 +38,8 @@ export function TasksAndForms({ tasks, forms, submissions, approvals, assetCheck
   const [reviewMode, setReviewMode] = useState(false)
   const [submitterName, setSubmitterName] = useState<string | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
+  // True when `active` is a freshly-started draft; abandoning it should discard.
+  const [discardable, setDiscardable] = useState(false)
   const [starting, startTransition] = useTransition()
   const [startingId, setStartingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -46,10 +48,11 @@ export function TasksAndForms({ tasks, forms, submissions, approvals, assetCheck
     tasks.filter((t) => t.status !== 'completed').length + assetChecks.length
   const showApprovals = approvals.length > 0
 
-  function openFill(instance: InternalTaskInstance) {
+  function openFill(instance: InternalTaskInstance, isFresh = false) {
     setActive(instance)
     setReviewMode(false)
     setSubmitterName(null)
+    setDiscardable(isFresh)
     setSheetOpen(true)
   }
 
@@ -57,6 +60,7 @@ export function TasksAndForms({ tasks, forms, submissions, approvals, assetCheck
     setActive(instance)
     setReviewMode(true)
     setSubmitterName(instance.user?.full_name ?? null)
+    setDiscardable(false)
     setSheetOpen(true)
   }
 
@@ -70,7 +74,7 @@ export function TasksAndForms({ tasks, forms, submissions, approvals, assetCheck
         setError(result.error ?? 'Could not open form.')
         return
       }
-      openFill(result.instance)
+      openFill(result.instance, true)
     })
   }
 
@@ -248,9 +252,13 @@ export function TasksAndForms({ tasks, forms, submissions, approvals, assetCheck
           open={sheetOpen}
           reviewMode={reviewMode}
           submitterName={submitterName}
+          discardOnAbandon={discardable}
           onOpenChange={(v) => {
             setSheetOpen(v)
-            if (!v) setActive(null)
+            if (!v) {
+              setActive(null)
+              setDiscardable(false)
+            }
           }}
         />
       ) : null}

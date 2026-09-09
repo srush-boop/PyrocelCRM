@@ -4,9 +4,13 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Check, Bell } from 'lucide-react'
+import { Check, Bell, X, Trash2 } from 'lucide-react'
 import { cn, UK_TIME_ZONE } from '@/lib/utils'
-import { markNotificationsRead } from '@/app/(dashboard)/dashboard/notifications/actions'
+import {
+  markNotificationsRead,
+  dismissNotification,
+  clearAllNotifications,
+} from '@/app/(dashboard)/dashboard/notifications/actions'
 
 interface NotificationRow {
   id: string
@@ -53,6 +57,18 @@ export function NotificationsList({
     if (n.url) router.push(n.url)
   }
 
+  async function handleDismiss(id: string) {
+    setItems((prev) => prev.filter((x) => x.id !== id))
+    await dismissNotification(id)
+    router.refresh()
+  }
+
+  async function handleClearAll() {
+    setItems((prev) => prev.filter((n) => n.category === 'emergency_call' && !n.read_at))
+    await clearAllNotifications()
+    router.refresh()
+  }
+
   if (items.length === 0) {
     return (
       <Card>
@@ -66,26 +82,38 @@ export function NotificationsList({
 
   return (
     <div className="space-y-3">
-      {hasUnread && (
-        <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        {hasUnread && (
           <Button variant="outline" size="sm" className="gap-2" onClick={handleMarkAll}>
             <Check className="h-4 w-4" />
             Mark all as read
           </Button>
-        </div>
-      )}
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2 text-muted-foreground"
+          onClick={handleClearAll}
+        >
+          <Trash2 className="h-4 w-4" />
+          Clear all
+        </Button>
+      </div>
       <Card>
         <CardContent className="p-0">
           <ul className="divide-y">
             {items.map((n) => (
-              <li key={n.id}>
+              <li
+                key={n.id}
+                className={cn(
+                  'relative transition-colors hover:bg-muted/60',
+                  !n.read_at && 'bg-muted/40',
+                )}
+              >
                 <button
                   type="button"
                   onClick={() => handleClick(n)}
-                  className={cn(
-                    'flex w-full flex-col items-start gap-1 px-4 py-4 text-left transition-colors hover:bg-muted/60',
-                    !n.read_at && 'bg-muted/40',
-                  )}
+                  className="flex w-full flex-col items-start gap-1 px-4 py-4 pr-10 text-left"
                 >
                   <div className="flex w-full items-start justify-between gap-3">
                     <span className="font-medium leading-snug">{n.title}</span>
@@ -100,6 +128,15 @@ export function NotificationsList({
                       Unread
                     </span>
                   )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDismiss(n.id)}
+                  aria-label="Dismiss notification"
+                  title="Dismiss"
+                  className="absolute right-3 top-3 rounded-md p-1 text-muted-foreground opacity-70 transition-opacity hover:bg-muted hover:opacity-100"
+                >
+                  <X className="h-4 w-4" />
                 </button>
               </li>
             ))}

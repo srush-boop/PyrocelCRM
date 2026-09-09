@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -23,13 +23,27 @@ import {
   ClipboardList,
   AlertCircle,
   Check,
+  Trash2,
 } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import type { InternalTaskInstance } from '@/lib/types/database'
 import type { CompletionReport } from '@/lib/internal-tasks/completion-report'
 import {
   getAllSubmissions,
   getMonthlyCompletionReport,
   sendCompletionReport,
+  revokeAssignedInstance,
+  revokeOutstandingForTemplate,
   type SubmissionFilters,
 } from '@/lib/actions/internal-tasks'
 import { InternalTaskSheet } from './internal-task-sheet'
@@ -57,10 +71,14 @@ export function SubmissionsAdmin({ initialInstances, templates, users, initialRe
   const [sheetOpen, setSheetOpen] = useState(false)
 
   const [month, setMonth] = useState(currentMonth())
+  const [reportTemplateId, setReportTemplateId] = useState<string>(ALL)
   const [report, setReport] = useState<CompletionReport | null>(initialReport)
   const [reportLoading, startReport] = useTransition()
   const [sending, startSend] = useTransition()
   const [sentMsg, setSentMsg] = useState<string | null>(null)
+
+  // Row-level + bulk revoke of outstanding assignments.
+  const [revoking, startRevoke] = useTransition()
 
   function updateFilter(patch: Partial<SubmissionFilters>) {
     const next = { ...filters, ...patch }
@@ -71,16 +89,63 @@ export function SubmissionsAdmin({ initialInstances, templates, users, initialRe
     })
   }
 
+  function reloadSubmissions() {
+    startLoad(async () => {
+      const res = await getAllSubmissions(filters)
+      if (res.ok) setInstances(res.instances ?? [])
+    })
+  }
+
+  function revokeOne(instanceId: string) {
+    startRevoke(async () => {
+      const res = await revokeAssignedInstance(instanceId)
+      if (res.ok) setInstances((list) => list.filter((i) => i.id !== instanceId))
+    })
+  }
+
+  function revokeAllForTemplate(templateId: string) {
+    startRevoke(async () => {
+      const res = await revokeOutstandingForTemplate(templateId)
+      if (res.ok) reloadSubmissions()
+    })
+  }
+
   function openReview(inst: InternalTaskInstance) {
     setActive(inst)
     setSheetOpen(true)
   }
 
-  function refreshReport(m: string) {
+  // Deep link from a flagged-issue notification: /…/submissions?instance=<id>
+  // opens that submission straight away. Read from the URL on mount (client
+  // only) to avoid the useSearchParams Suspense requirement.
+  const deepLinkedRef = useRef(false)
+  useEffect(() => {
+    if (deepLinkedRef.current) return
+    const target = new URLSearchParams(window.location.search).get('instance')
+    if (!target) return
+    deepLinkedRef.current = true
+    const found = instances.find((i) => i.id === target)
+    if (found) {
+      openReview(found)
+      return
+    }
+    // Not in the current list (e.g. filtered out) — fetch it directly.
+    startLoad(async () => {
+      const res = await getAllSubmissions({ status: 'all' })
+      if (res.ok) {
+        const match = (res.instances ?? []).find((i) => i.id === target)
+        if (match) openReview(match)
+      }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function refreshReport(m: string, tid: string = reportTemplateId) {
     setMonth(m)
+    setReportTemplateId(tid)
     setSentMsg(null)
     startReport(async () => {
-      const res = await getMonthlyCompletionReport(m)
+      const res = await getMonthlyCompletionReport(m, tid === ALL ? undefined : tid)
       if (res.ok) setReport(res.report ?? null)
     })
   }
@@ -88,7 +153,10 @@ export function SubmissionsAdmin({ initialInstances, templates, users, initialRe
   function emailReport() {
     setSentMsg(null)
     startSend(async () => {
-      const res = await sendCompletionReport({ month })
+      const res = await sendCompletionReport({
+        month,
+        templateId: reportTemplateId === ALL ? undefined : reportTemplateId,
+      })
       setSentMsg(res.ok ? `Report emailed (${res.sent ?? 0} recipient(s)).` : res.error ?? 'Failed.')
     })
   }
@@ -188,6 +256,43 @@ export function SubmissionsAdmin({ initialInstances, templates, users, initialRe
             </div>
           </div>
 
+          {/* Bulk revoke: only when narrowed to one task/form's outstanding rows. */}
+          {filters.status === 'pending' && filters.templateId && instances.length > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-2.5">
+              <p className="text-sm text-muted-foreground text-pretty">
+                Remove every outstanding assignment for this task/form (e.g. it was sent to the
+                wrong people).
+              </p>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" size="sm" disabled={revoking}>
+                    {revoking ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="size-4" />
+                    )}
+                    Remove all outstanding
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Remove all outstanding assignments?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This removes every outstanding (not yet completed) copy of this task/form
+                      from all users. Completed submissions are not affected.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => revokeAllForTemplate(filters.templateId!)}>
+                      Remove all
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          ) : null}
+
           {loading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="size-4 animate-spin" />
@@ -202,13 +307,15 @@ export function SubmissionsAdmin({ initialInstances, templates, users, initialRe
           ) : (
             <div className="flex flex-col divide-y rounded-lg border">
               {instances.map((inst) => (
-                <button
+                <div
                   key={inst.id}
-                  type="button"
-                  onClick={() => openReview(inst)}
-                  className="flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/50"
+                  className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/50"
                 >
-                  <div className="min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => openReview(inst)}
+                    className="flex min-w-0 flex-1 flex-col text-left"
+                  >
                     <div className="flex items-center gap-2">
                       <p className="truncate text-sm font-medium">
                         {inst.template?.name ?? 'Task'}
@@ -233,9 +340,42 @@ export function SubmissionsAdmin({ initialInstances, templates, users, initialRe
                         : 'Outstanding'}
                       {inst.reference_number ? ` · Ref ${inst.reference_number}` : ''}
                     </p>
+                  </button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {inst.status !== 'completed' ? (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            disabled={revoking}
+                            title="Remove this assignment"
+                          >
+                            <Trash2 className="size-4 text-destructive" />
+                            <span className="sr-only">Remove assignment</span>
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Remove this assignment?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This removes the outstanding &ldquo;{inst.template?.name ?? 'task'}
+                              &rdquo; from {inst.user?.full_name ?? 'this user'}. They will no
+                              longer need to complete it. Completed submissions are not affected.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => revokeOne(inst.id)}>
+                              Remove
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    ) : null}
+                    <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
                   </div>
-                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-                </button>
+                </div>
               ))}
             </div>
           )}
@@ -255,6 +395,25 @@ export function SubmissionsAdmin({ initialInstances, templates, users, initialRe
                 onChange={(e) => refreshReport(e.target.value)}
                 className="w-44"
               />
+            </div>
+            <div>
+              <Label className="text-xs">Type</Label>
+              <Select
+                value={reportTemplateId}
+                onValueChange={(v) => refreshReport(month, v)}
+              >
+                <SelectTrigger className="w-56">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>All tasks &amp; forms</SelectItem>
+                  {templates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <Button
               variant="outline"
@@ -388,6 +547,11 @@ function ReportView({ report }: { report: CompletionReport }) {
                   <p className="text-xs text-muted-foreground">
                     {f.state} · {f.userName}
                   </p>
+                  {f.note ? (
+                    <p className="mt-1 text-xs italic text-muted-foreground text-pretty">
+                      &ldquo;{f.note}&rdquo;
+                    </p>
+                  ) : null}
                 </div>
               </div>
             ))}

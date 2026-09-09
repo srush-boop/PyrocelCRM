@@ -23,6 +23,7 @@ import { computeCompletionReport } from '@/lib/internal-tasks/report-data'
 
 const MY_TASKS_PATH = '/dashboard/my-tasks'
 const SETTINGS_PATH = '/dashboard/settings'
+const SUBMISSIONS_PATH = '/dashboard/internal-tasks/submissions'
 
 async function getAuth() {
   const supabase = await createClient()
@@ -307,6 +308,9 @@ export async function submitInternalTask(input: {
     .from('internal_task_instances')
     .update({
       answers: input.answers,
+      // Bake in the template's questions exactly as they are now, so future
+      // edits to the template never retroactively change this submission.
+      questions_snapshot: template?.questions ?? [],
       reference_number: input.referenceNumber?.trim() || null,
       status: 'completed',
       completed_at: new Date().toISOString(),
@@ -361,6 +365,7 @@ export async function submitInternalTask(input: {
         notifyEmail: template?.notify_on_issue_email ?? null,
         referenceNumber: input.referenceNumber?.trim() || null,
         issues,
+        instanceId: input.instanceId,
       })
     } catch (err) {
       console.log('[v0] internal-task issue alert failed:', (err as Error).message)
@@ -469,6 +474,44 @@ export async function startOnDemandInstance(
   if (error) return { ok: false, error: error.message }
   revalidatePath(MY_TASKS_PATH)
   return { ok: true, instance: data as InternalTaskInstance }
+}
+
+/**
+ * Discards an abandoned draft instance the current user started but never
+ * submitted (e.g. opened "Submit another" or a form, then closed it). Only
+ * removes the caller's own non-completed instances so it can never delete a
+ * real submission. Best-effort cleanup of any attachments uploaded to it.
+ */
+export async function discardInternalTaskInstance(
+  instanceId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await getAuth()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase, userId } = auth
+
+  const { data: instance } = await supabase
+    .from('internal_task_instances')
+    .select('id, user_id, status')
+    .eq('id', instanceId)
+    .single()
+  const inst = instance as { user_id?: string; status?: string } | null
+  // Never delete someone else's row or a completed submission.
+  if (!inst || inst.user_id !== userId || inst.status === 'completed') {
+    return { ok: false, error: 'Nothing to discard.' }
+  }
+
+  // Best-effort: remove any attachments the user uploaded to this draft first.
+  await supabase.from('internal_task_attachments').delete().eq('instance_id', instanceId)
+
+  const { error } = await supabase
+    .from('internal_task_instances')
+    .delete()
+    .eq('id', instanceId)
+    .eq('user_id', userId)
+    .neq('status', 'completed')
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(MY_TASKS_PATH)
+  return { ok: true }
 }
 
 /**
@@ -936,8 +979,10 @@ async function dispatchIssueAlerts(args: {
   notifyEmail: string | null
   referenceNumber: string | null
   issues: InternalTaskAnswer[]
+  instanceId: string
 }): Promise<void> {
-  const { supabase, submitterId, templateName, notifyUserIds, notifyEmail, issues } = args
+  const { supabase, submitterId, templateName, notifyUserIds, notifyEmail, issues, instanceId } =
+    args
 
   // Who completed it (for the alert body).
   const { data: submitter } = await supabase
@@ -969,10 +1014,11 @@ async function dispatchIssueAlerts(args: {
       userIds: notifyUserIds,
       title: `Issue on "${templateName}"`,
       body: `${submitterName} flagged ${summary} completing "${templateName}".`,
-      url: MY_TASKS_PATH,
+      // Deep-link straight to the flagged submission in the manager view.
+      url: `${SUBMISSIONS_PATH}?instance=${instanceId}`,
       category: 'internal_task_issue',
       createdBy: submitterId,
-      data: { template_name: templateName },
+      data: { template_name: templateName, instanceId },
     })
   }
 
@@ -1079,16 +1125,82 @@ export async function getAllSubmissions(filters: SubmissionFilters = {}): Promis
 }
 
 /**
+ * Removes a single outstanding (non-completed) assignment from a user — e.g. a
+ * recurring task/form that was assigned to someone it no longer applies to.
+ * Manager-only; never deletes a completed submission so records stay intact.
+ */
+export async function revokeAssignedInstance(
+  instanceId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireManager()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase } = auth
+
+  const { data: inst } = await supabase
+    .from('internal_task_instances')
+    .select('id, status')
+    .eq('id', instanceId)
+    .single()
+  if (!inst || (inst as { status?: string }).status === 'completed') {
+    return { ok: false, error: 'Only outstanding assignments can be removed.' }
+  }
+
+  await supabase.from('internal_task_attachments').delete().eq('instance_id', instanceId)
+  const { error } = await supabase
+    .from('internal_task_instances')
+    .delete()
+    .eq('id', instanceId)
+    .neq('status', 'completed')
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(SUBMISSIONS_PATH)
+  revalidatePath(MY_TASKS_PATH)
+  return { ok: true }
+}
+
+/**
+ * Bulk-removes every outstanding (non-completed) assignment of one template —
+ * for the "I sent this form to the whole company by mistake" case. Manager-only;
+ * completed submissions are untouched so trends/records are preserved.
+ */
+export async function revokeOutstandingForTemplate(
+  templateId: string,
+): Promise<{ ok: boolean; error?: string; removed?: number }> {
+  const auth = await requireManager()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase } = auth
+
+  const { data: rows } = await supabase
+    .from('internal_task_instances')
+    .select('id')
+    .eq('template_id', templateId)
+    .neq('status', 'completed')
+  const ids = ((rows ?? []) as Array<{ id: string }>).map((r) => r.id)
+  if (ids.length === 0) return { ok: true, removed: 0 }
+
+  await supabase.from('internal_task_attachments').delete().in('instance_id', ids)
+  const { error } = await supabase
+    .from('internal_task_instances')
+    .delete()
+    .in('id', ids)
+    .neq('status', 'completed')
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(SUBMISSIONS_PATH)
+  revalidatePath(MY_TASKS_PATH)
+  return { ok: true, removed: ids.length }
+}
+
+/**
  * Builds the completion report for a given month (YYYY-MM, defaults to the
  * current month). Manager-only. Returns the structured report for on-screen use.
  */
 export async function getMonthlyCompletionReport(
   month?: string,
+  templateId?: string,
 ): Promise<{ ok: boolean; error?: string; report?: CompletionReport }> {
   const auth = await requireManager()
   if ('error' in auth) return { ok: false, error: auth.error }
   const monthStart = monthStartFrom(month)
-  const report = await computeCompletionReport(auth.supabase, monthStart)
+  const report = await computeCompletionReport(auth.supabase, monthStart, templateId)
   return { ok: true, report }
 }
 
@@ -1099,13 +1211,14 @@ export async function getMonthlyCompletionReport(
 export async function sendCompletionReport(input: {
   month?: string
   recipientIds?: string[]
+  templateId?: string
 }): Promise<{ ok: boolean; error?: string; sent?: number }> {
   const auth = await requireManager()
   if ('error' in auth) return { ok: false, error: auth.error }
   const { supabase, userId } = auth
 
   const monthStart = monthStartFrom(input.month)
-  const report = await computeCompletionReport(supabase, monthStart)
+  const report = await computeCompletionReport(supabase, monthStart, input.templateId)
   const html = renderCompletionReportHtml(report)
 
   const recipientIds =

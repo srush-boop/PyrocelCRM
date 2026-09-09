@@ -15,6 +15,8 @@ import {
 export async function computeCompletionReport(
   client: SupabaseClient,
   monthStart: Date,
+  // Optional: restrict the report to a single recurring task/form template.
+  templateId?: string,
 ): Promise<CompletionReport> {
   const y = monthStart.getUTCFullYear()
   const m = monthStart.getUTCMonth()
@@ -35,7 +37,9 @@ export async function computeCompletionReport(
       .neq('role', 'client'),
   ])
 
-  const tpls = (templates ?? []) as InternalTaskTemplate[]
+  const tpls = ((templates ?? []) as InternalTaskTemplate[]).filter(
+    (t) => !templateId || t.id === templateId,
+  )
   const cands = (candidates ?? []) as Array<
     Pick<Profile, 'id' | 'full_name' | 'role' | 'department_id' | 'status'>
   >
@@ -73,6 +77,7 @@ export async function computeCompletionReport(
           label: a.label,
           state: a.passed === false ? 'Fail' : 'Advisory',
           answer,
+          note: (a.notes ?? '').trim() || undefined,
         })
       }
     }

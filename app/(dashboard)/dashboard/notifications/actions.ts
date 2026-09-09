@@ -75,6 +75,50 @@ export async function markNotificationsRead(
 }
 
 /**
+ * Removes a single notification for the current user (dismiss from the list).
+ */
+export async function dismissNotification(
+  notificationId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: 'Not authenticated.' }
+
+  const { error } = await supabase
+    .from('notifications')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('id', notificationId)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/dashboard')
+  return { ok: true }
+}
+
+/**
+ * Clears the current user's notifications. Unread emergency-call notifications
+ * are kept so a live callout can't be wiped by accident.
+ */
+export async function clearAllNotifications(): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: 'Not authenticated.' }
+
+  // Delete everything except still-unread emergency calls.
+  const { error } = await supabase
+    .from('notifications')
+    .delete()
+    .eq('user_id', user.id)
+    .or('category.neq.emergency_call,read_at.not.is.null')
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/dashboard')
+  return { ok: true }
+}
+
+/**
  * Admin/office composer: push a notification to selected users and/or roles.
  */
 export async function sendAdminNotification(input: {

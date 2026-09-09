@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import useSWR from 'swr'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Bell, BellRing, Check, Siren, X, Trash2 } from 'lucide-react'
@@ -248,16 +249,10 @@ export function NotificationBell() {
         </ScrollArea>
 
         <div className="shrink-0 border-t px-4 py-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-center text-xs"
-            onClick={() => {
-              setOpen(false)
-              router.push('/dashboard/notifications')
-            }}
-          >
-            View all notifications
+          <Button asChild variant="ghost" size="sm" className="w-full justify-center text-xs">
+            <Link href="/dashboard/notifications" onClick={() => setOpen(false)}>
+              View all notifications
+            </Link>
           </Button>
         </div>
       </PopoverContent>

@@ -1276,6 +1276,59 @@ export type InternalTaskTemplateInput = Partial<
   Omit<InternalTaskTemplate, 'id' | 'created_at' | 'updated_at' | 'created_by'>
 > & { name: string }
 
+/**
+ * After a template's audience is edited, removes every still-outstanding
+ * (non-completed) instance belonging to a user who no longer matches the
+ * template's "Applies to" rules, so it drops off their due list. Completed
+ * submissions are never touched. Best-effort attachment cleanup.
+ */
+async function pruneUnassignedInstances(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  templateId: string,
+  audience: Pick<
+    InternalTaskTemplate,
+    'applies_to_all' | 'role_names' | 'department_ids' | 'user_ids'
+  >,
+): Promise<void> {
+  // If it applies to everyone, nobody can become ineligible — nothing to prune.
+  if (audience.applies_to_all) return
+
+  // Who is still eligible under the new rules.
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, role, department_id, status')
+  const eligible = new Set(
+    resolveAssigneeIds(
+      audience,
+      ((profiles ?? []) as Array<{
+        id: string
+        role: string | null
+        department_id: string | null
+        status: string | null
+      }>).map((p) => ({
+        id: p.id,
+        role: p.role,
+        department_id: p.department_id,
+        status: p.status,
+      })),
+    ),
+  )
+
+  // Outstanding instances whose owner is no longer eligible.
+  const { data: outstanding } = await supabase
+    .from('internal_task_instances')
+    .select('id, user_id')
+    .eq('template_id', templateId)
+    .neq('status', 'completed')
+  const staleIds = ((outstanding ?? []) as Array<{ id: string; user_id: string }>)
+    .filter((row) => !eligible.has(row.user_id))
+    .map((row) => row.id)
+  if (staleIds.length === 0) return
+
+  await supabase.from('internal_task_attachments').delete().in('instance_id', staleIds)
+  await supabase.from('internal_task_instances').delete().in('id', staleIds).neq('status', 'completed')
+}
+
 export async function saveInternalTaskTemplate(
   input: InternalTaskTemplateInput & { id?: string },
 ): Promise<{ ok: boolean; error?: string; id?: string }> {
@@ -1338,7 +1391,15 @@ export async function saveInternalTaskTemplate(
       .update({ ...payload, updated_at: new Date().toISOString() })
       .eq('id', input.id)
     if (error) return { ok: false, error: error.message }
+
+    // Editing the audience ("Applies to") must retract the task/form from anyone
+    // it no longer applies to. Delete their still-outstanding instances so it
+    // drops off their due lists; completed submissions are always preserved.
+    await pruneUnassignedInstances(supabase, input.id, payload)
+
     revalidatePath(SETTINGS_PATH)
+    revalidatePath(MY_TASKS_PATH)
+    revalidatePath(SUBMISSIONS_PATH)
     return { ok: true, id: input.id }
   }
 

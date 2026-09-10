@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import useSWR from 'swr'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { toast } from 'sonner'
 import { Bell, BellRing, Check, Siren, X, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -48,6 +48,16 @@ function timeAgo(iso: string): string {
 export function NotificationBell() {
   const [open, setOpen] = useState(false)
   const router = useRouter()
+  const pathname = usePathname()
+
+  // Close the popover once navigation actually lands. The header (and this
+  // popover) persists across dashboard routes, so closing must be driven by the
+  // route change rather than by the click handler — closing inside the click
+  // unmounts the <Link> from its portal before the browser navigates, which
+  // cancels the navigation (the "View all" button appeared to do nothing).
+  useEffect(() => {
+    setOpen(false)
+  }, [pathname])
   const { data, mutate } = useSWR<{ notifications: NotificationRow[]; unread: number }>(
     '/api/notifications',
     fetcher,
@@ -250,9 +260,7 @@ export function NotificationBell() {
 
         <div className="shrink-0 border-t px-4 py-2">
           <Button asChild variant="ghost" size="sm" className="w-full justify-center text-xs">
-            <Link href="/dashboard/notifications" onClick={() => setOpen(false)}>
-              View all notifications
-            </Link>
+            <Link href="/dashboard/notifications">View all notifications</Link>
           </Button>
         </div>
       </PopoverContent>

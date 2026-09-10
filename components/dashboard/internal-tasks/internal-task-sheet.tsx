@@ -1378,7 +1378,9 @@ function ApprovalStatusBadge({ status }: { status: 'pending' | 'approved' | 'rej
   )
 }
 
-// Optional note field, always available on top-level rows.
+// Note field, always available on top-level rows. When an active condition on
+// the row requires a note, the field is flagged as required rather than
+// optional so the placeholder matches the actual submit requirement.
 function RowExtras({
   row,
   update,
@@ -1386,14 +1388,24 @@ function RowExtras({
   row: Row
   update: (itemId: string, patch: Partial<Row>) => void
 }) {
+  const noteRequired = (row.conditions ?? []).some(
+    (cond) => cond.requireNote && isConditionActive(row, cond),
+  )
+  const hasNote = !!(row.notes && row.notes.trim())
   return (
-    <Textarea
-      value={row.notes ?? ''}
-      onChange={(e) => update(row.item_id, { notes: e.target.value })}
-      placeholder="Notes (optional)"
-      rows={2}
-      className="text-sm"
-    />
+    <div className="space-y-1">
+      <Textarea
+        value={row.notes ?? ''}
+        onChange={(e) => update(row.item_id, { notes: e.target.value })}
+        placeholder={noteRequired ? 'Notes (required)' : 'Notes (optional)'}
+        rows={2}
+        aria-required={noteRequired}
+        className="text-sm"
+      />
+      {noteRequired && !hasNote && (
+        <p className="text-xs text-destructive">A note is required for your answer.</p>
+      )}
+    </div>
   )
 }
 

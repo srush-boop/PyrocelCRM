@@ -24,6 +24,7 @@ import {
   AlertCircle,
   Check,
   Trash2,
+  CalendarClock,
 } from 'lucide-react'
 import {
   AlertDialog,
@@ -36,7 +37,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import type { InternalTaskInstance } from '@/lib/types/database'
+import type {
+  InternalTaskInstance,
+  InternalTaskReportSchedule,
+} from '@/lib/types/database'
 import type { CompletionReport } from '@/lib/internal-tasks/completion-report'
 import {
   getAllSubmissions,
@@ -47,12 +51,15 @@ import {
   type SubmissionFilters,
 } from '@/lib/actions/internal-tasks'
 import { InternalTaskSheet } from './internal-task-sheet'
+import { ReportSchedulesManager } from './report-schedules-manager'
 
 interface Props {
   initialInstances: InternalTaskInstance[]
   templates: { id: string; name: string }[]
   users: { id: string; name: string }[]
   initialReport: CompletionReport | null
+  roles: { name: string }[]
+  initialSchedules: InternalTaskReportSchedule[]
 }
 
 const ALL = '__all__'
@@ -62,7 +69,14 @@ function currentMonth(): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
-export function SubmissionsAdmin({ initialInstances, templates, users, initialReport }: Props) {
+export function SubmissionsAdmin({
+  initialInstances,
+  templates,
+  users,
+  initialReport,
+  roles,
+  initialSchedules,
+}: Props) {
   const [instances, setInstances] = useState(initialInstances)
   const [filters, setFilters] = useState<SubmissionFilters>({ status: 'all' })
   const [loading, startLoad] = useTransition()
@@ -172,6 +186,10 @@ export function SubmissionsAdmin({ initialInstances, templates, users, initialRe
           <TabsTrigger value="report" className="gap-1.5">
             <Mail className="size-4" />
             Completion report
+          </TabsTrigger>
+          <TabsTrigger value="schedules" className="gap-1.5">
+            <CalendarClock className="size-4" />
+            Scheduled reports
           </TabsTrigger>
         </TabsList>
 
@@ -446,6 +464,16 @@ export function SubmissionsAdmin({ initialInstances, templates, users, initialRe
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        {/* Scheduled reports ----------------------------------------------- */}
+        <TabsContent value="schedules" className="mt-4">
+          <ReportSchedulesManager
+            initialSchedules={initialSchedules}
+            templates={templates}
+            users={users}
+            roles={roles}
+          />
         </TabsContent>
       </Tabs>
 

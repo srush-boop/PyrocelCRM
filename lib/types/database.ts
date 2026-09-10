@@ -1174,6 +1174,33 @@ export interface InternalTaskAttachment {
   created_at: string
 }
 
+export type ReportScheduleFrequency = 'daily' | 'weekly' | 'monthly'
+
+// A saved rule that automatically emails a task/form completion report to
+// nominated recipients (specific users, whole roles and/or raw email
+// addresses) at a fixed cadence. Processed by the daily internal-tasks cron.
+export interface InternalTaskReportSchedule {
+  id: string
+  // null = report across all recurring tasks/forms combined.
+  template_id: string | null
+  frequency: ReportScheduleFrequency
+  // weekly: 0=Sun..6=Sat (default Mon). monthly: 1..28 day of month (default 1).
+  day_of_week: number | null
+  day_of_month: number | null
+  recipient_user_ids: string[]
+  recipient_role_names: string[]
+  recipient_emails: string[]
+  active: boolean
+  // Idempotency marker of the last window already sent (e.g. 'm:2026-08').
+  last_period_key: string | null
+  last_sent_at: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  // Optional embedded template name for list display.
+  template?: { name: string } | null
+}
+
 // ============================================================================
 // Timesheets module
 // ============================================================================

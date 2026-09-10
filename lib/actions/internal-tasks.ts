@@ -9,6 +9,8 @@ import type {
   InternalTaskItem,
   InternalTaskAnswer,
   ChecklistCondition,
+  InternalTaskReportSchedule,
+  ReportScheduleFrequency,
 } from '@/lib/types/database'
 import { computePeriod, resolveAssigneeIds } from '@/lib/internal-tasks/schedule'
 import {
@@ -16,6 +18,8 @@ import {
   type CompletionReport,
 } from '@/lib/internal-tasks/completion-report'
 import { computeCompletionReport } from '@/lib/internal-tasks/report-data'
+import { latestReportWindow } from '@/lib/internal-tasks/report-schedule'
+import { deliverScheduledReport } from '@/lib/internal-tasks/deliver-report'
 
 // Server actions for the Internal Tasks / Quality module. Users generate + view
 // + complete their own recurring task instances; quality managers (admin/office)
@@ -1270,11 +1274,196 @@ function monthStartFrom(month?: string): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
 }
 
+// --- Scheduled report emails (quality managers) -----------------------------
+
+export interface ReportScheduleInput {
+  id?: string
+  templateId?: string | null
+  frequency: ReportScheduleFrequency
+  dayOfWeek?: number | null
+  dayOfMonth?: number | null
+  recipientUserIds?: string[]
+  recipientRoleNames?: string[]
+  recipientEmails?: string[]
+  active?: boolean
+}
+
+/** Lists every saved report schedule (with its scope template name). */
+export async function listReportSchedules(): Promise<{
+  ok: boolean
+  error?: string
+  schedules?: InternalTaskReportSchedule[]
+}> {
+  const auth = await requireManager()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { data, error } = await auth.supabase
+    .from('internal_task_report_schedules')
+    .select('*, template:internal_task_templates(name)')
+    .order('created_at', { ascending: false })
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, schedules: (data ?? []) as InternalTaskReportSchedule[] }
+}
+
+/** Creates or updates a report schedule. Requires at least one recipient. */
+export async function upsertReportSchedule(
+  input: ReportScheduleInput,
+): Promise<{ ok: boolean; error?: string; id?: string }> {
+  const auth = await requireManager()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase, userId } = auth
+
+  const emails = (input.recipientEmails ?? [])
+    .map((e) => e.trim())
+    .filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e))
+  const userIds = input.recipientUserIds ?? []
+  const roleNames = input.recipientRoleNames ?? []
+  if (userIds.length === 0 && roleNames.length === 0 && emails.length === 0) {
+    return { ok: false, error: 'Add at least one recipient (a person, a group or an email).' }
+  }
+
+  const payload = {
+    template_id: input.templateId ?? null,
+    frequency: input.frequency,
+    day_of_week: input.frequency === 'weekly' ? (input.dayOfWeek ?? 1) : null,
+    day_of_month: input.frequency === 'monthly' ? (input.dayOfMonth ?? 1) : null,
+    recipient_user_ids: userIds,
+    recipient_role_names: roleNames,
+    recipient_emails: emails,
+    active: input.active ?? true,
+    updated_at: new Date().toISOString(),
+  }
+
+  if (input.id) {
+    const { error } = await supabase
+      .from('internal_task_report_schedules')
+      .update(payload)
+      .eq('id', input.id)
+    if (error) return { ok: false, error: error.message }
+    revalidatePath(SUBMISSIONS_PATH)
+    return { ok: true, id: input.id }
+  }
+
+  const { data, error } = await supabase
+    .from('internal_task_report_schedules')
+    .insert({ ...payload, created_by: userId })
+    .select('id')
+    .single()
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(SUBMISSIONS_PATH)
+  return { ok: true, id: (data as { id: string }).id }
+}
+
+/** Enables/disables a schedule without deleting it. */
+export async function setReportScheduleActive(
+  id: string,
+  active: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireManager()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { error } = await auth.supabase
+    .from('internal_task_report_schedules')
+    .update({ active, updated_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(SUBMISSIONS_PATH)
+  return { ok: true }
+}
+
+/** Permanently deletes a schedule. */
+export async function deleteReportSchedule(
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireManager()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { error } = await auth.supabase
+    .from('internal_task_report_schedules')
+    .delete()
+    .eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(SUBMISSIONS_PATH)
+  return { ok: true }
+}
+
+/**
+ * Sends a schedule's report immediately for its most recently completed window,
+ * regardless of the day gate. Does not touch the idempotency marker so the
+ * automatic send still fires on its next scheduled day.
+ */
+export async function sendReportScheduleNow(
+  id: string,
+): Promise<{ ok: boolean; error?: string; sent?: number }> {
+  const auth = await requireManager()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { data, error } = await auth.supabase
+    .from('internal_task_report_schedules')
+    .select('*, template:internal_task_templates(name)')
+    .eq('id', id)
+    .single()
+  if (error || !data) return { ok: false, error: error?.message ?? 'Schedule not found.' }
+  const schedule = data as InternalTaskReportSchedule
+  const window = latestReportWindow(new Date(), schedule.frequency)
+  const res = await deliverScheduledReport(auth.supabase, schedule, window)
+  return { ok: res.ok, error: res.error, sent: res.sent }
+}
+
 // --- Template management (quality managers) ---------------------------------
 
 export type InternalTaskTemplateInput = Partial<
   Omit<InternalTaskTemplate, 'id' | 'created_at' | 'updated_at' | 'created_by'>
 > & { name: string }
+
+/**
+ * After a template's audience is edited, removes every still-outstanding
+ * (non-completed) instance belonging to a user who no longer matches the
+ * template's "Applies to" rules, so it drops off their due list. Completed
+ * submissions are never touched. Best-effort attachment cleanup.
+ */
+async function pruneUnassignedInstances(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  templateId: string,
+  audience: Pick<
+    InternalTaskTemplate,
+    'applies_to_all' | 'role_names' | 'department_ids' | 'user_ids'
+  >,
+): Promise<void> {
+  // If it applies to everyone, nobody can become ineligible — nothing to prune.
+  if (audience.applies_to_all) return
+
+  // Who is still eligible under the new rules.
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, role, department_id, status')
+  const eligible = new Set(
+    resolveAssigneeIds(
+      audience,
+      ((profiles ?? []) as Array<{
+        id: string
+        role: string | null
+        department_id: string | null
+        status: string | null
+      }>).map((p) => ({
+        id: p.id,
+        role: p.role,
+        department_id: p.department_id,
+        status: p.status,
+      })),
+    ),
+  )
+
+  // Outstanding instances whose owner is no longer eligible.
+  const { data: outstanding } = await supabase
+    .from('internal_task_instances')
+    .select('id, user_id')
+    .eq('template_id', templateId)
+    .neq('status', 'completed')
+  const staleIds = ((outstanding ?? []) as Array<{ id: string; user_id: string }>)
+    .filter((row) => !eligible.has(row.user_id))
+    .map((row) => row.id)
+  if (staleIds.length === 0) return
+
+  await supabase.from('internal_task_attachments').delete().in('instance_id', staleIds)
+  await supabase.from('internal_task_instances').delete().in('id', staleIds).neq('status', 'completed')
+}
 
 export async function saveInternalTaskTemplate(
   input: InternalTaskTemplateInput & { id?: string },
@@ -1338,7 +1527,15 @@ export async function saveInternalTaskTemplate(
       .update({ ...payload, updated_at: new Date().toISOString() })
       .eq('id', input.id)
     if (error) return { ok: false, error: error.message }
+
+    // Editing the audience ("Applies to") must retract the task/form from anyone
+    // it no longer applies to. Delete their still-outstanding instances so it
+    // drops off their due lists; completed submissions are always preserved.
+    await pruneUnassignedInstances(supabase, input.id, payload)
+
     revalidatePath(SETTINGS_PATH)
+    revalidatePath(MY_TASKS_PATH)
+    revalidatePath(SUBMISSIONS_PATH)
     return { ok: true, id: input.id }
   }
 

@@ -1,6 +1,10 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { getAllSubmissions, getMonthlyCompletionReport } from '@/lib/actions/internal-tasks'
+import {
+  getAllSubmissions,
+  getMonthlyCompletionReport,
+  listReportSchedules,
+} from '@/lib/actions/internal-tasks'
 import { SubmissionsAdmin } from '@/components/dashboard/internal-tasks/submissions-admin'
 
 export const metadata = {
@@ -24,10 +28,13 @@ export default async function SubmissionsPage() {
   const role = (profile as { role?: string } | null)?.role
   if (role !== 'admin' && role !== 'office') redirect('/dashboard/my-tasks')
 
-  const [subs, report] = await Promise.all([
+  const [subs, report, schedules, rolesRes] = await Promise.all([
     getAllSubmissions({}),
     getMonthlyCompletionReport(),
+    listReportSchedules(),
+    supabase.from('roles').select('name').order('name'),
   ])
+  const roles = ((rolesRes.data ?? []) as Array<{ name: string }>).filter((r) => !!r.name)
 
   return (
     <div className="space-y-6">
@@ -44,6 +51,8 @@ export default async function SubmissionsPage() {
         templates={subs.templates ?? []}
         users={subs.users ?? []}
         initialReport={report.report ?? null}
+        roles={roles}
+        initialSchedules={schedules.schedules ?? []}
       />
     </div>
   )

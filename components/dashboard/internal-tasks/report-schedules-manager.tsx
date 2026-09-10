@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Select,
   SelectContent,
@@ -25,7 +24,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -416,14 +414,14 @@ export function ReportSchedulesManager({ initialSchedules, templates, users, rol
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <MultiSelectPopover
+              <MultiSelectField
                 label="People"
                 placeholder="Choose people"
                 options={users.map((u) => ({ value: u.id, label: u.name }))}
                 selected={editor.userIds}
                 onChange={(userIds) => setEditor((e) => ({ ...e, userIds }))}
               />
-              <MultiSelectPopover
+              <MultiSelectField
                 label="Groups (roles)"
                 placeholder="Choose teams"
                 options={roles.map((r) => ({ value: r.name, label: `${r.name} team` }))}
@@ -477,7 +475,11 @@ export function ReportSchedulesManager({ initialSchedules, templates, users, rol
   )
 }
 
-function MultiSelectPopover({
+// Inline multi-select rendered directly in the dialog's DOM (no nested portal).
+// A portaled Popover inside a modal Dialog is made inert/mispositioned by the
+// Dialog, so the recipient dropdown did not render correctly — this expands a
+// native scroll list in-flow instead, which the dialog's own overflow scrolls.
+function MultiSelectField({
   label,
   placeholder,
   options,
@@ -508,36 +510,38 @@ function MultiSelectPopover({
   return (
     <div>
       <Label className="text-xs">{label}</Label>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button variant="outline" className="w-full justify-between font-normal">
-            <span className="truncate text-left">{summary}</span>
-            <ChevronDown className="size-4 shrink-0 opacity-60" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-64 p-0" align="start">
-          <ScrollArea className="max-h-64">
-            <div className="p-1">
-              {options.length === 0 ? (
-                <p className="px-2 py-3 text-sm text-muted-foreground">None available.</p>
-              ) : (
-                options.map((o) => (
-                  <label
-                    key={o.value}
-                    className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
-                  >
-                    <Checkbox
-                      checked={selectedSet.has(o.value)}
-                      onCheckedChange={() => toggle(o.value)}
-                    />
-                    <span className="truncate">{o.label}</span>
-                  </label>
-                ))
-              )}
-            </div>
-          </ScrollArea>
-        </PopoverContent>
-      </Popover>
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full justify-between font-normal"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <span className="truncate text-left">{summary}</span>
+        <ChevronDown
+          className={`size-4 shrink-0 opacity-60 transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      </Button>
+      {open ? (
+        <div className="mt-1 max-h-48 overflow-y-auto rounded-md border p-1">
+          {options.length === 0 ? (
+            <p className="px-2 py-3 text-sm text-muted-foreground">None available.</p>
+          ) : (
+            options.map((o) => (
+              <label
+                key={o.value}
+                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+              >
+                <Checkbox
+                  checked={selectedSet.has(o.value)}
+                  onCheckedChange={() => toggle(o.value)}
+                />
+                <span className="truncate">{o.label}</span>
+              </label>
+            ))
+          )}
+        </div>
+      ) : null}
     </div>
   )
 }

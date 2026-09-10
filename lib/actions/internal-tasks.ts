@@ -9,6 +9,8 @@ import type {
   InternalTaskItem,
   InternalTaskAnswer,
   ChecklistCondition,
+  InternalTaskReportSchedule,
+  ReportScheduleFrequency,
 } from '@/lib/types/database'
 import { computePeriod, resolveAssigneeIds } from '@/lib/internal-tasks/schedule'
 import {
@@ -16,6 +18,8 @@ import {
   type CompletionReport,
 } from '@/lib/internal-tasks/completion-report'
 import { computeCompletionReport } from '@/lib/internal-tasks/report-data'
+import { latestReportWindow } from '@/lib/internal-tasks/report-schedule'
+import { deliverScheduledReport } from '@/lib/internal-tasks/deliver-report'
 
 // Server actions for the Internal Tasks / Quality module. Users generate + view
 // + complete their own recurring task instances; quality managers (admin/office)
@@ -1268,6 +1272,138 @@ function monthStartFrom(month?: string): Date {
   }
   const now = new Date()
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+}
+
+// --- Scheduled report emails (quality managers) -----------------------------
+
+export interface ReportScheduleInput {
+  id?: string
+  templateId?: string | null
+  frequency: ReportScheduleFrequency
+  dayOfWeek?: number | null
+  dayOfMonth?: number | null
+  recipientUserIds?: string[]
+  recipientRoleNames?: string[]
+  recipientEmails?: string[]
+  active?: boolean
+}
+
+/** Lists every saved report schedule (with its scope template name). */
+export async function listReportSchedules(): Promise<{
+  ok: boolean
+  error?: string
+  schedules?: InternalTaskReportSchedule[]
+}> {
+  const auth = await requireManager()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { data, error } = await auth.supabase
+    .from('internal_task_report_schedules')
+    .select('*, template:internal_task_templates(name)')
+    .order('created_at', { ascending: false })
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, schedules: (data ?? []) as InternalTaskReportSchedule[] }
+}
+
+/** Creates or updates a report schedule. Requires at least one recipient. */
+export async function upsertReportSchedule(
+  input: ReportScheduleInput,
+): Promise<{ ok: boolean; error?: string; id?: string }> {
+  const auth = await requireManager()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase, userId } = auth
+
+  const emails = (input.recipientEmails ?? [])
+    .map((e) => e.trim())
+    .filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e))
+  const userIds = input.recipientUserIds ?? []
+  const roleNames = input.recipientRoleNames ?? []
+  if (userIds.length === 0 && roleNames.length === 0 && emails.length === 0) {
+    return { ok: false, error: 'Add at least one recipient (a person, a group or an email).' }
+  }
+
+  const payload = {
+    template_id: input.templateId ?? null,
+    frequency: input.frequency,
+    day_of_week: input.frequency === 'weekly' ? (input.dayOfWeek ?? 1) : null,
+    day_of_month: input.frequency === 'monthly' ? (input.dayOfMonth ?? 1) : null,
+    recipient_user_ids: userIds,
+    recipient_role_names: roleNames,
+    recipient_emails: emails,
+    active: input.active ?? true,
+    updated_at: new Date().toISOString(),
+  }
+
+  if (input.id) {
+    const { error } = await supabase
+      .from('internal_task_report_schedules')
+      .update(payload)
+      .eq('id', input.id)
+    if (error) return { ok: false, error: error.message }
+    revalidatePath(SUBMISSIONS_PATH)
+    return { ok: true, id: input.id }
+  }
+
+  const { data, error } = await supabase
+    .from('internal_task_report_schedules')
+    .insert({ ...payload, created_by: userId })
+    .select('id')
+    .single()
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(SUBMISSIONS_PATH)
+  return { ok: true, id: (data as { id: string }).id }
+}
+
+/** Enables/disables a schedule without deleting it. */
+export async function setReportScheduleActive(
+  id: string,
+  active: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireManager()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { error } = await auth.supabase
+    .from('internal_task_report_schedules')
+    .update({ active, updated_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(SUBMISSIONS_PATH)
+  return { ok: true }
+}
+
+/** Permanently deletes a schedule. */
+export async function deleteReportSchedule(
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireManager()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { error } = await auth.supabase
+    .from('internal_task_report_schedules')
+    .delete()
+    .eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath(SUBMISSIONS_PATH)
+  return { ok: true }
+}
+
+/**
+ * Sends a schedule's report immediately for its most recently completed window,
+ * regardless of the day gate. Does not touch the idempotency marker so the
+ * automatic send still fires on its next scheduled day.
+ */
+export async function sendReportScheduleNow(
+  id: string,
+): Promise<{ ok: boolean; error?: string; sent?: number }> {
+  const auth = await requireManager()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { data, error } = await auth.supabase
+    .from('internal_task_report_schedules')
+    .select('*, template:internal_task_templates(name)')
+    .eq('id', id)
+    .single()
+  if (error || !data) return { ok: false, error: error?.message ?? 'Schedule not found.' }
+  const schedule = data as InternalTaskReportSchedule
+  const window = latestReportWindow(new Date(), schedule.frequency)
+  const res = await deliverScheduledReport(auth.supabase, schedule, window)
+  return { ok: res.ok, error: res.error, sent: res.sent }
 }
 
 // --- Template management (quality managers) ---------------------------------

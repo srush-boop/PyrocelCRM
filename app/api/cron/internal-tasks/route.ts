@@ -5,8 +5,10 @@ import { computePeriod, resolveAssigneeIds, type AssigneeCandidate } from '@/lib
 import { deliverSurveySummary } from '@/lib/surveys/deliver'
 import { computeCompletionReport } from '@/lib/internal-tasks/report-data'
 import { renderCompletionReportHtml } from '@/lib/internal-tasks/completion-report'
+import { dueReportWindow } from '@/lib/internal-tasks/report-schedule'
+import { deliverScheduledReport } from '@/lib/internal-tasks/deliver-report'
 import { sendEmail } from '@/lib/email/send-email'
-import type { InternalTaskTemplate } from '@/lib/types/database'
+import type { InternalTaskTemplate, InternalTaskReportSchedule } from '@/lib/types/database'
 
 // Runs daily (see vercel.json). For every active internal-task template:
 //  1) ensures the current-period instance exists for each assignee,
@@ -244,6 +246,35 @@ export async function GET(req: Request) {
     console.log('[v0] monthly report sweep failed:', (err as Error).message)
   }
 
+  // 6) Configurable scheduled reports: for each active schedule whose cadence
+  //    lands today, email its windowed report to the nominated recipients.
+  //    Idempotent via last_period_key so a repeated daily run never double-sends.
+  let schedulesSent = 0
+  try {
+    const { data: schedules } = await admin
+      .from('internal_task_report_schedules')
+      .select('*, template:internal_task_templates(name)')
+      .eq('active', true)
+
+    for (const s of (schedules ?? []) as InternalTaskReportSchedule[]) {
+      const window = dueReportWindow(now, s.frequency, s.day_of_week, s.day_of_month)
+      if (!window) continue
+      if (s.last_period_key === window.periodKey) continue
+      try {
+        await deliverScheduledReport(admin, s, window)
+        await admin
+          .from('internal_task_report_schedules')
+          .update({ last_period_key: window.periodKey, last_sent_at: now.toISOString() })
+          .eq('id', s.id)
+        schedulesSent += 1
+      } catch (err) {
+        console.log('[v0] scheduled report send failed:', (err as Error).message)
+      }
+    }
+  } catch (err) {
+    console.log('[v0] scheduled report sweep failed:', (err as Error).message)
+  }
+
   return NextResponse.json({
     ok: true,
     generated,
@@ -252,6 +283,7 @@ export async function GET(req: Request) {
     surveysClosed,
     surveysSummarised,
     reportSent,
+    schedulesSent,
   })
 }
 

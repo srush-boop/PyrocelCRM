@@ -10,6 +10,7 @@ import {
   confirmSafe,
   evaluateMySession,
   pushLocation,
+  heartbeat,
 } from '@/app/(dashboard)/dashboard/lone-worker/actions'
 import type { LoneWorkerPromptState, MyLoneWorkerState } from '@/lib/lone-worker/types'
 import {
@@ -83,6 +84,59 @@ export function LoneWorkerPrompt() {
     }
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [data?.session])
+
+  // Continuous GPS while on shift. We stream real device position (throttled to
+  // ~every 90s or on meaningful movement) so the monitor always shows where the
+  // worker actually is — never an inferred/assigned site, which can be stale.
+  const lastGpsPushRef = useRef(0)
+  const lastGpsCoordsRef = useRef<{ lat: number; lng: number } | null>(null)
+  useEffect(() => {
+    if (!data?.session || data.session.status !== 'active') return
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return
+
+    const MIN_INTERVAL_MS = 90_000
+    const MIN_MOVE_METRES = 40
+
+    const metresBetween = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+      const R = 6371000
+      const dLat = ((b.lat - a.lat) * Math.PI) / 180
+      const dLng = ((b.lng - a.lng) * Math.PI) / 180
+      const lat1 = (a.lat * Math.PI) / 180
+      const lat2 = (b.lat * Math.PI) / 180
+      const h =
+        Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2
+      return 2 * R * Math.asin(Math.sqrt(h))
+    }
+
+    const onFix = (pos: GeolocationPosition) => {
+      const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+      const since = Date.now() - lastGpsPushRef.current
+      const moved = lastGpsCoordsRef.current
+        ? metresBetween(lastGpsCoordsRef.current, coords)
+        : Infinity
+      if (since < MIN_INTERVAL_MS && moved < MIN_MOVE_METRES) return
+      lastGpsPushRef.current = Date.now()
+      lastGpsCoordsRef.current = coords
+      void pushLocation(coords.lat, coords.lng, pos.coords.accuracy)
+    }
+
+    const watchId = navigator.geolocation.watchPosition(onFix, () => {}, {
+      enableHighAccuracy: true,
+      maximumAge: 30_000,
+      timeout: 27_000,
+    })
+    return () => navigator.geolocation.clearWatch(watchId)
+  }, [data?.session])
+
+  // Device heartbeat while the app is open. If these stop during an active shift,
+  // the monitor shows "device offline — last seen X ago" so the office can act on
+  // lost contact with context, rather than only learning about it at a red alert.
+  useEffect(() => {
+    if (!data?.session || data.session.status !== 'active') return
+    void heartbeat()
+    const id = setInterval(() => void heartbeat(), 60_000)
+    return () => clearInterval(id)
   }, [data?.session])
 
   const effectiveNow = now + offset

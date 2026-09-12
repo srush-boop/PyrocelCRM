@@ -1,6 +1,7 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { notifyUsers } from '@/lib/notifications'
+import { sendEscalationAlerts } from './escalation-alerts'
 import type { LoneWorkerPromptState, LoneWorkerSession } from './types'
 
 /** Raw DB row shape for a session (snake_case). */
@@ -20,7 +21,9 @@ export interface SessionRow {
   red_at: string
   last_lat: number | null
   last_lng: number | null
+  last_accuracy: number | null
   location_updated_at: string | null
+  last_heartbeat_at: string | null
   created_at: string
   finished_at: string | null
 }
@@ -42,7 +45,9 @@ export function mapSession(r: SessionRow): LoneWorkerSession {
     redAt: r.red_at,
     lastLat: r.last_lat,
     lastLng: r.last_lng,
+    lastAccuracy: r.last_accuracy,
     locationUpdatedAt: r.location_updated_at,
+    lastHeartbeatAt: r.last_heartbeat_at,
     createdAt: r.created_at,
     finishedAt: r.finished_at,
   }
@@ -63,13 +68,27 @@ export function computeDeadlines(
   return { nextPromptAt: next.toISOString(), amberAt: amber.toISOString(), redAt: red.toISOString() }
 }
 
-/** Best-available location for a user: pushed session loc → live share → home. */
+interface ResolvedLocation {
+  lat: number | null
+  lng: number | null
+  accuracy: number | null
+  /** Where the fix came from, for the monitor to show trust/freshness. */
+  source: 'gps' | 'live-share' | 'home' | 'none'
+}
+
+/**
+ * Best-available location for a user, always favouring real device GPS over any
+ * inferred/assigned site. Order: continuously-pushed session GPS → live-share
+ * location → home postcode. We never guess the location from the call the system
+ * thinks they're on, because that record may be out of date — a safety feature
+ * must report where the device actually is.
+ */
 async function resolveLocation(
   admin: SupabaseClient,
   session: SessionRow,
-): Promise<{ lat: number | null; lng: number | null }> {
+): Promise<ResolvedLocation> {
   if (session.last_lat != null && session.last_lng != null) {
-    return { lat: session.last_lat, lng: session.last_lng }
+    return { lat: session.last_lat, lng: session.last_lng, accuracy: session.last_accuracy, source: 'gps' }
   }
   const { data } = await admin
     .from('profiles')
@@ -82,9 +101,11 @@ async function resolveLocation(
     home_latitude: number | null
     home_longitude: number | null
   } | null
-  if (p?.location_lat != null && p?.location_lng != null) return { lat: p.location_lat, lng: p.location_lng }
-  if (p?.home_latitude != null && p?.home_longitude != null) return { lat: p.home_latitude, lng: p.home_longitude }
-  return { lat: null, lng: null }
+  if (p?.location_lat != null && p?.location_lng != null)
+    return { lat: p.location_lat, lng: p.location_lng, accuracy: null, source: 'live-share' }
+  if (p?.home_latitude != null && p?.home_longitude != null)
+    return { lat: p.home_latitude, lng: p.home_longitude, accuracy: null, source: 'home' }
+  return { lat: null, lng: null, accuracy: null, source: 'none' }
 }
 
 async function monitorRecipients(admin: SupabaseClient): Promise<string[]> {
@@ -212,13 +233,17 @@ export async function evaluateSessionRow(
 
     const loc = await resolveLocation(admin, session)
     if (!existing) {
-      await admin.from('lone_worker_events').insert({
-        session_id: session.id,
-        user_id: session.user_id,
-        level,
-        lat: loc.lat,
-        lng: loc.lng,
-      })
+      const { data: inserted } = await admin
+        .from('lone_worker_events')
+        .insert({
+          session_id: session.id,
+          user_id: session.user_id,
+          level,
+          lat: loc.lat,
+          lng: loc.lng,
+        })
+        .select('id')
+        .maybeSingle()
       const name = await userName(admin, session.user_id)
       const recipients = await monitorRecipients(admin)
       await notifyUsers({
@@ -232,11 +257,22 @@ export async function evaluateSessionRow(
         category: 'lone_worker',
         data: { kind: 'lone_worker_alert', level, userId: session.user_id, sessionId: session.id },
       })
+      // Out-of-band backstop: email (always) + SMS (emergencies) reach a locked
+      // phone with the browser closed, where web push alone is unreliable.
+      await sendEscalationAlerts(admin, {
+        session,
+        level,
+        workerName: name,
+        lat: loc.lat,
+        lng: loc.lng,
+        accuracy: loc.accuracy,
+        eventId: (inserted as { id: string } | null)?.id ?? null,
+      })
     }
     return loc
   }
 
-  let loc: { lat: number | null; lng: number | null } | null = null
+  let loc: ResolvedLocation | null = null
   if (target === 'amber') loc = await escalate('amber')
   if (target === 'red') {
     // If jumping straight through amber (e.g. long cron gap), raise amber too.

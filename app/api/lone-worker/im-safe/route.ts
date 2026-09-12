@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { resetSessionCycle, type SessionRow } from '@/lib/lone-worker/engine'
 
 const SESSION_COLS =
-  'id, user_id, shift_start, shift_end, checkin_interval_minutes, amber_minutes, red_minutes, status, prompt_state, last_checkin_at, next_prompt_at, amber_at, red_at, last_lat, last_lng, location_updated_at, created_at, finished_at'
+  'id, user_id, shift_start, shift_end, checkin_interval_minutes, amber_minutes, red_minutes, status, prompt_state, last_checkin_at, next_prompt_at, amber_at, red_at, last_lat, last_lng, last_accuracy, location_updated_at, last_heartbeat_at, created_at, finished_at'
 
 /**
  * "I'm safe" acknowledgement that can be triggered directly from a push

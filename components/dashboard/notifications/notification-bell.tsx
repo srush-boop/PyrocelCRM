@@ -258,7 +258,7 @@ export function NotificationBell() {
           )}
         </ScrollArea>
 
-        <div className="shrink-0 border-t px-4 py-2">
+        <div className="relative z-10 shrink-0 border-t bg-popover px-4 py-2">
           <Button asChild variant="ghost" size="sm" className="w-full justify-center text-xs">
             <Link href="/dashboard/notifications">View all notifications</Link>
           </Button>

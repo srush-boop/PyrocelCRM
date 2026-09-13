@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
-import type { TodoItem } from '@/lib/types/database'
+import { useRef, useState } from 'react'
+import { toast } from 'sonner'
+import type { TodoAttachment, TodoItem } from '@/lib/types/database'
 import type { TodoAssigneeView } from '@/lib/todo/queries'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
@@ -25,6 +26,9 @@ import {
   GripVertical,
   Check,
   X,
+  Paperclip,
+  FileText,
+  Mail,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -42,7 +46,14 @@ import {
   updateItem,
   addToCalendar,
   respondToInvite,
+  deleteAttachment,
 } from '@/app/(dashboard)/dashboard/todo/actions'
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
 
 function fmtDue(iso: string, allDay: boolean): string {
   const d = new Date(iso)
@@ -69,6 +80,7 @@ export function TodoItemRow({
   item,
   subtasks,
   assignees,
+  attachments = [],
   onChanged,
   compact,
   currentUserId,
@@ -77,6 +89,7 @@ export function TodoItemRow({
   item: TodoItem
   subtasks: TodoItem[]
   assignees: TodoAssigneeView[]
+  attachments?: TodoAttachment[]
   onChanged: () => void
   compact?: boolean
   currentUserId?: string
@@ -85,8 +98,33 @@ export function TodoItemRow({
   const [expanded, setExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(item.title)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const done = item.status === 'done'
   const doneCount = subtasks.filter((s) => s.status === 'done').length
+
+  async function uploadFile(file: File) {
+    setUploading(true)
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      const res = await fetch(`/api/todo/${item.id}/attachments`, {
+        method: 'POST',
+        body,
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(json.error || 'Upload failed.')
+        return
+      }
+      toast.success('Attachment added.')
+      onChanged()
+    } catch {
+      toast.error('Upload failed.')
+    } finally {
+      setUploading(false)
+    }
+  }
 
   // Whether the signed-in user is a collaborator (not the owner) who still
   // needs to respond to an assignment/invite.
@@ -191,6 +229,12 @@ export function TodoItemRow({
             {subtasks.length > 0 && (
               <span className="text-xs text-muted-foreground">
                 {doneCount}/{subtasks.length} subtasks
+              </span>
+            )}
+            {attachments.length > 0 && (
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <Paperclip className="h-3 w-3" />
+                {attachments.length}
               </span>
             )}
             {assignees.length > 0 && (
@@ -335,6 +379,76 @@ export function TodoItemRow({
               {item.notes}
             </p>
           )}
+
+          {/* attachments */}
+          <div className="space-y-1">
+            {attachments.map((att) => {
+              const canRemove = !currentUserId || att.uploaded_by === currentUserId || item.owner_id === currentUserId
+              return (
+                <div
+                  key={att.id}
+                  className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2 py-1"
+                >
+                  {att.kind === 'email' ? (
+                    <Mail className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  ) : (
+                    <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  )}
+                  <a
+                    href={`/api/todo/attachment/${att.id}`}
+                    className="min-w-0 flex-1 truncate text-xs hover:underline"
+                    title={att.file_name}
+                  >
+                    {att.file_name}
+                  </a>
+                  {att.size_bytes != null && (
+                    <span className="shrink-0 text-[10px] text-muted-foreground">
+                      {formatBytes(att.size_bytes)}
+                    </span>
+                  )}
+                  {canRemove && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5 shrink-0"
+                      onClick={async () => {
+                        const res = await deleteAttachment(att.id)
+                        if (!res.ok) {
+                          toast.error(res.error || 'Could not remove attachment.')
+                          return
+                        }
+                        onChanged()
+                      }}
+                      aria-label={`Remove ${att.file_name}`}
+                    >
+                      <X className="h-3 w-3 text-muted-foreground" />
+                    </Button>
+                  )}
+                </div>
+              )
+            })}
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) uploadFile(file)
+                e.target.value = ''
+              }}
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+              disabled={uploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Paperclip className="h-3.5 w-3.5" />
+              {uploading ? 'Uploading...' : 'Attach file or email'}
+            </Button>
+          </div>
+
           {subtasks.map((sub) => (
             <div key={sub.id} className="flex items-center gap-2 py-0.5">
               <Checkbox

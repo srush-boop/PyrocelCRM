@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { notifyUsers } from '@/lib/notifications'
-import type { TodoItem, TodoList } from '@/lib/types/database'
+import type { TodoItem, TodoList, TodoTeam } from '@/lib/types/database'
 
 interface AuthCtx {
   supabase: Awaited<ReturnType<typeof createClient>>
@@ -356,6 +356,188 @@ export async function removeAssignee(input: {
   if (error) return { ok: false, error: error.message }
   revalidatePath('/dashboard/todo')
   return { ok: true }
+}
+
+// ------------------------------ Attachments --------------------------------
+
+export async function deleteAttachment(
+  attachmentId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await getAuth()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase } = auth
+
+  // RLS restricts DELETE to the uploader or item owner. Read the blob path first
+  // (also RLS-checked) so we can clean up storage after the row is removed.
+  const { data: att } = await supabase
+    .from('todo_attachments')
+    .select('blob_path')
+    .eq('id', attachmentId)
+    .maybeSingle()
+
+  const { error } = await supabase.from('todo_attachments').delete().eq('id', attachmentId)
+  if (error) return { ok: false, error: error.message }
+
+  if (att?.blob_path) {
+    const { del } = await import('@vercel/blob')
+    await del(att.blob_path).catch(() => {})
+  }
+  revalidatePath('/dashboard/todo')
+  return { ok: true }
+}
+
+// ------------------------------- Teams -------------------------------------
+
+// Replaces the full member set of a team the caller owns. Owner-scoped so a
+// user can only edit their own teams (RLS also enforces this).
+async function writeTeamMembers(
+  supabase: AuthCtx['supabase'],
+  userId: string,
+  teamId: string,
+  memberIds: string[],
+): Promise<void> {
+  const clean = Array.from(new Set(memberIds.filter((u) => u && u !== userId)))
+  await supabase.from('todo_team_members').delete().eq('team_id', teamId)
+  if (clean.length > 0) {
+    await supabase
+      .from('todo_team_members')
+      .insert(clean.map((uid) => ({ team_id: teamId, user_id: uid })))
+  }
+}
+
+export async function createTeam(input: {
+  name: string
+  color?: string | null
+  memberIds?: string[]
+}): Promise<{ ok: boolean; error?: string; team?: TodoTeam }> {
+  const auth = await getAuth()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase, userId } = auth
+  const name = input.name.trim()
+  if (!name) return { ok: false, error: 'A team name is required.' }
+
+  const { data, error } = await supabase
+    .from('todo_teams')
+    .insert({ owner_id: userId, name, color: input.color ?? null })
+    .select('*')
+    .single()
+  if (error) return { ok: false, error: error.message }
+
+  if (input.memberIds?.length) {
+    await writeTeamMembers(supabase, userId, data.id, input.memberIds)
+  }
+  revalidatePath('/dashboard/todo')
+  return { ok: true, team: data as TodoTeam }
+}
+
+export async function updateTeam(input: {
+  id: string
+  name?: string
+  color?: string | null
+  memberIds?: string[]
+}): Promise<{ ok: boolean; error?: string }> {
+  const auth = await getAuth()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase, userId } = auth
+
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  if (input.name !== undefined && input.name.trim()) patch.name = input.name.trim()
+  if (input.color !== undefined) patch.color = input.color
+
+  const { data: team, error } = await supabase
+    .from('todo_teams')
+    .update(patch)
+    .eq('id', input.id)
+    .eq('owner_id', userId)
+    .select('id')
+    .maybeSingle()
+  if (error) return { ok: false, error: error.message }
+  if (!team) return { ok: false, error: 'Team not found.' }
+
+  if (input.memberIds !== undefined) {
+    await writeTeamMembers(supabase, userId, input.id, input.memberIds)
+  }
+  revalidatePath('/dashboard/todo')
+  return { ok: true }
+}
+
+export async function deleteTeam(id: string): Promise<{ ok: boolean; error?: string }> {
+  const auth = await getAuth()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase, userId } = auth
+  // Members cascade via FK. Deleting a team never touches to-dos already
+  // assigned from it — those assignees stand on their own.
+  const { error } = await supabase
+    .from('todo_teams')
+    .delete()
+    .eq('id', id)
+    .eq('owner_id', userId)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/dashboard/todo')
+  return { ok: true }
+}
+
+// Assigns (or invites) every member of a team to a to-do in one step. The team
+// is just a convenience grouping — each member becomes an ordinary assignee row,
+// so later team edits don't retroactively change existing to-dos.
+export async function assignTeam(input: {
+  itemId: string
+  teamId: string
+  role: 'assignee' | 'invitee'
+}): Promise<{ ok: boolean; error?: string; added?: number }> {
+  const auth = await getAuth()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase, userId } = auth
+
+  // Only the to-do owner can assign people.
+  const { data: item } = await supabase
+    .from('todo_items')
+    .select('id, title, owner_id')
+    .eq('id', input.itemId)
+    .eq('owner_id', userId)
+    .maybeSingle()
+  if (!item) return { ok: false, error: 'To-do not found.' }
+
+  // Only pull members from a team the caller owns.
+  const { data: team } = await supabase
+    .from('todo_teams')
+    .select('id')
+    .eq('id', input.teamId)
+    .eq('owner_id', userId)
+    .maybeSingle()
+  if (!team) return { ok: false, error: 'Team not found.' }
+
+  const { data: memberRows } = await supabase
+    .from('todo_team_members')
+    .select('user_id')
+    .eq('team_id', input.teamId)
+  const targets = Array.from(
+    new Set((memberRows ?? []).map((m) => m.user_id).filter((u) => u && u !== userId)),
+  )
+  if (targets.length === 0) return { ok: true, added: 0 }
+
+  const rows = targets.map((uid) => ({
+    item_id: input.itemId,
+    user_id: uid,
+    role: input.role,
+    response: 'pending' as const,
+  }))
+  const { error } = await supabase
+    .from('todo_item_assignees')
+    .upsert(rows, { onConflict: 'item_id,user_id' })
+  if (error) return { ok: false, error: error.message }
+
+  await notifyUsers({
+    userIds: targets,
+    title: input.role === 'assignee' ? 'You were assigned a to-do' : 'You were invited to a to-do',
+    body: item.title,
+    url: '/dashboard/todo',
+    category: 'todo',
+    createdBy: userId,
+  })
+
+  revalidatePath('/dashboard/todo')
+  return { ok: true, added: targets.length }
 }
 
 // --------------------------- Calendar inclusion ----------------------------

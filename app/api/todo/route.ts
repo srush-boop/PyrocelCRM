@@ -31,6 +31,7 @@ export async function GET() {
     lists: todo.lists,
     items: todo.items,
     assignees: todo.assignees,
+    attachments: todo.attachments,
     currentUserId: user.id,
   })
 }

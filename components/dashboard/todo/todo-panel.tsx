@@ -79,6 +79,7 @@ export function TodoPanel({ onNavigate }: { onNavigate?: () => void }) {
                     item={item}
                     subtasks={(data?.items ?? []).filter((s) => s.parent_id === item.id)}
                     assignees={data?.assignees[item.id] ?? []}
+                    attachments={data?.attachments[item.id] ?? []}
                     currentUserId={data?.currentUserId}
                     onChanged={() => mutate()}
                     compact

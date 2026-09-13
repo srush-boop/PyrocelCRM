@@ -1,7 +1,7 @@
 'use client'
 
 import useSWR from 'swr'
-import type { TodoItem, TodoList } from '@/lib/types/database'
+import type { TodoAttachment, TodoItem, TodoList } from '@/lib/types/database'
 import type { WaitingBucket } from '@/lib/todo/waiting-for-you'
 import type { TodoAssigneeView } from '@/lib/todo/queries'
 
@@ -11,6 +11,7 @@ export interface TodoPayload {
   lists: TodoList[]
   items: TodoItem[]
   assignees: Record<string, TodoAssigneeView[]>
+  attachments: Record<string, TodoAttachment[]>
   currentUserId: string
 }
 
@@ -39,4 +40,24 @@ export function useMembers(enabled: boolean) {
     fetcher,
   )
   return data?.members ?? []
+}
+
+export interface TeamMemberView {
+  user_id: string
+  full_name: string | null
+}
+
+export interface TodoTeamView {
+  id: string
+  name: string
+  color: string | null
+  members: TeamMemberView[]
+}
+
+export function useTeams(enabled: boolean) {
+  const { data, mutate } = useSWR<{ teams: TodoTeamView[] }>(
+    enabled ? '/api/todo/teams' : null,
+    fetcher,
+  )
+  return { teams: data?.teams ?? [], mutate }
 }

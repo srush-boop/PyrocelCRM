@@ -3939,3 +3939,35 @@ export interface TodoItemAssignee {
   response: TodoAssigneeResponse
   created_at: string
 }
+
+// A reusable, named group of people an owner can assign a whole to-do to.
+export interface TodoTeam {
+  id: string
+  owner_id: string
+  name: string
+  color: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface TodoTeamMember {
+  team_id: string
+  user_id: string
+  created_at: string
+}
+
+export type TodoAttachmentKind = 'file' | 'email'
+
+// A file or email attached to a to-do. Bytes live in the private Blob store at
+// `blob_path`; they're streamed through /api/todo/attachment/[id].
+export interface TodoAttachment {
+  id: string
+  item_id: string
+  uploaded_by: string
+  kind: TodoAttachmentKind
+  file_name: string
+  content_type: string | null
+  size_bytes: number | null
+  blob_path: string
+  created_at: string
+}

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
+import { toast } from 'sonner'
 import { createItem } from '@/app/(dashboard)/dashboard/todo/actions'
 
 // A single-line quick-add. Enter (respecting IME composition) or the button
@@ -28,10 +29,24 @@ export function TodoComposer({
     const trimmed = title.trim()
     if (!trimmed || busy) return
     setBusy(true)
-    setTitle('')
-    await createItem({ title: trimmed, listId: listId ?? null, parentId: parentId ?? null })
-    setBusy(false)
-    onCreated()
+    try {
+      const res = await createItem({
+        title: trimmed,
+        listId: listId ?? null,
+        parentId: parentId ?? null,
+      })
+      if (!res.ok) {
+        // Keep the text so the user doesn't lose it, and surface why.
+        toast.error(res.error ?? 'Could not add to-do.')
+        return
+      }
+      setTitle('')
+      onCreated()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not add to-do.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (

@@ -41,3 +41,23 @@ export function useMembers(enabled: boolean) {
   )
   return data?.members ?? []
 }
+
+export interface TeamMemberView {
+  user_id: string
+  full_name: string | null
+}
+
+export interface TodoTeamView {
+  id: string
+  name: string
+  color: string | null
+  members: TeamMemberView[]
+}
+
+export function useTeams(enabled: boolean) {
+  const { data, mutate } = useSWR<{ teams: TodoTeamView[] }>(
+    enabled ? '/api/todo/teams' : null,
+    fetcher,
+  )
+  return { teams: data?.teams ?? [], mutate }
+}

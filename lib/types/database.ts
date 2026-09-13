@@ -3940,6 +3940,22 @@ export interface TodoItemAssignee {
   created_at: string
 }
 
+// A reusable, named group of people an owner can assign a whole to-do to.
+export interface TodoTeam {
+  id: string
+  owner_id: string
+  name: string
+  color: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface TodoTeamMember {
+  team_id: string
+  user_id: string
+  created_at: string
+}
+
 export type TodoAttachmentKind = 'file' | 'email'
 
 // A file or email attached to a to-do. Bytes live in the private Blob store at

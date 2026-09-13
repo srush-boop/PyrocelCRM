@@ -5,6 +5,7 @@ import { useTodo } from './use-todo'
 import { WaitingBuckets } from './waiting-buckets'
 import { TodoItemRow } from './todo-item-row'
 import { TodoComposer } from './todo-composer'
+import { TeamBuilderDialog } from './team-builder-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -34,6 +35,7 @@ import {
   Search,
   X,
   GripVertical,
+  Users,
 } from 'lucide-react'
 import {
   DndContext,
@@ -110,6 +112,7 @@ export function TodoBoard() {
   const [newListName, setNewListName] = useState('')
   const [newListColor, setNewListColor] = useState<string>(LIST_COLORS[5])
   const [busy, setBusy] = useState(false)
+  const [showTeams, setShowTeams] = useState(false)
 
   // Filters
   const [search, setSearch] = useState('')
@@ -344,6 +347,18 @@ export function TodoBoard() {
             No lists yet. Create one to group your to-dos.
           </p>
         )}
+
+        <div className="px-2 pb-1 pt-4">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            People
+          </span>
+        </div>
+        <NavRow
+          icon={<Users className="h-4 w-4" />}
+          label="Teams"
+          active={false}
+          onClick={() => setShowTeams(true)}
+        />
       </aside>
 
       {/* Main column */}
@@ -538,6 +553,8 @@ export function TodoBoard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <TeamBuilderDialog open={showTeams} onOpenChange={setShowTeams} />
     </div>
   )
 }

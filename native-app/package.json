@@ -1,0 +1,27 @@
+{
+  "name": "pyrocel-crm-native",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Capacitor native shell (iOS + Android) for the Pyrocel CRM lone-worker safety features.",
+  "scripts": {
+    "add:ios": "cap add ios",
+    "add:android": "cap add android",
+    "sync": "cap sync",
+    "open:ios": "cap open ios",
+    "open:android": "cap open android",
+    "run:ios": "cap run ios",
+    "run:android": "cap run android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/app": "^6.0.3",
+    "@capacitor/core": "^6.2.2",
+    "@capacitor/device": "^6.0.3",
+    "@capacitor/ios": "^6.2.0",
+    "@capacitor/push-notifications": "^6.0.5",
+    "@transistorsoft/capacitor-background-geolocation": "^6.1.5"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.2"
+  }
+}

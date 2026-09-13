@@ -19,6 +19,7 @@ import {
   playAlarmTone,
   buzz,
 } from '@/lib/lone-worker/alarm'
+import { startNativeSafety, stopNativeSafety } from '@/lib/native'
 
 type DisplayState = 'none' | 'ok' | 'prompting' | 'amber' | 'red'
 
@@ -127,6 +128,18 @@ export function LoneWorkerPrompt() {
       timeout: 27_000,
     })
     return () => navigator.geolocation.clearWatch(watchId)
+  }, [data?.session])
+
+  // Native shell only: start safety-grade background location (Transistorsoft)
+  // and register the device for native push when a shift is active. This is what
+  // keeps location + escalations working after the phone is locked or the app is
+  // force-quit — the failure mode the browser can't cover. No-op on the web.
+  useEffect(() => {
+    if (!data?.session || data.session.status !== 'active') return
+    void startNativeSafety()
+    return () => {
+      void stopNativeSafety()
+    }
   }, [data?.session])
 
   // Device heartbeat while the app is open. If these stop during an active shift,

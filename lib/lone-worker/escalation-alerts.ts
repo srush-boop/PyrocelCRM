@@ -2,6 +2,7 @@ import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email/send-email'
 import { sendSmsBulk, smsConfigured } from '@/lib/sms'
+import { sendNativePush, nativePushConfigured } from '@/lib/native/push-send'
 import { getPublicBaseUrl } from '@/lib/rams/base-url'
 import type { SessionRow } from './engine'
 
@@ -207,8 +208,40 @@ export async function sendEscalationAlerts(
     }
   }
 
+  // ---- Native push (both levels; targets registered native app installs) --
+  // Reaches a locked phone with the app closed via FCM/APNs. No-op until a
+  // Firebase service account is configured, exactly like the SMS backstop.
+  let nativePushSent = false
+  if (nativePushConfigured) {
+    try {
+      const ids = [opts.session.user_id, ...monitors.map((m) => m.id)]
+      const { data: deviceRows } = await admin
+        .from('lone_worker_devices')
+        .select('push_token')
+        .in('user_id', ids)
+        .not('push_token', 'is', null)
+        .is('revoked_at', null)
+      const targets = ((deviceRows ?? []) as { push_token: string | null }[])
+        .filter((d): d is { push_token: string } => !!d.push_token)
+        .map((d) => ({ token: d.push_token }))
+      if (targets.length > 0) {
+        const res = await sendNativePush(targets, {
+          title: isRed ? 'EMERGENCY — lone worker' : 'Lone worker warning',
+          body: isRed
+            ? `${opts.workerName} has not confirmed they are safe. Respond now.`
+            : `${opts.workerName} missed a safety check-in.`,
+          url: monitorUrl,
+          critical: isRed,
+        })
+        nativePushSent = res.sent > 0
+      }
+    } catch (err) {
+      console.log('[v0] lone-worker native push failed:', (err as Error).message)
+    }
+  }
+
   // ---- Audit: stamp what actually went out on the event ------------------
-  if (opts.eventId && (emailSent || smsSent)) {
+  if (opts.eventId && (emailSent || smsSent || nativePushSent)) {
     const patch: Record<string, string> = {}
     if (emailSent) patch.email_sent_at = new Date().toISOString()
     if (smsSent) patch.sms_sent_at = new Date().toISOString()

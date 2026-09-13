@@ -52,6 +52,7 @@ import {
   Briefcase,
   ScrollText,
   Inbox,
+  ListChecks,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { UserRole } from '@/lib/types/database'
@@ -433,8 +434,17 @@ const chatNavItem: NavItem = {
 // Role default menus
 // ---------------------------------------------------------------------------
 
+const todoNavItem: NavItem = {
+  key: 'todo',
+  title: 'To-Do',
+  href: '/dashboard/todo',
+  icon: ListChecks,
+  locked: true,
+}
+
 const adminNavItems: NavItem[] = [
   { key: 'dashboard', title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  todoNavItem,
   { key: 'requests', title: 'Requests', href: '/dashboard/requests', icon: Inbox },
   { key: 'clients', title: 'Clients', href: '/dashboard/clients', icon: Building },
   sitesNavItem,
@@ -457,6 +467,7 @@ const adminNavItems: NavItem[] = [
 
 const officeNavItems: NavItem[] = [
   { key: 'dashboard', title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  todoNavItem,
   { key: 'requests', title: 'Requests', href: '/dashboard/requests', icon: Inbox },
   { key: 'clients', title: 'Clients', href: '/dashboard/clients', icon: Building },
   sitesNavItem,
@@ -479,6 +490,7 @@ const officeNavItems: NavItem[] = [
 
 const engineerNavItems: NavItem[] = [
   { key: 'home', title: 'Home', href: '/dashboard', icon: LayoutDashboard, locked: true },
+  todoNavItem,
   engineerCallsNavItem,
   { key: 'calendar', title: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   myTasksNavItem,
@@ -508,6 +520,7 @@ const subcontractorCallsNavItem: NavItem = {
 
 const subcontractorNavItems: NavItem[] = [
   { key: 'home', title: 'Home', href: '/dashboard', icon: LayoutDashboard, locked: true },
+  todoNavItem,
   subcontractorCallsNavItem,
   myTasksNavItem,
 ]

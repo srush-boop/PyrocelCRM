@@ -17,6 +17,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { LogOut, User, ArrowLeft, LayoutDashboard } from 'lucide-react'
 import Link from 'next/link'
 import { GlobalSiteSearch } from '@/components/dashboard/global-site-search'
+import { TodoButton } from '@/components/dashboard/todo/todo-button'
 import { NotificationBell } from '@/components/dashboard/notifications/notification-bell'
 import { HeaderShortcuts } from '@/components/dashboard/header-shortcuts'
 import type { Profile } from '@/lib/types/database'
@@ -117,6 +118,7 @@ export function DashboardHeader({ profile }: DashboardHeaderProps) {
       <HeaderShortcuts shortcuts={profile.header_shortcuts} />
       <div className="flex-1" />
       {isManager && <GlobalSiteSearch />}
+      <TodoButton />
       <NotificationBell />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

@@ -153,7 +153,7 @@ function TeamList({
           teams.map((team) => (
             <div
               key={team.id}
-              className="group flex items-center gap-3 rounded-lg border border-border/60 px-3 py-2"
+              className="flex items-center gap-3 rounded-lg border border-border/60 px-3 py-2"
             >
               <span
                 className="h-3 w-3 shrink-0 rounded-full"
@@ -161,34 +161,26 @@ function TeamList({
                 aria-hidden
               />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{team.name}</p>
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-sm font-medium">{team.name}</p>
+                  <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    {team.members.length}{' '}
+                    {team.members.length === 1 ? 'member' : 'members'}
+                  </span>
+                </div>
                 <p className="truncate text-xs text-muted-foreground">
                   {team.members.length === 0
-                    ? 'No members'
+                    ? 'No members yet'
                     : team.members
                         .map((m) => m.full_name ?? 'Unknown')
                         .join(', ')}
                 </p>
               </div>
-              <div className="flex shrink-0 -space-x-1.5">
-                {team.members.slice(0, 3).map((m) => (
-                  <Avatar key={m.user_id} className="h-6 w-6 border border-background">
-                    <AvatarFallback className="bg-primary/10 text-[9px] text-primary">
-                      {initials(m.full_name)}
-                    </AvatarFallback>
-                  </Avatar>
-                ))}
-                {team.members.length > 3 && (
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full border border-background bg-muted text-[9px] text-muted-foreground">
-                    +{team.members.length - 3}
-                  </span>
-                )}
-              </div>
-              <div className="flex shrink-0 items-center gap-1.5 pl-1">
+              <div className="flex shrink-0 items-center gap-1">
                 <button
                   type="button"
                   onClick={() => onEdit(team)}
-                  className="text-muted-foreground hover:text-foreground"
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
                   aria-label={`Edit team ${team.name}`}
                 >
                   <Pencil className="h-4 w-4" />
@@ -197,7 +189,7 @@ function TeamList({
                   type="button"
                   onClick={() => remove(team)}
                   disabled={busy === team.id}
-                  className="text-muted-foreground hover:text-destructive"
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
                   aria-label={`Delete team ${team.name}`}
                 >
                   {busy === team.id ? (

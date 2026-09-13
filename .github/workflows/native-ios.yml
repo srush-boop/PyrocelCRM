@@ -1,0 +1,96 @@
+name: Native iOS build
+
+# Builds the lone-worker Capacitor iOS app on a macOS runner. The app loads the
+# deployed remote CRM URL, so this only compiles the native shell + plugins
+# (background geolocation, push, Critical Alerts entitlement).
+on:
+  workflow_dispatch:
+    inputs:
+      export_method:
+        description: "Xcode export method"
+        required: true
+        default: "app-store"
+        type: choice
+        options:
+          - app-store
+          - ad-hoc
+          - development
+
+jobs:
+  ios:
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: native-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Configure Transistorsoft registry
+        env:
+          TRANSISTORSOFT_TOKEN: ${{ secrets.TRANSISTORSOFT_TOKEN }}
+        run: |
+          if [ -n "$TRANSISTORSOFT_TOKEN" ]; then
+            printf '@transistorsoft:registry=https://npm.transistorsoft.com/\n' >> .npmrc
+            printf '//npm.transistorsoft.com/:_authToken=%s\n' "$TRANSISTORSOFT_TOKEN" >> .npmrc
+          fi
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Add iOS platform
+        run: pnpm exec cap add ios || echo "ios platform already added"
+
+      - name: Sync Capacitor
+        run: pnpm exec cap sync ios
+
+      - name: Install CocoaPods
+        working-directory: native-app/ios/App
+        run: pod install
+
+      # Signing uses the Apple App Store Connect API key + distribution cert.
+      # Provide these as repo secrets; see native-app/README.md for the list.
+      - name: Import signing assets
+        env:
+          IOS_DIST_CERT_BASE64: ${{ secrets.IOS_DIST_CERT_BASE64 }}
+          IOS_DIST_CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          IOS_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
+        run: |
+          if [ -z "$IOS_DIST_CERT_BASE64" ] || [ -z "$IOS_PROVISION_PROFILE_BASE64" ]; then
+            echo "::error::iOS signing secrets are required (see native-app/README.md)"; exit 1
+          fi
+          KEYCHAIN=build.keychain
+          security create-keychain -p "" "$KEYCHAIN"
+          security default-keychain -s "$KEYCHAIN"
+          security unlock-keychain -p "" "$KEYCHAIN"
+          echo "$IOS_DIST_CERT_BASE64" | base64 -d > cert.p12
+          security import cert.p12 -k "$KEYCHAIN" -P "$IOS_DIST_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$KEYCHAIN"
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$IOS_PROVISION_PROFILE_BASE64" | base64 -d > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+
+      - name: Archive and export IPA
+        working-directory: native-app/ios/App
+        run: |
+          xcodebuild -workspace App.xcworkspace -scheme App \
+            -configuration Release -archivePath "$PWD/build/App.xcarchive" \
+            archive
+          xcodebuild -exportArchive \
+            -archivePath "$PWD/build/App.xcarchive" \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath "$PWD/build"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-${{ github.event.inputs.export_method || 'app-store' }}
+          path: native-app/ios/App/build/*.ipa
+          if-no-files-found: warn

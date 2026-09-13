@@ -13,6 +13,7 @@ import {
   Loader2,
   PhoneCall,
   Users,
+  WifiOff,
 } from 'lucide-react'
 import type { AlertPoint } from '@/components/dashboard/lone-worker/lone-worker-monitor-canvas'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -280,6 +281,13 @@ function MonitorRow({
       ? `https://www.google.com/maps/search/?api=1&query=${row.lat},${row.lng}`
       : null
 
+  // "Lost contact": the device stopped heart-beating while still on shift. The
+  // server keeps escalating regardless, but flagging it lets the office reach out
+  // early and understand why the board went quiet, rather than waiting for red.
+  const HEARTBEAT_STALE_MS = 5 * 60 * 1000
+  const lastSeen = row.lastHeartbeatAt ? new Date(row.lastHeartbeatAt).getTime() : null
+  const deviceOffline = lastSeen == null || now - lastSeen > HEARTBEAT_STALE_MS
+
   return (
     <li className={cn('rounded-lg border p-4', border, level === 'red' && 'animate-pulse')}>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -330,6 +338,12 @@ function MonitorRow({
               OK
             </Badge>
           )}
+          {deviceOffline && (
+            <Badge variant="outline" className="gap-1 border-amber-500/60 text-amber-600">
+              <WifiOff className="h-3 w-3" />
+              Device offline
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -353,9 +367,18 @@ function MonitorRow({
         )}
         {row.locationUpdatedAt && (
           <span>
-            Location: <span className="text-foreground">{timeAgo(row.locationUpdatedAt, now)}</span>
+            GPS: <span className="text-foreground">{timeAgo(row.locationUpdatedAt, now)}</span>
+            {row.accuracy != null && (
+              <span className="text-muted-foreground"> (±{Math.round(row.accuracy)}m)</span>
+            )}
           </span>
         )}
+        <span>
+          Device:{' '}
+          <span className={cn('font-medium', deviceOffline ? 'text-amber-600' : 'text-foreground')}>
+            {deviceOffline ? `offline · last seen ${timeAgo(row.lastHeartbeatAt, now)}` : 'online'}
+          </span>
+        </span>
       </div>
 
       {level && (

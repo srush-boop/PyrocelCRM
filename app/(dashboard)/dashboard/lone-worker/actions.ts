@@ -20,7 +20,7 @@ import type {
 } from '@/lib/lone-worker/types'
 
 const SESSION_COLS =
-  'id, user_id, shift_start, shift_end, checkin_interval_minutes, amber_minutes, red_minutes, status, prompt_state, last_checkin_at, next_prompt_at, amber_at, red_at, last_lat, last_lng, location_updated_at, created_at, finished_at'
+  'id, user_id, shift_start, shift_end, checkin_interval_minutes, amber_minutes, red_minutes, status, prompt_state, last_checkin_at, next_prompt_at, amber_at, red_at, last_lat, last_lng, last_accuracy, location_updated_at, last_heartbeat_at, created_at, finished_at'
 
 async function getCaller() {
   const supabase = await createClient()
@@ -258,16 +258,48 @@ export async function setCheckinInterval(minutes: number): Promise<{ error: stri
   return { error: null }
 }
 
-export async function pushLocation(lat: number, lng: number): Promise<{ error: string | null }> {
+export async function pushLocation(
+  lat: number,
+  lng: number,
+  accuracy?: number,
+): Promise<{ error: string | null }> {
   const { user } = await getCaller()
   if (!user) return { error: 'Not signed in' }
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { error: 'Invalid location' }
   const admin = createAdminClient()
   const session = await activeSessionFor(admin, user.id)
   if (!session) return { error: null }
+  const now = new Date().toISOString()
+  // Pushing a fresh GPS fix is also proof the device is alive, so it doubles as
+  // a heartbeat — keeps the "device online" signal accurate without an extra call.
   await admin
     .from('lone_worker_sessions')
-    .update({ last_lat: lat, last_lng: lng, location_updated_at: new Date().toISOString() })
+    .update({
+      last_lat: lat,
+      last_lng: lng,
+      last_accuracy: Number.isFinite(accuracy) ? accuracy : null,
+      location_updated_at: now,
+      last_heartbeat_at: now,
+    })
+    .eq('id', session.id)
+  return { error: null }
+}
+
+/**
+ * Lightweight liveness ping from the worker's device while the app is open.
+ * If these stop arriving during an active shift, the monitor shows "device
+ * offline — last seen X ago" so the office understands why it went quiet and can
+ * make contact, instead of only finding out at a red escalation.
+ */
+export async function heartbeat(): Promise<{ error: string | null }> {
+  const { user } = await getCaller()
+  if (!user) return { error: 'Not signed in' }
+  const admin = createAdminClient()
+  const session = await activeSessionFor(admin, user.id)
+  if (!session) return { error: null }
+  await admin
+    .from('lone_worker_sessions')
+    .update({ last_heartbeat_at: new Date().toISOString() })
     .eq('id', session.id)
   return { error: null }
 }
@@ -356,7 +388,9 @@ export async function getMonitorData(): Promise<LoneWorkerMonitorData> {
       activeSince: activeEvent?.raised_at ?? null,
       lat: activeEvent?.lat ?? s.last_lat,
       lng: activeEvent?.lng ?? s.last_lng,
+      accuracy: s.last_accuracy,
       locationUpdatedAt: s.location_updated_at,
+      lastHeartbeatAt: s.last_heartbeat_at,
     }
   })
 

@@ -1,0 +1,15 @@
+# Generated native platform projects (recreate with `npx cap add ios|android`)
+/ios/
+/android/
+/www/
+
+# Dependencies
+/node_modules/
+
+# Firebase / signing secrets — never commit these
+google-services.json
+GoogleService-Info.plist
+*.keystore
+*.p8
+*.p12
+*.mobileprovision

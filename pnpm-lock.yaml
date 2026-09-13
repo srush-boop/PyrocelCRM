@@ -8,6 +8,18 @@ importers:
 
   .:
     dependencies:
+      '@capacitor/app':
+        specifier: ^6.0.3
+        version: 6.0.3(@capacitor/core@6.2.2)
+      '@capacitor/core':
+        specifier: ^6.2.2
+        version: 6.2.2
+      '@capacitor/device':
+        specifier: ^6.0.3
+        version: 6.0.3(@capacitor/core@6.2.2)
+      '@capacitor/push-notifications':
+        specifier: ^6.0.5
+        version: 6.0.5(@capacitor/core@6.2.2)
       '@hookform/resolvers':
         specifier: ^3.9.1
         version: 3.10.0(react-hook-form@7.71.1(react@19.2.4))
@@ -104,6 +116,9 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.103.3
         version: 2.103.3
+      '@transistorsoft/capacitor-background-geolocation':
+        specifier: ^6.1.5
+        version: 6.1.5(@capacitor/core@6.2.2)
       '@upstash/ratelimit':
         specifier: ^2.0.8
         version: 2.0.8(@upstash/redis@1.38.0)
@@ -287,6 +302,24 @@ packages:
   '@babel/runtime@7.29.7':
     resolution: {integrity: sha512-Nq8OhGWiZIZGV6hLHoyAKLLcJihP/xFeBMGJoUrxTX2psI8dCifzLhZISFb+VWS3wFMRDmCGw5R+dOySCqPLhw==}
     engines: {node: '>=6.9.0'}
+
+  '@capacitor/app@6.0.3':
+    resolution: {integrity: sha512-4gFUCbcVz0N/YYN32OBFerocWXslIv3Nc90gDiRsBkJc0plwK6kIUT6PKa5WtW2kfhteUeCVXQbvArH2fH+0Ug==}
+    peerDependencies:
+      '@capacitor/core': ^6.0.0
+
+  '@capacitor/core@6.2.2':
+    resolution: {integrity: sha512-qEI3DcwJEPzhW+hVGKH8m4jbujtkdUiGkpMLHmpR8epACU7wEsV6NF8pCHzpsMYjc80oK7Cmpcw+MIienv/YRw==}
+
+  '@capacitor/device@6.0.3':
+    resolution: {integrity: sha512-AmPtVuWeW31Ui+UMIl5zgCzwMU4fL4hIvYYvbAhXXyKWjxi1nk+CAh9B3k4OYUQLJI5nan0PoJ4GiiJ7x6DT/A==}
+    peerDependencies:
+      '@capacitor/core': ^6.0.0
+
+  '@capacitor/push-notifications@6.0.5':
+    resolution: {integrity: sha512-CsRmb0cnZd9Uwx24ym4My5fNKrQvwI4D51aMEph5pUZy+LAjp6q0y4NJe8DEgwaVdAqVLbb4rqn75AZ4WSiFYg==}
+    peerDependencies:
+      '@capacitor/core': ^6.0.0
 
   '@date-fns/tz@1.4.1':
     resolution: {integrity: sha512-P5LUNhtbj6YfI3iJjw5EL9eUAG6OitD0W3fWQcpQjDRc/QIsL0tRNuO1PcDvPccWL1fSTXXdE1ds+l95DV/OFA==}
@@ -2079,6 +2112,16 @@ packages:
   '@tailwindcss/postcss@4.2.0':
     resolution: {integrity: sha512-u6YBacGpOm/ixPfKqfgrJEjMfrYmPD7gEFRoygS/hnQaRtV0VCBdpkx5Ouw9pnaLRwwlgGCuJw8xLpaR0hOrQg==}
 
+  '@transistorsoft/capacitor-background-fetch@6.0.2':
+    resolution: {integrity: sha512-tZsqZfFlO6R5fGCQru08TlCioGRO/hteIlgYSopuxcsBWnTJ+fJ3ZPt6B9gQLKqQH9qY90uiEqMOXA+SM4b4OQ==}
+    peerDependencies:
+      '@capacitor/core': ^6.0.0
+
+  '@transistorsoft/capacitor-background-geolocation@6.1.5':
+    resolution: {integrity: sha512-BjH0psmcyU30RPLhJ1WbccJ6UKVSljCyk9u/kMRBBPpPjz/h11XnVaI5diYwna1+N6tJxP0bFUCslYZTDEYGQw==}
+    peerDependencies:
+      '@capacitor/core': ^6.0.0
+
   '@types/d3-array@3.2.2':
     resolution: {integrity: sha512-hOLWVbm7uRza0BYXpIIW5pxfrKe0W+D5lrFiAEYR+pb6w3N2SwSMaJbXdUfSEv+dT4MfHBLtn5js0LAWaO6otw==}
 
@@ -3368,6 +3411,22 @@ snapshots:
   '@alloc/quick-lru@5.2.0': {}
 
   '@babel/runtime@7.29.7': {}
+
+  '@capacitor/app@6.0.3(@capacitor/core@6.2.2)':
+    dependencies:
+      '@capacitor/core': 6.2.2
+
+  '@capacitor/core@6.2.2':
+    dependencies:
+      tslib: 2.8.1
+
+  '@capacitor/device@6.0.3(@capacitor/core@6.2.2)':
+    dependencies:
+      '@capacitor/core': 6.2.2
+
+  '@capacitor/push-notifications@6.0.5(@capacitor/core@6.2.2)':
+    dependencies:
+      '@capacitor/core': 6.2.2
 
   '@date-fns/tz@1.4.1': {}
 
@@ -5218,6 +5277,15 @@ snapshots:
       '@tailwindcss/oxide': 4.2.0
       postcss: 8.5.6
       tailwindcss: 4.2.0
+
+  '@transistorsoft/capacitor-background-fetch@6.0.2(@capacitor/core@6.2.2)':
+    dependencies:
+      '@capacitor/core': 6.2.2
+
+  '@transistorsoft/capacitor-background-geolocation@6.1.5(@capacitor/core@6.2.2)':
+    dependencies:
+      '@capacitor/core': 6.2.2
+      '@transistorsoft/capacitor-background-fetch': 6.0.2(@capacitor/core@6.2.2)
 
   '@types/d3-array@3.2.2': {}
 

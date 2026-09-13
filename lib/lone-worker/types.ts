@@ -44,7 +44,9 @@ export interface LoneWorkerSession {
   redAt: string
   lastLat: number | null
   lastLng: number | null
+  lastAccuracy: number | null
   locationUpdatedAt: string | null
+  lastHeartbeatAt: string | null
   createdAt: string
   finishedAt: string | null
 }
@@ -85,7 +87,11 @@ export interface LoneWorkerMonitorRow {
   activeSince: string | null
   lat: number | null
   lng: number | null
+  /** GPS accuracy in metres for the last fix, when the device reported it. */
+  accuracy: number | null
   locationUpdatedAt: string | null
+  /** Last time the worker's device checked in (heartbeat), for lost-contact. */
+  lastHeartbeatAt: string | null
 }
 
 export interface LoneWorkerMonitorData {

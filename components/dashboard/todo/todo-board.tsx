@@ -8,6 +8,13 @@ import { TodoComposer } from './todo-composer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Dialog,
   DialogContent,
   DialogFooter,
@@ -24,10 +31,32 @@ import {
   Trash2,
   Loader2,
   Check,
+  Search,
+  X,
+  GripVertical,
 } from 'lucide-react'
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { cn } from '@/lib/utils'
 import type { TodoItem, TodoList } from '@/lib/types/database'
-import { createList, deleteList } from '@/app/(dashboard)/dashboard/todo/actions'
+import {
+  createList,
+  deleteList,
+  reorderItems,
+} from '@/app/(dashboard)/dashboard/todo/actions'
 
 type Selection =
   | { kind: 'waiting' }
@@ -36,6 +65,10 @@ type Selection =
   | { kind: 'pinned' }
   | { kind: 'today' }
   | { kind: 'list'; id: string }
+
+type DueFilter = 'any' | 'overdue' | 'today' | 'week' | 'none'
+type PeopleFilter = 'any' | 'owned' | 'assigned' | 'shared'
+type SortBy = 'manual' | 'due' | 'priority'
 
 const LIST_COLORS = [
   '#ef4444',
@@ -59,9 +92,17 @@ function isToday(iso: string | null): boolean {
   )
 }
 
+function withinWeek(iso: string | null): boolean {
+  if (!iso) return false
+  const t = new Date(iso).getTime()
+  const now = Date.now()
+  return t >= now && t <= now + 7 * 24 * 60 * 60 * 1000
+}
+
 // Full-page To-Do workspace: left rail of smart views + custom lists, main
-// column showing the selected view with quick capture. Mirrors Wunderlist-style
-// organisation while reusing the same item row as the slide-over.
+// column showing the selected view with quick capture, filters, and
+// drag-to-reorder. Mirrors Wunderlist-style organisation while reusing the
+// same item row as the slide-over.
 export function TodoBoard() {
   const { data, isLoading, mutate } = useTodo()
   const [selection, setSelection] = useState<Selection>({ kind: 'waiting' })
@@ -70,8 +111,19 @@ export function TodoBoard() {
   const [newListColor, setNewListColor] = useState<string>(LIST_COLORS[5])
   const [busy, setBusy] = useState(false)
 
+  // Filters
+  const [search, setSearch] = useState('')
+  const [dueFilter, setDueFilter] = useState<DueFilter>('any')
+  const [peopleFilter, setPeopleFilter] = useState<PeopleFilter>('any')
+  const [sortBy, setSortBy] = useState<SortBy>('manual')
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  )
+
   const items = data?.items ?? []
   const lists = data?.lists ?? []
+  const currentUserId = data?.currentUserId
   const topLevel = useMemo(() => items.filter((i) => !i.parent_id), [items])
 
   const counts = useMemo(() => {
@@ -85,8 +137,13 @@ export function TodoBoard() {
     }
   }, [topLevel])
 
+  const filtersActive =
+    search.trim() !== '' || dueFilter !== 'any' || peopleFilter !== 'any'
+
   const visible = useMemo(() => {
     let rows = topLevel.filter((i) => i.status !== 'done')
+
+    // View selection
     switch (selection.kind) {
       case 'starred':
         rows = rows.filter((i) => i.starred)
@@ -100,18 +157,65 @@ export function TodoBoard() {
       case 'list':
         rows = rows.filter((i) => i.list_id === selection.id)
         break
-      case 'all':
       default:
         break
     }
-    return [...rows].sort((a, b) => {
-      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
-      if (a.starred !== b.starred) return a.starred ? -1 : 1
-      const at = a.due_at ? new Date(a.due_at).getTime() : Infinity
-      const bt = b.due_at ? new Date(b.due_at).getTime() : Infinity
-      return at - bt
-    })
-  }, [topLevel, selection])
+
+    // Text search (title + notes)
+    const q = search.trim().toLowerCase()
+    if (q) {
+      rows = rows.filter(
+        (i) =>
+          i.title.toLowerCase().includes(q) ||
+          (i.notes ?? '').toLowerCase().includes(q),
+      )
+    }
+
+    // Due filter
+    if (dueFilter === 'overdue') {
+      rows = rows.filter((i) => i.due_at && new Date(i.due_at).getTime() < Date.now())
+    } else if (dueFilter === 'today') {
+      rows = rows.filter((i) => isToday(i.due_at))
+    } else if (dueFilter === 'week') {
+      rows = rows.filter((i) => withinWeek(i.due_at))
+    } else if (dueFilter === 'none') {
+      rows = rows.filter((i) => !i.due_at)
+    }
+
+    // People filter
+    if (peopleFilter === 'owned') {
+      rows = rows.filter((i) => i.owner_id === currentUserId)
+    } else if (peopleFilter === 'assigned') {
+      rows = rows.filter((i) => i.owner_id !== currentUserId)
+    } else if (peopleFilter === 'shared') {
+      rows = rows.filter((i) => (data?.assignees[i.id]?.length ?? 0) > 0)
+    }
+
+    // Sort
+    const sorted = [...rows]
+    if (sortBy === 'manual') {
+      sorted.sort((a, b) => a.position - b.position)
+    } else if (sortBy === 'due') {
+      sorted.sort((a, b) => {
+        const at = a.due_at ? new Date(a.due_at).getTime() : Infinity
+        const bt = b.due_at ? new Date(b.due_at).getTime() : Infinity
+        return at - bt
+      })
+    } else {
+      sorted.sort((a, b) => {
+        if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+        if (a.starred !== b.starred) return a.starred ? -1 : 1
+        const at = a.due_at ? new Date(a.due_at).getTime() : Infinity
+        const bt = b.due_at ? new Date(b.due_at).getTime() : Infinity
+        return at - bt
+      })
+    }
+    return sorted
+  }, [topLevel, selection, search, dueFilter, peopleFilter, sortBy, currentUserId, data])
+
+  // Drag only makes sense with the manual sort and no active filters, so the
+  // on-screen order maps cleanly back to stored positions.
+  const canDrag = sortBy === 'manual' && !filtersActive
 
   const doneItems = useMemo(
     () =>
@@ -134,6 +238,37 @@ export function TodoBoard() {
       await mutate()
       if (res.list) setSelection({ kind: 'list', id: res.list.id })
     }
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = visible.findIndex((i) => i.id === active.id)
+    const newIndex = visible.findIndex((i) => i.id === over.id)
+    if (oldIndex < 0 || newIndex < 0) return
+    const reordered = arrayMove(visible, oldIndex, newIndex)
+    // Optimistically apply the new order, then persist.
+    await mutate(
+      (prev) => {
+        if (!prev) return prev
+        const posById = new Map(reordered.map((it, idx) => [it.id, idx]))
+        return {
+          ...prev,
+          items: prev.items.map((it) =>
+            posById.has(it.id) ? { ...it, position: posById.get(it.id) as number } : it,
+          ),
+        }
+      },
+      { revalidate: false },
+    )
+    await reorderItems({ orderedIds: reordered.map((i) => i.id) })
+    await mutate()
+  }
+
+  function clearFilters() {
+    setSearch('')
+    setDueFilter('any')
+    setPeopleFilter('any')
   }
 
   return (
@@ -222,14 +357,101 @@ export function TodoBoard() {
         ) : (
           <div className="space-y-4">
             <TodoComposer listId={activeListId} onCreated={() => mutate()} autoFocus />
+
+            {/* Filter bar */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative min-w-[10rem] flex-1">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search to-dos..."
+                  className="h-8 pl-8"
+                />
+              </div>
+              <Select value={dueFilter} onValueChange={(v) => setDueFilter(v as DueFilter)}>
+                <SelectTrigger className="h-8 w-[8.5rem]">
+                  <SelectValue placeholder="Due" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any date</SelectItem>
+                  <SelectItem value="overdue">Overdue</SelectItem>
+                  <SelectItem value="today">Due today</SelectItem>
+                  <SelectItem value="week">Next 7 days</SelectItem>
+                  <SelectItem value="none">No date</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={peopleFilter}
+                onValueChange={(v) => setPeopleFilter(v as PeopleFilter)}
+              >
+                <SelectTrigger className="h-8 w-[8.5rem]">
+                  <SelectValue placeholder="People" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Everyone</SelectItem>
+                  <SelectItem value="owned">Owned by me</SelectItem>
+                  <SelectItem value="assigned">Assigned to me</SelectItem>
+                  <SelectItem value="shared">Shared</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortBy)}>
+                <SelectTrigger className="h-8 w-[8.5rem]">
+                  <SelectValue placeholder="Sort" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="manual">Manual order</SelectItem>
+                  <SelectItem value="due">Due date</SelectItem>
+                  <SelectItem value="priority">Priority</SelectItem>
+                </SelectContent>
+              </Select>
+              {filtersActive && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1 px-2 text-xs"
+                  onClick={clearFilters}
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Clear
+                </Button>
+              )}
+            </div>
+
             <div className="space-y-0.5">
               {visible.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border/70 py-12 text-center">
-                  <p className="text-sm font-medium">Nothing here yet</p>
+                  <p className="text-sm font-medium">
+                    {filtersActive ? 'No matching to-dos' : 'Nothing here yet'}
+                  </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Add a to-do above to get started.
+                    {filtersActive
+                      ? 'Try adjusting or clearing your filters.'
+                      : 'Add a to-do above to get started.'}
                   </p>
                 </div>
+              ) : canDrag ? (
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext
+                    items={visible.map((i) => i.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {visible.map((item) => (
+                      <SortableRow
+                        key={item.id}
+                        item={item}
+                        subtasks={items.filter((s) => s.parent_id === item.id)}
+                        assignees={data?.assignees[item.id] ?? []}
+                        currentUserId={currentUserId}
+                        onChanged={() => mutate()}
+                      />
+                    ))}
+                  </SortableContext>
+                </DndContext>
               ) : (
                 visible.map((item) => (
                   <TodoItemRow
@@ -237,6 +459,7 @@ export function TodoBoard() {
                     item={item}
                     subtasks={items.filter((s) => s.parent_id === item.id)}
                     assignees={data?.assignees[item.id] ?? []}
+                    currentUserId={currentUserId}
                     onChanged={() => mutate()}
                   />
                 ))
@@ -255,6 +478,7 @@ export function TodoBoard() {
                       item={item}
                       subtasks={items.filter((s) => s.parent_id === item.id)}
                       assignees={data?.assignees[item.id] ?? []}
+                      currentUserId={currentUserId}
                       onChanged={() => mutate()}
                     />
                   ))}
@@ -311,6 +535,52 @@ export function TodoBoard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+// A draggable wrapper around a to-do row. The grip is the only drag handle so
+// the row's own buttons stay clickable.
+function SortableRow({
+  item,
+  subtasks,
+  assignees,
+  currentUserId,
+  onChanged,
+}: {
+  item: TodoItem
+  subtasks: TodoItem[]
+  assignees: import('@/lib/todo/queries').TodoAssigneeView[]
+  currentUserId?: string
+  onChanged: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: item.id })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+  }
+  return (
+    <div ref={setNodeRef} style={style}>
+      <TodoItemRow
+        item={item}
+        subtasks={subtasks}
+        assignees={assignees}
+        currentUserId={currentUserId}
+        onChanged={onChanged}
+        dragHandle={
+          <button
+            type="button"
+            className="mt-1 cursor-grab touch-none text-muted-foreground/50 opacity-0 hover:text-foreground group-hover/row:opacity-100 active:cursor-grabbing"
+            aria-label="Drag to reorder"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
+        }
+      />
     </div>
   )
 }

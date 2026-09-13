@@ -3921,6 +3921,8 @@ export interface TodoItem {
   // Set when the to-do has been mirrored into the in-app calendar.
   calendar_entry_id: string | null
   completed_at: string | null
+  // Set once a due-date reminder has been sent (idempotency for the cron).
+  reminded_at: string | null
   created_at: string
   updated_at: string
 }

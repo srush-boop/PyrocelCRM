@@ -22,6 +22,9 @@ import {
   Download,
   Trash2,
   MoreHorizontal,
+  GripVertical,
+  Check,
+  X,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -38,6 +41,7 @@ import {
   deleteItem,
   updateItem,
   addToCalendar,
+  respondToInvite,
 } from '@/app/(dashboard)/dashboard/todo/actions'
 
 function fmtDue(iso: string, allDay: boolean): string {
@@ -67,18 +71,30 @@ export function TodoItemRow({
   assignees,
   onChanged,
   compact,
+  currentUserId,
+  dragHandle,
 }: {
   item: TodoItem
   subtasks: TodoItem[]
   assignees: TodoAssigneeView[]
   onChanged: () => void
   compact?: boolean
+  currentUserId?: string
+  dragHandle?: React.ReactNode
 }) {
   const [expanded, setExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(item.title)
   const done = item.status === 'done'
   const doneCount = subtasks.filter((s) => s.status === 'done').length
+
+  // Whether the signed-in user is a collaborator (not the owner) who still
+  // needs to respond to an assignment/invite.
+  const me =
+    currentUserId && item.owner_id !== currentUserId
+      ? assignees.find((a) => a.user_id === currentUserId)
+      : undefined
+  const needsResponse = me?.response === 'pending'
 
   async function saveTitle() {
     setEditing(false)
@@ -97,8 +113,9 @@ export function TodoItemRow({
   }
 
   return (
-    <div className="rounded-lg border border-transparent hover:border-border/60 hover:bg-muted/30">
+    <div className="group/row rounded-lg border border-transparent hover:border-border/60 hover:bg-muted/30">
       <div className="flex items-start gap-2 px-2 py-1.5">
+        {dragHandle}
         <Checkbox
           checked={done}
           onCheckedChange={async (v) => {
@@ -187,7 +204,45 @@ export function TodoItemRow({
                 ))}
               </div>
             )}
+            {me?.response === 'declined' && (
+              <span className="text-xs text-muted-foreground">You declined</span>
+            )}
+            {me?.response === 'accepted' && (
+              <span className="inline-flex items-center gap-0.5 text-xs text-green-600 dark:text-green-500">
+                <Check className="h-3 w-3" /> You accepted
+              </span>
+            )}
           </div>
+
+          {/* invite response prompt */}
+          {needsResponse && (
+            <div className="mt-1.5 flex items-center gap-2 pl-5">
+              <span className="text-xs text-muted-foreground">
+                {me?.role === 'invitee' ? 'You were invited' : 'Assigned to you'}
+              </span>
+              <Button
+                size="sm"
+                className="h-6 gap-1 px-2 text-xs"
+                onClick={async () => {
+                  await respondToInvite({ itemId: item.id, response: 'accepted' })
+                  onChanged()
+                }}
+              >
+                <Check className="h-3 w-3" /> Accept
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 gap-1 px-2 text-xs"
+                onClick={async () => {
+                  await respondToInvite({ itemId: item.id, response: 'declined' })
+                  onChanged()
+                }}
+              >
+                <X className="h-3 w-3" /> Decline
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* actions */}

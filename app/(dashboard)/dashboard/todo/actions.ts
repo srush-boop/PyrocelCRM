@@ -202,6 +202,67 @@ export async function setItemFlag(input: {
   return { ok: true }
 }
 
+export async function reorderItems(input: {
+  orderedIds: string[]
+}): Promise<{ ok: boolean; error?: string }> {
+  const auth = await getAuth()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase, userId } = auth
+  if (input.orderedIds.length === 0) return { ok: true }
+  // Persist the new order as sequential positions. Only the owner's own rows
+  // are touched (RLS + owner filter), so a drag can't reorder others' items.
+  const now = new Date().toISOString()
+  await Promise.all(
+    input.orderedIds.map((id, index) =>
+      supabase
+        .from('todo_items')
+        .update({ position: index, updated_at: now })
+        .eq('id', id)
+        .eq('owner_id', userId),
+    ),
+  )
+  revalidatePath('/dashboard/todo')
+  return { ok: true }
+}
+
+export async function respondToInvite(input: {
+  itemId: string
+  response: 'accepted' | 'declined'
+}): Promise<{ ok: boolean; error?: string }> {
+  const auth = await getAuth()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase, userId } = auth
+  // The current user updates only their own assignee row on this item.
+  const { data: row, error } = await supabase
+    .from('todo_item_assignees')
+    .update({ response: input.response })
+    .eq('item_id', input.itemId)
+    .eq('user_id', userId)
+    .select('item_id')
+    .maybeSingle()
+  if (error) return { ok: false, error: error.message }
+  if (!row) return { ok: false, error: 'You are not on this to-do.' }
+
+  // Let the owner know how the person responded.
+  const { data: item } = await supabase
+    .from('todo_items')
+    .select('title, owner_id')
+    .eq('id', input.itemId)
+    .maybeSingle()
+  if (item?.owner_id && item.owner_id !== userId) {
+    await notifyUsers({
+      userIds: [item.owner_id],
+      title: input.response === 'accepted' ? 'To-do accepted' : 'To-do declined',
+      body: item.title,
+      url: '/dashboard/todo',
+      category: 'todo',
+      createdBy: userId,
+    })
+  }
+  revalidatePath('/dashboard/todo')
+  return { ok: true }
+}
+
 export async function deleteItem(id: string): Promise<{ ok: boolean; error?: string }> {
   const auth = await getAuth()
   if ('error' in auth) return { ok: false, error: auth.error }

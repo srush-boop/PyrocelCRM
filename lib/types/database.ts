@@ -3939,3 +3939,19 @@ export interface TodoItemAssignee {
   response: TodoAssigneeResponse
   created_at: string
 }
+
+export type TodoAttachmentKind = 'file' | 'email'
+
+// A file or email attached to a to-do. Bytes live in the private Blob store at
+// `blob_path`; they're streamed through /api/todo/attachment/[id].
+export interface TodoAttachment {
+  id: string
+  item_id: string
+  uploaded_by: string
+  kind: TodoAttachmentKind
+  file_name: string
+  content_type: string | null
+  size_bytes: number | null
+  blob_path: string
+  created_at: string
+}

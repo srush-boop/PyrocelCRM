@@ -358,6 +358,34 @@ export async function removeAssignee(input: {
   return { ok: true }
 }
 
+// ------------------------------ Attachments --------------------------------
+
+export async function deleteAttachment(
+  attachmentId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await getAuth()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase } = auth
+
+  // RLS restricts DELETE to the uploader or item owner. Read the blob path first
+  // (also RLS-checked) so we can clean up storage after the row is removed.
+  const { data: att } = await supabase
+    .from('todo_attachments')
+    .select('blob_path')
+    .eq('id', attachmentId)
+    .maybeSingle()
+
+  const { error } = await supabase.from('todo_attachments').delete().eq('id', attachmentId)
+  if (error) return { ok: false, error: error.message }
+
+  if (att?.blob_path) {
+    const { del } = await import('@vercel/blob')
+    await del(att.blob_path).catch(() => {})
+  }
+  revalidatePath('/dashboard/todo')
+  return { ok: true }
+}
+
 // --------------------------- Calendar inclusion ----------------------------
 
 export async function addToCalendar(

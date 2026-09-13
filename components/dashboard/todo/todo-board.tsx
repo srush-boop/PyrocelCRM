@@ -446,6 +446,7 @@ export function TodoBoard() {
                         item={item}
                         subtasks={items.filter((s) => s.parent_id === item.id)}
                         assignees={data?.assignees[item.id] ?? []}
+                        attachments={data?.attachments[item.id] ?? []}
                         currentUserId={currentUserId}
                         onChanged={() => mutate()}
                       />
@@ -459,6 +460,7 @@ export function TodoBoard() {
                     item={item}
                     subtasks={items.filter((s) => s.parent_id === item.id)}
                     assignees={data?.assignees[item.id] ?? []}
+                    attachments={data?.attachments[item.id] ?? []}
                     currentUserId={currentUserId}
                     onChanged={() => mutate()}
                   />
@@ -478,6 +480,7 @@ export function TodoBoard() {
                       item={item}
                       subtasks={items.filter((s) => s.parent_id === item.id)}
                       assignees={data?.assignees[item.id] ?? []}
+                      attachments={data?.attachments[item.id] ?? []}
                       currentUserId={currentUserId}
                       onChanged={() => mutate()}
                     />
@@ -545,12 +548,14 @@ function SortableRow({
   item,
   subtasks,
   assignees,
+  attachments,
   currentUserId,
   onChanged,
 }: {
   item: TodoItem
   subtasks: TodoItem[]
   assignees: import('@/lib/todo/queries').TodoAssigneeView[]
+  attachments: import('@/lib/types/database').TodoAttachment[]
   currentUserId?: string
   onChanged: () => void
 }) {
@@ -567,6 +572,7 @@ function SortableRow({
         item={item}
         subtasks={subtasks}
         assignees={assignees}
+        attachments={attachments}
         currentUserId={currentUserId}
         onChanged={onChanged}
         dragHandle={

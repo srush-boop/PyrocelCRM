@@ -27,17 +27,23 @@ export function TodoButton() {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <Button
-        variant="ghost"
+        variant={total > 0 ? 'default' : 'outline'}
         size="sm"
         onClick={() => setOpen(true)}
-        className="relative gap-2 text-muted-foreground hover:text-foreground"
+        className="relative gap-2 font-semibold shadow-sm"
         aria-label={`To-Do${total > 0 ? `, ${total} needing attention` : ''}`}
       >
         <ListChecks className="h-5 w-5" />
-        <span className="hidden lg:inline">To-Do</span>
+        <span className="hidden sm:inline">To-Do</span>
         {total > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+          <span className="ml-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-background px-1.5 text-xs font-bold text-foreground shadow-sm">
             {total > 99 ? '99+' : total}
+          </span>
+        )}
+        {total > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-2.5 w-2.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
           </span>
         )}
       </Button>

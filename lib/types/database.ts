@@ -3882,3 +3882,60 @@ export interface FormDocument {
   completedByName: string | null
   files: FormDocumentFile[]
 }
+
+// ---------------------------------------------------------------------------
+// To-Do module ("Waiting for you" inbox + personal Wunderlist-style tasks)
+// ---------------------------------------------------------------------------
+
+// A user's container for to-dos. Every user has an implicit "Inbox" (list_id
+// null) plus any custom lists they create here.
+export interface TodoList {
+  id: string
+  owner_id: string
+  name: string
+  color: string | null
+  position: number
+  is_default: boolean
+  created_at: string
+}
+
+export type TodoStatus = 'open' | 'done'
+
+// A single to-do (or subtask when parent_id is set).
+export interface TodoItem {
+  id: string
+  owner_id: string
+  // null = the owner's Inbox.
+  list_id: string | null
+  // Self-reference for subtasks; null for top-level items.
+  parent_id: string | null
+  title: string
+  notes: string | null
+  status: TodoStatus
+  // ISO timestamp; null = no due date.
+  due_at: string | null
+  all_day: boolean
+  starred: boolean
+  pinned: boolean
+  position: number
+  // Set when the to-do has been mirrored into the in-app calendar.
+  calendar_entry_id: string | null
+  completed_at: string | null
+  // Set once a due-date reminder has been sent (idempotency for the cron).
+  reminded_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type TodoAssigneeRole = 'assignee' | 'invitee'
+export type TodoAssigneeResponse = 'pending' | 'accepted' | 'declined'
+
+// A person assigned to, or invited to collaborate on, a to-do.
+export interface TodoItemAssignee {
+  id: string
+  item_id: string
+  user_id: string
+  role: TodoAssigneeRole
+  response: TodoAssigneeResponse
+  created_at: string
+}

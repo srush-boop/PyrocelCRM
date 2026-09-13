@@ -17,7 +17,12 @@ import { TodoPanel } from './todo-panel'
 export function TodoButton() {
   const [open, setOpen] = useState(false)
   const { data } = useTodo()
-  const total = data?.totalWaiting ?? 0
+  // Count everything that needs the user's attention: their own open to-dos
+  // plus items waiting on them, so adding a to-do moves the badge.
+  const openMine = (data?.items ?? []).filter(
+    (i) => !i.parent_id && i.status !== 'done',
+  ).length
+  const total = (data?.totalWaiting ?? 0) + openMine
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -26,7 +31,7 @@ export function TodoButton() {
         size="sm"
         onClick={() => setOpen(true)}
         className="relative gap-2 text-muted-foreground hover:text-foreground"
-        aria-label={`To-Do${total > 0 ? `, ${total} waiting on you` : ''}`}
+        aria-label={`To-Do${total > 0 ? `, ${total} needing attention` : ''}`}
       >
         <ListChecks className="h-5 w-5" />
         <span className="hidden lg:inline">To-Do</span>

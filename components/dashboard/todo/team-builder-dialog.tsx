@@ -77,7 +77,7 @@ export function TeamBuilderDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users className="h-5 w-5 text-primary" />
@@ -168,7 +168,7 @@ function TeamList({
                     {team.members.length === 1 ? 'member' : 'members'}
                   </span>
                 </div>
-                <p className="truncate text-xs text-muted-foreground">
+                <p className="line-clamp-2 text-xs text-muted-foreground">
                   {team.members.length === 0
                     ? 'No members yet'
                     : team.members

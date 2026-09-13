@@ -170,7 +170,7 @@ function TeamList({
                         .join(', ')}
                 </p>
               </div>
-              <div className="flex -space-x-1.5">
+              <div className="flex shrink-0 -space-x-1.5">
                 {team.members.slice(0, 3).map((m) => (
                   <Avatar key={m.user_id} className="h-6 w-6 border border-background">
                     <AvatarFallback className="bg-primary/10 text-[9px] text-primary">
@@ -184,27 +184,29 @@ function TeamList({
                   </span>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => onEdit(team)}
-                className="text-muted-foreground hover:text-foreground"
-                aria-label={`Edit team ${team.name}`}
-              >
-                <Pencil className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => remove(team)}
-                disabled={busy === team.id}
-                className="text-muted-foreground hover:text-destructive"
-                aria-label={`Delete team ${team.name}`}
-              >
-                {busy === team.id ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Trash2 className="h-4 w-4" />
-                )}
-              </button>
+              <div className="flex shrink-0 items-center gap-1.5 pl-1">
+                <button
+                  type="button"
+                  onClick={() => onEdit(team)}
+                  className="text-muted-foreground hover:text-foreground"
+                  aria-label={`Edit team ${team.name}`}
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => remove(team)}
+                  disabled={busy === team.id}
+                  className="text-muted-foreground hover:text-destructive"
+                  aria-label={`Delete team ${team.name}`}
+                >
+                  {busy === team.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             </div>
           ))
         )}

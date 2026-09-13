@@ -95,6 +95,41 @@ Because the app loads the remote site, day-to-day CRM changes ship by deploying
 the web app as usual — you only resubmit the native binary when native plugins,
 permissions, icons, or the `CRM_URL` change.
 
+## CI builds (GitHub Actions)
+
+Two workflows in `.github/workflows/` build the binaries off a developer machine
+so you only need to configure secrets once:
+
+- `native-android.yml` — Ubuntu runner, outputs a signed `.aab` (release) or
+  `.apk` (debug). Trigger via **Actions → Native Android build → Run workflow**.
+- `native-ios.yml` — macOS runner, archives and exports an `.ipa`. Trigger via
+  **Actions → Native iOS build → Run workflow**.
+
+Both also run automatically on `main` when `native-app/**` or `lib/native/**`
+changes. Set `CRM_URL` (or hardcode it in `capacitor.config.ts`) before release.
+
+### Required repository secrets
+
+Shared:
+
+- `TRANSISTORSOFT_TOKEN` — auth token for the licensed background-geolocation
+  npm registry (omit only if you vendor the package another way).
+
+Android:
+
+- `ANDROID_KEYSTORE_BASE64` — base64 of your release keystore
+  (`base64 -w0 release.keystore`).
+- `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
+
+iOS (also set `teamID` in `ios/App/ExportOptions.plist`):
+
+- `IOS_DIST_CERT_BASE64` — base64 of your Apple distribution cert (`.p12`).
+- `IOS_DIST_CERT_PASSWORD` — the `.p12` password.
+- `IOS_PROVISION_PROFILE_BASE64` — base64 of the matching provisioning profile.
+
+Downloadable build artifacts are attached to each workflow run. You still upload
+to TestFlight / Play Console (or add a fastlane deploy step later).
+
 ## What still needs a decision / future work
 
 - **Voice-call escalation** (deferred — SMS-only was chosen for the web backstop).

@@ -238,10 +238,10 @@ export function TodoItemRow({
               </span>
             )}
             {assignees.length > 0 && (
-              <div className="flex -space-x-1.5">
+              <div className="flex -space-x-2">
                 {assignees.slice(0, 3).map((a) => (
-                  <Avatar key={a.user_id} className="h-4 w-4 border border-background">
-                    <AvatarFallback className="bg-primary/10 text-[8px] text-primary">
+                  <Avatar key={a.user_id} className="h-7 w-7 border border-background">
+                    <AvatarFallback className="bg-primary/10 text-[11px] text-primary">
                       {initials(a.full_name)}
                     </AvatarFallback>
                   </Avatar>

@@ -79,10 +79,10 @@ export function AssignPopover({
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+          className="h-8 w-8 text-muted-foreground hover:text-foreground"
           aria-label="Assign or invite people"
         >
-          <UserPlus className="h-4 w-4" />
+          <UserPlus className="h-5 w-5" />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 p-0">

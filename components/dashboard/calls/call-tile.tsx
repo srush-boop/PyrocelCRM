@@ -220,10 +220,12 @@ export function CallTile({
   className,
 }: CallTileProps) {
   const isCompleted = status === 'completed'
-  // Accent: overdue always wins (destructive); else a supplied system colour;
-  // else in-progress uses the brand primary; otherwise a plain border.
+  const isPaused = status === 'paused'
+  // Accent: overdue always wins (destructive); then paused (amber) so a paused
+  // call is instantly identifiable; else a supplied system colour; else
+  // in-progress uses the brand primary; otherwise a plain border.
   const accentStyle =
-    !isOverdue && accentColor ? { borderLeftColor: accentColor } : undefined
+    !isOverdue && !isPaused && accentColor ? { borderLeftColor: accentColor } : undefined
   // Open calls show the client KPI "complete by" date when supplied (else the
   // visit date). Completed calls always show the actual completion date.
   const showCompleteBy = !isCompleted && completeByDate != null
@@ -240,11 +242,13 @@ export function CallTile({
         'border-l-4 transition-colors',
         isOverdue
           ? 'border-l-destructive'
-          : accentColor
-            ? ''
-            : status === 'in_progress'
-              ? 'border-l-primary'
-              : 'border-l-border',
+          : isPaused
+            ? 'border-l-orange-500'
+            : accentColor
+              ? ''
+              : status === 'in_progress'
+                ? 'border-l-primary'
+                : 'border-l-border',
         className,
       )}
       style={accentStyle}

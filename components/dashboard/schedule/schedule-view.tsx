@@ -311,6 +311,8 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
   const [needsBookingOnly, setNeedsBookingOnly] = useState(false)
   // Quick filter: only show overdue (past scheduled_date, still pending) calls.
   const [showOverdueOnly, setShowOverdueOnly] = useState(false)
+  // Quick filter: only show paused calls (started then paused mid-visit).
+  const [pausedOnly, setPausedOnly] = useState(false)
   // Multi-select filters: empty array = "all" (no restriction). Engineers accept
   // the sentinel 'unassigned' alongside real engineer ids.
   const [selectedEngineers, setSelectedEngineers] = useState<string[]>([])
@@ -579,6 +581,7 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
   }
 
   const needsBookingCount = tasks.filter(taskNeedsBooking).length
+  const pausedCount = tasks.filter((t) => t.status === 'paused').length
   // Weekly recurring calls (a recurring service repeating every 1 week, e.g.
   // weekly fire-alarm tests) are too routine to book an individual appointment
   // for, so the booking option is hidden for them.
@@ -588,7 +591,7 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
   }
 
   const hasActiveFilters =
-    search || selectedEngineers.length > 0 || selectedSystems.length > 0 || selectedServices.length > 0 || dateFrom || dateTo || needsBookingOnly || showOverdueOnly
+    search || selectedEngineers.length > 0 || selectedSystems.length > 0 || selectedServices.length > 0 || dateFrom || dateTo || needsBookingOnly || showOverdueOnly || pausedOnly
 
   const clearFilters = () => {
     setSearch('')
@@ -599,6 +602,7 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
     setDateTo(undefined)
     setNeedsBookingOnly(false)
     setShowOverdueOnly(false)
+    setPausedOnly(false)
   }
 
   // ---- Saved / shared views (office/admin) ----------------------------------
@@ -612,6 +616,7 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
     dateTo: dateTo ? dateTo.toISOString() : null,
     needsBookingOnly,
     showOverdueOnly,
+    pausedOnly,
     activeTab,
     sortBy,
   }
@@ -632,6 +637,7 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
     setDateTo(f.dateTo ? new Date(f.dateTo as string) : undefined)
     setNeedsBookingOnly(!!f.needsBookingOnly)
     setShowOverdueOnly(!!f.showOverdueOnly)
+    setPausedOnly(!!f.pausedOnly)
     if (typeof f.activeTab === 'string') setActiveTab(f.activeTab)
     if (typeof f.sortBy === 'string') setSortBy(f.sortBy as SortKey)
   }
@@ -684,6 +690,9 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
       task.status === 'pending' && new Date(task.scheduled_date) < today
     )
 
+    // Paused quick filter — only calls started then paused mid-visit.
+    const matchesPaused = !pausedOnly || task.status === 'paused'
+
     // CDO route selector — narrow to the chosen route's calls ('all' = no limit).
     const matchesRoute =
       !isCdo || selectedRouteId === 'all' || taskRoute(task)?.id === selectedRouteId
@@ -697,6 +706,7 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
       matchesDateTo &&
       matchesNeedsBooking &&
       matchesOverdue &&
+      matchesPaused &&
       matchesRoute
     )
   })
@@ -1315,7 +1325,7 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
           section only renders when it has something to offer, so engineers (no
           Who/When) simply see fewer columns. */}
       <div className="mt-2 flex flex-wrap gap-2">
-        {(needsBookingCount > 0 || needsBookingOnly || overdueTasks.length > 0 || showOverdueOnly) && (
+        {(needsBookingCount > 0 || needsBookingOnly || overdueTasks.length > 0 || showOverdueOnly || pausedCount > 0 || pausedOnly) && (
           <FilterGroup tone="attention" icon={Filter} label="Flags" className="flex-none">
             <div className="flex flex-wrap items-center gap-1.5">
               {(needsBookingCount > 0 || needsBookingOnly) && (
@@ -1345,6 +1355,29 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
                   Overdue
                   <Badge variant={showOverdueOnly ? 'secondary' : 'destructive'} className="ml-0.5 px-1.5 py-0">
                     {overdueTasks.length}
+                  </Badge>
+                </Button>
+              )}
+              {(pausedCount > 0 || pausedOnly) && (
+                <Button
+                  type="button"
+                  variant={pausedOnly ? 'default' : 'outline'}
+                  onClick={() => setPausedOnly((v) => !v)}
+                  aria-pressed={pausedOnly}
+                  className={cn(
+                    'h-9 gap-1.5',
+                    pausedOnly
+                      ? 'bg-orange-500 text-white hover:bg-orange-500/90'
+                      : 'bg-background text-orange-700',
+                  )}
+                >
+                  <PauseCircle className="h-4 w-4" />
+                  Paused
+                  <Badge
+                    variant={pausedOnly ? 'secondary' : 'outline'}
+                    className="ml-0.5 px-1.5 py-0"
+                  >
+                    {pausedCount}
                   </Badge>
                 </Button>
               )}

@@ -148,6 +148,13 @@ export function McpInspectionCard({ mcp, state, disabled = false, onChange }: Mc
       <CollapsibleContent className="space-y-4 px-4 pb-4">
         <Separator />
 
+        {mcp.notes && (
+          <div className="rounded-md bg-muted/50 p-3 text-sm">
+            <p className="mb-1 text-xs font-medium text-muted-foreground">Notes</p>
+            <p className="whitespace-pre-wrap">{mcp.notes}</p>
+          </div>
+        )}
+
         {(mcp.asset_image_url || mcp.test_key_type || (mcp.photos && mcp.photos.length > 0)) && (
           <div className="space-y-3 rounded-md bg-muted/50 p-3 text-sm">
             {mcp.asset_image_url && (

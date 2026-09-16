@@ -415,7 +415,7 @@ export function TimesheetView({ initial, outstandingTasks }: Props) {
         <div className="flex justify-end">
           <Button onClick={() => setSubmitOpen(true)} disabled={pending}>
             <Send className="mr-2 h-4 w-4" />
-            Confirm &amp; submit
+            {timesheet.status === 'rejected' ? 'Amend & resubmit' : 'Confirm & submit'}
           </Button>
         </div>
       )}

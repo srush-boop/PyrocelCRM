@@ -226,6 +226,13 @@ export function DamperInspectionCard({
       <CollapsibleContent className="space-y-4 px-4 pb-4">
         <Separator />
 
+        {damper.notes && (
+          <div className="rounded-md bg-muted/50 p-3 text-sm">
+            <p className="mb-1 text-xs font-medium text-muted-foreground">Notes</p>
+            <p className="whitespace-pre-wrap">{damper.notes}</p>
+          </div>
+        )}
+
         <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
           <Label htmlFor={`acc-${damper.id}`} className="text-sm font-medium">
             Accessible for testing?

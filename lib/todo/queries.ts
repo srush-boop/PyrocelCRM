@@ -61,6 +61,23 @@ export async function getTodoData(userId: string): Promise<TodoData> {
   const byId = new Map<string, TodoItem>()
   for (const it of owned) byId.set(it.id, it)
   for (const it of assignedItems) if (!byId.has(it.id)) byId.set(it.id, it)
+
+  // Pull in subtasks of every visible item, regardless of who owns them, so a
+  // shared/assigned to-do shows the owner's subtasks to the collaborator and
+  // the collaborator's subtasks back to the owner. RLS (is_todo_parent_participant)
+  // authorises this cross-owner read.
+  const parentIds = Array.from(byId.keys())
+  if (parentIds.length > 0) {
+    const { data: childRows } = await supabase
+      .from('todo_items')
+      .select('*')
+      .in('parent_id', parentIds)
+      .order('position', { ascending: true })
+    for (const c of (childRows ?? []) as TodoItem[]) {
+      if (!byId.has(c.id)) byId.set(c.id, c)
+    }
+  }
+
   const items = Array.from(byId.values())
 
   // Load assignees for all visible items, joined to profile names.

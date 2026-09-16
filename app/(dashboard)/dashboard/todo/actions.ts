@@ -71,16 +71,39 @@ export async function renameList(input: {
   return { ok: true }
 }
 
-export async function deleteList(id: string): Promise<{ ok: boolean; error?: string }> {
+export async function deleteList(
+  id: string,
+  opts?: { deleteItems?: boolean },
+): Promise<{ ok: boolean; error?: string }> {
   const auth = await getAuth()
   if ('error' in auth) return { ok: false, error: auth.error }
   const { supabase, userId } = auth
-  // Items in the list fall back to the Inbox (list_id null) rather than delete.
-  await supabase
-    .from('todo_items')
-    .update({ list_id: null })
-    .eq('list_id', id)
-    .eq('owner_id', userId)
+
+  if (opts?.deleteItems) {
+    // Caller chose to delete the list's tasks too. Clean up any mirrored
+    // calendar entries first, then delete the items (subtasks cascade via FK).
+    const { data: rows } = await supabase
+      .from('todo_items')
+      .select('calendar_entry_id')
+      .eq('list_id', id)
+      .eq('owner_id', userId)
+    const calIds = (rows ?? [])
+      .map((r) => r.calendar_entry_id)
+      .filter((v): v is string => Boolean(v))
+    if (calIds.length > 0) {
+      await supabase.from('calendar_entries').delete().in('id', calIds)
+    }
+    await supabase.from('todo_items').delete().eq('list_id', id).eq('owner_id', userId)
+  } else {
+    // Otherwise the items fall back to the Inbox (list_id null) so they remain
+    // visible in All to-dos.
+    await supabase
+      .from('todo_items')
+      .update({ list_id: null })
+      .eq('list_id', id)
+      .eq('owner_id', userId)
+  }
+
   const { error } = await supabase
     .from('todo_lists')
     .delete()
@@ -169,7 +192,10 @@ export async function toggleItemDone(input: {
 }): Promise<{ ok: boolean; error?: string }> {
   const auth = await getAuth()
   if ('error' in auth) return { ok: false, error: auth.error }
-  const { supabase, userId } = auth
+  const { supabase } = auth
+  // No owner filter: anyone the to-do is shared with (assignee/invitee) or who
+  // can access it as a subtask of a shared parent may tick it off. RLS
+  // (owner / assignee / parent-participant) authorises the update.
   const { error } = await supabase
     .from('todo_items')
     .update({
@@ -178,7 +204,6 @@ export async function toggleItemDone(input: {
       updated_at: new Date().toISOString(),
     })
     .eq('id', input.id)
-    .eq('owner_id', userId)
   if (error) return { ok: false, error: error.message }
   revalidatePath('/dashboard/todo')
   return { ok: true }
@@ -267,14 +292,31 @@ export async function deleteItem(id: string): Promise<{ ok: boolean; error?: str
   const auth = await getAuth()
   if ('error' in auth) return { ok: false, error: auth.error }
   const { supabase, userId } = auth
-  // Subtasks cascade via FK; also remove any mirrored calendar entry.
+
+  // Read the item (RLS lets the owner or a collaborator see it).
   const { data: item } = await supabase
     .from('todo_items')
-    .select('calendar_entry_id')
+    .select('owner_id, calendar_entry_id')
     .eq('id', id)
-    .eq('owner_id', userId)
     .maybeSingle()
-  if (item?.calendar_entry_id) {
+  if (!item) return { ok: false, error: 'To-do not found.' }
+
+  // A collaborator (assignee/invitee, not the owner) "deleting" the to-do only
+  // removes it from their own list — the owner and everyone else keep it.
+  if (item.owner_id !== userId) {
+    const { error } = await supabase
+      .from('todo_item_assignees')
+      .delete()
+      .eq('item_id', id)
+      .eq('user_id', userId)
+    if (error) return { ok: false, error: error.message }
+    revalidatePath('/dashboard/todo')
+    return { ok: true }
+  }
+
+  // Owner delete removes it for everyone. Subtasks cascade via FK; also remove
+  // any mirrored calendar entry.
+  if (item.calendar_entry_id) {
     await supabase.from('calendar_entries').delete().eq('id', item.calendar_entry_id)
   }
   const { error } = await supabase
@@ -586,5 +628,39 @@ export async function addToCalendar(
 
   revalidatePath('/dashboard/todo')
   revalidatePath('/dashboard/calendar')
+  return { ok: true }
+}
+
+// --------------------------- Waiting-on-you inbox --------------------------
+
+// Manually clears one item from the "Waiting on you" inbox. Most sources
+// auto-clear once actioned; this is the escape hatch for anything that lingers
+// (e.g. an approval you've delegated, an escalation you've handled elsewhere).
+// Notifications are cleared by marking them read so they don't re-appear in the
+// bell either; everything else is remembered in todo_waiting_dismissals.
+export async function dismissWaitingItem(
+  key: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await getAuth()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase, userId } = auth
+  const trimmed = (key ?? '').trim()
+  if (!trimmed) return { ok: false, error: 'Nothing to dismiss.' }
+
+  if (trimmed.startsWith('notif-')) {
+    const notifId = trimmed.slice('notif-'.length)
+    await supabase
+      .from('notifications')
+      .update({ read_at: new Date().toISOString() })
+      .eq('id', notifId)
+      .eq('user_id', userId)
+      .is('read_at', null)
+  }
+
+  const { error } = await supabase
+    .from('todo_waiting_dismissals')
+    .upsert({ user_id: userId, item_key: trimmed }, { onConflict: 'user_id,item_key' })
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/dashboard/todo')
   return { ok: true }
 }

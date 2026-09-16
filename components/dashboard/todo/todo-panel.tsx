@@ -63,7 +63,7 @@ export function TodoPanel({ onNavigate }: { onNavigate?: () => void }) {
             <Loader2 className="h-5 w-5 animate-spin" />
           </div>
         ) : tab === 'waiting' ? (
-          <WaitingBuckets buckets={data?.buckets ?? []} onNavigate={onNavigate} />
+          <WaitingBuckets buckets={data?.buckets ?? []} onNavigate={onNavigate} onDismissed={() => mutate()} />
         ) : (
           <div className="space-y-3">
             <TodoComposer onCreated={() => mutate()} />

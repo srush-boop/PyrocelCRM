@@ -99,9 +99,18 @@ export function TodoItemRow({
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(item.title)
   const [uploading, setUploading] = useState(false)
+  // Optimistic completion + removal so the row responds instantly instead of
+  // waiting on the round-trip (the old behaviour felt broken for 3-10s).
+  const [optimisticDone, setOptimisticDone] = useState<boolean | null>(null)
+  const [removed, setRemoved] = useState(false)
+  // Optimistic per-subtask completion state, keyed by subtask id.
+  const [subDone, setSubDone] = useState<Record<string, boolean>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const done = item.status === 'done'
-  const doneCount = subtasks.filter((s) => s.status === 'done').length
+  const done = optimisticDone ?? item.status === 'done'
+  const doneCount = subtasks.filter((s) => (subDone[s.id] ?? s.status === 'done')).length
+
+  // The signed-in user is a collaborator (shared with) rather than the owner.
+  const isCollaborator = Boolean(currentUserId && item.owner_id !== currentUserId)
 
   async function uploadFile(file: File) {
     setUploading(true)
@@ -150,6 +159,10 @@ export function TodoItemRow({
     onChanged()
   }
 
+  // Optimistically removed (deleted, or left by a collaborator) — drop it from
+  // the list immediately; the revalidation confirms it.
+  if (removed) return null
+
   return (
     <div className="group/row rounded-lg border border-transparent hover:border-border/60 hover:bg-muted/30">
       <div className="flex items-start gap-2 px-2 py-1.5">
@@ -157,7 +170,14 @@ export function TodoItemRow({
         <Checkbox
           checked={done}
           onCheckedChange={async (v) => {
-            await toggleItemDone({ id: item.id, done: Boolean(v) })
+            const next = Boolean(v)
+            setOptimisticDone(next)
+            const res = await toggleItemDone({ id: item.id, done: next })
+            if (!res.ok) {
+              setOptimisticDone(null)
+              toast.error(res.error || 'Could not update the to-do.')
+              return
+            }
             onChanged()
           }}
           className="mt-1"
@@ -360,12 +380,18 @@ export function TodoItemRow({
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
                 onClick={async () => {
-                  await deleteItem(item.id)
+                  setRemoved(true)
+                  const res = await deleteItem(item.id)
+                  if (!res.ok) {
+                    setRemoved(false)
+                    toast.error(res.error || 'Could not delete the to-do.')
+                    return
+                  }
                   onChanged()
                 }}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
-                Delete
+                {isCollaborator ? 'Remove from my list' : 'Delete'}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -449,12 +475,21 @@ export function TodoItemRow({
             </Button>
           </div>
 
-          {subtasks.map((sub) => (
+          {subtasks.map((sub) => {
+            const subChecked = subDone[sub.id] ?? sub.status === 'done'
+            return (
             <div key={sub.id} className="flex items-center gap-2 py-0.5">
               <Checkbox
-                checked={sub.status === 'done'}
+                checked={subChecked}
                 onCheckedChange={async (v) => {
-                  await toggleItemDone({ id: sub.id, done: Boolean(v) })
+                  const next = Boolean(v)
+                  setSubDone((m) => ({ ...m, [sub.id]: next }))
+                  const res = await toggleItemDone({ id: sub.id, done: next })
+                  if (!res.ok) {
+                    setSubDone((m) => ({ ...m, [sub.id]: !next }))
+                    toast.error(res.error || 'Could not update the subtask.')
+                    return
+                  }
                   onChanged()
                 }}
                 aria-label="Toggle subtask"
@@ -462,7 +497,7 @@ export function TodoItemRow({
               <span
                 className={cn(
                   'flex-1 text-sm',
-                  sub.status === 'done' && 'text-muted-foreground line-through',
+                  subChecked && 'text-muted-foreground line-through',
                 )}
               >
                 {sub.title}
@@ -472,7 +507,11 @@ export function TodoItemRow({
                 size="icon"
                 className="h-6 w-6"
                 onClick={async () => {
-                  await deleteItem(sub.id)
+                  const res = await deleteItem(sub.id)
+                  if (!res.ok) {
+                    toast.error(res.error || 'Could not delete the subtask.')
+                    return
+                  }
                   onChanged()
                 }}
                 aria-label="Delete subtask"
@@ -480,7 +519,8 @@ export function TodoItemRow({
                 <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
               </Button>
             </div>
-          ))}
+            )
+          })}
           <div className="pt-1">
             <TodoComposer
               parentId={item.id}

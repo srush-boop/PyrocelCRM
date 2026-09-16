@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTodo } from './use-todo'
 import { WaitingBuckets } from './waiting-buckets'
 import { TodoItemRow } from './todo-item-row'
@@ -106,19 +106,33 @@ function withinWeek(iso: string | null): boolean {
 // drag-to-reorder. Mirrors Wunderlist-style organisation while reusing the
 // same item row as the slide-over.
 export function TodoBoard() {
-  const { data, isLoading, mutate } = useTodo()
+  const { data, isLoading, mutate, mutatePersonal, mutateWaiting } = useTodo()
   const [selection, setSelection] = useState<Selection>({ kind: 'waiting' })
   const [showNewList, setShowNewList] = useState(false)
   const [newListName, setNewListName] = useState('')
   const [newListColor, setNewListColor] = useState<string>(LIST_COLORS[5])
   const [busy, setBusy] = useState(false)
   const [showTeams, setShowTeams] = useState(false)
+  const [listPendingDelete, setListPendingDelete] = useState<TodoList | null>(null)
+  const [deletingList, setDeletingList] = useState(false)
 
   // Filters
   const [search, setSearch] = useState('')
   const [dueFilter, setDueFilter] = useState<DueFilter>('any')
   const [peopleFilter, setPeopleFilter] = useState<PeopleFilter>('any')
   const [sortBy, setSortBy] = useState<SortBy>('manual')
+
+  // Only auto-focus the quick-add box on pointer/desktop. On touch devices
+  // auto-focus pops the on-screen keyboard the moment a view opens, which is
+  // jarring — so we hold off until the user actually taps the field.
+  const [isDesktop, setIsDesktop] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px) and (pointer: fine)')
+    const update = () => setIsDesktop(mq.matches)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -250,8 +264,9 @@ export function TodoBoard() {
     const newIndex = visible.findIndex((i) => i.id === over.id)
     if (oldIndex < 0 || newIndex < 0) return
     const reordered = arrayMove(visible, oldIndex, newIndex)
-    // Optimistically apply the new order, then persist.
-    await mutate(
+    // Optimistically apply the new order, then persist. Reordering only touches
+    // personal items, so mutate the cheap personal key (never the inbox).
+    await mutatePersonal(
       (prev) => {
         if (!prev) return prev
         const posById = new Map(reordered.map((it, idx) => [it.id, idx]))
@@ -265,7 +280,7 @@ export function TodoBoard() {
       { revalidate: false },
     )
     await reorderItems({ orderedIds: reordered.map((i) => i.id) })
-    await mutate()
+    await mutatePersonal()
   }
 
   function clearFilters() {
@@ -335,11 +350,7 @@ export function TodoBoard() {
             count={counts.byList(list.id)}
             active={activeListId === list.id}
             onClick={() => setSelection({ kind: 'list', id: list.id })}
-            onDelete={async () => {
-              await deleteList(list.id)
-              if (activeListId === list.id) setSelection({ kind: 'all' })
-              await mutate()
-            }}
+            onDelete={() => setListPendingDelete(list)}
           />
         ))}
         {lists.length === 0 && (
@@ -368,10 +379,10 @@ export function TodoBoard() {
             <Loader2 className="h-6 w-6 animate-spin" />
           </div>
         ) : selection.kind === 'waiting' ? (
-          <WaitingBuckets buckets={data?.buckets ?? []} />
+          <WaitingBuckets buckets={data?.buckets ?? []} onDismissed={() => mutateWaiting()} />
         ) : (
           <div className="space-y-4">
-            <TodoComposer listId={activeListId} onCreated={() => mutate()} autoFocus />
+            <TodoComposer listId={activeListId} onCreated={() => mutatePersonal()} autoFocus={isDesktop} />
 
             {/* Filter bar */}
             <div className="flex flex-wrap items-center gap-2">
@@ -463,7 +474,7 @@ export function TodoBoard() {
                         assignees={data?.assignees[item.id] ?? []}
                         attachments={data?.attachments[item.id] ?? []}
                         currentUserId={currentUserId}
-                        onChanged={() => mutate()}
+                        onChanged={() => mutatePersonal()}
                       />
                     ))}
                   </SortableContext>
@@ -477,7 +488,7 @@ export function TodoBoard() {
                     assignees={data?.assignees[item.id] ?? []}
                     attachments={data?.attachments[item.id] ?? []}
                     currentUserId={currentUserId}
-                    onChanged={() => mutate()}
+                    onChanged={() => mutatePersonal()}
                   />
                 ))
               )}
@@ -497,7 +508,7 @@ export function TodoBoard() {
                       assignees={data?.assignees[item.id] ?? []}
                       attachments={data?.attachments[item.id] ?? []}
                       currentUserId={currentUserId}
-                      onChanged={() => mutate()}
+                      onChanged={() => mutatePersonal()}
                     />
                   ))}
                 </div>
@@ -549,6 +560,85 @@ export function TodoBoard() {
             </Button>
             <Button onClick={handleCreateList} disabled={busy || !newListName.trim()}>
               Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={listPendingDelete !== null}
+        onOpenChange={(o) => {
+          if (!o) setListPendingDelete(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete “{listPendingDelete?.name}”?</DialogTitle>
+          </DialogHeader>
+          {(() => {
+            const openInList = listPendingDelete
+              ? topLevel.filter(
+                  (i) => i.list_id === listPendingDelete.id && i.status !== 'done',
+                ).length
+              : 0
+            return (
+              <div className="space-y-2 text-sm text-muted-foreground">
+                {openInList > 0 ? (
+                  <p>
+                    This list still has{' '}
+                    <span className="font-medium text-foreground">
+                      {openInList} unfinished {openInList === 1 ? 'to-do' : 'to-dos'}
+                    </span>
+                    . What should happen to them?
+                  </p>
+                ) : (
+                  <p>This list has no unfinished to-dos.</p>
+                )}
+              </div>
+            )
+          })()}
+          <DialogFooter className="flex-col gap-2 sm:flex-col sm:gap-2">
+            <Button
+              variant="outline"
+              className="w-full"
+              disabled={deletingList}
+              onClick={async () => {
+                if (!listPendingDelete) return
+                setDeletingList(true)
+                const listId = listPendingDelete.id
+                await deleteList(listId, { deleteItems: false })
+                setDeletingList(false)
+                setListPendingDelete(null)
+                if (activeListId === listId) setSelection({ kind: 'all' })
+                await mutate()
+              }}
+            >
+              Keep to-dos (move to Inbox)
+            </Button>
+            <Button
+              variant="destructive"
+              className="w-full"
+              disabled={deletingList}
+              onClick={async () => {
+                if (!listPendingDelete) return
+                setDeletingList(true)
+                const listId = listPendingDelete.id
+                await deleteList(listId, { deleteItems: true })
+                setDeletingList(false)
+                setListPendingDelete(null)
+                if (activeListId === listId) setSelection({ kind: 'all' })
+                await mutate()
+              }}
+            >
+              Delete list and its to-dos
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full"
+              disabled={deletingList}
+              onClick={() => setListPendingDelete(null)}
+            >
+              Cancel
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -678,13 +768,14 @@ function ListNavRow({
         <span className="flex-1 truncate">{list.name}</span>
       </button>
       {count > 0 && <span className="text-xs text-muted-foreground">{count}</span>}
+      {/* Always visible on touch (no hover); reveal on hover for pointer users. */}
       <button
         type="button"
         onClick={onDelete}
-        className="text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
+        className="p-1 text-muted-foreground hover:text-destructive md:opacity-0 md:group-hover:opacity-100"
         aria-label={`Delete list ${list.name}`}
       >
-        <Trash2 className="h-3.5 w-3.5" />
+        <Trash2 className="h-4 w-4" />
       </button>
     </div>
   )

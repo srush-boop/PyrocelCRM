@@ -15,6 +15,10 @@ export interface WaitingItem {
   href: string
   // ISO timestamp used for ordering / "x ago" display.
   timestamp?: string | null
+  // Whether the user can manually dismiss this line from their inbox. The id
+  // doubles as the dismissal key. Defaults to dismissible; chat (which
+  // auto-clears when the thread is read) opts out.
+  dismissible?: boolean
 }
 
 // One source group of things awaiting the user.
@@ -55,6 +59,18 @@ export async function getWaitingForYou(
   const isStaff = STAFF_ROLES.includes(role)
   const buckets: WaitingBucket[] = []
 
+  // Keys the user has manually dismissed from their inbox. Anything still
+  // "live" but explicitly dismissed is hidden; anything that has actually been
+  // actioned drops out of its source query on its own (auto-clear).
+  const dismissed = (await safe(async () => {
+    const { data } = await supabase
+      .from('todo_waiting_dismissals')
+      .select('item_key')
+      .eq('user_id', userId)
+    return new Set((data ?? []).map((d: { item_key: string }) => d.item_key))
+  })) ?? new Set<string>()
+  const keep = (id: string) => !dismissed.has(id)
+
   // 1) Approvals (leave, forms/tasks, timesheets, missed tasks, purchase invoices)
   if (isStaff) {
     const approvals = await safe(async () => {
@@ -66,7 +82,7 @@ export async function getWaitingForYou(
         getPurchaseInvoiceApprovals(),
       ])
       const items: WaitingItem[] = []
-      const pendingLeave = leave?.pending ?? []
+      const pendingLeave = (leave?.pending ?? []).filter((l) => keep(`leave-${l.id}`))
       for (const l of pendingLeave.slice(0, 6)) {
         items.push({
           id: `leave-${l.id}`,
@@ -76,7 +92,9 @@ export async function getWaitingForYou(
           timestamp: l.startAt ?? null,
         })
       }
-      const formItems = forms.ok ? forms.instances ?? [] : []
+      const formItems = (forms.ok ? forms.instances ?? [] : []).filter((f) =>
+        keep(`form-${f.id}`),
+      )
       for (const f of formItems.slice(0, 6)) {
         items.push({
           id: `form-${f.id}`,
@@ -86,7 +104,9 @@ export async function getWaitingForYou(
           timestamp: f.completed_at ?? null,
         })
       }
-      const missedItems = missed.ok ? missed.instances ?? [] : []
+      const missedItems = (missed.ok ? missed.instances ?? [] : []).filter((m) =>
+        keep(`missed-${m.id}`),
+      )
       for (const m of missedItems.slice(0, 6)) {
         items.push({
           id: `missed-${m.id}`,
@@ -96,7 +116,9 @@ export async function getWaitingForYou(
           timestamp: m.due_at ?? null,
         })
       }
-      const purchaseItems = purchase.ok ? purchase.invoices ?? [] : []
+      const purchaseItems = (purchase.ok ? purchase.invoices ?? [] : []).filter((p) =>
+        keep(`pi-${p.id}`),
+      )
       for (const p of purchaseItems.slice(0, 6)) {
         items.push({
           id: `pi-${p.id}`,
@@ -138,11 +160,11 @@ export async function getWaitingForYou(
         .lte('due_at', nowIso)
         .order('due_at', { ascending: true })
         .limit(20)
-      const rows = (data ?? []) as unknown as {
+      const rows = ((data ?? []) as unknown as {
         id: string
         due_at: string | null
         template: { name: string | null } | { name: string | null }[] | null
-      }[]
+      }[]).filter((r) => keep(`task-${r.id}`))
       const items: WaitingItem[] = rows.map((r) => {
         const tpl = Array.isArray(r.template) ? r.template[0] : r.template
         return {
@@ -178,6 +200,8 @@ export async function getWaitingForYou(
         subtitle: `${c.unread} unread`,
         href: `/dashboard/chat?channel=${c.id}`,
         timestamp: null,
+        // Chat clears itself once the thread is read — no manual dismiss.
+        dismissible: false,
       }))
       const count = withUnread.reduce((sum, c) => sum + c.unread, 0)
       return { items, count }
@@ -203,12 +227,12 @@ export async function getWaitingForYou(
         .eq('status', 'new')
         .order('received_at', { ascending: false })
         .limit(10)
-      const rows = (data ?? []) as {
+      const rows = ((data ?? []) as {
         id: string
         subject: string | null
         from_email: string | null
         received_at: string | null
-      }[]
+      }[]).filter((r) => keep(`req-${r.id}`))
       const items: WaitingItem[] = rows.map((r) => ({
         id: `req-${r.id}`,
         title: r.subject ?? 'Client request',
@@ -240,13 +264,13 @@ export async function getWaitingForYou(
         .is('read_at', null)
         .order('created_at', { ascending: false })
         .limit(10)
-      const rows = (data ?? []) as {
+      const rows = ((data ?? []) as {
         id: string
         title: string | null
         body: string | null
         url: string | null
         created_at: string | null
-      }[]
+      }[]).filter((r) => keep(`notif-${r.id}`))
       const items: WaitingItem[] = rows.map((r) => ({
         id: `notif-${r.id}`,
         title: r.title ?? 'Notification',

@@ -158,6 +158,13 @@ export interface CallOverdueInput {
   /** Regulatory baseline the client tier falls back to when no override. */
   regulatoryToleranceValue?: number | null
   regulatoryToleranceUnit?: ToleranceUnit | null
+  /**
+   * "Attend within X hours" KPI deadline (tasks.respond_by) for reactive /
+   * emergency calls. When present it drives an hours-based urgency window
+   * instead of the date-based tolerance target. Ignored by the date-based
+   * overdue/target-date helpers.
+   */
+  respondBy?: string | Date | null
 }
 
 /**
@@ -232,9 +239,17 @@ export interface CallUrgencyConfig {
   /**
    * How many days before a call's complete-by/target date it starts showing
    * the amber "due soon" accent. Overdue (red) always applies once the target
-   * date has passed, independent of this window.
+   * date has passed, independent of this window. Used for PPM / date-based
+   * calls.
    */
   dueSoonDays: number
+  /**
+   * How many hours before a reactive/emergency call's "attend within X hours"
+   * respond-by deadline it starts showing the amber "due soon" accent. Overdue
+   * (red) always applies once respond_by has passed. Used only for calls that
+   * carry a respond_by KPI deadline.
+   */
+  dueSoonHours: number
 }
 
 /** The global_config key storing the CallUrgencyConfig. */
@@ -244,6 +259,7 @@ export const CALL_URGENCY_CONFIG_KEY = 'call_urgency_config'
 export const DEFAULT_CALL_URGENCY_CONFIG: CallUrgencyConfig = {
   enabled: true,
   dueSoonDays: 7,
+  dueSoonHours: 4,
 }
 
 /** Coerce a stored (possibly partial/unknown) config value into a valid one. */
@@ -254,9 +270,14 @@ export function parseCallUrgencyConfig(value: unknown): CallUrgencyConfig {
     typeof v.dueSoonDays === 'number' && v.dueSoonDays >= 0 && v.dueSoonDays <= 365
       ? Math.round(v.dueSoonDays)
       : DEFAULT_CALL_URGENCY_CONFIG.dueSoonDays
+  const hours =
+    typeof v.dueSoonHours === 'number' && v.dueSoonHours >= 0 && v.dueSoonHours <= 336
+      ? Math.round(v.dueSoonHours)
+      : DEFAULT_CALL_URGENCY_CONFIG.dueSoonHours
   return {
     enabled: typeof v.enabled === 'boolean' ? v.enabled : DEFAULT_CALL_URGENCY_CONFIG.enabled,
     dueSoonDays: days,
+    dueSoonHours: hours,
   }
 }
 
@@ -276,6 +297,16 @@ export function getCallUrgency(
 ): CallUrgency {
   if (!config.enabled) return null
   if (input.status !== 'pending') return null
+
+  // Reactive/emergency calls with an "attend within X hours" respond-by deadline
+  // use an hours-based window rather than the date-based tolerance target.
+  const respondBy = toDate(input.respondBy ?? null)
+  if (respondBy) {
+    if (today.getTime() > respondBy.getTime()) return 'overdue'
+    const warnMs = Math.max(0, config.dueSoonHours) * 60 * 60 * 1000
+    return respondBy.getTime() - today.getTime() <= warnMs ? 'due_soon' : null
+  }
+
   const target = getCallTargetDate(input)
   if (!target) return null
   if (isAfter(today, endOfDay(target))) return 'overdue'

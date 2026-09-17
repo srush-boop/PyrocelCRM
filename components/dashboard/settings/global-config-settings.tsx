@@ -88,6 +88,7 @@ export function GlobalConfigSettings({
   // Call urgency accent (amber "due soon" / red "overdue" ring on call tiles)
   const [urgencyEnabled, setUrgencyEnabled] = useState(initialUrgencyConfig.enabled)
   const [dueSoonDays, setDueSoonDays] = useState(String(initialUrgencyConfig.dueSoonDays))
+  const [dueSoonHours, setDueSoonHours] = useState(String(initialUrgencyConfig.dueSoonHours))
   const [savingUrgency, setSavingUrgency] = useState(false)
 
   const persistUrgency = async (next: CallUrgencyConfig) => {
@@ -105,7 +106,8 @@ export function GlobalConfigSettings({
   const toggleUrgency = async (next: boolean) => {
     setUrgencyEnabled(next)
     const days = Math.min(365, Math.max(0, parseInt(dueSoonDays, 10) || 0))
-    const ok = await persistUrgency({ enabled: next, dueSoonDays: days })
+    const hours = Math.min(336, Math.max(0, parseInt(dueSoonHours, 10) || 0))
+    const ok = await persistUrgency({ enabled: next, dueSoonDays: days, dueSoonHours: hours })
     if (!ok) {
       setUrgencyEnabled(!next) // revert on failure
     } else {
@@ -113,11 +115,13 @@ export function GlobalConfigSettings({
     }
   }
 
-  const saveDueSoonDays = async () => {
+  const saveDueSoonWindows = async () => {
     const days = Math.min(365, Math.max(0, parseInt(dueSoonDays, 10) || 0))
+    const hours = Math.min(336, Math.max(0, parseInt(dueSoonHours, 10) || 0))
     setDueSoonDays(String(days))
-    const ok = await persistUrgency({ enabled: urgencyEnabled, dueSoonDays: days })
-    if (ok) toast.success('Due-soon window saved')
+    setDueSoonHours(String(hours))
+    const ok = await persistUrgency({ enabled: urgencyEnabled, dueSoonDays: days, dueSoonHours: hours })
+    if (ok) toast.success('Due-soon windows saved')
   }
 
   // PO overdue threshold
@@ -339,9 +343,11 @@ export function GlobalConfigSettings({
               />
             </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="due-soon-days">Due-soon window (days before complete-by)</Label>
-            <div className="flex items-center gap-2">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="due-soon-days">
+                PPM due-soon window (days before complete-by)
+              </Label>
               <Input
                 id="due-soon-days"
                 type="number"
@@ -349,23 +355,47 @@ export function GlobalConfigSettings({
                 max={365}
                 value={dueSoonDays}
                 onChange={(e) => setDueSoonDays(e.target.value)}
-                className="max-w-[120px]"
+                className="max-w-[140px]"
                 disabled={!urgencyEnabled || savingUrgency}
               />
-              <Button onClick={saveDueSoonDays} disabled={!urgencyEnabled || savingUrgency}>
-                {savingUrgency ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
-                Save
-              </Button>
+              <p className="text-xs text-muted-foreground">
+                Planned/PPM calls turn amber this many days before their complete-by date.
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              A call turns amber this many days before its complete-by date. Overdue (red) always
-              applies once that date has passed.
-            </p>
+            <div className="space-y-2">
+              <Label htmlFor="due-soon-hours">
+                Reactive due-soon window (hours before respond-by)
+              </Label>
+              <Input
+                id="due-soon-hours"
+                type="number"
+                min={0}
+                max={336}
+                value={dueSoonHours}
+                onChange={(e) => setDueSoonHours(e.target.value)}
+                className="max-w-[140px]"
+                disabled={!urgencyEnabled || savingUrgency}
+              />
+              <p className="text-xs text-muted-foreground">
+                Reactive/emergency calls with an &ldquo;attend within X hours&rdquo; deadline turn
+                amber this many hours before respond-by.
+              </p>
+            </div>
           </div>
+          <div className="flex items-center gap-2">
+            <Button onClick={saveDueSoonWindows} disabled={!urgencyEnabled || savingUrgency}>
+              {savingUrgency ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              Save windows
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Overdue (red) always applies once the complete-by or respond-by deadline has passed,
+            independent of these windows.
+          </p>
         </CardContent>
       </Card>
 

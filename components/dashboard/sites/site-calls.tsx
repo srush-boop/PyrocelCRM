@@ -150,9 +150,10 @@ function CallCard({
     frequencyUnit: call.site_service?.frequency_unit,
     clientToleranceValue: call.site_service?.client_tolerance_value,
     clientToleranceUnit: call.site_service?.client_tolerance_unit,
-    regulatoryToleranceValue: call.site_service?.service_type?.regulatory_tolerance_value,
-    regulatoryToleranceUnit: call.site_service?.service_type?.regulatory_tolerance_unit,
-  }
+      regulatoryToleranceValue: call.site_service?.service_type?.regulatory_tolerance_value,
+      regulatoryToleranceUnit: call.site_service?.service_type?.regulatory_tolerance_unit,
+      respondBy: call.respond_by,
+    }
   const isOverdue = isCallOverdue(overdueInput, today)
   const urgency = getCallUrgency(overdueInput, urgencyConfig, today)
   const completeByDate = getCallTargetDate(overdueInput)

@@ -386,6 +386,7 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
     clientToleranceUnit: task.site_service?.client_tolerance_unit,
     regulatoryToleranceValue: task.site_service?.service_type?.regulatory_tolerance_value,
     regulatoryToleranceUnit: task.site_service?.service_type?.regulatory_tolerance_unit,
+    respondBy: task.respond_by,
   })
   const taskOverdue = (task: TaskWithDetails) => isCallOverdue(overdueInput(task), today)
   const taskUrgency = (task: TaskWithDetails) => getCallUrgency(overdueInput(task), callUrgencyConfig, today)

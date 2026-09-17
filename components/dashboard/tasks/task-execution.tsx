@@ -549,6 +549,11 @@ export function TaskExecution({
   const [clientSignatureName, setClientSignatureName] = useState(
     existingResult?.client_signature_name || '',
   )
+  // Reason captured when a non-recurring call is completed with no client
+  // signature (forced at completion; shown on the report).
+  const [signatureWaivedReason, setSignatureWaivedReason] = useState(
+    existingResult?.client_signature_waived_reason || '',
+  )
   const [testingStartTime, setTestingStartTime] = useState<Date | null>(
     existingResult?.testing_start_time ? new Date(existingResult.testing_start_time) : null
   )
@@ -847,9 +852,51 @@ export function TaskExecution({
   }
 
   const [submitBlockers, setSubmitBlockers] = useState<string[]>([])
-  // Complete the call. Validates conditional requirements first; there is no
-  // confirmation dialog — completing returns the engineer straight to Calls
-  // (or the nearby-calls prompt). handleSubmit is hoisted below.
+  const [incompleteWarnings, setIncompleteWarnings] = useState<string[]>([])
+
+  // Soft warnings: checklist items left blank that don't hard-block completion
+  // (unlike required fields / conditions). Surfaced in a confirmation dialog so
+  // the engineer knowingly completes with gaps rather than by accident.
+  const collectIncompleteWarnings = (): string[] => {
+    const warnings: string[] = []
+    for (const row of checklistResults) {
+      if (row.parent_item_id) continue
+      if (row.na) continue
+      if (row.required) continue // required blanks are hard blockers, handled above
+      const where = row.panel_name ? `${row.panel_name} — ${row.label}` : row.label
+      switch (row.type) {
+        case 'text':
+          if (!String(row.value ?? '').trim()) warnings.push(`${where}: no answer entered`)
+          break
+        case 'number':
+          if (row.value === '' || row.value == null || Number.isNaN(Number(row.value)))
+            warnings.push(`${where}: no value entered`)
+          break
+        case 'choice': {
+          const empty = Array.isArray(row.value) ? row.value.length === 0 : !row.value
+          if (empty) warnings.push(`${where}: no option chosen`)
+          break
+        }
+        case 'table': {
+          const empty = !Array.isArray(row.value) || row.value.length === 0
+          if (empty) warnings.push(`${where}: no rows added`)
+          break
+        }
+        default:
+          break
+      }
+    }
+    return warnings
+  }
+
+  // For non-recurring calls we expect an on-site client signature. If none was
+  // captured the engineer must state why before the call can close.
+  const signatureReasonRequired = isNonRecurring && !clientSignature
+
+  // Complete the call. Hard blockers (required fields / conditions) block inline.
+  // Otherwise, if there are incomplete sections OR a non-recurring call has no
+  // client signature, a confirmation dialog is shown (which forces a signature
+  // reason). A fully-complete call with a signature closes straight away.
   const handleAttemptSubmit = () => {
     const blockers = collectSubmitBlockers()
     if (blockers.length > 0) {
@@ -858,6 +905,12 @@ export function TaskExecution({
       return
     }
     setSubmitBlockers([])
+    const warnings = collectIncompleteWarnings()
+    setIncompleteWarnings(warnings)
+    if (warnings.length > 0 || signatureReasonRequired) {
+      setShowSubmitDialog(true)
+      return
+    }
     void handleSubmit()
   }
   const checklistCardRef = useRef<HTMLDivElement>(null)
@@ -872,6 +925,8 @@ export function TaskExecution({
       engineer_notes: engineerNotes,
       client_signature: clientSignature,
       client_signature_name: clientSignatureName.trim() || null,
+      client_signature_waived_reason:
+        isNonRecurring && !clientSignature ? signatureWaivedReason.trim() || null : null,
       testing_start_time: testingStartTime?.toISOString(),
       testing_end_time: testingEndTime?.toISOString(),
       photos: existingResult?.photos || [],
@@ -922,6 +977,8 @@ export function TaskExecution({
       engineer_notes: engineerNotes,
       client_signature: clientSignature,
       client_signature_name: clientSignatureName.trim() || null,
+      client_signature_waived_reason:
+        isNonRecurring && !clientSignature ? signatureWaivedReason.trim() || null : null,
       testing_start_time: testingStartTime?.toISOString(),
       testing_end_time: endTime.toISOString(),
       photos: existingResult?.photos || [],
@@ -958,63 +1015,61 @@ export function TaskExecution({
     setResultId(persisted.id)
     baseUpdatedAtRef.current = resultData.updated_at
 
-    // Mark task as completed
+    // Mark the task completed AND read the site service in parallel — they're
+    // independent, so running them together shaves a round-trip off the close.
     const completedAt = new Date()
-    await supabase
-      .from('tasks')
-      .update({
-        status: 'completed',
-        completed_at: completedAt.toISOString(),
-        updated_at: completedAt.toISOString(),
-      })
-      .eq('id', task.id)
-
-    // Update site service with last service date
     const lastServiceDate = completedAt.toISOString().split('T')[0]
-    await supabase
-      .from('site_services')
-      .update({
-        last_service_date: lastServiceDate,
-      })
-      .eq('id', task.site_service_id)
+    const [, siteServiceRes] = await Promise.all([
+      supabase
+        .from('tasks')
+        .update({
+          status: 'completed',
+          completed_at: completedAt.toISOString(),
+          updated_at: completedAt.toISOString(),
+        })
+        .eq('id', task.id),
+      task.site_service_id
+        ? supabase
+            .from('site_services')
+            .select(`
+              frequency_value,
+              frequency_unit,
+              anchor_next_to_schedule,
+              active,
+              site:sites!inner(id, status),
+              service_type:service_types!inner(id, status)
+            `)
+            .eq('id', task.site_service_id)
+            .single()
+        : Promise.resolve({ data: null }),
+    ])
 
     // Roll the service's projected "next due" date forward on completion so the
-    // office can see when the next visit falls due. NOTE: we deliberately do NOT
-    // create the next call here — future calls are only ever created via the
-    // office "Generate Calls" workflow.
-    const { data: siteServiceData } = await supabase
-      .from('site_services')
-      .select(`
-        frequency_value,
-        frequency_unit,
-        anchor_next_to_schedule,
-        active,
-        site:sites!inner(id, status),
-        service_type:service_types!inner(id, status)
-      `)
-      .eq('id', task.site_service_id)
-      .single()
-
-    const siteRel = (siteServiceData as { site?: { status?: string } | { status?: string }[] } | null)?.site
-    const siteStatus = Array.isArray(siteRel) ? siteRel[0]?.status : siteRel?.status
-    const serviceRel = (siteServiceData as { service_type?: { status?: string } | { status?: string }[] } | null)?.service_type
-    const serviceStatus = Array.isArray(serviceRel) ? serviceRel[0]?.status : serviceRel?.status
-    const serviceActive = (siteServiceData as { active?: boolean } | null)?.active !== false
-    if (siteServiceData && serviceActive && siteStatus === 'live' && serviceStatus !== 'dead') {
-      // Calculate next scheduled date based on frequency + anchor preference
-      const nextDate = computeNextScheduledDate(siteServiceData, {
-        completedAt,
-        scheduledDate: task.scheduled_date,
-      })
-      const nextDateStr = toDateString(nextDate)
-
-      // Update next_service_date on the site_service (projected "next due" only —
-      // no call is created).
+    // office can see when the next visit falls due, and stamp last_service_date.
+    // Both go in ONE update. NOTE: we deliberately do NOT create the next call
+    // here — future calls are only ever created via "Generate Calls".
+    const siteServiceData = siteServiceRes.data
+    if (task.site_service_id) {
+      const siteRel = (siteServiceData as { site?: { status?: string } | { status?: string }[] } | null)?.site
+      const siteStatus = Array.isArray(siteRel) ? siteRel[0]?.status : siteRel?.status
+      const serviceRel = (siteServiceData as { service_type?: { status?: string } | { status?: string }[] } | null)?.service_type
+      const serviceStatus = Array.isArray(serviceRel) ? serviceRel[0]?.status : serviceRel?.status
+      const serviceActive = (siteServiceData as { active?: boolean } | null)?.active !== false
+      const rollNext =
+        siteServiceData && serviceActive && siteStatus === 'live' && serviceStatus !== 'dead'
+      const serviceUpdate: { last_service_date: string; next_service_date?: string } = {
+        last_service_date: lastServiceDate,
+      }
+      if (rollNext) {
+        const nextDate = computeNextScheduledDate(siteServiceData, {
+          completedAt,
+          scheduledDate: task.scheduled_date,
+        })
+        serviceUpdate.next_service_date = toDateString(nextDate)
+      }
       await supabase
         .from('site_services')
-        .update({
-          next_service_date: nextDateStr,
-        })
+        .update(serviceUpdate)
         .eq('id', task.site_service_id)
     }
 
@@ -2388,7 +2443,70 @@ export function TaskExecution({
       {/* Call history — collapsed, at the very bottom below the completion action. */}
       {callHistory}
 
-      {/* Submit Confirmation Dialog */}
+      {/* Completion confirmation — surfaces incomplete sections and forces a
+          reason when a non-recurring call has no client signature. */}
+      <AlertDialog open={showSubmitDialog} onOpenChange={(o) => !submitting && setShowSubmitDialog(o)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Complete this call?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {incompleteWarnings.length > 0
+                ? 'Some sections are still incomplete. Review them below, then confirm to close the call.'
+                : 'Confirm to close the call and submit the report.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {incompleteWarnings.length > 0 && (
+            <div className="max-h-48 overflow-y-auto rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
+              <p className="flex items-center gap-2 font-medium text-amber-900">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                Incomplete sections
+              </p>
+              <ul className="mt-2 list-disc space-y-0.5 pl-6 text-amber-900">
+                {incompleteWarnings.map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {signatureReasonRequired && (
+            <div className="grid gap-1.5">
+              <Label htmlFor="signature-waived-reason">
+                No client signature captured — reason required
+              </Label>
+              <Textarea
+                id="signature-waived-reason"
+                value={signatureWaivedReason}
+                onChange={(e) => setSignatureWaivedReason(e.target.value)}
+                placeholder="e.g. No client representative available on site."
+                rows={3}
+              />
+              <p className="text-xs text-muted-foreground">
+                This reason is recorded on the report in place of the signature.
+              </p>
+            </div>
+          )}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting}>Keep editing</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={
+                submitting ||
+                (signatureReasonRequired && signatureWaivedReason.trim().length < 3)
+              }
+              onClick={(e) => {
+                e.preventDefault()
+                setShowSubmitDialog(false)
+                void handleSubmit()
+              }}
+            >
+              Complete call
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Lone-worker shift gate — blocks starting a call until on shift. */}
       {shiftGateDialog}
 
@@ -2398,6 +2516,15 @@ export function TaskExecution({
         calls={nearbyCalls}
         onClose={handleNearbyPromptClose}
       />
+
+      {/* Blocking overlay while the completion cascade runs, so the engineer
+          can't keep editing a call that's already closing. */}
+      {submitting && (
+        <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-3 bg-background/70 backdrop-blur-sm">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm font-medium text-foreground">Completing call…</p>
+        </div>
+      )}
     </div>
   )
 }

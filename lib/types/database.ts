@@ -2117,6 +2117,9 @@ export interface TaskResult {
   // a PNG data URL (self-contained), client_signature_name is the printed name.
   client_signature: string | null
   client_signature_name: string | null
+  // Reason a non-recurring call was completed WITHOUT an on-site signature
+  // (forced at completion when no signature is captured). Shown on the report.
+  client_signature_waived_reason: string | null
   testing_start_time: string | null
   testing_end_time: string | null
   email_sent_at: string | null

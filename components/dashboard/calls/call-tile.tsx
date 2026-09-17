@@ -291,6 +291,13 @@ export function CallTile({
                     aria-label="Emergency call"
                   />
                 )}
+                {isPaused && (
+                  <PauseCircle
+                    className="h-4 w-4 shrink-0 text-orange-500"
+                    role="img"
+                    aria-label="Paused call"
+                  />
+                )}
                 <span className="font-semibold text-pretty">{title}</span>
                 <CallStatusBadge status={status} />
                 {urgency === 'overdue' && (

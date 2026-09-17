@@ -563,6 +563,11 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
           signatoryTitle="Client / on-site representative"
           date={completedDate}
         />
+      ) : result?.client_signature_waived_reason ? (
+        <div className="rounded-md border border-dashed border-input bg-muted/40 p-3 text-sm">
+          <p className="font-medium">Client signature not captured</p>
+          <p className="mt-1 text-muted-foreground">{result.client_signature_waived_reason}</p>
+        </div>
       ) : null,
   }
 

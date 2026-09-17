@@ -36,6 +36,7 @@ import {
   ClipboardCheck,
   Search,
   Printer,
+  TriangleAlert,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { TimesheetSummary } from '@/lib/timesheets/compute'
@@ -424,6 +425,12 @@ function ReviewCard({ row, mode }: { row: ReviewRow; mode: CardMode }) {
             <span className="flex items-center gap-1 rounded-md border px-2 py-1">
               <Plane className="h-3.5 w-3.5 text-chart-4" />
               {summary?.leave.map((l) => l.type).join(', ')}
+            </span>
+          )}
+          {(summary?.conflictCount ?? 0) > 0 && (
+            <span className="flex items-center gap-1 rounded-md border border-chart-4/40 bg-chart-4/10 px-2 py-1 text-chart-4">
+              <TriangleAlert className="h-3.5 w-3.5" />
+              {summary?.conflictCount} leave conflict{(summary?.conflictCount ?? 0) === 1 ? '' : 's'}
             </span>
           )}
         </div>

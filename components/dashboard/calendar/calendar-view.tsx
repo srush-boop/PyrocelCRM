@@ -193,6 +193,10 @@ export function CalendarView({
   const [kindFilter, setKindFilter] = useState<string[]>([])
   const [departmentFilter, setDepartmentFilter] = useState<string[]>([])
 
+  // "My entries" quick toggle: active when the person filter is exactly the
+  // current user, so the button reflects and drives that single-person filter.
+  const mineOnly = personFilter.length === 1 && personFilter[0] === profile.id
+
   // Snapshot of the toolbar filters, used when saving a template.
   const currentFilters = useMemo<CalendarFilterState>(
     () => ({
@@ -389,6 +393,21 @@ export function CalendarView({
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          aria-pressed={mineOnly}
+          onClick={() => setPersonFilter(mineOnly ? [] : [profile.id])}
+          className={cn(
+            'border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:text-green-900',
+            mineOnly && 'ring-2 ring-green-500 ring-offset-1',
+          )}
+        >
+          <UserIcon className="mr-2 h-4 w-4" />
+          {mineOnly ? 'Showing my entries' : 'My entries'}
+        </Button>
+
         <MultiSelectFilter
           allLabel="All items"
           noun="kinds"

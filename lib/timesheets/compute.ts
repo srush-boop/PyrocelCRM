@@ -162,6 +162,13 @@ export interface TimesheetDay {
   // regardless of the user's manual choice. Drives the pre-tick hint in the UI.
   nightAutoSuggested: boolean
   oncallBand: string | null
+  // Conflict flag: the day has BOTH a recorded worked span (shift or timed
+  // job/manual activity) AND a leave/sickness/absence entry — i.e. the person
+  // was booked off yet still logged work. Advisory only; it never alters the
+  // computed hours or overtime.
+  leaveConflict: boolean
+  // The leave/absence type names that clash with the worked span on this day.
+  conflictLeaveTypes: string[]
 }
 
 export interface LeaveSummaryItem {
@@ -173,6 +180,13 @@ export interface OncallSummaryItem {
   date: string
   dayName: string
   band: string | null
+}
+
+export interface ConflictSummaryItem {
+  date: string
+  dayName: string
+  leaveTypes: string[]
+  workedMinutes: number
 }
 
 export interface TimesheetSummary {
@@ -190,6 +204,9 @@ export interface TimesheetSummary {
   oncall: OncallSummaryItem[]
   oncallCount: number
   leave: LeaveSummaryItem[]
+  // Days where a worked span clashes with a leave/absence entry (advisory).
+  conflicts: ConflictSummaryItem[]
+  conflictCount: number
 }
 
 // Calendar entry type names treated as LEAVE (excluded from worked time; shown
@@ -471,6 +488,26 @@ export function computeTimesheet(inputs: TimesheetInputs): TimesheetSummary {
     // --- On-call band for this date ---
     const oncallForDay = inputs.oncall.find((o) => o.shift_date === date)
 
+    // --- Leave/absence conflict ---
+    // The distinct leave/absence type names whose span covers this date.
+    const conflictLeaveTypes = Array.from(
+      new Set(
+        inputs.calendar
+          .filter((c) => {
+            const cStartDate = fmtDate(new Date(c.start_at))
+            const cEndDate = fmtDate(new Date(c.end_at))
+            return (
+              date >= cStartDate &&
+              date <= cEndDate &&
+              LEAVE_TYPE_NAMES.has(c.type_name.trim().toLowerCase())
+            )
+          })
+          .map((c) => c.type_name.trim()),
+      ),
+    )
+    // A conflict = booked off (leave/absence) yet a worked span was recorded.
+    const leaveConflict = conflictLeaveTypes.length > 0 && !!shiftStart && !!shiftEnd && workedMinutes > 0
+
     return {
       date,
       isoWeekday: iso,
@@ -493,6 +530,8 @@ export function computeTimesheet(inputs: TimesheetInputs): TimesheetSummary {
       isNightShift,
       nightAutoSuggested,
       oncallBand: oncallForDay?.band ?? null,
+      leaveConflict,
+      conflictLeaveTypes,
     }
   })
 
@@ -540,6 +579,16 @@ export function computeTimesheet(inputs: TimesheetInputs): TimesheetSummary {
     dates: Array.from(set).sort(),
   }))
 
+  // Leave/absence-vs-worked conflicts (advisory — does not change any totals).
+  const conflicts: ConflictSummaryItem[] = days
+    .filter((d) => d.leaveConflict)
+    .map((d) => ({
+      date: d.date,
+      dayName: d.dayName,
+      leaveTypes: d.conflictLeaveTypes,
+      workedMinutes: d.workedMinutes,
+    }))
+
   return {
     weekEnding: inputs.weekEnding,
     weekStart: dates[0],
@@ -554,6 +603,8 @@ export function computeTimesheet(inputs: TimesheetInputs): TimesheetSummary {
     oncall,
     oncallCount: oncall.length,
     leave,
+    conflicts,
+    conflictCount: conflicts.length,
   }
 }
 

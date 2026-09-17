@@ -203,7 +203,7 @@ function BookingEditor({
           <Input
             id="book-start"
             type="time"
-            className="w-full min-w-0"
+            className="w-full min-w-0 appearance-none"
             value={start}
             onChange={(e) => setStart(e.target.value)}
           />
@@ -215,7 +215,7 @@ function BookingEditor({
           <Input
             id="book-end"
             type="time"
-            className="w-full min-w-0"
+            className="w-full min-w-0 appearance-none"
             value={end}
             onChange={(e) => setEnd(e.target.value)}
           />

@@ -1713,7 +1713,7 @@ export function TaskExecution({
                               <div className="grid gap-2 sm:grid-cols-2">
                                 {(result.options || []).map((opt) => {
                                   const selected = Array.isArray(result.value)
-                                    ? result.value.includes(opt)
+                                    ? (result.value as string[]).includes(opt)
                                     : false
                                   return (
                                     <label

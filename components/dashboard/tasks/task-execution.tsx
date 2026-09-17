@@ -52,6 +52,7 @@ import {
   formatCalculationValue,
   suggestionForOption,
 } from '@/lib/checklists/compute'
+import { blobSrc } from '@/lib/blob'
 import { SignaturePad } from '@/components/portal/signature-pad'
 import { formatDateUK, formatTimeUK, toDatetimeLocalValue, cn } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
@@ -174,6 +175,9 @@ function buildInitialResults(
       : {}),
     ...(item.type === 'calculation' && item.calculation
       ? { calculation: item.calculation }
+      : {}),
+    ...(item.imagePathname
+      ? { imagePathname: item.imagePathname, imageName: item.imageName ?? null }
       : {}),
   })
 
@@ -1401,6 +1405,17 @@ export function TaskExecution({
                       {index > 0 && <Separator />}
                       <div className="pt-2">
                         <Label className="text-base font-medium">{result.label}</Label>
+
+                        {result.imagePathname ? (
+                          <div className="mt-2">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={blobSrc(result.imagePathname) || '/placeholder.svg'}
+                              alt={result.imageName ?? 'Reference image'}
+                              className="max-h-40 rounded-md border object-contain"
+                            />
+                          </div>
+                        ) : null}
 
                         {result.type === 'pass_fail' && (
                           <div className="grid grid-cols-4 gap-2 mt-3">

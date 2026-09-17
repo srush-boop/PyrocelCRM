@@ -34,6 +34,8 @@ import {
   CornerDownRight,
   List,
   Calculator,
+  ImageIcon,
+  X,
 } from 'lucide-react'
 import type {
   ChecklistTemplate,
@@ -44,6 +46,7 @@ import type {
   ServiceVisitType,
 } from '@/lib/types/database'
 import { calculationOpLabel } from '@/lib/checklists/compute'
+import { blobSrc } from '@/lib/blob'
 
 interface ChecklistEditorProps {
   checklist: ChecklistTemplate & { service_type: ServiceType }
@@ -475,6 +478,11 @@ export function ChecklistEditor({ checklist, visitTypes = [] }: ChecklistEditorP
                       />
                     )}
 
+                    <ChecklistItemImageField
+                      item={item}
+                      onChange={(updates) => updateItem(item.id, updates)}
+                    />
+
                     {supportsConditions(item.type) && (
                       <ConditionsPanel
                         item={item}
@@ -885,6 +893,87 @@ function CalculationPanel({
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// Author-uploaded reference image/icon shown beneath a service checklist
+// question at execution time. Reuses the internal-task template-image upload
+// route (admin/office gated, private Blob served via blobSrc).
+function ChecklistItemImageField({
+  item,
+  onChange,
+}: {
+  item: ChecklistItem
+  onChange: (updates: Partial<ChecklistItem>) => void
+}) {
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const src = blobSrc(item.imagePathname ?? null)
+
+  async function upload(file: File) {
+    setUploading(true)
+    setError(null)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('kind', 'image')
+      const res = await fetch('/api/internal-tasks/template-image/upload', {
+        method: 'POST',
+        body: fd,
+      })
+      if (!res.ok) throw new Error('upload failed')
+      const data = (await res.json()) as { pathname: string; name: string }
+      onChange({ imagePathname: data.pathname, imageName: data.name })
+    } catch {
+      setError('Image upload failed — please try again.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="border-t bg-muted/30 px-4 py-3">
+      {src ? (
+        <div className="flex items-start gap-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={src || '/placeholder.svg'}
+            alt={item.imageName ?? 'Reference image'}
+            className="h-16 w-16 rounded-md border object-cover"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => onChange({ imagePathname: null, imageName: null })}
+          >
+            <X className="mr-1 size-3.5" />
+            Remove image
+          </Button>
+        </div>
+      ) : (
+        <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+          {uploading ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <ImageIcon className="size-3.5" />
+          )}
+          Add reference image
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            disabled={uploading}
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) upload(f)
+              e.target.value = ''
+            }}
+          />
+        </label>
+      )}
+      {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
     </div>
   )
 }

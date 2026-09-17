@@ -19,6 +19,7 @@ import {
   numericValue,
   formatChoiceValue,
 } from '@/lib/checklists/compute'
+import { blobSrc } from '@/lib/blob'
 import {
   ReportBlocks,
   NumberedSection,
@@ -334,7 +335,19 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
                       </tr>
                     )}
                     <tr className="border-t align-top odd:bg-muted/30">
-                      <td className="px-3 py-2 font-medium">{item.label}</td>
+                      <td className="px-3 py-2 font-medium">
+                        {item.label}
+                        {item.imagePathname ? (
+                          <div className="mt-1">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={blobSrc(item.imagePathname) || '/placeholder.svg'}
+                              alt={item.imageName ?? 'Reference image'}
+                              className="max-h-24 rounded border object-contain"
+                            />
+                          </div>
+                        ) : null}
+                      </td>
                       <td className="px-3 py-2">
                         {item.na ? (
                           <span

@@ -889,6 +889,12 @@ export interface ChecklistItem {
   optionSuggestions?: Record<string, string>
   // calculation: how to combine the referenced numeric items.
   calculation?: ChecklistCalculation
+  // Optional author-uploaded reference image/icon shown beneath the question to
+  // help the engineer (e.g. a photo of the component or a labelled diagram).
+  // Stored as a private Blob pathname (served via blobSrc) — reuses the
+  // internal-task template-image upload route.
+  imagePathname?: string | null
+  imageName?: string | null
 }
 
 export interface ChecklistTemplate {
@@ -1985,6 +1991,11 @@ export interface Task {
   multiSelect?: boolean
   optionSuggestions?: Record<string, string>
   calculation?: ChecklistCalculation
+  // Author-uploaded reference image copied from the template item onto the row,
+  // so execution and reports can show it without the template. Served via
+  // blobSrc() through /api/blob.
+  imagePathname?: string | null
+  imageName?: string | null
   // Third state for pass/fail items: neither a pass nor a fail, but an
   // observation worth noting (e.g. wear, minor issue, recommendation).
   // When true, `passed` is null and the item is excluded from the pass/fail

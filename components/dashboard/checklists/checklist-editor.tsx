@@ -32,14 +32,22 @@ import {
   Camera,
   StickyNote,
   CornerDownRight,
+  List,
+  Calculator,
+  ImageIcon,
+  X,
+  Table as TableIcon,
 } from 'lucide-react'
 import type {
   ChecklistTemplate,
   ServiceType,
   ChecklistItem,
   ChecklistCondition,
+  ChecklistCalculation,
   ServiceVisitType,
 } from '@/lib/types/database'
+import { calculationOpLabel } from '@/lib/checklists/compute'
+import { blobSrc } from '@/lib/blob'
 
 interface ChecklistEditorProps {
   checklist: ChecklistTemplate & { service_type: ServiceType }
@@ -55,6 +63,9 @@ const itemTypeIcons = {
   text: TextCursorInput,
   number: Hash,
   checkbox: ToggleLeft,
+  choice: List,
+  calculation: Calculator,
+  table: TableIcon,
 }
 
 const itemTypeLabels = {
@@ -62,11 +73,21 @@ const itemTypeLabels = {
   text: 'Text Input',
   number: 'Number',
   checkbox: 'Checkbox',
+  choice: 'Dropdown',
+  calculation: 'Calculation',
+  table: 'Table',
 }
 
-// Text items have no discrete answer to trigger on, so they can't carry rules.
+// The condition-trigger dropdowns only cover pass_fail/checkbox/number. Text,
+// dropdown, calculation and table items have no discrete pass/fail answer to
+// trigger on.
 function supportsConditions(type: ChecklistItem['type']) {
-  return type !== 'text'
+  return type === 'pass_fail' || type === 'checkbox' || type === 'number'
+}
+
+// Calculation items are read-only outputs, so "Required" is meaningless for them.
+function supportsRequired(type: ChecklistItem['type']) {
+  return type !== 'calculation'
 }
 
 // The sensible default trigger for a freshly-added rule on a given item type.
@@ -409,18 +430,24 @@ export function ChecklistEditor({ checklist, visitTypes = [] }: ChecklistEditorP
                           </SelectContent>
                         </Select>
 
-                        <div className="flex items-center gap-2">
-                          <Checkbox
-                            id={`required-${item.id}`}
-                            checked={item.required}
-                            onCheckedChange={(checked) =>
-                              updateItem(item.id, { required: checked as boolean })
-                            }
-                          />
-                          <Label htmlFor={`required-${item.id}`} className="text-sm">
-                            Required
-                          </Label>
-                        </div>
+                        {supportsRequired(item.type) ? (
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              id={`required-${item.id}`}
+                              checked={item.required}
+                              onCheckedChange={(checked) =>
+                                updateItem(item.id, { required: checked as boolean })
+                              }
+                            />
+                            <Label htmlFor={`required-${item.id}`} className="text-sm">
+                              Required
+                            </Label>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground self-center">
+                            Auto-calculated
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-2">
@@ -437,6 +464,35 @@ export function ChecklistEditor({ checklist, visitTypes = [] }: ChecklistEditorP
                         </Button>
                       </div>
                     </div>
+
+                    {item.type === 'choice' && (
+                      <ChoiceOptionsPanel
+                        item={item}
+                        onChange={(updates) => updateItem(item.id, updates)}
+                      />
+                    )}
+
+                    {item.type === 'calculation' && (
+                      <CalculationPanel
+                        item={item}
+                        numberItems={items.filter(
+                          (i) => i.type === 'number' && i.id !== item.id,
+                        )}
+                        onChange={(updates) => updateItem(item.id, updates)}
+                      />
+                    )}
+
+                    {item.type === 'table' && (
+                      <TableColumnsPanel
+                        item={item}
+                        onChange={(updates) => updateItem(item.id, updates)}
+                      />
+                    )}
+
+                    <ChecklistItemImageField
+                      item={item}
+                      onChange={(updates) => updateItem(item.id, updates)}
+                    />
 
                     {supportsConditions(item.type) && (
                       <ConditionsPanel
@@ -673,6 +729,358 @@ function ConditionsPanel({
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// Per-item panel for a "Dropdown" (choice) item: manage its selectable options,
+// whether several may be picked, and an optional suggested answer per option
+// that pre-fills the engineer's note when that option is chosen.
+function ChoiceOptionsPanel({
+  item,
+  onChange,
+}: {
+  item: ChecklistItem
+  onChange: (updates: Partial<ChecklistItem>) => void
+}) {
+  const options = item.options || []
+
+  const setOption = (index: number, next: string) => {
+    const prev = options[index]
+    const nextOptions = options.map((o, i) => (i === index ? next : o))
+    // Keep any suggested answer attached to the renamed option.
+    const suggestions = { ...(item.optionSuggestions || {}) }
+    if (prev in suggestions && prev !== next) {
+      suggestions[next] = suggestions[prev]
+      delete suggestions[prev]
+    }
+    onChange({ options: nextOptions, optionSuggestions: suggestions })
+  }
+
+  const setSuggestion = (option: string, text: string) => {
+    const suggestions = { ...(item.optionSuggestions || {}) }
+    if (text.trim()) suggestions[option] = text
+    else delete suggestions[option]
+    onChange({ optionSuggestions: suggestions })
+  }
+
+  const addOption = () =>
+    onChange({ options: [...options, `Option ${options.length + 1}`] })
+
+  const removeOption = (index: number) => {
+    const removed = options[index]
+    const suggestions = { ...(item.optionSuggestions || {}) }
+    delete suggestions[removed]
+    onChange({
+      options: options.filter((_, i) => i !== index),
+      optionSuggestions: suggestions,
+    })
+  }
+
+  return (
+    <div className="border-t bg-muted/30 px-4 py-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Dropdown options
+        </span>
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id={`multi-${item.id}`}
+            checked={!!item.multiSelect}
+            onCheckedChange={(checked) => onChange({ multiSelect: checked as boolean })}
+          />
+          <Label htmlFor={`multi-${item.id}`} className="text-xs">
+            Allow multiple answers
+          </Label>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {options.map((option, index) => (
+          <div key={index} className="grid gap-2 md:grid-cols-[1fr_1fr_auto] items-center">
+            <Input
+              value={option}
+              onChange={(e) => setOption(index, e.target.value)}
+              placeholder={`Option ${index + 1}`}
+            />
+            <Input
+              value={item.optionSuggestions?.[option] || ''}
+              onChange={(e) => setSuggestion(option, e.target.value)}
+              placeholder="Suggested answer / note when chosen (optional)"
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => removeOption(index)}
+              className="text-destructive hover:text-destructive"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        ))}
+        {options.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            No options yet. Add the choices the engineer can pick from.
+          </p>
+        )}
+      </div>
+
+      <Button variant="outline" size="sm" onClick={addOption}>
+        <Plus className="mr-1 h-4 w-4" />
+        Add option
+      </Button>
+    </div>
+  )
+}
+
+// Per-item panel for a "Calculation" item: choose the operation and which number
+// items on this checklist feed it. The value is computed live at execution.
+const CALC_OPS: ChecklistCalculation['op'][] = ['sum', 'average', 'min', 'max', 'count']
+
+function CalculationPanel({
+  item,
+  numberItems,
+  onChange,
+}: {
+  item: ChecklistItem
+  numberItems: ChecklistItem[]
+  onChange: (updates: Partial<ChecklistItem>) => void
+}) {
+  const calc: ChecklistCalculation = item.calculation || { op: 'sum', itemIds: [] }
+
+  const toggleSource = (id: string, on: boolean) => {
+    const itemIds = on
+      ? [...calc.itemIds, id]
+      : calc.itemIds.filter((x) => x !== id)
+    onChange({ calculation: { ...calc, itemIds } })
+  }
+
+  return (
+    <div className="border-t bg-muted/30 px-4 py-3 space-y-3">
+      <div className="flex items-center gap-3">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Calculation
+        </span>
+        <Select
+          value={calc.op}
+          onValueChange={(op: ChecklistCalculation['op']) =>
+            onChange({ calculation: { ...calc, op } })
+          }
+        >
+          <SelectTrigger className="w-[180px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {CALC_OPS.map((op) => (
+              <SelectItem key={op} value={op}>
+                {calculationOpLabel(op)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {numberItems.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Add some Number items to this checklist first, then choose which of them
+          feed this calculation.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">Include these number answers:</p>
+          <div className="grid gap-2 md:grid-cols-2">
+            {numberItems.map((n) => (
+              <div key={n.id} className="flex items-center gap-2">
+                <Checkbox
+                  id={`calc-${item.id}-${n.id}`}
+                  checked={calc.itemIds.includes(n.id)}
+                  onCheckedChange={(checked) => toggleSource(n.id, checked as boolean)}
+                />
+                <Label htmlFor={`calc-${item.id}-${n.id}`} className="text-sm truncate">
+                  {n.label || 'Untitled number item'}
+                </Label>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Per-item panel for a "Table" item: manage the columns the engineer fills
+// row-by-row at execution. Each column has a label and a cell type
+// (text/number/date); number columns are totalled automatically at execution
+// and in the report.
+function TableColumnsPanel({
+  item,
+  onChange,
+}: {
+  item: ChecklistItem
+  onChange: (updates: Partial<ChecklistItem>) => void
+}) {
+  const columns = item.columns ?? []
+
+  const addColumn = () => {
+    const col = {
+      id: `col-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      label: '',
+      type: 'text' as const,
+    }
+    onChange({ columns: [...columns, col] })
+  }
+
+  const updateColumn = (
+    id: string,
+    patch: Partial<{ label: string; type: 'text' | 'number' | 'date' }>,
+  ) => {
+    onChange({
+      columns: columns.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+    })
+  }
+
+  const removeColumn = (id: string) => {
+    onChange({ columns: columns.filter((c) => c.id !== id) })
+  }
+
+  return (
+    <div className="border-t bg-muted/30 px-4 py-3 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Table columns
+        </span>
+        <Button type="button" variant="outline" size="sm" onClick={addColumn}>
+          <Plus className="mr-1 h-3.5 w-3.5" />
+          Add column
+        </Button>
+      </div>
+
+      {columns.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          No columns yet. Add the columns the engineer will fill in row by row.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {columns.map((col) => (
+            <div key={col.id} className="flex items-center gap-2">
+              <Input
+                value={col.label}
+                placeholder="Column name"
+                onChange={(e) => updateColumn(col.id, { label: e.target.value })}
+                className="flex-1"
+              />
+              <Select
+                value={col.type}
+                onValueChange={(type: 'text' | 'number' | 'date') =>
+                  updateColumn(col.id, { type })
+                }
+              >
+                <SelectTrigger className="w-[130px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="text">Text</SelectItem>
+                  <SelectItem value="number">Number</SelectItem>
+                  <SelectItem value="date">Date</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => removeColumn(col.id)}
+                aria-label="Remove column"
+              >
+                <Trash2 className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            </div>
+          ))}
+          <p className="text-xs text-muted-foreground">
+            Number columns are totalled automatically.
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Author-uploaded reference image/icon shown beneath a service checklist
+// question at execution time. Reuses the internal-task template-image upload
+// route (admin/office gated, private Blob served via blobSrc).
+function ChecklistItemImageField({
+  item,
+  onChange,
+}: {
+  item: ChecklistItem
+  onChange: (updates: Partial<ChecklistItem>) => void
+}) {
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const src = blobSrc(item.imagePathname ?? null)
+
+  async function upload(file: File) {
+    setUploading(true)
+    setError(null)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('kind', 'image')
+      const res = await fetch('/api/internal-tasks/template-image/upload', {
+        method: 'POST',
+        body: fd,
+      })
+      if (!res.ok) throw new Error('upload failed')
+      const data = (await res.json()) as { pathname: string; name: string }
+      onChange({ imagePathname: data.pathname, imageName: data.name })
+    } catch {
+      setError('Image upload failed — please try again.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="border-t bg-muted/30 px-4 py-3">
+      {src ? (
+        <div className="flex items-start gap-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={src || '/placeholder.svg'}
+            alt={item.imageName ?? 'Reference image'}
+            className="h-16 w-16 rounded-md border object-cover"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => onChange({ imagePathname: null, imageName: null })}
+          >
+            <X className="mr-1 size-3.5" />
+            Remove image
+          </Button>
+        </div>
+      ) : (
+        <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+          {uploading ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <ImageIcon className="size-3.5" />
+          )}
+          Add reference image
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            disabled={uploading}
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) upload(f)
+              e.target.value = ''
+            }}
+          />
+        </label>
+      )}
+      {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
     </div>
   )
 }

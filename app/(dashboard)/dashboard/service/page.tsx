@@ -55,6 +55,7 @@ import {
 } from '@/components/dashboard/overview/completions-chart'
 import { fetchKpiData } from '@/lib/kpi-data'
 import { buildKpiReport, isCallOverdue } from '@/lib/kpi'
+import { NoAccessQueue, type NoAccessCall } from '@/components/dashboard/service/no-access-queue'
 import {
   startOfMonth,
   startOfWeek,
@@ -362,6 +363,63 @@ export default async function ServiceDashboardPage() {
     }
   })
 
+  // No-access queue: calls an engineer returned unable to gain entry, awaiting the
+  // office to contact the client and rearrange. Only office/admin action these.
+  const isOfficeOrAdmin =
+    (profile as Profile).role === 'admin' || (profile as Profile).role === 'office'
+
+  const [{ data: noAccessData }, { data: engineerData }] = await Promise.all([
+    isOfficeOrAdmin
+      ? supabase
+          .from('tasks')
+          .select(
+            `id, reference_number, no_access_at, no_access_reason, site_service_id,
+             site_service:site_services(site:sites(name), service_type:service_types(name)),
+             direct_site:sites!tasks_site_id_fkey(name),
+             assigned_engineer:profiles!tasks_assigned_engineer_id_fkey(full_name, email)`,
+          )
+          .not('no_access_at', 'is', null)
+          .is('no_access_resolved_at', null)
+          .order('no_access_at', { ascending: true })
+          .limit(50)
+      : Promise.resolve({ data: null }),
+    isOfficeOrAdmin
+      ? supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .eq('role', 'engineer')
+          .eq('status', 'active')
+          .order('full_name')
+      : Promise.resolve({ data: null }),
+  ])
+
+  const noAccessCalls: NoAccessCall[] = ((noAccessData as any[]) || []).map((t) => {
+    const ss = Array.isArray(t.site_service) ? t.site_service[0] ?? null : t.site_service
+    const ssSite = Array.isArray(ss?.site) ? ss?.site[0] ?? null : ss?.site
+    const ssType = Array.isArray(ss?.service_type) ? ss?.service_type[0] ?? null : ss?.service_type
+    const directSite = Array.isArray(t.direct_site) ? t.direct_site[0] ?? null : t.direct_site
+    const eng = Array.isArray(t.assigned_engineer)
+      ? t.assigned_engineer[0] ?? null
+      : t.assigned_engineer
+    return {
+      id: t.id as string,
+      referenceNumber: (t.reference_number as string) ?? null,
+      siteName: (ssSite?.name as string) ?? (directSite?.name as string) ?? 'Unknown site',
+      serviceName: (ssType?.name as string) ?? 'Reactive call',
+      reason: (t.no_access_reason as string) ?? null,
+      noAccessAt: (t.no_access_at as string) ?? null,
+      engineerName: (eng?.full_name as string) ?? (eng?.email as string) ?? null,
+      // A call with no site_service is a reactive/non-recurring call — eligible for
+      // an attendance charge on a wasted visit.
+      isNonRecurring: !t.site_service_id,
+    }
+  })
+
+  const noAccessEngineers = ((engineerData as any[]) || []).map((e) => ({
+    id: e.id as string,
+    name: (e.full_name as string) || (e.email as string) || 'Engineer',
+  }))
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -424,6 +482,11 @@ export default async function ServiceDashboardPage() {
             ))}
           </CardContent>
         </Card>
+      )}
+
+      {/* No-access calls awaiting the office to contact the client and rearrange */}
+      {isOfficeOrAdmin && (
+        <NoAccessQueue calls={noAccessCalls} engineers={noAccessEngineers} />
       )}
 
       {/* Maintenance contract reviews awaiting approval before going live */}

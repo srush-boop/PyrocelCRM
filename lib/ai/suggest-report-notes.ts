@@ -4,6 +4,7 @@ import { generateObject } from 'ai'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { DRAFT_MODEL } from '@/lib/ai/shared'
+import type { InternalTaskTableRow } from '@/lib/types/database'
 
 // Reuses the small, fast gateway model already used elsewhere (RAMS/email).
 
@@ -31,7 +32,7 @@ export interface SuggestReportNotesResult {
 interface ChecklistLine {
   label: string
   type: string
-  value: boolean | string | number
+  value: boolean | string | number | string[] | InternalTaskTableRow[]
   passed: boolean | null
   advisory?: boolean
   notes?: string

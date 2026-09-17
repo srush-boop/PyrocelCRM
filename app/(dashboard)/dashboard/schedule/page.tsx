@@ -15,6 +15,8 @@ import { getMyCurrentOncall } from '@/lib/oncall/queries'
 import { isTaskVisibleToEngineer } from '@/lib/engineer-visibility'
 import { getCallEstimateLookup, buildTaskEstimates } from '@/lib/task-duration'
 import { getSavedGridViews, getSharedGridViews } from '@/lib/actions/grid-views'
+import { getGlobalConfig } from '@/lib/actions/global-config'
+import { CALL_URGENCY_CONFIG_KEY, parseCallUrgencyConfig } from '@/lib/kpi'
 
 export default async function SchedulePage({
   searchParams,
@@ -171,6 +173,11 @@ export default async function SchedulePage({
     })),
   )
 
+  // Urgency-accent config (amber "due soon" / red "overdue" tile rings).
+  const callUrgencyConfig = parseCallUrgencyConfig(
+    await getGlobalConfig(CALL_URGENCY_CONFIG_KEY),
+  )
+
   // Saved + shared filter views for the Calls grid (office/admin only).
   const [savedViews, sharedViews] = isAdminOrOffice
     ? await Promise.all([getSavedGridViews('calls'), getSharedGridViews('calls')])
@@ -244,8 +251,9 @@ export default async function SchedulePage({
         profile={profile as Profile}
         engineers={engineers}
         initialTab={initialTab}
-        estimates={estimates}
-        serviceTypes={allServiceTypes}
+          estimates={estimates}
+          callUrgencyConfig={callUrgencyConfig}
+          serviceTypes={allServiceTypes}
         systemTypes={systemTypes}
         savedViews={savedViews}
         sharedViews={sharedViews}

@@ -13,7 +13,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { formatDateUK, formatBookedSlot } from '@/lib/utils'
-import { isCallOverdue, getCallTargetDate } from '@/lib/kpi'
+import { isCallOverdue, getCallTargetDate, getCallUrgency, DEFAULT_CALL_URGENCY_CONFIG } from '@/lib/kpi'
+import type { CallUrgencyConfig } from '@/lib/kpi'
 import { bookExistingCall } from '@/app/(dashboard)/dashboard/schedule/book-call-actions'
 import {
   Select,
@@ -120,6 +121,11 @@ interface ScheduleViewProps {
    * on the server; tasks without a grounded estimate are simply absent.
    */
   estimates?: Record<string, CallEstimate>
+  /**
+   * Company-wide urgency-accent config (amber "due soon" / red "overdue" tile
+   * rings). Defaults ON; controlled from Settings → Calls.
+   */
+  callUrgencyConfig?: CallUrgencyConfig
   /**
    * Full live service-type / system-type catalogue used to populate the System
    * and Service filters so every type is selectable, even when it currently has
@@ -283,7 +289,7 @@ function FilterGroup({
   )
 }
 
-export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initialTab, estimates = {}, serviceTypes = [], systemTypes = [], savedViews, sharedViews, currentUserId }: ScheduleViewProps) {
+export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initialTab, estimates = {}, callUrgencyConfig = DEFAULT_CALL_URGENCY_CONFIG, serviceTypes = [], systemTypes = [], savedViews, sharedViews, currentUserId }: ScheduleViewProps) {
   const router = useRouter()
   const supabase = createClient()
   const [search, setSearch] = useState('')
@@ -380,8 +386,10 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
     clientToleranceUnit: task.site_service?.client_tolerance_unit,
     regulatoryToleranceValue: task.site_service?.service_type?.regulatory_tolerance_value,
     regulatoryToleranceUnit: task.site_service?.service_type?.regulatory_tolerance_unit,
+    respondBy: task.respond_by,
   })
   const taskOverdue = (task: TaskWithDetails) => isCallOverdue(overdueInput(task), today)
+  const taskUrgency = (task: TaskWithDetails) => getCallUrgency(overdueInput(task), callUrgencyConfig, today)
   const taskTargetDate = (task: TaskWithDetails) => getCallTargetDate(overdueInput(task))
 
   const isEngineer = profile.role === 'engineer'
@@ -834,6 +842,7 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
         scheduledDate={task.scheduled_date}
         completeByDate={taskTargetDate(task)}
         isOverdue={isOverdue}
+        urgency={taskUrgency(task)}
         engineerName={
           !isEngineer
             ? task.assigned_engineer?.full_name || task.assigned_engineer?.email || ''

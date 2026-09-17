@@ -15,6 +15,12 @@ import { PYROCEL_RED } from '@/lib/service-colors'
 import { formatDateUK } from '@/lib/utils'
 import { resolveLayout } from '@/lib/reports/layout'
 import {
+  formatCalculationValue,
+  numericValue,
+  formatChoiceValue,
+} from '@/lib/checklists/compute'
+import { blobSrc } from '@/lib/blob'
+import {
   ReportBlocks,
   NumberedSection,
   type ReportBlockRegistry,
@@ -38,6 +44,7 @@ import type {
   ChecklistResult,
   ReportTemplate,
   CompanyInfo,
+  InternalTaskTableRow,
 } from '@/lib/types/database'
 
 interface ServiceReportProps {
@@ -239,7 +246,17 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
       </ReportMetaGrid>
     ),
     status_ribbon: () => (
-      <ReportStatusRibbon statusLabel={statusMeta.label} color={statusMeta.color} />
+      <ReportStatusRibbon
+        statusLabel={statusMeta.label}
+        color={statusMeta.color}
+        note={
+          status === 'no_access'
+            ? task.no_access_reason
+              ? `Access denied on attendance — ${task.no_access_reason}`
+              : 'The engineer attended but could not gain access to site.'
+            : undefined
+        }
+      />
     ),
     summary_kpis: () => (
       <div className="mb-8 grid gap-6 md:grid-cols-2">
@@ -329,7 +346,19 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
                       </tr>
                     )}
                     <tr className="border-t align-top odd:bg-muted/30">
-                      <td className="px-3 py-2 font-medium">{item.label}</td>
+                      <td className="px-3 py-2 font-medium">
+                        {item.label}
+                        {item.imagePathname ? (
+                          <div className="mt-1">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={blobSrc(item.imagePathname) || '/placeholder.svg'}
+                              alt={item.imageName ?? 'Reference image'}
+                              className="max-h-24 rounded border object-contain"
+                            />
+                          </div>
+                        ) : null}
+                      </td>
                       <td className="px-3 py-2">
                         {item.na ? (
                           <span
@@ -351,12 +380,76 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
                           >
                             {item.advisory ? 'Advisory' : item.passed ? 'Pass' : 'Fail'}
                           </span>
+                        ) : item.type === 'calculation' ? (
+                          <span className="font-semibold tabular-nums">
+                            {formatCalculationValue(numericValue(item.value))}
+                            {item.calculation?.unit ? ` ${item.calculation.unit}` : ''}
+                          </span>
+                        ) : item.type === 'choice' ? (
+                          <span className="font-semibold">{formatChoiceValue(item.value) || '—'}</span>
+                        ) : item.type === 'table' ? (
+                          <span className="text-muted-foreground">
+                            {Array.isArray(item.value) ? `${item.value.length} row(s)` : '—'}
+                          </span>
                         ) : (
                           <span className="font-semibold tabular-nums">{String(item.value)}</span>
                         )}
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">{item.notes || '—'}</td>
                     </tr>
+                    {item.type === 'table' &&
+                      Array.isArray(item.value) &&
+                      item.value.length > 0 &&
+                      (item.columns?.length ?? 0) > 0 && (
+                        <tr className="border-t border-dashed align-top">
+                          <td colSpan={3} className="px-3 py-2 pl-6">
+                            <table className="w-full border text-xs">
+                              <thead className="bg-muted/50">
+                                <tr>
+                                  {item.columns!.map((c) => (
+                                    <th
+                                      key={c.id}
+                                      className="border px-2 py-1 text-left font-medium"
+                                    >
+                                      {c.label || 'Column'}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(item.value as InternalTaskTableRow[]).map((row, i) => (
+                                  <tr key={i}>
+                                    {item.columns!.map((c) => (
+                                      <td key={c.id} className="border px-2 py-1">
+                                        {String(row[c.id] ?? '')}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                              {item.columns!.some((c) => c.type === 'number') && (
+                                <tfoot className="bg-muted/30">
+                                  <tr>
+                                    {item.columns!.map((c) => (
+                                      <td key={c.id} className="border px-2 py-1 font-medium">
+                                        {c.type === 'number'
+                                          ? `Total: ${(item.value as InternalTaskTableRow[]).reduce(
+                                              (s, r) => {
+                                                const n = parseFloat(String(r[c.id] ?? ''))
+                                                return Number.isFinite(n) ? s + n : s
+                                              },
+                                              0,
+                                            )}`
+                                          : ''}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                </tfoot>
+                              )}
+                            </table>
+                          </td>
+                        </tr>
+                      )}
                     {followUps.map((child) => (
                       <tr
                         key={child.item_id}

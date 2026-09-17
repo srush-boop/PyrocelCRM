@@ -158,6 +158,13 @@ export interface CallOverdueInput {
   /** Regulatory baseline the client tier falls back to when no override. */
   regulatoryToleranceValue?: number | null
   regulatoryToleranceUnit?: ToleranceUnit | null
+  /**
+   * "Attend within X hours" KPI deadline (tasks.respond_by) for reactive /
+   * emergency calls. When present it drives an hours-based urgency window
+   * instead of the date-based tolerance target. Ignored by the date-based
+   * overdue/target-date helpers.
+   */
+  respondBy?: string | Date | null
 }
 
 /**
@@ -216,6 +223,95 @@ export function isCallOverdue(
   const target = getCallTargetDate(input)
   if (!target) return false
   return isAfter(today, endOfDay(target))
+}
+
+// ─── Call urgency highlighting ────────────────────────────────────────────────
+// A per-call urgency signal layered ON TOP of the service-type colour used on
+// call tiles. Distinct from status colour: it answers "how pressing is this
+// call's deadline?" not "what kind of call is it?". Drives an amber (due soon)
+// or red (overdue) accent so engineers can triage at a glance on a phone.
+
+export type CallUrgency = 'overdue' | 'due_soon' | null
+
+export interface CallUrgencyConfig {
+  /** Master on/off for the urgency accent (defaults ON). */
+  enabled: boolean
+  /**
+   * How many days before a call's complete-by/target date it starts showing
+   * the amber "due soon" accent. Overdue (red) always applies once the target
+   * date has passed, independent of this window. Used for PPM / date-based
+   * calls.
+   */
+  dueSoonDays: number
+  /**
+   * How many hours before a reactive/emergency call's "attend within X hours"
+   * respond-by deadline it starts showing the amber "due soon" accent. Overdue
+   * (red) always applies once respond_by has passed. Used only for calls that
+   * carry a respond_by KPI deadline.
+   */
+  dueSoonHours: number
+}
+
+/** The global_config key storing the CallUrgencyConfig. */
+export const CALL_URGENCY_CONFIG_KEY = 'call_urgency_config'
+
+/** Sensible defaults used whenever the key has never been set. */
+export const DEFAULT_CALL_URGENCY_CONFIG: CallUrgencyConfig = {
+  enabled: true,
+  dueSoonDays: 7,
+  dueSoonHours: 4,
+}
+
+/** Coerce a stored (possibly partial/unknown) config value into a valid one. */
+export function parseCallUrgencyConfig(value: unknown): CallUrgencyConfig {
+  if (!value || typeof value !== 'object') return { ...DEFAULT_CALL_URGENCY_CONFIG }
+  const v = value as Partial<CallUrgencyConfig>
+  const days =
+    typeof v.dueSoonDays === 'number' && v.dueSoonDays >= 0 && v.dueSoonDays <= 365
+      ? Math.round(v.dueSoonDays)
+      : DEFAULT_CALL_URGENCY_CONFIG.dueSoonDays
+  const hours =
+    typeof v.dueSoonHours === 'number' && v.dueSoonHours >= 0 && v.dueSoonHours <= 336
+      ? Math.round(v.dueSoonHours)
+      : DEFAULT_CALL_URGENCY_CONFIG.dueSoonHours
+  return {
+    enabled: typeof v.enabled === 'boolean' ? v.enabled : DEFAULT_CALL_URGENCY_CONFIG.enabled,
+    dueSoonDays: days,
+    dueSoonHours: hours,
+  }
+}
+
+/**
+ * Classify a call's deadline urgency for the tile accent:
+ * - `overdue` — pending and past its complete-by/target date (same rule as
+ *   isCallOverdue).
+ * - `due_soon` — pending and the target date falls within `dueSoonDays` from
+ *   today (but not yet passed).
+ * - `null` — not pending, no target date, further out than the window, or the
+ *   feature is disabled.
+ */
+export function getCallUrgency(
+  input: CallOverdueInput,
+  config: CallUrgencyConfig = DEFAULT_CALL_URGENCY_CONFIG,
+  today: Date = new Date(),
+): CallUrgency {
+  if (!config.enabled) return null
+  if (input.status !== 'pending') return null
+
+  // Reactive/emergency calls with an "attend within X hours" respond-by deadline
+  // use an hours-based window rather than the date-based tolerance target.
+  const respondBy = toDate(input.respondBy ?? null)
+  if (respondBy) {
+    if (today.getTime() > respondBy.getTime()) return 'overdue'
+    const warnMs = Math.max(0, config.dueSoonHours) * 60 * 60 * 1000
+    return respondBy.getTime() - today.getTime() <= warnMs ? 'due_soon' : null
+  }
+
+  const target = getCallTargetDate(input)
+  if (!target) return null
+  if (isAfter(today, endOfDay(target))) return 'overdue'
+  const warnStart = startOfDay(addDays(target, -Math.max(0, config.dueSoonDays)))
+  return today.getTime() >= warnStart.getTime() ? 'due_soon' : null
 }
 
 export interface ComplianceCounts {

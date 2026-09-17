@@ -45,7 +45,16 @@ import { useOfflineSync } from '@/lib/offline/use-offline-sync'
 import { persistTaskResult, isOnline } from '@/lib/offline/sync'
 import { cacheCallSnapshot } from '@/lib/offline/snapshots'
 import { isNonRecurringCall } from '@/lib/follow-up'
+import { completeCallNoAccess } from '@/lib/tasks/no-access'
+import { NoAccessButton } from '@/components/dashboard/tasks/no-access-button'
 import { resolveCallKind } from '@/lib/call-kinds'
+import {
+  computeCalculation,
+  calculationOpLabel,
+  formatCalculationValue,
+  suggestionForOption,
+} from '@/lib/checklists/compute'
+import { blobSrc } from '@/lib/blob'
 import { SignaturePad } from '@/components/portal/signature-pad'
 import { formatDateUK, formatTimeUK, toDatetimeLocalValue, cn } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
@@ -83,6 +92,9 @@ import {
   X,
   CornerDownRight,
   Ban,
+  Calculator,
+  Trash2,
+  Plus,
   } from 'lucide-react'
 import type { 
   Profile, 
@@ -94,7 +106,8 @@ import type {
   TaskResult,
   TaskResultStatus,
   ClientLink,
-  SystemPanel
+  SystemPanel,
+  InternalTaskTableRow
 } from '@/lib/types/database'
 
 interface TaskExecutionProps {
@@ -139,12 +152,43 @@ function buildInitialResults(
     item_id: itemId,
     label: item.label,
     type: item.type,
-    value: item.type === 'pass_fail' ? true : item.type === 'checkbox' ? false : '',
+    value:
+      item.type === 'pass_fail'
+        ? true
+        : item.type === 'checkbox'
+          ? false
+          : item.type === 'choice'
+            ? item.multiSelect
+              ? []
+              : ''
+            : item.type === 'calculation'
+              ? 0
+              : item.type === 'table'
+                ? []
+                : '',
     passed: item.type === 'pass_fail' ? true : null,
     notes: '',
     panel_id: panel?.id ?? null,
     panel_name: panel?.name ?? null,
     panel_level: level,
+    // Carry choice/calculation/table config onto the row so execution and reports
+    // work without the template (mirrors how conditions are copied below).
+    ...(item.type === 'choice'
+      ? {
+          options: item.options || [],
+          multiSelect: !!item.multiSelect,
+          optionSuggestions: item.optionSuggestions,
+        }
+      : {}),
+    ...(item.type === 'calculation' && item.calculation
+      ? { calculation: item.calculation }
+      : {}),
+    ...(item.type === 'table'
+      ? { columns: item.columns || [] }
+      : {}),
+    ...(item.imagePathname
+      ? { imagePathname: item.imagePathname, imageName: item.imageName ?? null }
+      : {}),
   })
 
   // A template item expands to its own (parent) row plus, for each conditional
@@ -253,6 +297,138 @@ function NaToggle({
       <Ban className="h-4 w-4" />
       N/A
     </Button>
+  )
+}
+
+// Editable grid for a `table` checklist item at execution. The engineer adds
+// rows and fills cells; number columns show a live total. Rows are stored on the
+// result value as InternalTaskTableRow[] (a map of column id -> cell text).
+function ChecklistTableField({
+  result,
+  canEdit,
+  onChange,
+}: {
+  result: ChecklistResult
+  canEdit: boolean
+  onChange: (rows: InternalTaskTableRow[]) => void
+}) {
+  const columns = result.columns ?? []
+  const rows: InternalTaskTableRow[] = Array.isArray(result.value)
+    ? (result.value as InternalTaskTableRow[])
+    : []
+
+  const addRow = () => {
+    const empty: InternalTaskTableRow = {}
+    for (const c of columns) empty[c.id] = ''
+    onChange([...rows, empty])
+  }
+  const updateCell = (idx: number, colId: string, v: string) => {
+    onChange(rows.map((r, i) => (i === idx ? { ...r, [colId]: v } : r)))
+  }
+  const removeRow = (idx: number) => {
+    onChange(rows.filter((_, i) => i !== idx))
+  }
+  const columnTotal = (colId: string) =>
+    rows.reduce((sum, r) => {
+      const n = parseFloat(String(r[colId] ?? ''))
+      return Number.isFinite(n) ? sum + n : sum
+    }, 0)
+
+  const hasNumberColumn = columns.some((c) => c.type === 'number')
+
+  if (columns.length === 0) {
+    return (
+      <p className="mt-2 text-sm text-muted-foreground">
+        This table has no columns configured.
+      </p>
+    )
+  }
+
+  return (
+    <div className="mt-2 space-y-2">
+      <div className="overflow-x-auto rounded-md border">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50">
+            <tr>
+              {columns.map((c) => (
+                <th
+                  key={c.id}
+                  className="px-2 py-1.5 text-left font-medium text-muted-foreground whitespace-nowrap"
+                >
+                  {c.label || 'Column'}
+                </th>
+              ))}
+              <th className="w-10 px-2 py-1.5" />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={columns.length + 1}
+                  className="px-2 py-3 text-center text-muted-foreground"
+                >
+                  No rows yet.
+                </td>
+              </tr>
+            ) : (
+              rows.map((row, idx) => (
+                <tr key={idx} className="border-t">
+                  {columns.map((c) => (
+                    <td key={c.id} className="px-1.5 py-1">
+                      <Input
+                        value={String(row[c.id] ?? '')}
+                        type={
+                          c.type === 'number'
+                            ? 'number'
+                            : c.type === 'date'
+                              ? 'date'
+                              : 'text'
+                        }
+                        onChange={(e) => updateCell(idx, c.id, e.target.value)}
+                        disabled={!canEdit}
+                        className="h-8"
+                      />
+                    </td>
+                  ))}
+                  <td className="px-1.5 py-1 text-right">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => removeRow(idx)}
+                      disabled={!canEdit}
+                      aria-label="Remove row"
+                    >
+                      <Trash2 className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+          {hasNumberColumn && rows.length > 0 && (
+            <tfoot className="border-t bg-muted/30">
+              <tr>
+                {columns.map((c) => (
+                  <td key={c.id} className="px-2 py-1.5 font-medium whitespace-nowrap">
+                    {c.type === 'number' ? `Total: ${columnTotal(c.id)}` : ''}
+                  </td>
+                ))}
+                <td />
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+      {canEdit && (
+        <Button type="button" variant="outline" size="sm" onClick={addRow}>
+          <Plus className="mr-1 h-3.5 w-3.5" />
+          Add row
+        </Button>
+      )}
+    </div>
   )
 }
 
@@ -576,6 +752,26 @@ export function TaskExecution({
     )
   }
 
+  // Keep calculation rows' stored value in sync with the number answers they
+  // depend on, so the computed figure is persisted on save/submit (not just
+  // shown). Pure recompute; only writes when a value actually changes.
+  useEffect(() => {
+    setChecklistResults((prev) => {
+      let changed = false
+      const next = prev.map((result) => {
+        if (result.type !== 'calculation') return result
+        const computed = computeCalculation(result.calculation, prev)
+        const value = computed ?? 0
+        if (result.value !== value) {
+          changed = true
+          return { ...result, value }
+        }
+        return result
+      })
+      return changed ? next : prev
+    })
+  }, [checklistResults])
+
   // Per-item photo capture for conditional "require photo" requirements. Reuses
   // the task attachments upload + private-blob serve route, so no new storage is
   // introduced. Tracked by the row's item_id so multiple rows upload independently.
@@ -617,6 +813,18 @@ export function TaskExecution({
     for (const row of checklistResults) {
       if (row.parent_item_id) continue // only parent rows own conditions
       const where = row.panel_name ? `${row.panel_name} — ${row.label}` : row.label
+      // Required dropdown items must have a selection (unless marked N/A).
+      if (row.type === 'choice' && row.required && !row.na) {
+        const empty = Array.isArray(row.value)
+          ? row.value.length === 0
+          : !row.value
+        if (empty) blockers.push(`${where}: choose an option`)
+      }
+      // Required tables must have at least one row.
+      if (row.type === 'table' && row.required && !row.na) {
+        const empty = !Array.isArray(row.value) || row.value.length === 0
+        if (empty) blockers.push(`${where}: add at least one row`)
+      }
       for (const cond of row.conditions || []) {
         if (!isConditionActive(row, cond)) continue
         if (cond.requireNote && !(row.notes && row.notes.trim())) {
@@ -875,6 +1083,50 @@ export function TaskExecution({
   // Leave the completed task once the engineer dismisses the nearby-calls prompt.
   const handleNearbyPromptClose = () => {
     setShowNearbyPrompt(false)
+    router.push('/dashboard/schedule')
+    router.refresh()
+  }
+
+  // Engineer attended but couldn't gain entry. Records the no-access outcome
+  // (shared cascade) and exits exactly like a normal completion.
+  const handleNoAccess = async (reason: string) => {
+    if (submitting) return
+    setSubmitting(true)
+    try {
+      await completeCallNoAccess(supabase, {
+        task: {
+          id: task.id,
+          site_service_id: task.site_service_id,
+          scheduled_date: task.scheduled_date,
+        },
+        reason,
+        clientSignature,
+        clientSignatureName,
+      })
+    } catch (err) {
+      console.error('[v0] No-access completion failed:', err)
+      setSubmitting(false)
+      return
+    }
+    if (routeProgress?.nextTaskId) {
+      router.push(`/dashboard/tasks/${routeProgress.nextTaskId}`)
+      router.refresh()
+      return
+    }
+    if (profile.role === 'engineer' && profile.discipline !== 'cdo') {
+      try {
+        const res = await findNearbyOverdueCalls({ fromTaskId: task.id })
+        if (res.ok && res.calls && res.calls.length > 0) {
+          setNearbyCalls(res.calls)
+          setShowNearbyPrompt(true)
+          setSubmitting(false)
+          return
+        }
+      } catch (err) {
+        console.error('[v0] Nearby calls lookup failed:', err)
+      }
+    }
+    setSubmitting(false)
     router.push('/dashboard/schedule')
     router.refresh()
   }
@@ -1345,6 +1597,17 @@ export function TaskExecution({
                       <div className="pt-2">
                         <Label className="text-base font-medium">{result.label}</Label>
 
+                        {result.imagePathname ? (
+                          <div className="mt-2">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={blobSrc(result.imagePathname) || '/placeholder.svg'}
+                              alt={result.imageName ?? 'Reference image'}
+                              className="max-h-40 rounded-md border object-contain"
+                            />
+                          </div>
+                        ) : null}
+
                         {result.type === 'pass_fail' && (
                           <div className="grid grid-cols-4 gap-2 mt-3">
                             <Button
@@ -1477,6 +1740,111 @@ export function TaskExecution({
                                 })
                               }
                             />
+                          </div>
+                        )}
+
+                        {result.type === 'table' && (
+                          <ChecklistTableField
+                            result={result}
+                            canEdit={canEdit}
+                            onChange={(rows) =>
+                              updateChecklistResult(result.item_id, { value: rows })
+                            }
+                          />
+                        )}
+
+                        {result.type === 'choice' && (
+                          <div className="mt-2 space-y-2">
+                            {result.multiSelect ? (
+                              <div className="grid gap-2 sm:grid-cols-2">
+                                {(result.options || []).map((opt) => {
+                                  const selected = Array.isArray(result.value)
+                                    ? (result.value as string[]).includes(opt)
+                                    : false
+                                  return (
+                                    <label
+                                      key={opt}
+                                      className="flex items-center gap-2 text-sm"
+                                    >
+                                      <Checkbox
+                                        checked={selected}
+                                        disabled={!canEdit || result.na}
+                                        onCheckedChange={(checked) => {
+                                          const current = Array.isArray(result.value)
+                                            ? (result.value as string[])
+                                            : []
+                                          const next = checked
+                                            ? [...current, opt]
+                                            : current.filter((x) => x !== opt)
+                                          const suggestion = checked
+                                            ? suggestionForOption(result, opt)
+                                            : undefined
+                                          updateChecklistResult(result.item_id, {
+                                            value: next,
+                                            na: false,
+                                            ...(suggestion && !result.notes?.trim()
+                                              ? { notes: suggestion }
+                                              : {}),
+                                          })
+                                        }}
+                                      />
+                                      {opt}
+                                    </label>
+                                  )
+                                })}
+                              </div>
+                            ) : (
+                              <Select
+                                value={(result.value as string) || ''}
+                                disabled={!canEdit || result.na}
+                                onValueChange={(val) => {
+                                  const suggestion = suggestionForOption(result, val)
+                                  updateChecklistResult(result.item_id, {
+                                    value: val,
+                                    na: false,
+                                    // Pre-fill the note with the option's suggested
+                                    // answer (author-defined) as a starting point.
+                                    ...(suggestion ? { notes: suggestion } : {}),
+                                  })
+                                }}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue
+                                    placeholder={result.na ? 'Not applicable' : 'Select...'}
+                                  />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {(result.options || []).map((opt) => (
+                                    <SelectItem key={opt} value={opt}>
+                                      {opt}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                            <Textarea
+                              value={result.notes || ''}
+                              onChange={(e) =>
+                                updateChecklistResult(result.item_id, { notes: e.target.value })
+                              }
+                              placeholder="Notes (a suggested answer is pre-filled where set)"
+                              disabled={!canEdit}
+                              rows={2}
+                            />
+                          </div>
+                        )}
+
+                        {result.type === 'calculation' && (
+                          <div className="mt-2 flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
+                            <Calculator className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm text-muted-foreground">
+                              {calculationOpLabel(result.calculation?.op || 'sum')}:
+                            </span>
+                            <span className="text-base font-semibold tabular-nums">
+                              {formatCalculationValue(
+                                computeCalculation(result.calculation, checklistResults),
+                              )}
+                            </span>
                           </div>
                         )}
 
@@ -1954,6 +2322,9 @@ export function TaskExecution({
               )}
             </Button>
           </div>
+          {/* No-access outcome: attended but couldn't gain entry. Sends the call
+              to the office no-access queue to contact the client and rearrange. */}
+          <NoAccessButton onConfirm={handleNoAccess} submitting={submitting} className="h-12 w-full" />
           {/* Non-recurring calls (reactive / emergency / planned) can be flagged as
               needing further works, which raises a follow-up for review. Internal
               escalation — hidden from external sub-contractors. */}

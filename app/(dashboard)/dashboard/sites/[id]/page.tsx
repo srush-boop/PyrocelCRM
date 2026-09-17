@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { getCallEstimateLookup, buildTaskEstimates } from '@/lib/task-duration'
+import { getGlobalConfig } from '@/lib/actions/global-config'
+import { CALL_URGENCY_CONFIG_KEY, parseCallUrgencyConfig } from '@/lib/kpi'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -412,6 +414,9 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
 
   // "Approximate time to complete" per call: learned average of the last 5
   // same-type calls, or the manual expected time from service setup.
+  const callUrgencyConfig = parseCallUrgencyConfig(
+    await getGlobalConfig(CALL_URGENCY_CONFIG_KEY),
+  )
   const callEstimateLookup = await getCallEstimateLookup(supabase)
   const callEstimates = buildTaskEstimates(
     callEstimateLookup,
@@ -991,9 +996,10 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             calls={allCalls}
             engineers={allCallEngineers}
             serviceTypes={allCallServiceTypes}
-            reportingEmails={(site as Site).reporting_emails || []}
-            estimates={callEstimates}
-          />
+              reportingEmails={(site as Site).reporting_emails || []}
+              estimates={callEstimates}
+              callUrgencyConfig={callUrgencyConfig}
+            />
         </TabsContent>
 
         <TabsContent value="systems" className="mt-0 space-y-4">

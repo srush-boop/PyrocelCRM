@@ -1869,6 +1869,17 @@ export interface Task {
   cancelled_at: string | null
   cancelled_by: string | null
   cancellation_reason: string | null
+  // "No access" outcome + office rearrange workflow. Set when an engineer returns
+  // the call unable to gain entry (task_results.overall_status = 'no_access' too).
+  // A call sits in the office no-access queue while no_access_at is set and
+  // no_access_resolved_at is null. Resolution is 'rearranged' (a new linked call
+  // was created — no_access_rebooked_task_id) or 'dismissed'.
+  no_access_at: string | null
+  no_access_reason: string | null
+  no_access_resolved_at: string | null
+  no_access_resolved_by: string | null
+  no_access_resolution: 'rearranged' | 'dismissed' | null
+  no_access_rebooked_task_id: string | null
   notes: string | null
   public_token: string
   created_at: string

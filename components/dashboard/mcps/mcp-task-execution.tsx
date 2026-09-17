@@ -391,9 +391,23 @@ export function McpTaskExecution({
     // End time defaults to now if the engineer didn't set one, still adjustable.
     const completedAt = endTime ?? new Date()
     if (!endTime) setEndTime(completedAt)
+    // No-access outcomes also stamp the queue columns so the office no-access
+    // queue picks the call up to contact the client and rearrange.
+    const noAccessFields =
+      opts.overall === 'no_access'
+        ? {
+            no_access_at: completedAt.toISOString(),
+            no_access_reason: opts.engineerNotes || null,
+          }
+        : {}
     await supabase
       .from('tasks')
-      .update({ status: 'completed', completed_at: completedAt.toISOString(), updated_at: completedAt.toISOString() })
+      .update({
+        status: 'completed',
+        completed_at: completedAt.toISOString(),
+        updated_at: completedAt.toISOString(),
+        ...noAccessFields,
+      })
       .eq('id', task.id)
 
     if (opts.updateLastService) {

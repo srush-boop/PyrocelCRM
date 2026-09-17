@@ -4,6 +4,8 @@ import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useShiftGate } from '@/components/dashboard/tasks/use-shift-gate'
 import { useCompletionExit } from '@/components/dashboard/tasks/use-completion-exit'
+import { completeCallNoAccess } from '@/lib/tasks/no-access'
+import { NoAccessButton } from '@/components/dashboard/tasks/no-access-button'
 import { RouteProgressBanner } from '@/components/dashboard/tasks/route-progress-banner'
 import { AssignEngineerCard } from '@/components/dashboard/tasks/assign-engineer-card'
 import type { RouteProgress } from '@/lib/routes/route-progress'
@@ -480,6 +482,31 @@ export function DamperTaskExecution({
     await runExit(task.id, routeProgress?.nextTaskId)
   }
 
+  // Engineer attended but couldn't gain entry. Records the shared no-access
+  // outcome and exits like a normal completion.
+  const handleNoAccess = async (reason: string) => {
+    if (submitting) return
+    setSubmitting(true)
+    try {
+      await completeCallNoAccess(supabase, {
+        task: {
+          id: task.id,
+          site_service_id: task.site_service_id,
+          scheduled_date: task.scheduled_date,
+        },
+        reason,
+        clientSignature: isNonRecurring ? clientSignature : null,
+        clientSignatureName: isNonRecurring ? clientSignatureName : null,
+      })
+    } catch (err) {
+      console.error('[v0] No-access completion failed:', err)
+      setSubmitting(false)
+      return
+    }
+    setStatus('completed')
+    await runExit(task.id, routeProgress?.nextTaskId)
+  }
+
   // The primary Start action always sits directly beneath the overview header
   // so engineers can begin in one tap and every task item stays below it,
   // consistent across all call types.
@@ -664,31 +691,35 @@ export function DamperTaskExecution({
       )}
 
       {status === 'in_progress' && canEdit && dampers.length > 0 && (
-        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-50 flex gap-2 border-t bg-background p-4 lg:relative lg:inset-x-auto lg:bottom-auto lg:z-auto lg:border-0 lg:p-0">
-          <Button variant="outline" onClick={handleSave} disabled={saving} className="flex-1">
-            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            Save Progress
-          </Button>
-          <div className="flex flex-1 flex-col items-stretch gap-1">
-            <Button
-              onClick={handleSubmit}
-              disabled={summary.tested < summary.total || submitting}
-              className="w-full"
-            >
-              {submitting ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="mr-2 h-4 w-4" />
-              )}
-              {submitting ? 'Submitting…' : 'Complete Inspection'}
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-50 flex flex-col gap-2 border-t bg-background p-4 lg:relative lg:inset-x-auto lg:bottom-auto lg:z-auto lg:border-0 lg:p-0">
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleSave} disabled={saving} className="flex-1">
+              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              Save Progress
             </Button>
-            {summary.tested < summary.total && (
-              <p className="text-center text-xs text-muted-foreground">
-                {summary.total - summary.tested} damper
-                {summary.total - summary.tested === 1 ? '' : 's'} still to test or mark not accessible
-              </p>
-            )}
+            <div className="flex flex-1 flex-col items-stretch gap-1">
+              <Button
+                onClick={handleSubmit}
+                disabled={summary.tested < summary.total || submitting}
+                className="w-full"
+              >
+                {submitting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="mr-2 h-4 w-4" />
+                )}
+                {submitting ? 'Submitting…' : 'Complete Inspection'}
+              </Button>
+              {summary.tested < summary.total && (
+                <p className="text-center text-xs text-muted-foreground">
+                  {summary.total - summary.tested} damper
+                  {summary.total - summary.tested === 1 ? '' : 's'} still to test or mark not accessible
+                </p>
+              )}
+            </div>
           </div>
+          {/* No-access outcome: attended but couldn't gain entry. */}
+          <NoAccessButton onConfirm={handleNoAccess} submitting={submitting} className="w-full" />
         </div>
       )}
 

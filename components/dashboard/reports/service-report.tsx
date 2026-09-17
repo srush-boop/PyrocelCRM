@@ -246,7 +246,17 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
       </ReportMetaGrid>
     ),
     status_ribbon: () => (
-      <ReportStatusRibbon statusLabel={statusMeta.label} color={statusMeta.color} />
+      <ReportStatusRibbon
+        statusLabel={statusMeta.label}
+        color={statusMeta.color}
+        note={
+          status === 'no_access'
+            ? task.no_access_reason
+              ? `Access denied on attendance — ${task.no_access_reason}`
+              : 'The engineer attended but could not gain access to site.'
+            : undefined
+        }
+      />
     ),
     summary_kpis: () => (
       <div className="mb-8 grid gap-6 md:grid-cols-2">

@@ -45,6 +45,8 @@ import { useOfflineSync } from '@/lib/offline/use-offline-sync'
 import { persistTaskResult, isOnline } from '@/lib/offline/sync'
 import { cacheCallSnapshot } from '@/lib/offline/snapshots'
 import { isNonRecurringCall } from '@/lib/follow-up'
+import { completeCallNoAccess } from '@/lib/tasks/no-access'
+import { NoAccessButton } from '@/components/dashboard/tasks/no-access-button'
 import { resolveCallKind } from '@/lib/call-kinds'
 import {
   computeCalculation,
@@ -1081,6 +1083,50 @@ export function TaskExecution({
   // Leave the completed task once the engineer dismisses the nearby-calls prompt.
   const handleNearbyPromptClose = () => {
     setShowNearbyPrompt(false)
+    router.push('/dashboard/schedule')
+    router.refresh()
+  }
+
+  // Engineer attended but couldn't gain entry. Records the no-access outcome
+  // (shared cascade) and exits exactly like a normal completion.
+  const handleNoAccess = async (reason: string) => {
+    if (submitting) return
+    setSubmitting(true)
+    try {
+      await completeCallNoAccess(supabase, {
+        task: {
+          id: task.id,
+          site_service_id: task.site_service_id,
+          scheduled_date: task.scheduled_date,
+        },
+        reason,
+        clientSignature,
+        clientSignatureName,
+      })
+    } catch (err) {
+      console.error('[v0] No-access completion failed:', err)
+      setSubmitting(false)
+      return
+    }
+    if (routeProgress?.nextTaskId) {
+      router.push(`/dashboard/tasks/${routeProgress.nextTaskId}`)
+      router.refresh()
+      return
+    }
+    if (profile.role === 'engineer' && profile.discipline !== 'cdo') {
+      try {
+        const res = await findNearbyOverdueCalls({ fromTaskId: task.id })
+        if (res.ok && res.calls && res.calls.length > 0) {
+          setNearbyCalls(res.calls)
+          setShowNearbyPrompt(true)
+          setSubmitting(false)
+          return
+        }
+      } catch (err) {
+        console.error('[v0] Nearby calls lookup failed:', err)
+      }
+    }
+    setSubmitting(false)
     router.push('/dashboard/schedule')
     router.refresh()
   }
@@ -2276,6 +2322,9 @@ export function TaskExecution({
               )}
             </Button>
           </div>
+          {/* No-access outcome: attended but couldn't gain entry. Sends the call
+              to the office no-access queue to contact the client and rearrange. */}
+          <NoAccessButton onConfirm={handleNoAccess} submitting={submitting} className="h-12 w-full" />
           {/* Non-recurring calls (reactive / emergency / planned) can be flagged as
               needing further works, which raises a follow-up for review. Internal
               escalation — hidden from external sub-contractors. */}

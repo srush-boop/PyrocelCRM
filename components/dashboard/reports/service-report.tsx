@@ -15,6 +15,11 @@ import { PYROCEL_RED } from '@/lib/service-colors'
 import { formatDateUK } from '@/lib/utils'
 import { resolveLayout } from '@/lib/reports/layout'
 import {
+  formatCalculationValue,
+  numericValue,
+  formatChoiceValue,
+} from '@/lib/checklists/compute'
+import {
   ReportBlocks,
   NumberedSection,
   type ReportBlockRegistry,
@@ -351,6 +356,13 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
                           >
                             {item.advisory ? 'Advisory' : item.passed ? 'Pass' : 'Fail'}
                           </span>
+                        ) : item.type === 'calculation' ? (
+                          <span className="font-semibold tabular-nums">
+                            {formatCalculationValue(numericValue(item.value))}
+                            {item.calculation?.unit ? ` ${item.calculation.unit}` : ''}
+                          </span>
+                        ) : item.type === 'choice' ? (
+                          <span className="font-semibold">{formatChoiceValue(item.value) || '—'}</span>
                         ) : (
                           <span className="font-semibold tabular-nums">{String(item.value)}</span>
                         )}

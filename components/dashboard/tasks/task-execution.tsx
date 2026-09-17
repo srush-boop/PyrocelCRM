@@ -46,6 +46,12 @@ import { persistTaskResult, isOnline } from '@/lib/offline/sync'
 import { cacheCallSnapshot } from '@/lib/offline/snapshots'
 import { isNonRecurringCall } from '@/lib/follow-up'
 import { resolveCallKind } from '@/lib/call-kinds'
+import {
+  computeCalculation,
+  calculationOpLabel,
+  formatCalculationValue,
+  suggestionForOption,
+} from '@/lib/checklists/compute'
 import { SignaturePad } from '@/components/portal/signature-pad'
 import { formatDateUK, formatTimeUK, toDatetimeLocalValue, cn } from '@/lib/utils'
 import { computeNextScheduledDate, toDateString } from '@/lib/scheduling'
@@ -83,6 +89,7 @@ import {
   X,
   CornerDownRight,
   Ban,
+  Calculator,
   } from 'lucide-react'
 import type { 
   Profile, 
@@ -139,12 +146,35 @@ function buildInitialResults(
     item_id: itemId,
     label: item.label,
     type: item.type,
-    value: item.type === 'pass_fail' ? true : item.type === 'checkbox' ? false : '',
+    value:
+      item.type === 'pass_fail'
+        ? true
+        : item.type === 'checkbox'
+          ? false
+          : item.type === 'choice'
+            ? item.multiSelect
+              ? []
+              : ''
+            : item.type === 'calculation'
+              ? 0
+              : '',
     passed: item.type === 'pass_fail' ? true : null,
     notes: '',
     panel_id: panel?.id ?? null,
     panel_name: panel?.name ?? null,
     panel_level: level,
+    // Carry choice/calculation config onto the row so execution and reports work
+    // without the template (mirrors how conditions are copied below).
+    ...(item.type === 'choice'
+      ? {
+          options: item.options || [],
+          multiSelect: !!item.multiSelect,
+          optionSuggestions: item.optionSuggestions,
+        }
+      : {}),
+    ...(item.type === 'calculation' && item.calculation
+      ? { calculation: item.calculation }
+      : {}),
   })
 
   // A template item expands to its own (parent) row plus, for each conditional
@@ -576,6 +606,26 @@ export function TaskExecution({
     )
   }
 
+  // Keep calculation rows' stored value in sync with the number answers they
+  // depend on, so the computed figure is persisted on save/submit (not just
+  // shown). Pure recompute; only writes when a value actually changes.
+  useEffect(() => {
+    setChecklistResults((prev) => {
+      let changed = false
+      const next = prev.map((result) => {
+        if (result.type !== 'calculation') return result
+        const computed = computeCalculation(result.calculation, prev)
+        const value = computed ?? 0
+        if (result.value !== value) {
+          changed = true
+          return { ...result, value }
+        }
+        return result
+      })
+      return changed ? next : prev
+    })
+  }, [checklistResults])
+
   // Per-item photo capture for conditional "require photo" requirements. Reuses
   // the task attachments upload + private-blob serve route, so no new storage is
   // introduced. Tracked by the row's item_id so multiple rows upload independently.
@@ -617,6 +667,13 @@ export function TaskExecution({
     for (const row of checklistResults) {
       if (row.parent_item_id) continue // only parent rows own conditions
       const where = row.panel_name ? `${row.panel_name} — ${row.label}` : row.label
+      // Required dropdown items must have a selection (unless marked N/A).
+      if (row.type === 'choice' && row.required && !row.na) {
+        const empty = Array.isArray(row.value)
+          ? row.value.length === 0
+          : !row.value
+        if (empty) blockers.push(`${where}: choose an option`)
+      }
       for (const cond of row.conditions || []) {
         if (!isConditionActive(row, cond)) continue
         if (cond.requireNote && !(row.notes && row.notes.trim())) {
@@ -1477,6 +1534,101 @@ export function TaskExecution({
                                 })
                               }
                             />
+                          </div>
+                        )}
+
+                        {result.type === 'choice' && (
+                          <div className="mt-2 space-y-2">
+                            {result.multiSelect ? (
+                              <div className="grid gap-2 sm:grid-cols-2">
+                                {(result.options || []).map((opt) => {
+                                  const selected = Array.isArray(result.value)
+                                    ? result.value.includes(opt)
+                                    : false
+                                  return (
+                                    <label
+                                      key={opt}
+                                      className="flex items-center gap-2 text-sm"
+                                    >
+                                      <Checkbox
+                                        checked={selected}
+                                        disabled={!canEdit || result.na}
+                                        onCheckedChange={(checked) => {
+                                          const current = Array.isArray(result.value)
+                                            ? (result.value as string[])
+                                            : []
+                                          const next = checked
+                                            ? [...current, opt]
+                                            : current.filter((x) => x !== opt)
+                                          const suggestion = checked
+                                            ? suggestionForOption(result, opt)
+                                            : undefined
+                                          updateChecklistResult(result.item_id, {
+                                            value: next,
+                                            na: false,
+                                            ...(suggestion && !result.notes?.trim()
+                                              ? { notes: suggestion }
+                                              : {}),
+                                          })
+                                        }}
+                                      />
+                                      {opt}
+                                    </label>
+                                  )
+                                })}
+                              </div>
+                            ) : (
+                              <Select
+                                value={(result.value as string) || ''}
+                                disabled={!canEdit || result.na}
+                                onValueChange={(val) => {
+                                  const suggestion = suggestionForOption(result, val)
+                                  updateChecklistResult(result.item_id, {
+                                    value: val,
+                                    na: false,
+                                    // Pre-fill the note with the option's suggested
+                                    // answer (author-defined) as a starting point.
+                                    ...(suggestion ? { notes: suggestion } : {}),
+                                  })
+                                }}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue
+                                    placeholder={result.na ? 'Not applicable' : 'Select...'}
+                                  />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {(result.options || []).map((opt) => (
+                                    <SelectItem key={opt} value={opt}>
+                                      {opt}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                            <Textarea
+                              value={result.notes || ''}
+                              onChange={(e) =>
+                                updateChecklistResult(result.item_id, { notes: e.target.value })
+                              }
+                              placeholder="Notes (a suggested answer is pre-filled where set)"
+                              disabled={!canEdit}
+                              rows={2}
+                            />
+                          </div>
+                        )}
+
+                        {result.type === 'calculation' && (
+                          <div className="mt-2 flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
+                            <Calculator className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm text-muted-foreground">
+                              {calculationOpLabel(result.calculation?.op || 'sum')}:
+                            </span>
+                            <span className="text-base font-semibold tabular-nums">
+                              {formatCalculationValue(
+                                computeCalculation(result.calculation, checklistResults),
+                              )}
+                            </span>
                           </div>
                         )}
 

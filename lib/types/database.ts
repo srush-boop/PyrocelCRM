@@ -857,13 +857,38 @@ export interface ChecklistCondition {
   notifyUserIds?: string[]
 }
 
+// How a `calculation` checklist item combines the numeric answers it references.
+export interface ChecklistCalculation {
+  op: 'sum' | 'average' | 'min' | 'max' | 'count'
+  // Source item ids (the `number` items on the same checklist) whose answers feed
+  // this calculation. Recomputed live at execution and rendered in the report.
+  itemIds: string[]
+  // Optional unit suffix shown after the computed value (e.g. "L", "°C", "%").
+  unit?: string
+}
+
 export interface ChecklistItem {
   id: string
   label: string
-  type: 'pass_fail' | 'text' | 'number' | 'checkbox'
+  // 'choice'      : a dropdown / multi-select of author-defined options, each of
+  //                 which can carry a suggested answer pre-filled into the note.
+  // 'calculation' : a read-only field computed from other number answers (sum,
+  //                 average, min, max, count).
+  type: 'pass_fail' | 'text' | 'number' | 'checkbox' | 'choice' | 'calculation'
   required: boolean
   // Conditional rules that reveal extra requirements based on this item's answer.
   conditions?: ChecklistCondition[]
+  // choice: the selectable answer options (author-defined).
+  options?: string[]
+  // choice: when true the user may tick several options; otherwise it is a
+  // single-select dropdown. Defaults to single-select.
+  multiSelect?: boolean
+  // choice: maps an option value to a suggested response that is pre-filled into
+  // the item's note when that option is chosen. Lets the author attach a
+  // predetermined answer to each option.
+  optionSuggestions?: Record<string, string>
+  // calculation: how to combine the referenced numeric items.
+  calculation?: ChecklistCalculation
 }
 
 export interface ChecklistTemplate {
@@ -984,8 +1009,11 @@ export interface InternalTaskItem {
     | 'url_link'
     | 'table'
     | 'file'
+    | 'calculation'
   required: boolean
   conditions?: ChecklistCondition[]
+  // calculation: how to combine other numeric answers on the form.
+  calculation?: ChecklistCalculation
   // choice: the selectable answer options (author-defined).
   options?: string[]
   // choice: when true, the user may select multiple options (checkboxes);
@@ -1945,9 +1973,18 @@ export interface Task {
   export interface ChecklistResult {
   item_id: string
   label: string
-  type: 'pass_fail' | 'text' | 'number' | 'checkbox'
-  value: boolean | string | number
+  type: 'pass_fail' | 'text' | 'number' | 'checkbox' | 'choice' | 'calculation'
+  // string[] carries a multi-select choice answer; a single-select choice is a
+  // plain string; a calculation is the computed number.
+  value: boolean | string | number | string[]
   passed: boolean | null
+  // choice/calculation config copied from the template item onto the row at build
+  // time (mirrors how `conditions` are copied), so execution and reports render
+  // purely from the stored results without needing the template.
+  options?: string[]
+  multiSelect?: boolean
+  optionSuggestions?: Record<string, string>
+  calculation?: ChecklistCalculation
   // Third state for pass/fail items: neither a pass nor a fail, but an
   // observation worth noting (e.g. wear, minor issue, recommendation).
   // When true, `passed` is null and the item is excluded from the pass/fail

@@ -31,7 +31,7 @@ export interface SuggestReportNotesResult {
 interface ChecklistLine {
   label: string
   type: string
-  value: boolean | string | number
+  value: boolean | string | number | string[]
   passed: boolean | null
   advisory?: boolean
   notes?: string

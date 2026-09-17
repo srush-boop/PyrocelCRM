@@ -38,6 +38,17 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Textarea } from '@/components/ui/textarea'
+import {
   Play,
   Save,
   Send,
@@ -45,6 +56,7 @@ import {
   Search,
   FireExtinguisher,
   Plus,
+  AlertTriangle,
 } from 'lucide-react'
 import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
 import { CallPartsPicker } from '@/components/dashboard/tasks/call-parts-picker'
@@ -178,8 +190,13 @@ export function ExtinguisherTaskExecution({
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [showSubmitDialog, setShowSubmitDialog] = useState(false)
+  const [incompleteWarnings, setIncompleteWarnings] = useState<string[]>([])
   const [clientSignature, setClientSignature] = useState<string | null>(existingSignature)
   const [clientSignatureName, setClientSignatureName] = useState(existingSignatureName ?? '')
+  // Reason captured when a non-recurring call is completed with no client
+  // signature (forced at completion; shown on the report).
+  const [signatureWaivedReason, setSignatureWaivedReason] = useState('')
   // Editable end time — auto-set to now on completion, adjustable via the End
   // time card. Feeds the task's completed_at on submit.
   const [endTime, setEndTime] = useState<Date | null>(
@@ -368,6 +385,36 @@ export function ExtinguisherTaskExecution({
     router.refresh()
   }
 
+  // Soft warnings surfaced in the completion dialog so the engineer knowingly
+  // closes a call with gaps (extinguishers not yet serviced) rather than by accident.
+  const collectIncompleteWarnings = (): string[] => {
+    const warnings: string[] = []
+    const untested = summary.total - summary.tested
+    if (untested > 0) {
+      warnings.push(
+        `${untested} extinguisher${untested === 1 ? '' : 's'} not yet serviced or marked not accessible`,
+      )
+    }
+    return warnings
+  }
+
+  // For non-recurring calls we expect an on-site client signature. If none was
+  // captured the engineer must state why before the call can close.
+  const signatureReasonRequired = isNonRecurring && !clientSignature
+
+  // Complete the call. If there are incomplete sections OR a non-recurring call
+  // has no client signature, a confirmation dialog is shown (which forces a
+  // signature reason). A fully-complete call with a signature closes straight away.
+  const handleAttemptSubmit = () => {
+    const warnings = collectIncompleteWarnings()
+    setIncompleteWarnings(warnings)
+    if (warnings.length > 0 || signatureReasonRequired) {
+      setShowSubmitDialog(true)
+      return
+    }
+    void handleSubmit()
+  }
+
   const overallTaskStatus = (): 'pass' | 'fail' | 'partial' => {
     if (summary.failed > 0) return 'fail'
     if (summary.remedial > 0) return 'partial'
@@ -424,6 +471,8 @@ export function ExtinguisherTaskExecution({
       photos: [] as string[],
       client_signature: isNonRecurring ? clientSignature : null,
       client_signature_name: isNonRecurring ? clientSignatureName.trim() || null : null,
+      client_signature_waived_reason:
+        isNonRecurring && !clientSignature ? signatureWaivedReason.trim() || null : null,
       updated_at: new Date().toISOString(),
     }
     const { data: existing } = await supabase
@@ -716,8 +765,8 @@ export function ExtinguisherTaskExecution({
             </Button>
             <div className="flex flex-1 flex-col items-stretch gap-1">
               <Button
-                onClick={handleSubmit}
-                disabled={summary.tested < summary.total || submitting}
+                onClick={handleAttemptSubmit}
+                disabled={submitting}
                 className="w-full"
               >
                 {submitting ? (
@@ -845,6 +894,79 @@ export function ExtinguisherTaskExecution({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Completion confirmation — surfaces incomplete sections and forces a
+          reason when a non-recurring call has no client signature. */}
+      <AlertDialog open={showSubmitDialog} onOpenChange={(o) => !submitting && setShowSubmitDialog(o)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Complete this call?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {incompleteWarnings.length > 0
+                ? 'Some sections are still incomplete. Review them below, then confirm to close the call.'
+                : 'Confirm to close the call and submit the report.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {incompleteWarnings.length > 0 && (
+            <div className="max-h-48 overflow-y-auto rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
+              <p className="flex items-center gap-2 font-medium text-amber-900">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                Incomplete sections
+              </p>
+              <ul className="mt-2 list-disc space-y-0.5 pl-6 text-amber-900">
+                {incompleteWarnings.map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {signatureReasonRequired && (
+            <div className="grid gap-1.5">
+              <Label htmlFor="signature-waived-reason">
+                No client signature captured — reason required
+              </Label>
+              <Textarea
+                id="signature-waived-reason"
+                value={signatureWaivedReason}
+                onChange={(e) => setSignatureWaivedReason(e.target.value)}
+                placeholder="e.g. No client representative available on site."
+                rows={3}
+              />
+              <p className="text-xs text-muted-foreground">
+                This reason is recorded on the report in place of the signature.
+              </p>
+            </div>
+          )}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting}>Keep editing</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={
+                submitting ||
+                (signatureReasonRequired && signatureWaivedReason.trim().length < 3)
+              }
+              onClick={(e) => {
+                e.preventDefault()
+                setShowSubmitDialog(false)
+                void handleSubmit()
+              }}
+            >
+              Complete call
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Blocking overlay while the completion cascade runs, so the engineer
+          can't keep editing a call that's already closing. */}
+      {submitting && (
+        <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-3 bg-background/70 backdrop-blur-sm">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm font-medium text-foreground">Completing call…</p>
+        </div>
+      )}
 
       {/* Post-completion: offer nearby overdue / due-soon calls, then Calls. */}
       {nearbyPrompt}

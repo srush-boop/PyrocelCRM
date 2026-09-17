@@ -2,7 +2,8 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Moon, Phone, Plane, Clock } from 'lucide-react'
+import { Moon, Phone, Plane, Clock, TriangleAlert } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import type { TimesheetSummary } from '@/lib/timesheets/compute'
 
 // Read-only full breakdown of a computed/frozen timesheet summary. Mirrors the
@@ -34,6 +35,26 @@ function timeLabel(iso: string | null): string {
 export function TimesheetDetail({ summary }: { summary: TimesheetSummary }) {
   return (
     <div className="space-y-4">
+      {/* Leave-vs-shift conflict warning (advisory — does not change totals) */}
+      {summary.conflicts.length > 0 && (
+        <div className="flex items-start gap-2 rounded-lg border border-chart-4/40 bg-chart-4/10 p-3 text-sm">
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-chart-4" />
+          <div className="space-y-1">
+            <p className="font-medium text-chart-4">
+              Booked off but worked — {summary.conflicts.length === 1 ? '1 day' : `${summary.conflicts.length} days`} to check
+            </p>
+            <ul className="space-y-0.5 text-muted-foreground">
+              {summary.conflicts.map((c) => (
+                <li key={c.date}>
+                  <span className="font-medium text-foreground">{dateLabel(c.date)}</span>: recorded{' '}
+                  {hm(c.workedMinutes)} of work while on {c.leaveTypes.join(' & ').toLowerCase()}.
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
       {/* Secondary summary: night shifts, on-call, leave */}
       <div className="grid gap-3 md:grid-cols-3">
         <Card>
@@ -103,11 +124,23 @@ export function TimesheetDetail({ summary }: { summary: TimesheetSummary }) {
           {summary.days.map((day) => {
             const ot = day.weekdayOtMinutes + day.weekendOtMinutes
             return (
-              <div key={day.date} className="rounded-lg border p-3">
+              <div
+                key={day.date}
+                className={cn(
+                  'rounded-lg border p-3',
+                  day.leaveConflict && 'border-chart-4/50 bg-chart-4/5',
+                )}
+              >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{day.dayName}</span>
                     <span className="text-sm text-muted-foreground">{dateLabel(day.date)}</span>
+                    {day.leaveConflict && (
+                      <Badge variant="outline" className="gap-1 border-chart-4/40 text-chart-4">
+                        <TriangleAlert className="h-3 w-3" />
+                        Worked on {day.conflictLeaveTypes.join(' & ').toLowerCase()}
+                      </Badge>
+                    )}
                     {day.isNightShift && (
                       <Badge variant="outline" className="gap-1 text-chart-3">
                         <Moon className="h-3 w-3" /> Night

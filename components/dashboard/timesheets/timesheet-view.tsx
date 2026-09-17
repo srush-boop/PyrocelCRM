@@ -30,6 +30,7 @@ import {
   Phone,
   Plane,
   CalendarClock,
+  TriangleAlert,
   Loader2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -217,6 +218,30 @@ export function TimesheetView({ initial, outstandingTasks }: Props) {
         </div>
       )}
 
+      {/* Leave-vs-shift conflict warning (advisory — does not change totals) */}
+      {summary.conflicts.length > 0 && (
+        <div className="flex items-start gap-2 rounded-lg border border-chart-4/40 bg-chart-4/10 p-3 text-sm">
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-chart-4" />
+          <div className="space-y-1">
+            <p className="font-medium text-chart-4">
+              Booked off but worked — please check {summary.conflicts.length === 1 ? 'this day' : 'these days'}
+            </p>
+            <ul className="space-y-0.5 text-muted-foreground">
+              {summary.conflicts.map((c) => (
+                <li key={c.date}>
+                  <span className="font-medium text-foreground">{dateLabel(c.date)}</span>: recorded{' '}
+                  {hm(c.workedMinutes)} of work while on {c.leaveTypes.join(' & ').toLowerCase()}.
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-muted-foreground">
+              These hours are still counted. If the day was worked, cancel the leave; if it was time
+              off, the shift may need correcting.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Overtime summary: three totals */}
       <div className="grid gap-4 sm:grid-cols-3">
         <SummaryStat label="Overtime Mon–Fri" value={hm(summary.weekdayOtMinutes)} accent="chart-1" />
@@ -299,11 +324,23 @@ export function TimesheetView({ initial, outstandingTasks }: Props) {
           {summary.days.map((day) => {
             const ot = day.weekdayOtMinutes + day.weekendOtMinutes
             return (
-              <div key={day.date} className="rounded-lg border p-3">
+              <div
+                key={day.date}
+                className={cn(
+                  'rounded-lg border p-3',
+                  day.leaveConflict && 'border-chart-4/50 bg-chart-4/5',
+                )}
+              >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{day.dayName}</span>
                     <span className="text-sm text-muted-foreground">{dateLabel(day.date)}</span>
+                    {day.leaveConflict && (
+                      <Badge variant="outline" className="gap-1 border-chart-4/40 text-chart-4">
+                        <TriangleAlert className="h-3 w-3" />
+                        Worked on {day.conflictLeaveTypes.join(' & ').toLowerCase()}
+                      </Badge>
+                    )}
                     {canEdit ? (
                       <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <Checkbox

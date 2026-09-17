@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useShiftGate } from '@/components/dashboard/tasks/use-shift-gate'
 import { useCompletionExit } from '@/components/dashboard/tasks/use-completion-exit'
 import { AssetQrScanAssign } from '@/components/dashboard/tasks/asset-qr-scan-assign'
+import { AssignEngineerCard } from '@/components/dashboard/tasks/assign-engineer-card'
 import { RouteProgressBanner } from '@/components/dashboard/tasks/route-progress-banner'
 import type { RouteProgress } from '@/lib/routes/route-progress'
 import { useRouter } from 'next/navigation'
@@ -76,6 +77,8 @@ interface EmergencyLightTaskExecutionProps {
   /** Saved client sign-off (name + signature) for redisplay on a completed call. */
   existingSignature?: string | null
   existingSignatureName?: string | null
+  /** Engineers office/admin can assign this call to. */
+  engineers?: Profile[]
 }
 
 function blankState(): EmergencyLightInspectionState {
@@ -103,6 +106,7 @@ export function EmergencyLightTaskExecution({
   routeProgress,
   existingSignature = null,
   existingSignatureName = null,
+  engineers = [],
 }: EmergencyLightTaskExecutionProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
@@ -482,6 +486,14 @@ export function EmergencyLightTaskExecution({
       {otherSiteCalls}
 
       {preAttendance}
+
+      {(profile.role === 'admin' || profile.role === 'office') && (
+        <AssignEngineerCard
+          taskId={task.id}
+          assignedEngineerId={task.assigned_engineer_id ?? null}
+          engineers={engineers}
+        />
+      )}
 
       {!startAtTop && startButton}
 

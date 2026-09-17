@@ -593,6 +593,20 @@ export default async function TaskPage({ params }: PageProps) {
   const existingSignatureName =
     (signOffResult as { client_signature_name?: string | null } | null)?.client_signature_name ?? null
 
+  // Office/admin can quick-assign this call from the summary, so load engineers.
+  // Fetched before the per-asset branches below so every execution flow (generic
+  // and per-asset) can offer the assign control — any call must be assignable.
+  const isAdminOrOffice = (profile as Profile).role === 'admin' || (profile as Profile).role === 'office'
+  let engineers: Profile[] = []
+  if (isAdminOrOffice) {
+    const { data: engineersData } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'engineer')
+      .order('full_name')
+    engineers = (engineersData || []) as Profile[]
+  }
+
   // The shared pre-attendance panel is passed into each execution flow so it can
   // render directly beneath the site/service header (rather than above it).
   // Damper inspection tasks use a dedicated per-asset flow
@@ -609,6 +623,7 @@ export default async function TaskPage({ params }: PageProps) {
         profile={profile as Profile}
         dampers={(dampersData || []) as Damper[]}
         existingInspections={(inspectionsData || []) as DamperInspection[]}
+        engineers={engineers}
         preAttendance={preAttendancePanel}
         otherSiteCalls={otherSiteCallsNode}
         callHistory={callHistory}
@@ -633,6 +648,7 @@ export default async function TaskPage({ params }: PageProps) {
         profile={profile as Profile}
         extinguishers={(extinguishersData || []) as Extinguisher[]}
         existingInspections={(inspectionsData || []) as ExtinguisherInspection[]}
+        engineers={engineers}
         preAttendance={preAttendancePanel}
         otherSiteCalls={otherSiteCallsNode}
         callHistory={callHistory}
@@ -704,6 +720,7 @@ export default async function TaskPage({ params }: PageProps) {
         lastTestedMcpId={lastTestedMcpId}
         lastTestedDate={lastTestedDate}
         nimbusUrl={nimbusUrl}
+        engineers={engineers}
         preAttendance={preAttendancePanel}
         otherSiteCalls={otherSiteCallsNode}
         callHistory={callHistory}
@@ -732,6 +749,7 @@ export default async function TaskPage({ params }: PageProps) {
         profile={profile as Profile}
         lights={(lightsData || []) as EmergencyLight[]}
         existingInspections={(inspectionsData || []) as EmergencyLightInspection[]}
+        engineers={engineers}
         preAttendance={preAttendancePanel}
         otherSiteCalls={otherSiteCallsNode}
         callHistory={callHistory}
@@ -900,18 +918,6 @@ export default async function TaskPage({ params }: PageProps) {
         }
       }
     }
-  }
-
-  // Office/admin can quick-assign this call from the summary, so load engineers.
-  const isAdminOrOffice = (profile as Profile).role === 'admin' || (profile as Profile).role === 'office'
-  let engineers: Profile[] = []
-  if (isAdminOrOffice) {
-    const { data: engineersData } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('role', 'engineer')
-      .order('full_name')
-    engineers = (engineersData || []) as Profile[]
   }
 
   return (

@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useShiftGate } from '@/components/dashboard/tasks/use-shift-gate'
 import { useCompletionExit } from '@/components/dashboard/tasks/use-completion-exit'
 import { RouteProgressBanner } from '@/components/dashboard/tasks/route-progress-banner'
+import { AssignEngineerCard } from '@/components/dashboard/tasks/assign-engineer-card'
 import type { RouteProgress } from '@/lib/routes/route-progress'
 import { useRouter } from 'next/navigation'
 import { CompletedReportActions } from '@/components/dashboard/reports/completed-report-actions'
@@ -76,6 +77,8 @@ interface ExtinguisherTaskExecutionProps {
   /** Saved client sign-off (name + signature) for redisplay on a completed call. */
   existingSignature?: string | null
   existingSignatureName?: string | null
+  /** Engineers office/admin can assign this call to. */
+  engineers?: Profile[]
 }
 
 function blankState(): InspectionState {
@@ -161,6 +164,7 @@ export function ExtinguisherTaskExecution({
   routeProgress,
   existingSignature = null,
   existingSignatureName = null,
+  engineers = [],
 }: ExtinguisherTaskExecutionProps) {
   const site = task.site_service?.site
   const serviceType = task.site_service?.service_type
@@ -549,6 +553,14 @@ export function ExtinguisherTaskExecution({
       {otherSiteCalls}
 
       {preAttendance}
+
+      {(profile.role === 'admin' || profile.role === 'office') && (
+        <AssignEngineerCard
+          taskId={task.id}
+          assignedEngineerId={task.assigned_engineer_id ?? null}
+          engineers={engineers}
+        />
+      )}
 
       {!startAtTop && startButton}
 

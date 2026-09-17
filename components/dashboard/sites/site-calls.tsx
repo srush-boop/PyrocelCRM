@@ -46,7 +46,8 @@ import { isDamperService } from '@/lib/dampers'
 import { isExtinguisherService } from '@/lib/extinguishers'
 import type { Task, SiteService, ServiceType, Profile, SystemType, TaskResult, ToleranceUnit } from '@/lib/types/database'
 import type { CallEstimate } from '@/lib/task-duration'
-import { isCallOverdue, getCallTargetDate } from '@/lib/kpi'
+import { isCallOverdue, getCallTargetDate, getCallUrgency, DEFAULT_CALL_URGENCY_CONFIG } from '@/lib/kpi'
+import type { CallUrgencyConfig } from '@/lib/kpi'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -129,10 +130,12 @@ function CallCard({
   call,
   onSendReport,
   estimate,
+  urgencyConfig,
 }: {
   call: SiteCall
   onSendReport?: (c: SiteCall) => void
   estimate?: CallEstimate
+  urgencyConfig: CallUrgencyConfig
 }) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -151,6 +154,7 @@ function CallCard({
     regulatoryToleranceUnit: call.site_service?.service_type?.regulatory_tolerance_unit,
   }
   const isOverdue = isCallOverdue(overdueInput, today)
+  const urgency = getCallUrgency(overdueInput, urgencyConfig, today)
   const completeByDate = getCallTargetDate(overdueInput)
   const serviceName = getServiceName(call)
   const system = getSystem(call)
@@ -186,6 +190,7 @@ function CallCard({
       completeByDate={completeByDate}
       completedDate={call.completed_at}
       isOverdue={isOverdue}
+      urgency={urgency}
       engineerName={call.assigned_engineer?.full_name ?? ''}
       valuePence={calcValue(call)}
       approxMinutes={estimate?.minutes ?? null}
@@ -246,9 +251,11 @@ interface SiteCallsProps {
   reportingEmails?: string[]
   /** taskId → "approximate time to complete" estimate. */
   estimates?: Record<string, CallEstimate>
+  /** Company-wide urgency-accent config (amber "due soon" / red "overdue"). */
+  callUrgencyConfig?: CallUrgencyConfig
 }
 
-export function SiteCalls({ calls, engineers, serviceTypes, reportingEmails = [], estimates = {} }: SiteCallsProps) {
+export function SiteCalls({ calls, engineers, serviceTypes, reportingEmails = [], estimates = {}, callUrgencyConfig = DEFAULT_CALL_URGENCY_CONFIG }: SiteCallsProps) {
   // Send-report dialog state
   const [sendingCall, setSendingCall] = useState<SiteCall | null>(null)
   const [sendEmails, setSendEmails] = useState<string[]>([])
@@ -505,6 +512,7 @@ export function SiteCalls({ calls, engineers, serviceTypes, reportingEmails = []
               call={call}
               onSendReport={openSendDialog}
               estimate={estimates[call.id]}
+              urgencyConfig={callUrgencyConfig}
             />
           ))}
         </div>

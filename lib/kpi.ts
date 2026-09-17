@@ -218,6 +218,71 @@ export function isCallOverdue(
   return isAfter(today, endOfDay(target))
 }
 
+// ─── Call urgency highlighting ────────────────────────────────────────────────
+// A per-call urgency signal layered ON TOP of the service-type colour used on
+// call tiles. Distinct from status colour: it answers "how pressing is this
+// call's deadline?" not "what kind of call is it?". Drives an amber (due soon)
+// or red (overdue) accent so engineers can triage at a glance on a phone.
+
+export type CallUrgency = 'overdue' | 'due_soon' | null
+
+export interface CallUrgencyConfig {
+  /** Master on/off for the urgency accent (defaults ON). */
+  enabled: boolean
+  /**
+   * How many days before a call's complete-by/target date it starts showing
+   * the amber "due soon" accent. Overdue (red) always applies once the target
+   * date has passed, independent of this window.
+   */
+  dueSoonDays: number
+}
+
+/** The global_config key storing the CallUrgencyConfig. */
+export const CALL_URGENCY_CONFIG_KEY = 'call_urgency_config'
+
+/** Sensible defaults used whenever the key has never been set. */
+export const DEFAULT_CALL_URGENCY_CONFIG: CallUrgencyConfig = {
+  enabled: true,
+  dueSoonDays: 7,
+}
+
+/** Coerce a stored (possibly partial/unknown) config value into a valid one. */
+export function parseCallUrgencyConfig(value: unknown): CallUrgencyConfig {
+  if (!value || typeof value !== 'object') return { ...DEFAULT_CALL_URGENCY_CONFIG }
+  const v = value as Partial<CallUrgencyConfig>
+  const days =
+    typeof v.dueSoonDays === 'number' && v.dueSoonDays >= 0 && v.dueSoonDays <= 365
+      ? Math.round(v.dueSoonDays)
+      : DEFAULT_CALL_URGENCY_CONFIG.dueSoonDays
+  return {
+    enabled: typeof v.enabled === 'boolean' ? v.enabled : DEFAULT_CALL_URGENCY_CONFIG.enabled,
+    dueSoonDays: days,
+  }
+}
+
+/**
+ * Classify a call's deadline urgency for the tile accent:
+ * - `overdue` — pending and past its complete-by/target date (same rule as
+ *   isCallOverdue).
+ * - `due_soon` — pending and the target date falls within `dueSoonDays` from
+ *   today (but not yet passed).
+ * - `null` — not pending, no target date, further out than the window, or the
+ *   feature is disabled.
+ */
+export function getCallUrgency(
+  input: CallOverdueInput,
+  config: CallUrgencyConfig = DEFAULT_CALL_URGENCY_CONFIG,
+  today: Date = new Date(),
+): CallUrgency {
+  if (!config.enabled) return null
+  if (input.status !== 'pending') return null
+  const target = getCallTargetDate(input)
+  if (!target) return null
+  if (isAfter(today, endOfDay(target))) return 'overdue'
+  const warnStart = startOfDay(addDays(target, -Math.max(0, config.dueSoonDays)))
+  return today.getTime() >= warnStart.getTime() ? 'due_soon' : null
+}
+
 export interface ComplianceCounts {
   compliant: number
   early: number

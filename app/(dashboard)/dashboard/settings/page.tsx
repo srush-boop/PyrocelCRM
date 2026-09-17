@@ -10,6 +10,7 @@ import { getChargeTemplates } from '@/lib/actions/charge-templates'
 import { getNominalCodes } from '@/lib/actions/nominal-codes'
 import { listTagsWithUsage } from '@/lib/actions/document-tags'
 import { OPENING_HOURS_KEY, parseOpeningHours } from '@/lib/oncall/opening-hours'
+import { CALL_URGENCY_CONFIG_KEY, parseCallUrgencyConfig } from '@/lib/kpi'
 import { mfaRequiredForRole } from '@/lib/auth/mfa'
 
 export default async function SettingsPage() {
@@ -119,6 +120,7 @@ export default async function SettingsPage() {
         'deadline_failed_reasons',
         'deadline_failed_reason_exclusions',
         'engagement_stats_enabled',
+        CALL_URGENCY_CONFIG_KEY,
         OPENING_HOURS_KEY,
       ])
     : {}
@@ -130,6 +132,8 @@ export default async function SettingsPage() {
   // Encouragement stats default to ON when the key has never been set.
   const engagementStatsEnabled =
     (globalConfig['engagement_stats_enabled'] as boolean | null) ?? true
+  // Call urgency accent config (amber "due soon" / red "overdue" tile rings).
+  const callUrgencyConfig = parseCallUrgencyConfig(globalConfig[CALL_URGENCY_CONFIG_KEY])
   // Company opening hours (defaults preserve the historical 08:30-17:00 window).
   const openingHours = parseOpeningHours(globalConfig[OPENING_HOURS_KEY])
 
@@ -202,6 +206,7 @@ export default async function SettingsPage() {
         deadlineReasons={deadlineReasons}
         deadlineExcludedReasons={deadlineExcludedReasons}
         engagementStatsEnabled={engagementStatsEnabled}
+        callUrgencyConfig={callUrgencyConfig}
         canManageLoneWorker={canManageLoneWorker}
         loneWorkerUsers={loneWorkerData.users}
         loneWorkerTimings={loneWorkerData.timings}

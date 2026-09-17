@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { STATUS_TONE_CLASS } from '@/lib/status-colors'
+import type { CallUrgency } from '@/lib/kpi'
 import { cn, formatDateUK } from '@/lib/utils'
 import {
   Clock,
@@ -138,6 +139,14 @@ export interface CallTileProps {
   completeByDate?: string | Date | null
   completedDate?: string | null
   isOverdue?: boolean
+  /**
+   * Deadline urgency accent, layered ON TOP of the service-type colour (which
+   * keeps the left border) — amber ring + "Due soon" badge for `due_soon`, red
+   * ring for `overdue`. Pass `null` to opt a surface into the accent system with
+   * no current urgency; leave `undefined` for legacy surfaces (where `isOverdue`
+   * alone still paints the border red).
+   */
+  urgency?: CallUrgency
   engineerName?: string | null
   valuePence?: number | null
   address?: string | null
@@ -194,6 +203,7 @@ export function CallTile({
   completeByDate,
   completedDate,
   isOverdue,
+  urgency,
   engineerName,
   valuePence,
   address,
@@ -221,11 +231,23 @@ export function CallTile({
 }: CallTileProps) {
   const isCompleted = status === 'completed'
   const isPaused = status === 'paused'
-  // Accent: overdue always wins (destructive); then paused (amber) so a paused
-  // call is instantly identifiable; else a supplied system colour; else
-  // in-progress uses the brand primary; otherwise a plain border.
-  const accentStyle =
-    !isOverdue && !isPaused && accentColor ? { borderLeftColor: accentColor } : undefined
+  // A surface "opts in" to the urgency-accent system by passing the `urgency`
+  // prop (even as null). In that mode the service-type colour always keeps the
+  // left border and urgency is shown as a coloured ring, so both dimensions
+  // read at once. Legacy surfaces (urgency === undefined) keep the old rule
+  // where overdue paints the border red.
+  const urgencyMode = urgency !== undefined
+  // Accent: paused (amber) always wins so a paused call is instantly
+  // identifiable; else the service colour owns the border (always in urgency
+  // mode; in legacy mode only when not overdue); else fall back below.
+  const useServiceBorder = !!accentColor && !isPaused && (urgencyMode || !isOverdue)
+  const accentStyle = useServiceBorder ? { borderLeftColor: accentColor } : undefined
+  const urgencyRing =
+    urgency === 'overdue'
+      ? 'ring-2 ring-inset ring-destructive/70'
+      : urgency === 'due_soon'
+        ? 'ring-2 ring-inset ring-amber-500/70'
+        : ''
   // Open calls show the client KPI "complete by" date when supplied (else the
   // visit date). Completed calls always show the actual completion date.
   const showCompleteBy = !isCompleted && completeByDate != null
@@ -240,15 +262,16 @@ export function CallTile({
     <Card
       className={cn(
         'border-l-4 transition-colors',
-        isOverdue
-          ? 'border-l-destructive'
-          : isPaused
-            ? 'border-l-orange-500'
-            : accentColor
-              ? ''
+        isPaused
+          ? 'border-l-orange-500'
+          : useServiceBorder
+            ? ''
+            : isOverdue
+              ? 'border-l-destructive'
               : status === 'in_progress'
                 ? 'border-l-primary'
                 : 'border-l-border',
+        urgencyRing,
         className,
       )}
       style={accentStyle}
@@ -270,6 +293,16 @@ export function CallTile({
                 )}
                 <span className="font-semibold text-pretty">{title}</span>
                 <CallStatusBadge status={status} />
+                {urgency === 'overdue' && (
+                  <Badge variant="destructive" className="gap-1 text-xs">
+                    <AlertTriangle className="h-3 w-3" /> Overdue
+                  </Badge>
+                )}
+                {urgency === 'due_soon' && (
+                  <Badge className="gap-1 border-amber-500/30 bg-amber-500/15 text-xs text-amber-700 dark:text-amber-400">
+                    <Clock className="h-3 w-3" /> Due soon
+                  </Badge>
+                )}
                 {isCompleted && result && <CallResultBadge status={result} />}
                 {systemName && (
                   <Badge variant="secondary" className="gap-1 text-xs font-normal">

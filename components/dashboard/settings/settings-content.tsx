@@ -40,6 +40,7 @@ import type { RateCard } from '@/lib/billing/rate-cards'
 import type { ChargeTemplate, NominalCode } from '@/lib/types/database'
 import type { TagWithUsage } from '@/lib/actions/document-tags'
 import type { OpeningHours } from '@/lib/oncall/opening-hours'
+import type { CallUrgencyConfig } from '@/lib/kpi'
 import { signatureSrc } from '@/lib/blob'
 
 interface SettingsContentProps {
@@ -57,6 +58,7 @@ interface SettingsContentProps {
   deadlineReasons: string[]
   deadlineExcludedReasons: string[]
   engagementStatsEnabled: boolean
+  callUrgencyConfig: CallUrgencyConfig
   canManageLoneWorker: boolean
   loneWorkerUsers: LoneWorkerManagedUser[]
   loneWorkerTimings: LoneWorkerTimings
@@ -84,7 +86,7 @@ interface SettingsContentProps {
   reportFilenamePatterns: ReportFilenamePattern[]
 }
 
-export function SettingsContent({ user, profile, company, branches, departments, departmentManagerCandidates, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, deadlineExcludedReasons, engagementStatsEnabled, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards, chargeTemplates, nominalCodes, canManageTags, documentTags, openingHours, canManageInternalTasks, internalTaskTemplates, internalTaskUsers, internalTaskDepartments, internalTaskRoles, internalTaskDocuments, mfaFactors, mfaRequired, myEmailFooter, globalEmailFooter, canManageGlobalFooter, canManageReports, reportServiceTypes, reportTemplates, reportFilenamePatterns }: SettingsContentProps) {
+export function SettingsContent({ user, profile, company, branches, departments, departmentManagerCandidates, roles, propertyTypes, documentTemplates, poOverdueDays, deadlineReasons, deadlineExcludedReasons, engagementStatsEnabled, callUrgencyConfig, canManageLoneWorker, loneWorkerUsers, loneWorkerTimings, canManageRates, rateCards, chargeTemplates, nominalCodes, canManageTags, documentTags, openingHours, canManageInternalTasks, internalTaskTemplates, internalTaskUsers, internalTaskDepartments, internalTaskRoles, internalTaskDocuments, mfaFactors, mfaRequired, myEmailFooter, globalEmailFooter, canManageGlobalFooter, canManageReports, reportServiceTypes, reportTemplates, reportFilenamePatterns }: SettingsContentProps) {
   const isAdmin = profile.role === 'admin'
   // Templates are managed by office/admin (mail-merge letters for client correspondence).
   const canManageTemplates = profile.role === 'admin' || profile.role === 'office'
@@ -548,9 +550,10 @@ export function SettingsContent({ user, profile, company, branches, departments,
                   poOverdueDays={poOverdueDays}
                   deadlineReasons={deadlineReasons}
                   excludedReasons={deadlineExcludedReasons}
-                  engagementStatsEnabled={engagementStatsEnabled}
-                  openingHours={openingHours}
-                />
+                engagementStatsEnabled={engagementStatsEnabled}
+                callUrgencyConfig={callUrgencyConfig}
+                openingHours={openingHours}
+              />
               </TabsContent>
             )}
             {canManageLoneWorker && (

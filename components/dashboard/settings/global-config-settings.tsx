@@ -18,13 +18,18 @@ import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { setGlobalConfig } from '@/lib/actions/global-config'
 import { OPENING_HOURS_KEY, type OpeningHours } from '@/lib/oncall/opening-hours'
-import { Loader2, Plus, Trash2, Save, Crown, Clock, ShieldOff } from 'lucide-react'
+import {
+  CALL_URGENCY_CONFIG_KEY,
+  type CallUrgencyConfig,
+} from '@/lib/kpi'
+import { Loader2, Plus, Trash2, Save, Crown, Clock, ShieldOff, AlertTriangle } from 'lucide-react'
 
 interface GlobalConfigSettingsProps {
   poOverdueDays: number
   deadlineReasons: string[]
   excludedReasons: string[]
   engagementStatsEnabled: boolean
+  callUrgencyConfig: CallUrgencyConfig
   openingHours: OpeningHours
 }
 
@@ -33,6 +38,7 @@ export function GlobalConfigSettings({
   deadlineReasons: initialReasons,
   excludedReasons: initialExcluded,
   engagementStatsEnabled: initialEngagementEnabled,
+  callUrgencyConfig: initialUrgencyConfig,
   openingHours: initialOpeningHours,
 }: GlobalConfigSettingsProps) {
   const router = useRouter()
@@ -77,6 +83,41 @@ export function GlobalConfigSettings({
       toast.success(next ? 'Engineer standings enabled' : 'Engineer standings hidden')
       startTransition(() => router.refresh())
     }
+  }
+
+  // Call urgency accent (amber "due soon" / red "overdue" ring on call tiles)
+  const [urgencyEnabled, setUrgencyEnabled] = useState(initialUrgencyConfig.enabled)
+  const [dueSoonDays, setDueSoonDays] = useState(String(initialUrgencyConfig.dueSoonDays))
+  const [savingUrgency, setSavingUrgency] = useState(false)
+
+  const persistUrgency = async (next: CallUrgencyConfig) => {
+    setSavingUrgency(true)
+    const { error } = await setGlobalConfig(CALL_URGENCY_CONFIG_KEY, next)
+    setSavingUrgency(false)
+    if (error) {
+      toast.error(error)
+      return false
+    }
+    startTransition(() => router.refresh())
+    return true
+  }
+
+  const toggleUrgency = async (next: boolean) => {
+    setUrgencyEnabled(next)
+    const days = Math.min(365, Math.max(0, parseInt(dueSoonDays, 10) || 0))
+    const ok = await persistUrgency({ enabled: next, dueSoonDays: days })
+    if (!ok) {
+      setUrgencyEnabled(!next) // revert on failure
+    } else {
+      toast.success(next ? 'Call urgency highlighting enabled' : 'Call urgency highlighting hidden')
+    }
+  }
+
+  const saveDueSoonDays = async () => {
+    const days = Math.min(365, Math.max(0, parseInt(dueSoonDays, 10) || 0))
+    setDueSoonDays(String(days))
+    const ok = await persistUrgency({ enabled: urgencyEnabled, dueSoonDays: days })
+    if (ok) toast.success('Due-soon window saved')
   }
 
   // PO overdue threshold
@@ -261,6 +302,69 @@ export function GlobalConfigSettings({
                 disabled={savingEngagement}
               />
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Call urgency highlighting */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-500" />
+            Call Urgency Highlighting
+          </CardTitle>
+          <CardDescription>
+            Adds a deadline accent on top of the service-type colour on call tiles: an amber ring and
+            &ldquo;Due soon&rdquo; badge as a call approaches its complete-by date, then a red ring and
+            &ldquo;Overdue&rdquo; badge once it passes. The service-type colour is never replaced.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="urgency-toggle" className="text-sm font-medium">
+                Show urgency accent on call tiles
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {urgencyEnabled ? 'Currently visible on call tiles' : 'Currently hidden'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {savingUrgency && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+              <Switch
+                id="urgency-toggle"
+                checked={urgencyEnabled}
+                onCheckedChange={toggleUrgency}
+                disabled={savingUrgency}
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="due-soon-days">Due-soon window (days before complete-by)</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="due-soon-days"
+                type="number"
+                min={0}
+                max={365}
+                value={dueSoonDays}
+                onChange={(e) => setDueSoonDays(e.target.value)}
+                className="max-w-[120px]"
+                disabled={!urgencyEnabled || savingUrgency}
+              />
+              <Button onClick={saveDueSoonDays} disabled={!urgencyEnabled || savingUrgency}>
+                {savingUrgency ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                Save
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              A call turns amber this many days before its complete-by date. Overdue (red) always
+              applies once that date has passed.
+            </p>
           </div>
         </CardContent>
       </Card>

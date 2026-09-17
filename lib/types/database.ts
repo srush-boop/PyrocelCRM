@@ -874,12 +874,17 @@ export interface ChecklistItem {
   //                 which can carry a suggested answer pre-filled into the note.
   // 'calculation' : a read-only field computed from other number answers (sum,
   //                 average, min, max, count).
-  type: 'pass_fail' | 'text' | 'number' | 'checkbox' | 'choice' | 'calculation'
+  // 'table'       : a fillable grid the engineer adds rows to at execution, with
+  //                 author-defined columns (text/number/date). Number columns are
+  //                 totalled automatically.
+  type: 'pass_fail' | 'text' | 'number' | 'checkbox' | 'choice' | 'calculation' | 'table'
   required: boolean
   // Conditional rules that reveal extra requirements based on this item's answer.
   conditions?: ChecklistCondition[]
   // choice: the selectable answer options (author-defined).
   options?: string[]
+  // table: the column definitions the engineer fills row-by-row at execution.
+  columns?: InternalTaskTableColumn[]
   // choice: when true the user may tick several options; otherwise it is a
   // single-select dropdown. Defaults to single-select.
   multiSelect?: boolean
@@ -1979,10 +1984,11 @@ export interface Task {
   export interface ChecklistResult {
   item_id: string
   label: string
-  type: 'pass_fail' | 'text' | 'number' | 'checkbox' | 'choice' | 'calculation'
+  type: 'pass_fail' | 'text' | 'number' | 'checkbox' | 'choice' | 'calculation' | 'table'
   // string[] carries a multi-select choice answer; a single-select choice is a
-  // plain string; a calculation is the computed number.
-  value: boolean | string | number | string[]
+  // plain string; a calculation is the computed number; a table is the list of
+  // filled rows (each maps a column id to its cell text).
+  value: boolean | string | number | string[] | InternalTaskTableRow[]
   passed: boolean | null
   // choice/calculation config copied from the template item onto the row at build
   // time (mirrors how `conditions` are copied), so execution and reports render
@@ -1991,6 +1997,8 @@ export interface Task {
   multiSelect?: boolean
   optionSuggestions?: Record<string, string>
   calculation?: ChecklistCalculation
+  // table config copied from the template item onto the row at build time.
+  columns?: InternalTaskTableColumn[]
   // Author-uploaded reference image copied from the template item onto the row,
   // so execution and reports can show it without the template. Served via
   // blobSrc() through /api/blob.

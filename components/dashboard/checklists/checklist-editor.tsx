@@ -36,6 +36,7 @@ import {
   Calculator,
   ImageIcon,
   X,
+  Table as TableIcon,
 } from 'lucide-react'
 import type {
   ChecklistTemplate,
@@ -64,6 +65,7 @@ const itemTypeIcons = {
   checkbox: ToggleLeft,
   choice: List,
   calculation: Calculator,
+  table: TableIcon,
 }
 
 const itemTypeLabels = {
@@ -73,10 +75,12 @@ const itemTypeLabels = {
   checkbox: 'Checkbox',
   choice: 'Dropdown',
   calculation: 'Calculation',
+  table: 'Table',
 }
 
 // The condition-trigger dropdowns only cover pass_fail/checkbox/number. Text,
-// dropdown and calculation items have no discrete pass/fail answer to trigger on.
+// dropdown, calculation and table items have no discrete pass/fail answer to
+// trigger on.
 function supportsConditions(type: ChecklistItem['type']) {
   return type === 'pass_fail' || type === 'checkbox' || type === 'number'
 }
@@ -474,6 +478,13 @@ export function ChecklistEditor({ checklist, visitTypes = [] }: ChecklistEditorP
                         numberItems={items.filter(
                           (i) => i.type === 'number' && i.id !== item.id,
                         )}
+                        onChange={(updates) => updateItem(item.id, updates)}
+                      />
+                    )}
+
+                    {item.type === 'table' && (
+                      <TableColumnsPanel
+                        item={item}
                         onChange={(updates) => updateItem(item.id, updates)}
                       />
                     )}
@@ -891,6 +902,102 @@ function CalculationPanel({
               </div>
             ))}
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Per-item panel for a "Table" item: manage the columns the engineer fills
+// row-by-row at execution. Each column has a label and a cell type
+// (text/number/date); number columns are totalled automatically at execution
+// and in the report.
+function TableColumnsPanel({
+  item,
+  onChange,
+}: {
+  item: ChecklistItem
+  onChange: (updates: Partial<ChecklistItem>) => void
+}) {
+  const columns = item.columns ?? []
+
+  const addColumn = () => {
+    const col = {
+      id: `col-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      label: '',
+      type: 'text' as const,
+    }
+    onChange({ columns: [...columns, col] })
+  }
+
+  const updateColumn = (
+    id: string,
+    patch: Partial<{ label: string; type: 'text' | 'number' | 'date' }>,
+  ) => {
+    onChange({
+      columns: columns.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+    })
+  }
+
+  const removeColumn = (id: string) => {
+    onChange({ columns: columns.filter((c) => c.id !== id) })
+  }
+
+  return (
+    <div className="border-t bg-muted/30 px-4 py-3 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Table columns
+        </span>
+        <Button type="button" variant="outline" size="sm" onClick={addColumn}>
+          <Plus className="mr-1 h-3.5 w-3.5" />
+          Add column
+        </Button>
+      </div>
+
+      {columns.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          No columns yet. Add the columns the engineer will fill in row by row.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {columns.map((col) => (
+            <div key={col.id} className="flex items-center gap-2">
+              <Input
+                value={col.label}
+                placeholder="Column name"
+                onChange={(e) => updateColumn(col.id, { label: e.target.value })}
+                className="flex-1"
+              />
+              <Select
+                value={col.type}
+                onValueChange={(type: 'text' | 'number' | 'date') =>
+                  updateColumn(col.id, { type })
+                }
+              >
+                <SelectTrigger className="w-[130px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="text">Text</SelectItem>
+                  <SelectItem value="number">Number</SelectItem>
+                  <SelectItem value="date">Date</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => removeColumn(col.id)}
+                aria-label="Remove column"
+              >
+                <Trash2 className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            </div>
+          ))}
+          <p className="text-xs text-muted-foreground">
+            Number columns are totalled automatically.
+          </p>
         </div>
       )}
     </div>

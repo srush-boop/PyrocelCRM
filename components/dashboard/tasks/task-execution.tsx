@@ -91,6 +91,8 @@ import {
   CornerDownRight,
   Ban,
   Calculator,
+  Trash2,
+  Plus,
   } from 'lucide-react'
 import type { 
   Profile, 
@@ -102,7 +104,8 @@ import type {
   TaskResult,
   TaskResultStatus,
   ClientLink,
-  SystemPanel
+  SystemPanel,
+  InternalTaskTableRow
 } from '@/lib/types/database'
 
 interface TaskExecutionProps {
@@ -158,14 +161,16 @@ function buildInitialResults(
               : ''
             : item.type === 'calculation'
               ? 0
-              : '',
+              : item.type === 'table'
+                ? []
+                : '',
     passed: item.type === 'pass_fail' ? true : null,
     notes: '',
     panel_id: panel?.id ?? null,
     panel_name: panel?.name ?? null,
     panel_level: level,
-    // Carry choice/calculation config onto the row so execution and reports work
-    // without the template (mirrors how conditions are copied below).
+    // Carry choice/calculation/table config onto the row so execution and reports
+    // work without the template (mirrors how conditions are copied below).
     ...(item.type === 'choice'
       ? {
           options: item.options || [],
@@ -175,6 +180,9 @@ function buildInitialResults(
       : {}),
     ...(item.type === 'calculation' && item.calculation
       ? { calculation: item.calculation }
+      : {}),
+    ...(item.type === 'table'
+      ? { columns: item.columns || [] }
       : {}),
     ...(item.imagePathname
       ? { imagePathname: item.imagePathname, imageName: item.imageName ?? null }
@@ -287,6 +295,138 @@ function NaToggle({
       <Ban className="h-4 w-4" />
       N/A
     </Button>
+  )
+}
+
+// Editable grid for a `table` checklist item at execution. The engineer adds
+// rows and fills cells; number columns show a live total. Rows are stored on the
+// result value as InternalTaskTableRow[] (a map of column id -> cell text).
+function ChecklistTableField({
+  result,
+  canEdit,
+  onChange,
+}: {
+  result: ChecklistResult
+  canEdit: boolean
+  onChange: (rows: InternalTaskTableRow[]) => void
+}) {
+  const columns = result.columns ?? []
+  const rows: InternalTaskTableRow[] = Array.isArray(result.value)
+    ? (result.value as InternalTaskTableRow[])
+    : []
+
+  const addRow = () => {
+    const empty: InternalTaskTableRow = {}
+    for (const c of columns) empty[c.id] = ''
+    onChange([...rows, empty])
+  }
+  const updateCell = (idx: number, colId: string, v: string) => {
+    onChange(rows.map((r, i) => (i === idx ? { ...r, [colId]: v } : r)))
+  }
+  const removeRow = (idx: number) => {
+    onChange(rows.filter((_, i) => i !== idx))
+  }
+  const columnTotal = (colId: string) =>
+    rows.reduce((sum, r) => {
+      const n = parseFloat(String(r[colId] ?? ''))
+      return Number.isFinite(n) ? sum + n : sum
+    }, 0)
+
+  const hasNumberColumn = columns.some((c) => c.type === 'number')
+
+  if (columns.length === 0) {
+    return (
+      <p className="mt-2 text-sm text-muted-foreground">
+        This table has no columns configured.
+      </p>
+    )
+  }
+
+  return (
+    <div className="mt-2 space-y-2">
+      <div className="overflow-x-auto rounded-md border">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50">
+            <tr>
+              {columns.map((c) => (
+                <th
+                  key={c.id}
+                  className="px-2 py-1.5 text-left font-medium text-muted-foreground whitespace-nowrap"
+                >
+                  {c.label || 'Column'}
+                </th>
+              ))}
+              <th className="w-10 px-2 py-1.5" />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={columns.length + 1}
+                  className="px-2 py-3 text-center text-muted-foreground"
+                >
+                  No rows yet.
+                </td>
+              </tr>
+            ) : (
+              rows.map((row, idx) => (
+                <tr key={idx} className="border-t">
+                  {columns.map((c) => (
+                    <td key={c.id} className="px-1.5 py-1">
+                      <Input
+                        value={String(row[c.id] ?? '')}
+                        type={
+                          c.type === 'number'
+                            ? 'number'
+                            : c.type === 'date'
+                              ? 'date'
+                              : 'text'
+                        }
+                        onChange={(e) => updateCell(idx, c.id, e.target.value)}
+                        disabled={!canEdit}
+                        className="h-8"
+                      />
+                    </td>
+                  ))}
+                  <td className="px-1.5 py-1 text-right">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => removeRow(idx)}
+                      disabled={!canEdit}
+                      aria-label="Remove row"
+                    >
+                      <Trash2 className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+          {hasNumberColumn && rows.length > 0 && (
+            <tfoot className="border-t bg-muted/30">
+              <tr>
+                {columns.map((c) => (
+                  <td key={c.id} className="px-2 py-1.5 font-medium whitespace-nowrap">
+                    {c.type === 'number' ? `Total: ${columnTotal(c.id)}` : ''}
+                  </td>
+                ))}
+                <td />
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+      {canEdit && (
+        <Button type="button" variant="outline" size="sm" onClick={addRow}>
+          <Plus className="mr-1 h-3.5 w-3.5" />
+          Add row
+        </Button>
+      )}
+    </div>
   )
 }
 
@@ -677,6 +817,11 @@ export function TaskExecution({
           ? row.value.length === 0
           : !row.value
         if (empty) blockers.push(`${where}: choose an option`)
+      }
+      // Required tables must have at least one row.
+      if (row.type === 'table' && row.required && !row.na) {
+        const empty = !Array.isArray(row.value) || row.value.length === 0
+        if (empty) blockers.push(`${where}: add at least one row`)
       }
       for (const cond of row.conditions || []) {
         if (!isConditionActive(row, cond)) continue
@@ -1550,6 +1695,16 @@ export function TaskExecution({
                               }
                             />
                           </div>
+                        )}
+
+                        {result.type === 'table' && (
+                          <ChecklistTableField
+                            result={result}
+                            canEdit={canEdit}
+                            onChange={(rows) =>
+                              updateChecklistResult(result.item_id, { value: rows })
+                            }
+                          />
                         )}
 
                         {result.type === 'choice' && (

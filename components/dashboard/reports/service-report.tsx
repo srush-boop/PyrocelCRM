@@ -44,6 +44,7 @@ import type {
   ChecklistResult,
   ReportTemplate,
   CompanyInfo,
+  InternalTaskTableRow,
 } from '@/lib/types/database'
 
 interface ServiceReportProps {
@@ -376,12 +377,69 @@ export function ServiceReport({ task, result, template, companyInfo }: ServiceRe
                           </span>
                         ) : item.type === 'choice' ? (
                           <span className="font-semibold">{formatChoiceValue(item.value) || '—'}</span>
+                        ) : item.type === 'table' ? (
+                          <span className="text-muted-foreground">
+                            {Array.isArray(item.value) ? `${item.value.length} row(s)` : '—'}
+                          </span>
                         ) : (
                           <span className="font-semibold tabular-nums">{String(item.value)}</span>
                         )}
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">{item.notes || '—'}</td>
                     </tr>
+                    {item.type === 'table' &&
+                      Array.isArray(item.value) &&
+                      item.value.length > 0 &&
+                      (item.columns?.length ?? 0) > 0 && (
+                        <tr className="border-t border-dashed align-top">
+                          <td colSpan={3} className="px-3 py-2 pl-6">
+                            <table className="w-full border text-xs">
+                              <thead className="bg-muted/50">
+                                <tr>
+                                  {item.columns!.map((c) => (
+                                    <th
+                                      key={c.id}
+                                      className="border px-2 py-1 text-left font-medium"
+                                    >
+                                      {c.label || 'Column'}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(item.value as InternalTaskTableRow[]).map((row, i) => (
+                                  <tr key={i}>
+                                    {item.columns!.map((c) => (
+                                      <td key={c.id} className="border px-2 py-1">
+                                        {String(row[c.id] ?? '')}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                              {item.columns!.some((c) => c.type === 'number') && (
+                                <tfoot className="bg-muted/30">
+                                  <tr>
+                                    {item.columns!.map((c) => (
+                                      <td key={c.id} className="border px-2 py-1 font-medium">
+                                        {c.type === 'number'
+                                          ? `Total: ${(item.value as InternalTaskTableRow[]).reduce(
+                                              (s, r) => {
+                                                const n = parseFloat(String(r[c.id] ?? ''))
+                                                return Number.isFinite(n) ? s + n : s
+                                              },
+                                              0,
+                                            )}`
+                                          : ''}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                </tfoot>
+                              )}
+                            </table>
+                          </td>
+                        </tr>
+                      )}
                     {followUps.map((child) => (
                       <tr
                         key={child.item_id}

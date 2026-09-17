@@ -17,12 +17,12 @@ import { TodoPanel } from './todo-panel'
 export function TodoButton() {
   const [open, setOpen] = useState(false)
   const { data } = useTodo()
-  // Count everything that needs the user's attention: their own open to-dos
-  // plus items waiting on them, so adding a to-do moves the badge.
-  const openMine = (data?.items ?? []).filter(
+  // Badge counts ONLY the user's own open to-dos. The "waiting on you"
+  // aggregation is notification-style and is surfaced by the bell, so it is
+  // intentionally excluded here to keep the two counts distinct.
+  const total = (data?.items ?? []).filter(
     (i) => !i.parent_id && i.status !== 'done',
   ).length
-  const total = (data?.totalWaiting ?? 0) + openMine
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>

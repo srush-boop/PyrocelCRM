@@ -196,24 +196,26 @@ function BookingEditor({
         {alreadyBooked ? 'Update booking' : 'Book appointment'}
       </p>
       <div className="grid grid-cols-2 gap-3">
-        <div className="grid gap-1">
+        <div className="grid min-w-0 gap-1">
           <label htmlFor="book-start" className="text-xs text-muted-foreground">
             Start time
           </label>
           <Input
             id="book-start"
             type="time"
+            className="w-full min-w-0"
             value={start}
             onChange={(e) => setStart(e.target.value)}
           />
         </div>
-        <div className="grid gap-1">
+        <div className="grid min-w-0 gap-1">
           <label htmlFor="book-end" className="text-xs text-muted-foreground">
             End time
           </label>
           <Input
             id="book-end"
             type="time"
+            className="w-full min-w-0"
             value={end}
             onChange={(e) => setEnd(e.target.value)}
           />
@@ -941,6 +943,13 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
                   className="h-3.5 w-3.5 shrink-0 animate-pulse text-destructive"
                   role="img"
                   aria-label="Emergency call"
+                />
+              )}
+              {task.status === 'paused' && (
+                <PauseCircle
+                  className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400"
+                  role="img"
+                  aria-label="Paused call"
                 />
               )}
               <p className="truncate text-sm font-medium leading-tight">{task.site_service?.site?.name}</p>

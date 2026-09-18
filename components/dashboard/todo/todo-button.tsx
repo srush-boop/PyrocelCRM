@@ -17,11 +17,12 @@ import { TodoPanel } from './todo-panel'
 export function TodoButton() {
   const [open, setOpen] = useState(false)
   const { data } = useTodo()
-  // Badge counts ONLY the user's own open to-dos. The "waiting on you"
+  // Badge counts ONLY the user's own open, NOTABLE to-dos. The "waiting on you"
   // aggregation is notification-style and is surfaced by the bell, so it is
-  // intentionally excluded here to keep the two counts distinct.
+  // intentionally excluded here. Items marked as not notable are quiet reminders
+  // the user deliberately kept out of the tally.
   const total = (data?.items ?? []).filter(
-    (i) => !i.parent_id && i.status !== 'done',
+    (i) => !i.parent_id && i.status !== 'done' && i.notable !== false,
   ).length
 
   return (

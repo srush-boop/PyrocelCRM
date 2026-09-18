@@ -116,6 +116,25 @@ export async function deleteList(
 
 // ------------------------------- Items -------------------------------------
 
+// Normalises free-form tags: trims, drops empties, de-dupes case-insensitively
+// (keeping the first-seen casing), caps length and count so a single item can't
+// carry an unbounded tag list.
+function cleanTags(tags: string[] | undefined): string[] {
+  if (!tags) return []
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const raw of tags) {
+    const t = raw.trim().slice(0, 40)
+    if (!t) continue
+    const key = t.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(t)
+    if (out.length >= 20) break
+  }
+  return out
+}
+
 export async function createItem(input: {
   title: string
   listId?: string | null
@@ -123,6 +142,8 @@ export async function createItem(input: {
   notes?: string | null
   dueAt?: string | null
   allDay?: boolean
+  notable?: boolean
+  tags?: string[]
 }): Promise<{ ok: boolean; error?: string; item?: TodoItem }> {
   const auth = await getAuth()
   if ('error' in auth) return { ok: false, error: auth.error }
@@ -149,6 +170,8 @@ export async function createItem(input: {
       notes: input.notes ?? null,
       due_at: input.dueAt ?? null,
       all_day: input.allDay ?? false,
+      notable: input.notable ?? true,
+      tags: cleanTags(input.tags),
       position,
     })
     .select('*')
@@ -165,6 +188,8 @@ export async function updateItem(input: {
   dueAt?: string | null
   allDay?: boolean
   listId?: string | null
+  notable?: boolean
+  tags?: string[]
 }): Promise<{ ok: boolean; error?: string }> {
   const auth = await getAuth()
   if ('error' in auth) return { ok: false, error: auth.error }
@@ -175,6 +200,8 @@ export async function updateItem(input: {
   if (input.dueAt !== undefined) patch.due_at = input.dueAt
   if (input.allDay !== undefined) patch.all_day = input.allDay
   if (input.listId !== undefined) patch.list_id = input.listId
+  if (input.notable !== undefined) patch.notable = input.notable
+  if (input.tags !== undefined) patch.tags = cleanTags(input.tags)
   patch.updated_at = new Date().toISOString()
   const { error } = await supabase
     .from('todo_items')
@@ -211,7 +238,7 @@ export async function toggleItemDone(input: {
 
 export async function setItemFlag(input: {
   id: string
-  field: 'starred' | 'pinned'
+  field: 'starred' | 'pinned' | 'notable'
   value: boolean
 }): Promise<{ ok: boolean; error?: string }> {
   const auth = await getAuth()

@@ -120,6 +120,7 @@ export function TodoBoard() {
   const [search, setSearch] = useState('')
   const [dueFilter, setDueFilter] = useState<DueFilter>('any')
   const [peopleFilter, setPeopleFilter] = useState<PeopleFilter>('any')
+  const [tagFilter, setTagFilter] = useState<string>('any')
   const [sortBy, setSortBy] = useState<SortBy>('manual')
 
   // Only auto-focus the quick-add box on pointer/desktop. On touch devices
@@ -143,8 +144,10 @@ export function TodoBoard() {
   const currentUserId = data?.currentUserId
   const topLevel = useMemo(() => items.filter((i) => !i.parent_id), [items])
 
+  // Counts reflect only NOTABLE open to-dos, matching the header badge. Items
+  // marked "quiet" still appear in the lists but are excluded from the tallies.
   const counts = useMemo(() => {
-    const open = topLevel.filter((i) => i.status !== 'done')
+    const open = topLevel.filter((i) => i.status !== 'done' && i.notable !== false)
     return {
       all: open.length,
       starred: open.filter((i) => i.starred).length,
@@ -154,8 +157,21 @@ export function TodoBoard() {
     }
   }, [topLevel])
 
+  // Distinct tags across the user's open to-dos, for the tag filter.
+  const allTags = useMemo(() => {
+    const set = new Set<string>()
+    for (const i of topLevel) {
+      if (i.status === 'done') continue
+      for (const t of i.tags ?? []) set.add(t)
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [topLevel])
+
   const filtersActive =
-    search.trim() !== '' || dueFilter !== 'any' || peopleFilter !== 'any'
+    search.trim() !== '' ||
+    dueFilter !== 'any' ||
+    peopleFilter !== 'any' ||
+    tagFilter !== 'any'
 
   const visible = useMemo(() => {
     let rows = topLevel.filter((i) => i.status !== 'done')
@@ -206,6 +222,11 @@ export function TodoBoard() {
       rows = rows.filter((i) => i.owner_id !== currentUserId)
     } else if (peopleFilter === 'shared') {
       rows = rows.filter((i) => (data?.assignees[i.id]?.length ?? 0) > 0)
+    }
+
+    // Tag filter
+    if (tagFilter !== 'any') {
+      rows = rows.filter((i) => (i.tags ?? []).includes(tagFilter))
     }
 
     // Sort
@@ -421,6 +442,21 @@ export function TodoBoard() {
                   <SelectItem value="shared">Shared</SelectItem>
                 </SelectContent>
               </Select>
+              {allTags.length > 0 && (
+                <Select value={tagFilter} onValueChange={(v) => setTagFilter(v)}>
+                  <SelectTrigger className="h-8 w-[8.5rem]">
+                    <SelectValue placeholder="Tag" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="any">All tags</SelectItem>
+                    {allTags.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortBy)}>
                 <SelectTrigger className="h-8 w-[8.5rem]">
                   <SelectValue placeholder="Sort" />

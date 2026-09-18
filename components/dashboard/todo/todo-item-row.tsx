@@ -23,12 +23,15 @@ import {
   Download,
   Trash2,
   MoreHorizontal,
-  GripVertical,
   Check,
   X,
   Paperclip,
   FileText,
   Mail,
+  Bell,
+  BellOff,
+  Tag as TagIcon,
+  Plus,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -99,6 +102,7 @@ export function TodoItemRow({
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(item.title)
   const [uploading, setUploading] = useState(false)
+  const [newTag, setNewTag] = useState('')
   // Optimistic completion + removal so the row responds instantly instead of
   // waiting on the round-trip (the old behaviour felt broken for 3-10s).
   const [optimisticDone, setOptimisticDone] = useState<boolean | null>(null)
@@ -164,8 +168,17 @@ export function TodoItemRow({
   if (removed) return null
 
   return (
-    <div className="group/row rounded-lg border border-transparent hover:border-border/60 hover:bg-muted/30">
-      <div className="flex items-start gap-2 px-2 py-1.5">
+    <div
+      className={cn(
+        'group/row rounded-xl border transition-all',
+        done
+          ? 'border-transparent'
+          : 'border-border/60 bg-card hover:border-border hover:shadow-sm',
+        item.notable === false && !done && 'border-dashed opacity-75',
+        item.pinned && !done && 'border-primary/40 bg-primary/[0.03]',
+      )}
+    >
+      <div className="flex items-start gap-2 px-3 py-2.5">
         {dragHandle}
         <Checkbox
           checked={done}
@@ -231,6 +244,15 @@ export function TodoItemRow({
               </button>
             )}
             {item.pinned && <Pin className="h-3 w-3 shrink-0 text-primary" />}
+            {item.notable === false && (
+              <span
+                className="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+                title="Not counted in your open to-do totals"
+              >
+                <BellOff className="h-2.5 w-2.5" />
+                Quiet
+              </span>
+            )}
           </div>
 
           {/* meta row */}
@@ -257,6 +279,15 @@ export function TodoItemRow({
                 {attachments.length}
               </span>
             )}
+            {item.tags.map((t) => (
+              <span
+                key={t}
+                className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary"
+              >
+                <TagIcon className="h-2.5 w-2.5" />
+                {t}
+              </span>
+            ))}
             {assignees.length > 0 && (
               <div className="flex -space-x-2">
                 {assignees.slice(0, 3).map((a) => (
@@ -357,6 +388,28 @@ export function TodoItemRow({
               >
                 <Pin className="mr-2 h-4 w-4" />
                 {item.pinned ? 'Unpin' : 'Pin'}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={async () => {
+                  await setItemFlag({
+                    id: item.id,
+                    field: 'notable',
+                    value: item.notable === false,
+                  })
+                  onChanged()
+                }}
+              >
+                {item.notable === false ? (
+                  <>
+                    <Bell className="mr-2 h-4 w-4" />
+                    Count in totals
+                  </>
+                ) : (
+                  <>
+                    <BellOff className="mr-2 h-4 w-4" />
+                    {"Don't count in totals"}
+                  </>
+                )}
               </DropdownMenuItem>
               {item.due_at && !item.calendar_entry_id && (
                 <DropdownMenuItem
@@ -473,6 +526,59 @@ export function TodoItemRow({
               <Paperclip className="h-3.5 w-3.5" />
               {uploading ? 'Uploading...' : 'Attach file or email'}
             </Button>
+          </div>
+
+          {/* tags */}
+          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+            <TagIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            {item.tags.map((t) => (
+              <span
+                key={t}
+                className="inline-flex items-center gap-1 rounded-full bg-primary/10 py-0.5 pl-2 pr-1 text-[11px] font-medium text-primary"
+              >
+                {t}
+                <button
+                  type="button"
+                  className="rounded-full p-0.5 hover:bg-primary/20"
+                  aria-label={`Remove tag ${t}`}
+                  onClick={async () => {
+                    const next = item.tags.filter((x) => x !== t)
+                    const res = await updateItem({ id: item.id, tags: next })
+                    if (!res.ok) {
+                      toast.error(res.error || 'Could not update tags.')
+                      return
+                    }
+                    onChanged()
+                  }}
+                >
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              </span>
+            ))}
+            <Input
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              onKeyDown={async (e) => {
+                if (e.nativeEvent.isComposing || e.keyCode === 229) return
+                if (e.key !== 'Enter') return
+                e.preventDefault()
+                const t = newTag.trim()
+                if (!t) return
+                if (item.tags.some((x) => x.toLowerCase() === t.toLowerCase())) {
+                  setNewTag('')
+                  return
+                }
+                const res = await updateItem({ id: item.id, tags: [...item.tags, t] })
+                if (!res.ok) {
+                  toast.error(res.error || 'Could not add tag.')
+                  return
+                }
+                setNewTag('')
+                onChanged()
+              }}
+              placeholder="Add tag..."
+              className="h-6 w-24 border-dashed px-2 text-[11px]"
+            />
           </div>
 
           {subtasks.map((sub) => {

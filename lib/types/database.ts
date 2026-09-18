@@ -3987,6 +3987,12 @@ export interface TodoItem {
   all_day: boolean
   starred: boolean
   pinned: boolean
+  // When false, the to-do is excluded from "open to-do" counts (header badge,
+  // list totals). It still appears in the list — just quietly, without adding
+  // to the tallies. Defaults to true.
+  notable: boolean
+  // Free-form labels for grouping/filtering. Defaults to an empty array.
+  tags: string[]
   position: number
   // Set when the to-do has been mirrored into the in-app calendar.
   calendar_entry_id: string | null

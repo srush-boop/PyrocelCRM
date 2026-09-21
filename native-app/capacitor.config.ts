@@ -9,10 +9,16 @@ import type { CapacitorConfig } from '@capacitor/cli'
  * site — the native project exists purely to add the capabilities a browser
  * can't provide (background location, native push, critical alerts).
  *
- * Set CRM_URL at build time to the production URL (defaults to the value baked
- * in below). It MUST be https for background push/geolocation to work.
+ * Resolution order at build time:
+ *   1. CRM_URL              — explicit override (CI / local builds)
+ *   2. NEXT_PUBLIC_SITE_URL — the CRM's own public site URL, when present
+ *   3. the baked literal    — the stable production deployment
+ * It MUST be https for background push/geolocation to work.
  */
-const CRM_URL = process.env.CRM_URL || 'https://REPLACE_WITH_PRODUCTION_URL'
+const CRM_URL =
+  process.env.CRM_URL ||
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  'https://crm-fsm.vercel.app'
 
 const config: CapacitorConfig = {
   appId: 'com.pyrocel.crm',

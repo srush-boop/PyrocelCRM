@@ -62,7 +62,15 @@ Use one Firebase project for Android and iOS so a single sender covers both.
 
 1. Create a Firebase project; add an Android app (package `com.pyrocel.crm`) and
    an iOS app (bundle id `com.pyrocel.crm`).
-2. Android: drop `google-services.json` into `android/app/`.
+2. Android: get `google-services.json` for the Firebase project `amber-pyrocel`
+   (package `com.pyrocel.crm`) and place it at `android/app/google-services.json`.
+   The `android/` folder and `google-services.json` are git-ignored (repo policy),
+   so it is **not** committed — supply it per build:
+   - **Local build:** copy your file into `android/app/google-services.json` after
+     `npx cap add android`.
+   - **CI build:** it is decoded from the `ANDROID_GOOGLE_SERVICES_BASE64` repo
+     secret (see "Required repository secrets"). Generate the secret value with
+     `base64 -w0 google-services.json`.
 3. iOS: drop `GoogleService-Info.plist` into the iOS app target, enable the Push
    Notifications + Background Modes (Remote notifications) capabilities, and
    upload your **APNs Auth Key (.p8)** to Firebase → Cloud Messaging so FCM can
@@ -117,6 +125,8 @@ Shared:
 
 Android:
 
+- `ANDROID_GOOGLE_SERVICES_BASE64` — base64 of `google-services.json`
+  (`base64 -w0 google-services.json`). Firebase project `amber-pyrocel`.
 - `ANDROID_KEYSTORE_BASE64` — base64 of your release keystore
   (`base64 -w0 release.keystore`).
 - `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.

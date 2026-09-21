@@ -6,6 +6,7 @@
   "scripts": {
     "add:ios": "cap add ios",
     "add:android": "cap add android",
+    "setup:android": "node scripts/setup-android.mjs",
     "sync": "cap sync",
     "open:ios": "cap open ios",
     "open:android": "cap open android",

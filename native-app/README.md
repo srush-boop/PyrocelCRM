@@ -34,6 +34,30 @@ npx cap sync
 `ios/` and `android/` are generated (git-ignored). Re-run `npx cap sync` after
 changing plugins or `capacitor.config.ts`.
 
+### Android native config (automated)
+
+After `npx cap add android` + `npx cap sync`, run the setup script to apply the
+lone-worker native config into the generated project (idempotent — re-runnable):
+
+```bash
+cd native-app
+TRANSISTORSOFT_LICENSE="your-android-license" npm run setup:android
+```
+
+It applies to the generated `android/` project:
+
+- Location + foreground-service + `POST_NOTIFICATIONS` permissions in
+  `AndroidManifest.xml`.
+- The Transistorsoft licence `<meta-data>` (from `TRANSISTORSOFT_LICENSE`, or a
+  placeholder you must replace before a release build).
+- The Transistorsoft maven repositories in `android/build.gradle`.
+
+The `lone-worker` notification channel is **not** set here — the web layer
+(`lib/native/push.ts`) creates it at runtime on first push registration, so it
+always matches the channel id the server sends to. CI runs this step
+automatically (see the Android workflow), reading the licence from the
+`ANDROID_TRANSISTORSOFT_LICENSE` repo secret.
+
 ## Transistorsoft background-geolocation
 
 This is a **licensed** plugin. Purchase a license per platform at

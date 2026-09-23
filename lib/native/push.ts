@@ -20,6 +20,26 @@ export async function registerForPush(): Promise<
     const perm = await PushNotifications.requestPermissions()
     if (perm.receive !== 'granted') return null
 
+    // Android 8+ requires an explicit channel. Create a high-importance
+    // "lone-worker" channel so escalation pushes surface loudly — the server
+    // targets this exact channel id when sending emergency notifications.
+    if (nativePlatform() === 'android') {
+      try {
+        await PushNotifications.createChannel({
+          id: 'lone-worker',
+          name: 'Lone Worker Safety',
+          description: 'Emergency lone-worker check-ins and escalation alerts',
+          importance: 5,
+          visibility: 1,
+          sound: 'default',
+          vibration: true,
+          lights: true,
+        })
+      } catch (err) {
+        console.log('[v0] channel create failed:', (err as Error).message)
+      }
+    }
+
     const token = await new Promise<string | null>((resolve) => {
       let settled = false
       const done = (v: string | null) => {

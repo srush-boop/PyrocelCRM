@@ -34,6 +34,30 @@ npx cap sync
 `ios/` and `android/` are generated (git-ignored). Re-run `npx cap sync` after
 changing plugins or `capacitor.config.ts`.
 
+### Android native config (automated)
+
+After `npx cap add android` + `npx cap sync`, run the setup script to apply the
+lone-worker native config into the generated project (idempotent — re-runnable):
+
+```bash
+cd native-app
+TRANSISTORSOFT_LICENSE="your-android-license" npm run setup:android
+```
+
+It applies to the generated `android/` project:
+
+- Location + foreground-service + `POST_NOTIFICATIONS` permissions in
+  `AndroidManifest.xml`.
+- The Transistorsoft licence `<meta-data>` (from `TRANSISTORSOFT_LICENSE`, or a
+  placeholder you must replace before a release build).
+- The Transistorsoft maven repositories in `android/build.gradle`.
+
+The `lone-worker` notification channel is **not** set here — the web layer
+(`lib/native/push.ts`) creates it at runtime on first push registration, so it
+always matches the channel id the server sends to. CI runs this step
+automatically (see the Android workflow), reading the licence from the
+`ANDROID_TRANSISTORSOFT_LICENSE` repo secret.
+
 ## Transistorsoft background-geolocation
 
 This is a **licensed** plugin. Purchase a license per platform at
@@ -62,7 +86,15 @@ Use one Firebase project for Android and iOS so a single sender covers both.
 
 1. Create a Firebase project; add an Android app (package `com.pyrocel.crm`) and
    an iOS app (bundle id `com.pyrocel.crm`).
-2. Android: drop `google-services.json` into `android/app/`.
+2. Android: get `google-services.json` for the Firebase project `amber-pyrocel`
+   (package `com.pyrocel.crm`) and place it at `android/app/google-services.json`.
+   The `android/` folder and `google-services.json` are git-ignored (repo policy),
+   so it is **not** committed — supply it per build:
+   - **Local build:** copy your file into `android/app/google-services.json` after
+     `npx cap add android`.
+   - **CI build:** it is decoded from the `ANDROID_GOOGLE_SERVICES_BASE64` repo
+     secret (see "Required repository secrets"). Generate the secret value with
+     `base64 -w0 google-services.json`.
 3. iOS: drop `GoogleService-Info.plist` into the iOS app target, enable the Push
    Notifications + Background Modes (Remote notifications) capabilities, and
    upload your **APNs Auth Key (.p8)** to Firebase → Cloud Messaging so FCM can
@@ -117,6 +149,8 @@ Shared:
 
 Android:
 
+- `ANDROID_GOOGLE_SERVICES_BASE64` — base64 of `google-services.json`
+  (`base64 -w0 google-services.json`). Firebase project `amber-pyrocel`.
 - `ANDROID_KEYSTORE_BASE64` — base64 of your release keystore
   (`base64 -w0 release.keystore`).
 - `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.

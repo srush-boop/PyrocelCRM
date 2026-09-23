@@ -64,6 +64,25 @@ jobs:
       - name: Sync Capacitor
         run: pnpm exec cap sync android
 
+      # Pre-stage the native config the lone-worker feature needs: location +
+      # foreground-service + notification permissions and the Transistorsoft
+      # licence/maven repos. Idempotent.
+      - name: Configure Android native settings
+        env:
+          TRANSISTORSOFT_LICENSE: ${{ secrets.ANDROID_TRANSISTORSOFT_LICENSE }}
+        run: pnpm run setup:android
+
+      # Decode the Firebase config (base64 repo secret) so the google-services
+      # Gradle plugin can resolve it. Required for FCM push to work in the build.
+      - name: Decode google-services.json
+        env:
+          ANDROID_GOOGLE_SERVICES_BASE64: ${{ secrets.ANDROID_GOOGLE_SERVICES_BASE64 }}
+        run: |
+          if [ -z "$ANDROID_GOOGLE_SERVICES_BASE64" ]; then
+            echo "::error::ANDROID_GOOGLE_SERVICES_BASE64 secret is required (base64 of google-services.json)"; exit 1
+          fi
+          echo "$ANDROID_GOOGLE_SERVICES_BASE64" | base64 -d > android/app/google-services.json
+
       # Decode the signing keystore (base64 repo secret) for release builds.
       - name: Decode keystore
         if: ${{ github.event.inputs.build_type != 'debug' }}

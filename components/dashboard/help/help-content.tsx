@@ -426,305 +426,482 @@ interface SectionGroup {
 const SECTION_GUIDE: SectionGroup[] = [
   {
     title: 'Service & scheduling',
-    intro: 'The day-to-day heart of the system — where recurring service visits (calls) are planned, tracked and closed out.',
+    intro: 'The day-to-day heart of the system — where recurring service visits (calls) are planned, assigned, tracked and closed out. This is where most office and engineer time is spent.',
     sections: [
       {
         name: 'All Calls (Schedule)',
-        overview: 'The master list of every service visit across Upcoming, Overdue and Completed.',
+        overview:
+          'The master list of every service visit. Tabs split work into Upcoming, Overdue and Completed, and four view modes let you look at the same calls in the way that suits the job in hand. Each tile shows the site, service, due date (or a red “Complete by” date once a tolerance is breached) and an approximate time-on-site learned from the last five similar calls.',
         steps: [
-          'Pick a view — Grid, List, By route or By area — and a tab (Upcoming / Overdue / Completed).',
-          'Filter by engineer or date and sort by Due date or Postcode to plan the round.',
-          'Click a call to view it; from there you can reassign, book, cancel (with a reason) or open the report.',
+          'Choose a view — Grid (visual tiles), List (dense rows), By route or By area — and a tab (Upcoming / Overdue / Completed).',
+          'Filter by engineer or date, sort by Due date or Postcode, and use the search box to jump to a site, client or call reference.',
+          'Save the current filters as a personal view, or share a view (with a note and comment thread) so the team works from the same list; print any filtered view for a paper round sheet.',
+          'Click a call to open the quick-view, where you can reassign it, book a date/time, cancel it (a reason is required) or open the completed report.',
+          'The Completed tab shows the rich report table for office/admin, with per-report filters and links straight to each service report.',
         ],
       },
       {
         name: 'Service Dashboard',
-        overview: 'A live overview of service health — overdue, unassigned and upcoming calls, plus escalations.',
+        overview:
+          'A live command centre for service health. Colour-coded tiles surface overdue, unassigned and upcoming calls, follow-up escalations, no-access calls awaiting a decision, and pending contract reviews so nothing slips.',
         steps: [
-          'Scan the tiles for anything red (overdue / escalated) first.',
-          'Click a tile to drop straight into the filtered list of those calls.',
+          'Scan for red first — overdue calls, third-visit escalations and the no-access queue need attention soonest.',
+          'Click any tile to drop straight into the filtered list of exactly those calls.',
+          'Use the no-access queue to rearrange or dismiss calls where the engineer attended but could not get in (optionally charging the wasted attendance).',
         ],
       },
       {
         name: 'CDO Management',
-        overview: 'Everything for CDO-delivered services, grouped by route with compliance and unrouted work.',
+        overview:
+          'A dedicated view for CDO-delivered services, grouped by route. Shows CDO engineers, route compliance over the last 90 days, and any services that are not yet on a route.',
         steps: [
           'Review the Overdue / Upcoming / Unassigned tabs for CDO calls.',
-          'Use the routes overview to spot unrouted services and assign them.',
+          'Use the routes overview to spot unrouted services and assign them to the right route.',
+          'Check the compliance figures to see which routes are keeping pace.',
         ],
       },
       {
         name: 'Map',
-        overview: 'A geographic view of calls to help plan travel and spot clusters of work.',
-        steps: ['Open Map and filter by engineer or date to see where the work is.'],
+        overview:
+          'A geographic view of calls that plots the round on an interactive map so you can plan travel, spot clusters of nearby work, and sequence a day sensibly.',
+        steps: [
+          'Open Map and filter by engineer or date to see where the work is.',
+          'Use it alongside the route planner to build efficient rounds.',
+        ],
+      },
+      {
+        name: 'Route Planner',
+        overview:
+          'A per-route day plan with a live map and a drag-reorderable list of the day’s sites. It anchors the first site at 08:30, back-calculates a leave-home time, and works lunch and driving legs into the schedule.',
+        steps: [
+          'Open a route to see its ordered sites on the map with driving legs between them.',
+          'Drag sites to reorder the day; timings recalculate automatically.',
+          'Give each route an explicit weekday so recurring calls land on the right day (a Monday choice warns about bank holidays).',
+        ],
       },
       {
         name: 'Chargeable Calls',
-        overview: 'Reactive or out-of-scope work that needs pricing and invoicing.',
+        overview:
+          'The review queue for reactive or out-of-scope work that must be priced and invoiced. Completed calls flagged chargeable land here with their parts and labour ready to check.',
         steps: [
-          'Open the review queue and check the parts and labour on each completed call.',
-          'Add any ad-hoc charges, capture the client reference / PO, then approve for invoicing.',
+          'Open the review queue and check the parts and labour recorded on each completed call.',
+          'Add any ad-hoc labour or sundry charges, then capture the client reference / PO number.',
+          'Approve for invoicing; the client reference locks once an invoice has been raised.',
         ],
       },
       {
         name: 'Follow-ups',
-        overview: 'Return visits raised by engineers when a call needs further works or parts.',
+        overview:
+          'Return visits raised by an engineer when a call needs further works or parts they could not complete on the day. Repeated failed fixes escalate so a manager steps in.',
         steps: [
-          'Review each follow-up request and the parts noted.',
-          'Approve it to book a linked follow-up call, reserving or ordering parts as needed.',
+          'Review each follow-up request, the works described and any parts noted.',
+          'Approve it to book a linked follow-up call, reserving or ordering the parts as needed.',
+          'Watch the red escalation tile for third-visit failures that need intervention.',
         ],
       },
       {
         name: 'Defects',
-        overview: 'A log of faults found on visits, which can turn into priced remedial quotes.',
+        overview:
+          'A log of faults found during visits, with photos and advisory notes. Defects can be turned into priced remedial quotes or booked directly as remedial calls.',
         steps: [
-          'Open a defect to see the detail and photos.',
-          'Raise a remedial quote or a remedial call directly from it.',
+          'Open a defect to see the detail, severity and photos.',
+          'Raise a remedial quote, or a remedial call (choosing an engineer and date), directly from it.',
         ],
       },
       {
         name: 'On-call & Lone Worker',
-        overview: 'The out-of-hours emergency rota, and safety monitoring for staff working alone.',
+        overview:
+          'The out-of-hours emergency rota, and real-time safety monitoring for staff working alone. Lone-worker shifts use a two-stage amber→red escalation and capture location if a check-in is missed.',
         steps: [
-          'On-call: build a rota block so every out-of-hours period has cover.',
-          'Lone Worker: monitor active shifts; missed check-ins escalate automatically.',
+          'On-call: use “Create block” to generate a rota so every out-of-hours period has named cover.',
+          'Lone Worker: monitor active shifts on the office page; missed check-ins escalate to the office and, out of hours, the on-call manager.',
+          'Temporarily disable lone-working for a user (with a nominated manager and double confirmation) when appropriate.',
         ],
       },
       {
         name: 'KPIs',
-        overview: 'Compliance performance across the business, split into Regulatory and Client tiers.',
+        overview:
+          'Compliance performance across the business, split into a Regulatory tier (legal deadlines) and a Client tier (any tighter per-site promises). Includes a monthly breakdown and a review tool for assigning reasons to missed deadlines.',
         steps: [
-          'Filter by branch, service or system type.',
-          'Use the monthly table and deadline-failed review to assign reasons to any misses.',
+          'Filter by branch, service type or system type to focus the view.',
+          'Read the monthly compliance table per tier, honouring your filters.',
+          'Use the deadline-failed review (office/admin) to assign or change a reason on any late/overdue miss; excused reasons can be excluded from the score.',
         ],
       },
     ],
   },
   {
     title: 'Clients, sites & assets',
-    intro: 'The record of who you work for, where, and the equipment on each site.',
+    intro: 'The record of who you work for, where, and the equipment on each site. Everything the service side generates hangs off this structure.',
     sections: [
       {
         name: 'Clients',
-        overview: 'The companies you provide services to.',
+        overview:
+          'The companies you provide services to, each owning one or more sites. A lifecycle status controls whether new work is generated, and billing accounts let a client be split into separately-invoiced sub-accounts.',
         steps: [
-          'Add a client, then add their site(s).',
-          'Set a lifecycle status (Active / Engaged / Dormant) to control whether work is generated.',
+          'Add a client (the address finder can pull name, address and postcode from a business search), then add their site(s).',
+          'Set a lifecycle status — Active (Live), Engaged (New) or Dormant (Dead) — to control whether recurring work is created.',
+          'Add billing accounts where a client needs multiple invoice destinations; sites and services inherit the right account.',
         ],
       },
       {
         name: 'Sites',
-        overview: 'Individual premises, their systems, services and billing.',
+        overview:
+          'Individual premises with their systems, recurring services, documents and billing. The Systems tab is where systems, services, frequencies and charges are managed, and the site’s overview surfaces open calls and upcoming visits.',
         steps: [
-          'Add a site with its address and a contact email (reports are sent here).',
-          'Under the Systems tab, add systems and their recurring services, then set each service’s frequency and charge.',
-          'The Site ID (CASH) doubles as the public log book access code.',
+          'Add a site with its address and a contact email — completed reports are sent here.',
+          'Optionally record the UPRN; the Site ID (CASH) doubles as the public log book access code.',
+          'Under the Systems tab, add systems and their services, set each service’s frequency, charge and any Client KPI override, and follow the “set up service charges” prompt for any chargeless service.',
+          'Use the site documents folder, per-system rotation and Remote Monitoring toggle as needed.',
         ],
       },
       {
         name: 'Assets',
-        overview: 'Company asset registers (dampers, extinguishers, emergency lights and more) with QR labels and reminders.',
+        overview:
+          'Company asset registers (dampers, extinguishers, emergency lights, MCPs and more) with printable QR labels and automatic servicing reminders.',
         steps: [
           'Browse or search the register for a site.',
-          'Scan an asset’s QR code on site to jump straight to it.',
+          'Scan an asset’s QR code on site to jump straight to it during a visit.',
+          'Let the reminders cron flag assets that are due so nothing is missed.',
         ],
       },
     ],
   },
   {
     title: 'Service setup',
-    intro: 'Define how services behave and how work is grouped and routed. Some of these are admin-only.',
+    intro: 'Define how services behave and how work is grouped and routed. Most of these are admin-only and set the rules the rest of the system follows.',
     sections: [
       {
         name: 'Service Types & System Types',
-        overview: 'The catalogue of services and the systems they sit under, including the Regulatory KPI and whether a type is chargeable by default.',
+        overview:
+          'The catalogue of services and the systems they sit under. Each service type carries its default frequency, its Regulatory KPI tolerance, whether it is chargeable by default, and whether it counts toward regulatory compliance. Per-visit types can carry an expected time on site.',
         steps: [
           'Create a service type and set its frequency and Regulatory KPI tolerance.',
-          'Group it under the appropriate system type.',
+          'Group it under the appropriate system type, and mark whether that system type requires recurring visits.',
+          'Toggle “regulatory compliance” off for non-regulatory services so they stay out of the regulatory KPI tier.',
+          'Set default and per-visit expected times to feed the call-tile time estimates.',
         ],
       },
       {
         name: 'Checklists',
-        overview: 'The on-site items an engineer records for each service, including conditional and advisory rules.',
+        overview:
+          'The on-site items an engineer records for each service. Supports pass/fail with an advisory state, numeric and text items, N/A, conditional rules, and shared checklists that apply across multiple service or system types.',
         steps: [
-          'Build the checklist for a service or system type.',
-          'Add conditions (e.g. a fail requires a photo) where needed.',
+          'Build the checklist for a service or system type, or a shared checklist that applies to several.',
+          'Add conditions where needed (e.g. a fail requires a photo and a note, or reveals follow-up questions).',
+          'Use the advisory state for items that are neither a clean pass nor a defect.',
         ],
       },
       {
         name: 'Routes & Areas',
-        overview: 'Two ways to group work and assign it to an engineer in bulk.',
+        overview:
+          'Two ways to group work and assign it to an engineer in bulk. A route is an ordered round of sites (with a weekday); an area is an alternative grouping. Assignment cascades to every open call in the group.',
         steps: [
-          'Assign an engineer to a route (with a weekday) or an area.',
-          'Reassigning it automatically moves all that group’s open calls to the new engineer.',
+          'Assign an engineer to a route (choosing its weekday) or an area.',
+          'Reassigning the route/area automatically moves all of that group’s open calls to the new engineer.',
+          'Use the route planner to add or remove sites and sequence the day.',
         ],
       },
       {
         name: 'Client Logins',
-        overview: 'Portal accounts that let clients self-serve their reports and compliance (admin-only).',
-        steps: ['Create a login for a client contact; they sign in at the same login page to their portal.'],
+        overview:
+          'Portal accounts that let clients self-serve their own reports, compliance and log book (admin-only).',
+        steps: [
+          'Create a login for a client contact.',
+          'They sign in at the same login page and land in their read-only portal.',
+        ],
       },
     ],
   },
   {
     title: 'Sales & quoting',
-    intro: 'Winning and configuring new work, from a quick quote to a full AI-assisted design.',
+    intro: 'Winning and configuring new work, from a quick quote to a full AI-assisted fire-alarm design, and turning an accepted quote into live services or a job.',
     sections: [
       {
         name: 'Quotes & Quote Bank',
-        overview: 'Build, send and track quotes; the Quote Bank stores reusable priced items.',
+        overview:
+          'Build, send and track quotes; the Quote Bank stores reusable priced catalogue items. An accepted quote can flow straight into the rest of the system.',
         steps: [
           'Start a quote, add catalogue items and margins, and send it for authorisation.',
-          'On acceptance it can auto-create a contract, a job, or remedial calls.',
+          'On acceptance, a routine-maintenance quote drafts a contract review; a remedial quote can create enriched remedial call(s); larger works can create a job.',
+          'Keep catalogue pricing current — editing a linked part pushes its cost through to the quote catalogue item.',
+        ],
+      },
+      {
+        name: 'Contract Reviews',
+        overview:
+          'The staging area between an accepted maintenance quote and live services. It builds a draft client/site/system/service/charge graph (with fuzzy auto-matching) that a manager approves before it goes live.',
+        steps: [
+          'Open a pending review from the queue or the Service Dashboard tile.',
+          'Check the auto-matched sites, systems and services and adjust as needed.',
+          'Commit the review to create the live records in the correct order.',
         ],
       },
       {
         name: 'Quote Studio',
-        overview: 'Brief-first, AI-assisted fire-alarm quoting that drafts a device schedule and BS 5839-1 spec.',
+        overview:
+          'Brief-first, AI-assisted fire-alarm quoting. Paste a brief and it drafts an understanding, requirements and a first-pass device schedule, prices it live against the catalogue, and can generate a BS 5839-1 / BAFE specification.',
         steps: [
           'Paste the brief and let the AI draft the takeoff.',
-          'Adjust the device schedule; pricing updates live, then save it as a real quote.',
+          'Adjust the device schedule; pricing updates live as you edit.',
+          'Generate the spec, then save it as a real quote (it is re-priced server-side on save).',
         ],
       },
       {
         name: 'Tender AI',
-        overview: 'A workspace for responding to tenders using a knowledge and evidence library.',
+        overview:
+          'A workspace for responding to tenders using a knowledge and evidence library, with a prompt library to speed up drafting.',
         steps: [
           'Add a tender, then draft answers drawing on the knowledge and evidence libraries.',
-          'Store finished responses for reuse.',
+          'Reuse prompts from the library, and store finished responses for future tenders.',
         ],
       },
     ],
   },
   {
     title: 'Jobs, purchasing & stock',
-    intro: 'Delivering larger installations and keeping parts and suppliers in order.',
+    intro: 'Delivering larger installations as staged projects and keeping parts, suppliers and purchase orders in order.',
     sections: [
       {
         name: 'Jobs',
-        overview: 'Larger installations run as staged projects with live cost and margin tracking.',
+        overview:
+          'Larger installations run as staged projects with live cost and margin tracking. The progress tracker shows each stage with real evidence (orders raised, calls done, invoices issued) and suggests the next stage.',
         steps: [
-          'Open a job and use the progress tracker to move it through the stages (contract review → ordering → in progress → commissioning → handover).',
-          'Watch the finance strip for committed vs remaining budget.',
+          'Open a job and use the progress tracker to move it through its stages (contract review → ordering → in progress → commissioning → handover → complete).',
+          'Watch the finance strip for contract value, quoted margin, committed spend and remaining budget.',
+          'Manage the job’s purchase orders, linked calls, invoices and documents from the one page.',
         ],
       },
       {
         name: 'Purchasing & Suppliers',
-        overview: 'Raise purchase orders and manage the suppliers behind them.',
-        steps: ['Create a purchase order against a job or call, then record it against the supplier.'],
+        overview:
+          'Raise purchase orders against jobs or calls and manage the suppliers behind them.',
+        steps: [
+          'Create a purchase order against a job or call.',
+          'Record it against the supplier and track it through to receipt.',
+        ],
       },
       {
         name: 'Products / Stock',
-        overview: 'Parts inventory across locations, with transfers and catalogues.',
+        overview:
+          'Parts inventory across vans and stores, with transfers, a parts catalogue and the quote catalogue. Parts filtering and bulk percentage price changes keep the catalogue maintainable.',
         steps: [
-          'Check stock levels on the Overview.',
-          'Use Transfer Stock to move parts between vans/stores; catalogues hold parts and quote items.',
+          'Check stock levels on the Overview and use Transfer Stock to move parts between locations.',
+          'Filter the parts catalogue and select parts to apply a bulk percentage price change.',
+          'Editing a part syncs its cost and details one-way to the linked quote catalogue item.',
         ],
       },
     ],
   },
   {
     title: 'Invoicing & billing',
-    intro: 'Turning completed work and recurring contracts into invoices, ready for Sage.',
+    intro: 'Turning completed work and recurring contracts into invoices, with managed nominal codes and a Sage-ready export.',
     sections: [
       {
         name: 'Invoices',
-        overview: 'Recurring, per-visit and remedial invoices with managed nominal codes and a Sage-ready export.',
+        overview:
+          'Recurring, per-visit and remedial invoices. VAT and the Sage tax code are set once at company level; every line carries a managed nominal code, and invoices can be exported to Sage 50.',
         steps: [
-          'Review a draft invoice; every line needs a nominal code before issuing.',
-          'Issue it, then export to Sage when ready.',
+          'Review a draft invoice; every line needs a nominal code before it can be issued.',
+          'Issue the invoice, then export a batch to Sage when ready.',
+          'For per-visit billing, one invoice is drafted automatically as each visit in the cycle completes.',
         ],
       },
       {
         name: 'Purchase Invoices',
-        overview: 'A store and approval workflow for supplier invoices.',
+        overview:
+          'A document store and approval-for-payment workflow for supplier invoices, with allocation to the call or job they belong to.',
         steps: [
-          'Upload the supplier invoice and allocate it to a call or job.',
-          'Assign an authoriser to approve it for payment.',
+          'Upload the supplier invoice (bulk upload is supported) and allocate it to a call or job.',
+          'Assign an authoriser, who approves or rejects it for payment.',
         ],
       },
       {
         name: 'Renewals & Projected Revenue',
-        overview: 'Upcoming contract renewals and an annualised forecast of recurring revenue.',
-        steps: ['Review upcoming renewals; use Projected Revenue to see the 12-month run-rate by branch and service.'],
+        overview:
+          'Upcoming contract renewals and an annualised forecast of recurring revenue, broken down by branch and service type with cost and margin.',
+        steps: [
+          'Review upcoming renewals and act before they lapse.',
+          'Use Projected Revenue to see the 12-month run-rate, filtered by system or service type.',
+        ],
+      },
+      {
+        name: 'Labour Costs',
+        overview:
+          'Profitability analysis for calls, combining labour (on-site time minus pauses, at each user’s cost rate) and parts against invoiced or apportioned revenue. Access is restricted.',
+        steps: [
+          'Open the labour-costs dashboard (visible only to granted users) and filter as needed.',
+          'Review per-call cost vs revenue and the resulting margin.',
+        ],
       },
     ],
   },
   {
     title: 'People & HR',
-    intro: 'Staff time, leave, training and approvals.',
+    intro: 'Staff time, leave, training and the approvals that sit on top of them.',
     sections: [
       {
         name: 'Approvals',
-        overview: 'A single place for items awaiting a manager decision (timesheets, purchase invoices and more).',
-        steps: ['Work through the pending items and approve or reject each.'],
+        overview:
+          'A single place for items awaiting a manager decision — timesheets, purchase invoices, leave and more.',
+        steps: ['Work through the pending items and approve or reject each with any required note.'],
       },
       {
         name: 'Timesheets',
-        overview: 'Weekly timesheets for eligible staff with overtime, night-shift and on-call calculation.',
+        overview:
+          'Weekly (Sunday-ending) timesheets for eligible staff. Hours come from the working-day span, with weekday overtime (outside normal hours, less a travel allowance), weekend overtime, night-shift and on-call counts. Days that were booked as leave but also worked are flagged as conflicts.',
         steps: [
-          'Staff submit their week by the Monday deadline.',
-          'Managers review and approve under Timesheets.',
+          'Staff submit their week by the Monday 09:00 deadline.',
+          'Managers review and approve under Timesheets, checking any amber leave-vs-shift conflict warnings.',
         ],
       },
       {
         name: 'Training & Leave',
-        overview: 'Training records, plus annual-leave booking and a team leave summary.',
+        overview:
+          'Training records, plus annual-leave booking, approvals and a team leave summary. Cancelling leave keeps an audit trail rather than deleting it.',
         steps: [
-          'Book leave under My Leave; balances update automatically.',
-          'Managers see everyone’s bookings under Leave Summary.',
+          'Book leave under My Leave; balances update automatically and it routes to your approver.',
+          'Managers see everyone’s bookings under Leave Summary; cancelled leave frees the days back up.',
         ],
       },
       {
         name: 'Employee Vault',
-        overview: 'Secure storage for staff documents.',
-        steps: ['Open a person’s vault to view or add their documents.'],
+        overview:
+          'Secure storage for staff documentation, organised into folders with role-based visibility and an admin broadcast for “document updated” notices.',
+        steps: [
+          'Open a person’s vault to view or add their documents.',
+          'Use folders and the search to find documentation quickly.',
+        ],
       },
     ],
   },
   {
     title: 'Communication, quality & oversight',
-    intro: 'How the team communicates, captures quality checks, and keeps an audit trail.',
+    intro: 'How the team communicates, captures quality checks and staff surveys, and keeps a full audit trail.',
     sections: [
       {
         name: 'Requests inbox',
-        overview: 'Incoming client requests, triaged with AI and matched to a site/service.',
-        steps: ['Open a request, confirm the matched site/service, and turn it into a booked call.'],
+        overview:
+          'Incoming client requests triaged with AI and matched to a likely site and service, ready to be turned into a booked call. Inbound email can feed it directly.',
+        steps: [
+          'Open a request, confirm the matched site/service, and turn it into a booked call.',
+          'Use the AI-prepared answer as a starting point for the reply.',
+        ],
       },
       {
         name: 'Internal tasks / My Tasks',
-        overview: 'Recurring form-style tasks (toolbox talks, vehicle checks) assigned across roles, teams or individuals.',
-        steps: ['Complete your assigned tasks under My Tasks by their due date, like a checklist.'],
+        overview:
+          'Recurring form-style tasks (toolbox talks, vehicle checks, and more) assigned across roles, teams or individuals. Supports rich blocks — sections, document links, tables — and conditional notifications when an answer fires a rule.',
+        steps: [
+          'Complete your assigned tasks under My Tasks by their due date, like a checklist.',
+          'Managers build templates in Settings, choosing who they apply to and any conditional alerts.',
+        ],
+      },
+      {
+        name: 'Surveys',
+        overview:
+          'Admin-only staff surveys built on the internal-tasks engine, with an aggregated results view and an emailed summary.',
+        steps: [
+          'Publish a survey to the chosen audience; staff answer it through My Tasks.',
+          'Review aggregated results, and close and summarise the survey when done.',
+        ],
+      },
+      {
+        name: 'Scheduled reports',
+        overview:
+          'Configurable automated emails summarising task/form responses — expected vs actual, overdue and a submission summary — on a daily, weekly or monthly schedule to chosen recipients.',
+        steps: [
+          'Set up a schedule in the submissions admin, choosing the template(s), frequency and recipients (users, roles or emails).',
+          'The cron delivers each report automatically for the due window.',
+        ],
       },
       {
         name: 'Team Chat',
-        overview: 'Internal messaging between staff, kept separate from client communication.',
+        overview:
+          'Internal messaging between staff, kept separate from client communication, with branch channels and direct messages.',
         steps: ['Use branch channels or direct messages to talk to colleagues.'],
       },
       {
         name: 'Knowledge Centre',
-        overview: 'A shared library of reference documents and guidance for the team.',
-        steps: ['Search or browse for a document; managers can add new ones.'],
+        overview:
+          'A shared library of reference documents and guidance, with AI extraction to make documents searchable.',
+        steps: ['Search or browse for a document; granted managers can add new ones.'],
       },
       {
         name: 'Documents',
-        overview: 'Shared file storage organised by client, site and service, with tags.',
-        steps: ['Upload a file, tag it, and file it under the right owner.'],
+        overview:
+          'Shared file storage organised by client, site, service and job, with company-wide tags and a per-folder type filter.',
+        steps: ['Upload a file, apply at least one tag, and file it under the right owner.'],
       },
       {
         name: 'Activity Log',
-        overview: 'An audit trail of key changes — who did what, where and when (admin & office).',
+        overview:
+          'An audit trail of key changes — who did what, where and when — open to admin and office.',
         steps: [
-          'Filter by user, what changed, where, or a date range.',
-          'Use it to trace security and business events such as cancellations and invoice changes.',
+          'Filter by user, what changed, where, or a date range, and free-text search.',
+          'Use it to trace security and business events such as call cancellations and invoice changes.',
         ],
       },
       {
         name: 'Users & account (admin)',
-        overview: 'Managing staff accounts, menu access and your own settings.',
+        overview:
+          'Managing staff accounts, page-level menu access and security. New accounts can be emailed their login details and are forced to set their own password on first sign-in.',
         steps: [
-          'Add a team member under Users; you can email their login details and they set their own password on first sign-in.',
-          'Control who sees what under Settings → Menu access.',
+          'Add a team member under Users (or copy an existing user to inherit their settings); optionally email their credentials.',
+          'Control who sees what — down to individual pages — under Settings → Menu access.',
+          'Grant restricted capabilities (e.g. query tools, labour-cost visibility) only where needed.',
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Personalisation & tools',
+    intro: 'Ways to tailor the app to how you work, plus power-user data tools for those granted access.',
+    sections: [
+      {
+        name: 'Home dashboard',
+        overview:
+          'The manager home screen is customisable — add or remove module tiles, create custom shortcut tiles, colour-code them, and choose a background. Header micro-shortcuts give quick access to your most-used pages.',
+        steps: [
+          'Add or remove tiles and drag to reorder them; recolour a tile from its colour dot.',
+          'Pin header shortcuts (up to eight) via the gear/plus popover, and pick a dashboard background in Settings.',
+        ],
+      },
+      {
+        name: 'Simple Mode',
+        overview:
+          'A stripped-back, big-tile mobile/tablet shell for non-engineer office staff, built from each user’s own menu access. A “Full site” override is always available.',
+        steps: [
+          'On a small screen, office staff see Simple Mode automatically.',
+          'Switch to the full site at any time with the “Full site” toggle.',
+        ],
+      },
+      {
+        name: 'To-Do',
+        overview:
+          'Personal and shared to-dos with subtasks, tags, file attachments, assignees and lists. Items can be marked “notable”; non-notable items stay in your lists but are excluded from the open-todo counts and the header badge.',
+        steps: [
+          'Add a to-do, then expand it to add subtasks, tags, attachments or assignees.',
+          'Mark an item “Don’t count in totals” to keep it quiet; star or pin the ones that matter.',
+          'Filter by list, tag, person or date, and save the view you use most.',
+        ],
+      },
+      {
+        name: 'Bulk data (Settings → Data)',
+        overview:
+          'Admin-only bulk Excel export and import across the core datasets, with a preview and merge step and FK-by-name/SKU matching.',
+        steps: [
+          'Export a dataset to Excel, edit it, then import it back.',
+          'Review the preview and resolve any matches before committing the merge.',
+        ],
+      },
+      {
+        name: 'Query tools',
+        overview:
+          'Owner-granted power tools: a SQL Query Builder with read/preview-rollback/commit safety, and a user cost calculator that derives hourly cost from work patterns.',
+        steps: [
+          'Run read-only queries first; preview a change and roll back before committing.',
+          'Use the cost calculator to turn a Name + cost spreadsheet into per-user hourly costs.',
         ],
       },
     ],

@@ -595,7 +595,7 @@ export async function rejectTimesheet(
     userIds: [(ts as Timesheet).user_id],
     title: 'Timesheet needs changes',
     body: reason ? `Your timesheet was returned: ${reason}` : 'Your timesheet was returned for changes.',
-    url: TIMESHEET_PATH,
+    url: `${TIMESHEET_PATH}?week=${(ts as Timesheet).week_ending}`,
     category: 'timesheet',
     createdBy: auth.userId,
   })

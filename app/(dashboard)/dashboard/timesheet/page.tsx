@@ -7,7 +7,13 @@ import { TimesheetView } from '@/components/dashboard/timesheets/timesheet-view'
 
 export const dynamic = 'force-dynamic'
 
-export default async function TimesheetPage() {
+export default async function TimesheetPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ week?: string }>
+}) {
+  const { week } = await searchParams
+  const requestedWeek = /^\d{4}-\d{2}-\d{2}$/.test(week ?? '') ? week : undefined
   const supabase = await createClient()
   const {
     data: { user },
@@ -33,7 +39,7 @@ export default async function TimesheetPage() {
   }
 
   const [view, outstandingRes] = await Promise.all([
-    getOrBuildTimesheet(),
+    getOrBuildTimesheet(requestedWeek),
     getOutstandingTasks(),
   ])
   const outstanding = outstandingRes.ok ? (outstandingRes.instances ?? []) : []

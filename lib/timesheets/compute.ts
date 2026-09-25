@@ -415,29 +415,51 @@ export function computeTimesheet(inputs: TimesheetInputs): TimesheetSummary {
       })
     }
 
-    // --- Worked span from shift(s) on this date ---
-    const dayShifts = inputs.shifts.filter((s) => fmtDate(new Date(s.shift_start)) === date)
-    let shiftStart: string | null = null
-    let shiftEnd: string | null = null
-    for (const s of dayShifts) {
-      const end = s.finished_at ?? s.shift_end
-      if (!shiftStart || epochMin(s.shift_start) < epochMin(shiftStart)) shiftStart = s.shift_start
-      if (end && (!shiftEnd || epochMin(end) > epochMin(shiftEnd))) shiftEnd = end
-    }
-
-    // Fallback: no shift record but there are timed job/manual entries — use the
-    // earliest start and latest end so overtime can still be estimated.
-    if (!shiftStart || !shiftEnd) {
-      const timed = entries.filter((e) => e.start && e.end && !e.isLeave)
-      if (timed.length) {
-        const starts = timed.map((e) => epochMin(e.start as string))
-        const ends = timed.map((e) => epochMin(e.end as string))
-        const minStart = Math.min(...starts)
-        const maxEnd = Math.max(...ends)
-        if (!shiftStart) shiftStart = new Date(minStart * 60000).toISOString()
-        if (!shiftEnd) shiftEnd = new Date(maxEnd * 60000).toISOString()
+    // --- Worked span for this date ---
+    // The working day runs from the FIRST evidence of work to the LAST. That is
+    // the envelope of BOTH the lone-worker shift(s) AND any timed job/manual
+    // activity — NOT the shift alone. A call that started before the engineer
+    // began (or logged) their lone-worker shift must pull the day start back to
+    // when the work actually began; otherwise the shift record on its own
+    // under-reports the day (e.g. a call started 08:38 but the shift was only
+    // started at 09:30, so the timesheet wrongly showed 09:30).
+    let startMin: number | null = null
+    let endMin: number | null = null
+    const extendSpan = (iso: string | null | undefined, isEnd: boolean) => {
+      if (!iso) return
+      const m = epochMin(iso)
+      if (isEnd) {
+        if (endMin === null || m > endMin) endMin = m
+      } else if (startMin === null || m < startMin) {
+        startMin = m
       }
     }
+
+    // Lone-worker shift(s) that started on this date.
+    const dayShifts = inputs.shifts.filter((s) => fmtDate(new Date(s.shift_start)) === date)
+    for (const s of dayShifts) {
+      extendSpan(s.shift_start, false)
+      extendSpan(s.finished_at ?? s.shift_end, true)
+    }
+
+    // Timed, non-leave work entries also bound the working day. Jobs and manual
+    // entries belong to this date by construction; a calendar entry only counts
+    // when it both starts and ends on this date (a multi-day entry, e.g. a
+    // course, must not drag the span across days).
+    for (const e of entries) {
+      if (e.isLeave || e.allDay || !e.start || !e.end) continue
+      if (
+        e.source === 'calendar' &&
+        (fmtDate(new Date(e.start)) !== date || fmtDate(new Date(e.end)) !== date)
+      ) {
+        continue
+      }
+      extendSpan(e.start, false)
+      extendSpan(e.end, true)
+    }
+
+    const shiftStart: string | null = startMin !== null ? new Date(startMin * 60000).toISOString() : null
+    const shiftEnd: string | null = endMin !== null ? new Date(endMin * 60000).toISOString() : null
 
     const workedMinutes =
       shiftStart && shiftEnd ? Math.max(0, epochMin(shiftEnd) - epochMin(shiftStart)) : 0

@@ -114,12 +114,15 @@ export async function getOrBuildTimesheet(
 
   const deadline = deadlineFor(weekEnding)
   const pastDeadline = new Date() > deadline
-  const submitted = ts.status !== 'draft'
-  const isLocked = submitted
   const canEdit = ts.status === 'draft' || ts.status === 'rejected'
+  // A REJECTED sheet was submitted then returned for changes: it must recompute
+  // live from source and stay editable, NOT show the stale frozen snapshot. Only
+  // genuinely submitted/approved sheets are frozen + locked.
+  const frozen = ts.status !== 'draft' && !canEdit
+  const isLocked = frozen
 
-  // Submitted/approved: return the frozen snapshot.
-  if (submitted && ts.summary) {
+  // Submitted/approved (not returned): return the frozen snapshot.
+  if (frozen && ts.summary) {
     return {
       ok: true,
       timesheet: ts,

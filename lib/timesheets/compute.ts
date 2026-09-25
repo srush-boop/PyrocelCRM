@@ -428,6 +428,9 @@ export function computeTimesheet(inputs: TimesheetInputs): TimesheetSummary {
     const extendSpan = (iso: string | null | undefined, isEnd: boolean) => {
       if (!iso) return
       const m = epochMin(iso)
+      // A malformed/empty timestamp parses to NaN; letting it seed startMin/endMin
+      // would later blow up `new Date(NaN).toISOString()`. Skip it entirely.
+      if (!Number.isFinite(m)) return
       if (isEnd) {
         if (endMin === null || m > endMin) endMin = m
       } else if (startMin === null || m < startMin) {

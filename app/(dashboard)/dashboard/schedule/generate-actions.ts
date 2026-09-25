@@ -8,6 +8,7 @@ import {
   computeEvenlySplitVisitDates,
   fetchVisitsByServiceType,
 } from '@/lib/scheduling'
+import { routeWeekday } from '@/lib/routes/route-schedule'
 
 export interface GenerateMonthlyCallsResult {
   ok: boolean
@@ -57,7 +58,7 @@ interface ServiceRow {
         route_id: string | null
         client: { id: string; name: string | null } | null
         branch: { id: string; name: string | null } | null
-        route: { id: string; name: string | null } | null
+        route: { id: string; name: string | null; day_of_week: number | null } | null
       }
     | null
   service_type: { id: string; status: string | null; is_recurring: boolean | null; name: string | null } | null
@@ -113,7 +114,7 @@ export interface GenerateCallsFilterOptions {
 const GENERATABLE_SERVICE_SELECT = `id, site_id, service_type_id, frequency_value, frequency_unit,
   next_service_date, active, status, area_id, route_id, subcontractor_id, worker_type,
   site:sites(status, name, client_id, branch_id, route_id,
-    client:clients(id, name), branch:branches(id, name), route:routes(id, name)),
+    client:clients(id, name), branch:branches(id, name), route:routes(id, name, day_of_week)),
   service_type:service_types(id, status, is_recurring, name),
   site_system:site_systems(status, system_type:system_types(id, name, requires_recurring_visits)),
   area:areas(id, name),
@@ -166,6 +167,26 @@ function addFrequency(base: Date, value: number, unit: 'weeks' | 'months'): Date
   if (unit === 'weeks') next.setDate(next.getDate() + value * 7)
   else next.setMonth(next.getMonth() + value)
   return next
+}
+
+/**
+ * Snap a projected call date onto the weekday its route is worked. A route runs
+ * on a fixed weekday, so a route-assigned service is actually visited that day —
+ * not whatever calendar date the raw frequency rollover happens to land on. We
+ * move the date to the nearest occurrence of the route weekday (within ±3 days),
+ * then keep it inside [min, max] so the call stays in the target month and the
+ * generator's per-month idempotency check still holds.
+ */
+function snapToWeekday(date: Date, weekday: number, min: Date, max: Date): Date {
+  let diff = weekday - date.getDay()
+  if (diff > 3) diff -= 7
+  else if (diff < -3) diff += 7
+  const snapped = new Date(date)
+  snapped.setDate(snapped.getDate() + diff)
+  // Clamp back into the month if the nearest weekday spilled over a boundary.
+  if (snapped < min) snapped.setDate(snapped.getDate() + 7)
+  else if (snapped > max) snapped.setDate(snapped.getDate() - 7)
+  return snapped
 }
 
 interface MonthPlan {
@@ -366,10 +387,16 @@ async function planMonthlyCalls(
       }
 
       if (project >= monthStart && project <= monthEnd) {
+        // When the service's site is on a route, the visit happens on the
+        // route's weekday — snap the projected date onto it rather than using
+        // the raw cadence date from the service setup.
+        const routeWd = routeWeekday(svc.site?.route)
+        const finalDate =
+          routeWd != null ? snapToWeekday(project, routeWd, monthStart, monthEnd) : project
         newRows.push({
           site_service_id: svc.id,
           visit_type_id: g.visitId,
-          scheduled_date: toDateString(project),
+          scheduled_date: toDateString(finalDate),
         })
         // Guard against two groups projecting onto the same month slot.
         coveredThisMonth.add(key)

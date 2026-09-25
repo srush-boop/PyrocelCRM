@@ -124,7 +124,6 @@ function timeStringToToday(value: string, ref: Date): Date | null {
 }
 
 export async function startShift(input: {
-  shiftStart: string
   shiftEnd: string
   checkinInterval?: number
 }): Promise<{ error: string | null }> {
@@ -151,12 +150,15 @@ export async function startShift(input: {
     timings.redMinutes,
   )
 
-  // The inputs arrive as "HH:MM" strings; anchor them to today so they can be
-  // stored in the timestamptz columns. If the end is at/before the start, treat
-  // it as an overnight shift and roll the end to the next day.
-  const shiftStartTs = timeStringToToday(input.shiftStart, now)
+  // The shift START is the actual moment the safety net switches on — i.e. now,
+  // when "Start shift" is pressed. It must NOT come from a prefilled/nominal
+  // work-start time, or the monitor and records would show a start hours before
+  // check-ins actually began. The END arrives as an "HH:MM" string (the planned
+  // finish, used for auto-finish); anchor it to today, and if it's at/before the
+  // start treat it as an overnight shift and roll it to the next day.
+  const shiftStartTs = now
   const shiftEndTs = timeStringToToday(input.shiftEnd, now)
-  if (!shiftStartTs || !shiftEndTs) return { error: 'Enter valid shift times' }
+  if (!shiftEndTs) return { error: 'Enter a valid shift end time' }
   if (shiftEndTs.getTime() <= shiftStartTs.getTime()) {
     shiftEndTs.setDate(shiftEndTs.getDate() + 1)
   }

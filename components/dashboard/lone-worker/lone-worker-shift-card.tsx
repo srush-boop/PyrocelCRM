@@ -41,13 +41,12 @@ export function LoneWorkerShiftCard() {
     { refreshInterval: 30000 },
   )
 
-  const [start, setStart] = useState('')
   const [end, setEnd] = useState('')
   const [starting, startStarting] = useTransition()
   const [finishing, startFinishing] = useTransition()
 
-  // Seed the shift inputs from the user's work hours once loaded.
-  const seededStart = start || data?.defaultShiftStart || '08:00'
+  // The shift start is always "now" (set server-side when Start is pressed), so
+  // only the planned end is seeded from the user's work hours.
   const seededEnd = end || data?.defaultShiftEnd || '17:00'
 
   const onStart = useCallback(() => {
@@ -55,7 +54,7 @@ export function LoneWorkerShiftCard() {
     // blocks Web Audio that isn't primed inside a gesture.
     primeAlarm()
     startStarting(async () => {
-      const res = await startShift({ shiftStart: seededStart, shiftEnd: seededEnd })
+      const res = await startShift({ shiftEnd: seededEnd })
       if (res.error) {
         toast.error(res.error)
         return
@@ -63,7 +62,7 @@ export function LoneWorkerShiftCard() {
       toast.success('Shift started — stay safe out there')
       await mutate()
     })
-  }, [seededStart, seededEnd, mutate])
+  }, [seededEnd, mutate])
 
   const onFinish = useCallback(() => {
     startFinishing(async () => {
@@ -172,37 +171,24 @@ export function LoneWorkerShiftCard() {
       <CardContent className="space-y-4">
         {!onShift ? (
           <>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="lw-start" className="text-xs">
-                  Shift start
-                </Label>
-                <Input
-                  id="lw-start"
-                  type="time"
-                  value={seededStart}
-                  onChange={(e) => setStart(e.target.value)}
-                  className="h-11 appearance-none text-base tabular-nums [&::-webkit-date-and-time-value]:text-left [&::-webkit-datetime-edit]:p-0"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="lw-end" className="text-xs">
-                  Shift end
-                </Label>
-                <Input
-                  id="lw-end"
-                  type="time"
-                  value={seededEnd}
-                  onChange={(e) => setEnd(e.target.value)}
-                  className="h-11 appearance-none text-base tabular-nums [&::-webkit-date-and-time-value]:text-left [&::-webkit-datetime-edit]:p-0"
-                />
-              </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="lw-end" className="text-xs">
+                Planned shift end
+              </Label>
+              <Input
+                id="lw-end"
+                type="time"
+                value={seededEnd}
+                onChange={(e) => setEnd(e.target.value)}
+                className="h-11 appearance-none text-base tabular-nums [&::-webkit-date-and-time-value]:text-left [&::-webkit-datetime-edit]:p-0"
+              />
             </div>
             <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
               <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>
-                Check-ins every {data.timings.checkinMinutes} min. Adjust the times above if you&apos;re
-                working a different shift today.
+                Your shift starts now, when you tap Start. Check-ins every{' '}
+                {data.timings.checkinMinutes} min. Set your planned finish time above so the shift
+                auto-closes if you forget.
               </span>
             </p>
             <Button onClick={onStart} disabled={starting} className="w-full gap-2">

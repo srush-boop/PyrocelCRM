@@ -1106,8 +1106,10 @@ export function TaskExecution({
     // On a CDO route: skip the nearby prompt and go straight to the next pending
     // call in route order so the engineer can work the route uninterrupted.
     if (routeProgress?.nextTaskId) {
-      router.push(`/dashboard/tasks/${routeProgress.nextTaskId}`)
+      // Invalidate the client Router Cache BEFORE navigating so the next call
+      // loads fresh — otherwise the cached page can briefly show stale state.
       router.refresh()
+      router.push(`/dashboard/tasks/${routeProgress.nextTaskId}`)
       return
     }
 
@@ -1130,16 +1132,19 @@ export function TaskExecution({
       }
     }
 
-    setSubmitting(false)
-    router.push('/dashboard/schedule')
+    // Invalidate the client Router Cache BEFORE navigating so the schedule
+    // loads fresh (via its loading.tsx skeleton) with the completed call already
+    // gone, instead of briefly showing the cached list with the call still open.
+    // Keep the loader up through navigation — the component unmounts on push.
     router.refresh()
+    router.push('/dashboard/schedule')
   }
 
   // Leave the completed task once the engineer dismisses the nearby-calls prompt.
   const handleNearbyPromptClose = () => {
     setShowNearbyPrompt(false)
-    router.push('/dashboard/schedule')
     router.refresh()
+    router.push('/dashboard/schedule')
   }
 
   // Engineer attended but couldn't gain entry. Records the no-access outcome
@@ -1164,8 +1169,8 @@ export function TaskExecution({
       return
     }
     if (routeProgress?.nextTaskId) {
-      router.push(`/dashboard/tasks/${routeProgress.nextTaskId}`)
       router.refresh()
+      router.push(`/dashboard/tasks/${routeProgress.nextTaskId}`)
       return
     }
     if (profile.role === 'engineer' && profile.discipline !== 'cdo') {
@@ -1181,9 +1186,8 @@ export function TaskExecution({
         console.error('[v0] Nearby calls lookup failed:', err)
       }
     }
-    setSubmitting(false)
-    router.push('/dashboard/schedule')
     router.refresh()
+    router.push('/dashboard/schedule')
   }
 
   // Sub-contractors execute their allocated tasks exactly like engineers.

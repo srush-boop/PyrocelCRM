@@ -1335,6 +1335,9 @@ export interface Site {
   // set_site_reference DB trigger and locked once set. Non year-scoped: a site
   // keeps one stable reference for its whole life.
   reference_number: string | null
+  // Editable reference carried over from the legacy CRM. Optional free text,
+  // searchable alongside reference_number.
+  internal_reference_no: string | null
   name: string
   address: string
   postcode: string | null

@@ -72,12 +72,14 @@ export function SitesTable({
   const filteredSites = sites.filter((site) => {
     // Text search
     const matchesSearch = 
-      site.name.toLowerCase().includes(search.toLowerCase()) ||
-      site.address.toLowerCase().includes(search.toLowerCase()) ||
-      site.contact_name?.toLowerCase().includes(search.toLowerCase()) ||
-      site.contact_email?.toLowerCase().includes(search.toLowerCase()) ||
-      site.route?.name?.toLowerCase().includes(search.toLowerCase()) ||
-      site.client?.name?.toLowerCase().includes(search.toLowerCase())
+        site.name.toLowerCase().includes(search.toLowerCase()) ||
+        site.address.toLowerCase().includes(search.toLowerCase()) ||
+        site.contact_name?.toLowerCase().includes(search.toLowerCase()) ||
+        site.contact_email?.toLowerCase().includes(search.toLowerCase()) ||
+        site.route?.name?.toLowerCase().includes(search.toLowerCase()) ||
+        site.client?.name?.toLowerCase().includes(search.toLowerCase()) ||
+        site.reference_number?.toLowerCase().includes(search.toLowerCase()) ||
+        site.internal_reference_no?.toLowerCase().includes(search.toLowerCase())
     
     // Route filter
     const matchesRoute = selectedRoute === 'all' || 
@@ -185,11 +187,16 @@ export function SitesTable({
                       {site.name}
                     </Link>
                   </TableCell>
-                  <TableCell className="hidden lg:table-cell">
-                    <span className="text-sm font-mono text-muted-foreground">
-                      {site.reference_number || '-'}
-                    </span>
-                  </TableCell>
+              <TableCell className="hidden lg:table-cell">
+                <span className="text-sm font-mono text-muted-foreground">
+                  {site.reference_number || '-'}
+                </span>
+                {site.internal_reference_no && (
+                  <span className="block text-xs text-muted-foreground">
+                    {site.internal_reference_no}
+                  </span>
+                )}
+              </TableCell>
                   <TableCell className="hidden xl:table-cell">
                     <span className="text-sm font-mono text-muted-foreground">
                       {site.site_id_cash || '-'}

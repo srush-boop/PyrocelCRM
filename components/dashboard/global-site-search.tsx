@@ -34,6 +34,8 @@ interface SiteResult {
   address: string | null
   postcode: string | null
   uprn: string | null
+  reference_number: string | null
+  internal_reference_no: string | null
 }
 interface ClientResult {
   id: string
@@ -125,11 +127,11 @@ export function GlobalSiteSearch() {
       // RLS scope what this user is allowed to see.
       const [sites, clients, calls, quotes, invoices, jobs] = await Promise.all([
         supabase
-          .from('sites')
-          .select('id, name, address, postcode, uprn')
-          .or(
-            `name.ilike.%${escaped}%,address.ilike.%${escaped}%,postcode.ilike.%${escaped}%,uprn.ilike.%${escaped}%`,
-          )
+        .from('sites')
+        .select('id, name, address, postcode, uprn, reference_number, internal_reference_no')
+        .or(
+          `name.ilike.%${escaped}%,address.ilike.%${escaped}%,postcode.ilike.%${escaped}%,uprn.ilike.%${escaped}%,reference_number.ilike.%${escaped}%,internal_reference_no.ilike.%${escaped}%`,
+        )
           .order('name', { ascending: true })
           .limit(6),
         supabase
@@ -263,7 +265,7 @@ export function GlobalSiteSearch() {
                 {results.sites.map((site) => (
                   <CommandItem
                     key={site.id}
-                    value={`site ${site.name} ${site.address ?? ''} ${site.postcode ?? ''} ${site.uprn ?? ''} ${site.id}`}
+                    value={`site ${site.name} ${site.address ?? ''} ${site.postcode ?? ''} ${site.uprn ?? ''} ${site.reference_number ?? ''} ${site.internal_reference_no ?? ''} ${site.id}`}
                     onSelect={() => go(`/dashboard/sites/${site.id}`)}
                     className="flex items-start gap-2"
                   >

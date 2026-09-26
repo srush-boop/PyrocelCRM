@@ -97,6 +97,7 @@ export function AddSiteDialog({
     property_type_id: '',
     site_id_cash: '',
     uprn: '',
+    internal_reference_no: '',
     status: 'live' as 'live' | 'new' | 'dead',
     notes: '',
     po_number: '',
@@ -228,6 +229,7 @@ export function AddSiteDialog({
       authorised_works_limit: undefined,
       po_number: formData.po_number.trim() || null,
       authorised_works_po: formData.authorised_works_po.trim() || null,
+      internal_reference_no: formData.internal_reference_no.trim() || null,
       authorised_works_limit_pence:
         (Number.parseFloat(formData.authorised_works_limit) || 0) > 0
           ? Math.round(Number.parseFloat(formData.authorised_works_limit) * 100)
@@ -338,6 +340,7 @@ export function AddSiteDialog({
         property_type_id: '',
         site_id_cash: '',
         uprn: '',
+        internal_reference_no: '',
         po_number: '',
         authorised_works_limit: '',
         authorised_works_po: '',
@@ -479,6 +482,17 @@ export function AddSiteDialog({
                 inputMode="numeric"
               />
             </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="internal_reference_no">Internal Reference No</Label>
+              <Input
+                id="internal_reference_no"
+                value={formData.internal_reference_no}
+                onChange={(e) =>
+                  setFormData({ ...formData, internal_reference_no: e.target.value })
+                }
+                placeholder="Reference from your existing CRM"
+              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="status">Status</Label>

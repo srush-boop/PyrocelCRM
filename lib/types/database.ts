@@ -1331,6 +1331,10 @@ export type RemoteMonitoringType = 'fire' | 'fire_and_fault' | 'fault'
 
 export interface Site {
   id: string
+  // Human-readable reference (e.g. SITE-00001), auto-assigned on insert by the
+  // set_site_reference DB trigger and locked once set. Non year-scoped: a site
+  // keeps one stable reference for its whole life.
+  reference_number: string | null
   name: string
   address: string
   postcode: string | null

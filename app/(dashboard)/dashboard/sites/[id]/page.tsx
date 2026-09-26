@@ -708,7 +708,12 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             )}
           </div>
           <h1 className="text-2xl font-bold">{site.name}</h1>
-        </div>
+          {(site as Site).reference_number && (
+            <p className="text-sm font-mono text-muted-foreground">
+              {(site as Site).reference_number}
+            </p>
+          )}
+          </div>
         <div className="flex items-center gap-2">
           {reactiveServiceTypes.length > 0 && (
             <CreateTaskDialog

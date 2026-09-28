@@ -49,6 +49,19 @@ export interface LoneWorkerSession {
   lastHeartbeatAt: string | null
   createdAt: string
   finishedAt: string | null
+  /** When the "your shift was due to end" prompt was last sent. */
+  shiftEndPromptedAt: string | null
+  /** How many times the worker has extended past their planned end. */
+  shiftExtendedCount: number
+}
+
+/** Extension choices offered once the planned shift end has passed. */
+export const SHIFT_EXTEND_OPTIONS = [30, 60, 120] as const
+
+/** True when an active shift has run past its planned end time. */
+export function isShiftOverrunning(shiftEnd: string, nowMs: number): boolean {
+  const end = new Date(shiftEnd).getTime()
+  return !Number.isNaN(end) && nowMs >= end
 }
 
 /** Client-facing state for the current user (the prompt overlay + shift card). */
@@ -75,6 +88,7 @@ export interface LoneWorkerMonitorRow {
   userName: string
   shiftStart: string
   shiftEnd: string
+  shiftExtendedCount: number
   promptState: LoneWorkerPromptState
   lastCheckinAt: string
   nextPromptAt: string

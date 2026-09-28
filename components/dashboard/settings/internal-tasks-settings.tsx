@@ -102,7 +102,7 @@ const QUESTION_TYPES: readonly QuestionType[] = [
 ]
 
 // Question types that support conditional follow-up rules.
-const CONDITION_TYPES: readonly string[] = ['pass_fail', 'checkbox', 'number']
+const CONDITION_TYPES: readonly string[] = ['pass_fail', 'checkbox', 'number', 'yes_no']
 
 // Whether a block is a question the user answers (vs a display/content block).
 function isQuestionType(type: InternalTaskItem['type']): type is QuestionType {
@@ -189,6 +189,10 @@ function blankTemplate(): InternalTaskTemplate {
     allow_multiple: false,
     reminder_days_before: [1],
     warn_overdue: true,
+    email_reminders: false,
+    overdue_repeat_days: 0,
+    overdue_notify_manager: false,
+    notify_on_issue_manager: false,
     questions: [],
     requires_reference: false,
     reference_label: null,
@@ -605,7 +609,14 @@ function TemplateEditorDialog({
         if (q.id !== qId) return q
         const cond: ChecklistCondition = {
           id: crypto.randomUUID(),
-          when: q.type === 'checkbox' ? 'checked' : q.type === 'number' ? 'number' : 'fail',
+          when:
+            q.type === 'checkbox'
+              ? 'checked'
+              : q.type === 'number'
+                ? 'number'
+                : q.type === 'yes_no'
+                  ? 'no'
+                  : 'fail',
           comparator: q.type === 'number' ? 'lt' : undefined,
           threshold: q.type === 'number' ? 0 : undefined,
           requirePhoto: false,
@@ -1135,6 +1146,60 @@ function TemplateEditorDialog({
                 />
                 <Label htmlFor="it-warn">Warn when overdue</Label>
               </div>
+              <div className="flex flex-col gap-3 rounded-md border p-3 sm:col-span-2">
+                <p className="text-sm font-medium">Reminder emails</p>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="it-email-reminders"
+                    checked={draft.email_reminders ?? false}
+                    onCheckedChange={(v) => patch({ email_reminders: v })}
+                  />
+                  <Label htmlFor="it-email-reminders" className="text-pretty">
+                    Email the assignee for due-soon and overdue reminders (in-app always sent)
+                  </Label>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Label htmlFor="it-overdue-repeat" className="text-pretty">
+                    Once overdue, repeat every
+                  </Label>
+                  <Input
+                    id="it-overdue-repeat"
+                    type="number"
+                    min={0}
+                    max={90}
+                    className="h-8 w-20"
+                    disabled={!draft.warn_overdue}
+                    value={draft.overdue_repeat_days ?? 0}
+                    onChange={(e) =>
+                      patch({
+                        overdue_repeat_days: Math.min(
+                          90,
+                          Math.max(0, Math.round(Number(e.target.value) || 0)),
+                        ),
+                      })
+                    }
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    day(s) until completed (0 = first day only)
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="it-overdue-manager"
+                    checked={draft.overdue_notify_manager ?? false}
+                    disabled={!draft.warn_overdue}
+                    onCheckedChange={(v) => patch({ overdue_notify_manager: v })}
+                  />
+                  <Label htmlFor="it-overdue-manager" className="text-pretty">
+                    Also alert the assignee&apos;s line manager when overdue (in-app + email)
+                  </Label>
+                </div>
+                {!draft.warn_overdue ? (
+                  <p className="text-xs text-muted-foreground">
+                    Turn on &quot;Warn when overdue&quot; to enable overdue repeats and manager alerts.
+                  </p>
+                ) : null}
+              </div>
               <div className="flex items-center gap-2 sm:col-span-2">
                 <Switch
                   id="it-allow-multiple"
@@ -1571,6 +1636,21 @@ function TemplateEditorDialog({
                                     <SelectItem value="unchecked">Unticked</SelectItem>
                                   </SelectContent>
                                 </Select>
+                              ) : q.type === 'yes_no' ? (
+                                <Select
+                                  value={c.when === 'yes' ? 'yes' : 'no'}
+                                  onValueChange={(v) =>
+                                    updateCondition(q.id, c.id, { when: v as 'yes' | 'no' })
+                                  }
+                                >
+                                  <SelectTrigger className="h-8 w-32">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="yes">Yes</SelectItem>
+                                    <SelectItem value="no">No</SelectItem>
+                                  </SelectContent>
+                                </Select>
                               ) : (
                                 <>
                                   <Select
@@ -1834,6 +1914,16 @@ function TemplateEditorDialog({
                   Optional. Leave blank to only notify users in-app.
                 </p>
               </div>
+              <div className="flex items-center gap-2 sm:col-span-2">
+                <Switch
+                  id="it-issue-manager"
+                  checked={draft.notify_on_issue_manager ?? false}
+                  onCheckedChange={(v) => patch({ notify_on_issue_manager: v })}
+                />
+                <Label htmlFor="it-issue-manager" className="text-pretty">
+                  Also alert the submitter&apos;s line manager on any Fail or Advisory (in-app + email)
+                </Label>
+              </div>
             </div>
           </div>
 
@@ -2006,7 +2096,7 @@ function BlockEditor({
               type="url"
               value={block.url ?? ''}
               onChange={(e) => onChange({ url: e.target.value })}
-              placeholder="https://…"
+              placeholder="https://���"
             />
           </div>
         </div>

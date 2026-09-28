@@ -114,12 +114,15 @@ export async function getOrBuildTimesheet(
 
   const deadline = deadlineFor(weekEnding)
   const pastDeadline = new Date() > deadline
-  const submitted = ts.status !== 'draft'
-  const isLocked = submitted
   const canEdit = ts.status === 'draft' || ts.status === 'rejected'
+  // A REJECTED sheet was submitted then returned for changes: it must recompute
+  // live from source and stay editable, NOT show the stale frozen snapshot. Only
+  // genuinely submitted/approved sheets are frozen + locked.
+  const frozen = ts.status !== 'draft' && !canEdit
+  const isLocked = frozen
 
-  // Submitted/approved: return the frozen snapshot.
-  if (submitted && ts.summary) {
+  // Submitted/approved (not returned): return the frozen snapshot.
+  if (frozen && ts.summary) {
     return {
       ok: true,
       timesheet: ts,
@@ -193,22 +196,43 @@ async function buildSummary(
   const oncall = (oncallRows as RawOncall[]) ?? []
 
   // Jobs (tasks) assigned to the user in the week, with actual on-site times.
-  const { data: taskRows } = await supabase
-    .from('tasks')
-    .select(
-      `id, scheduled_date, booked_start_time, booked_end_time, booked_duration_minutes,
+  const taskSelect = `id, scheduled_date, booked_start_time, booked_end_time, booked_duration_minutes,
        task_results ( testing_start_time, testing_end_time ),
        direct_site:sites!tasks_site_id_fkey ( name ),
        direct_service_type:service_types!tasks_service_type_id_fkey ( name ),
        site_service:site_services (
          site:sites ( name ),
          service_type:service_types ( name )
-       )`,
-    )
+       )`
+  const { data: taskRows } = await supabase
+    .from('tasks')
+    .select(taskSelect)
     .eq('assigned_engineer_id', profile.id)
     .gte('scheduled_date', from)
     .lte('scheduled_date', to)
-  const jobs: RawJob[] = ((taskRows as any[]) ?? []).map((t) => {
+  const allTaskRows: any[] = [...((taskRows as any[]) ?? [])]
+
+  // Calls actually worked this week but booked for a different week (done early
+  // or late) — the compute engine files them under the day they were worked.
+  const { data: workedRows } = await supabase
+    .from('task_results')
+    .select('task_id')
+    .gte('testing_start_time', fromTs)
+    .lte('testing_start_time', toTs)
+  const seen = new Set(allTaskRows.map((t) => t.id))
+  const extraIds = Array.from(
+    new Set(((workedRows as { task_id: string }[]) ?? []).map((r) => r.task_id)),
+  ).filter((id) => id && !seen.has(id))
+  if (extraIds.length > 0) {
+    const { data: extraRows } = await supabase
+      .from('tasks')
+      .select(taskSelect)
+      .eq('assigned_engineer_id', profile.id)
+      .in('id', extraIds)
+    allTaskRows.push(...((extraRows as any[]) ?? []))
+  }
+
+  const jobs: RawJob[] = allTaskRows.map((t) => {
     const result = Array.isArray(t.task_results) ? t.task_results[0] : t.task_results
     const siteName = t.direct_site?.name ?? t.site_service?.site?.name ?? null
     const serviceName =

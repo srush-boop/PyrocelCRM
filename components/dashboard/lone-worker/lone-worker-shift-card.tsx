@@ -3,7 +3,17 @@
 import { useCallback, useState, useTransition } from 'react'
 import useSWR from 'swr'
 import { toast } from 'sonner'
-import { ShieldCheck, ShieldAlert, Play, Square, Clock, Gauge, Loader2, Volume2 } from 'lucide-react'
+import {
+  ShieldCheck,
+  ShieldAlert,
+  Play,
+  Square,
+  Clock,
+  Gauge,
+  Loader2,
+  Volume2,
+  AlarmClock,
+} from 'lucide-react'
 import {
   Card,
   CardContent,
@@ -27,8 +37,18 @@ import {
   startShift,
   finishShift,
   setCheckinInterval,
+  extendShift,
 } from '@/app/(dashboard)/dashboard/lone-worker/actions'
-import { formatShiftTime, type MyLoneWorkerState } from '@/lib/lone-worker/types'
+import {
+  formatShiftTime,
+  isShiftOverrunning,
+  SHIFT_EXTEND_OPTIONS,
+  type MyLoneWorkerState,
+} from '@/lib/lone-worker/types'
+
+function extendLabel(minutes: number): string {
+  return minutes < 60 ? `+${minutes} min` : `+${minutes / 60} hr`
+}
 import { primeAlarm, playAlarmTone, buzz } from '@/lib/lone-worker/alarm'
 
 // Frequency presets the worker can raise to when risk increases.
@@ -44,6 +64,26 @@ export function LoneWorkerShiftCard() {
   const [end, setEnd] = useState('')
   const [starting, startStarting] = useTransition()
   const [finishing, startFinishing] = useTransition()
+  const [extending, startExtending] = useTransition()
+
+  const onExtend = useCallback(
+    (minutes: number) => {
+      startExtending(async () => {
+        const res = await extendShift(minutes)
+        if (res.error) {
+          toast.error(res.error)
+          return
+        }
+        toast.success(
+          res.shiftEnd
+            ? `Shift extended to ${formatShiftTime(res.shiftEnd)} — check-ins continue`
+            : 'Shift extended',
+        )
+        await mutate()
+      })
+    },
+    [mutate],
+  )
 
   // The shift start is always "now" (set server-side when Start is pressed), so
   // only the planned end is seeded from the user's work hours.
@@ -187,8 +227,8 @@ export function LoneWorkerShiftCard() {
               <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>
                 Your shift starts now, when you tap Start. Check-ins every{' '}
-                {data.timings.checkinMinutes} min. Set your planned finish time above so the shift
-                auto-closes if you forget.
+                {data.timings.checkinMinutes} min. At your planned finish time we&apos;ll ask whether
+                you&apos;re still working, so you can finish or extend.
               </span>
             </p>
             <Button onClick={onStart} disabled={starting} className="w-full gap-2">
@@ -198,6 +238,48 @@ export function LoneWorkerShiftCard() {
           </>
         ) : (
           <>
+            {isShiftOverrunning(session.shiftEnd, data.serverNow) && (
+              <div
+                role="alert"
+                className="flex flex-col gap-3 rounded-lg border border-amber-500/60 bg-amber-500/10 p-3"
+              >
+                <div className="flex items-start gap-2">
+                  <AlarmClock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-sm font-semibold">
+                      Your shift was due to end at {formatShiftTime(session.shiftEnd)}
+                    </p>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Still working? Extend your shift, or finish it if you&apos;ve left site.
+                      Check-ins carry on until you do.
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {SHIFT_EXTEND_OPTIONS.map((m) => (
+                    <Button
+                      key={m}
+                      size="sm"
+                      variant="outline"
+                      disabled={extending || finishing}
+                      onClick={() => onExtend(m)}
+                    >
+                      {extendLabel(m)}
+                    </Button>
+                  ))}
+                </div>
+                <Button
+                  size="sm"
+                  onClick={onFinish}
+                  disabled={finishing || extending}
+                  className="gap-2"
+                >
+                  {finishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
+                  Finish shift now
+                </Button>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-lg border bg-muted/40 p-3">
                 <p className="text-xs text-muted-foreground">Shift</p>

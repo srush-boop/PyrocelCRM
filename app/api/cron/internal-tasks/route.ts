@@ -8,7 +8,64 @@ import { renderCompletionReportHtml } from '@/lib/internal-tasks/completion-repo
 import { dueReportWindow } from '@/lib/internal-tasks/report-schedule'
 import { deliverScheduledReport } from '@/lib/internal-tasks/deliver-report'
 import { sendEmail } from '@/lib/email/send-email'
+import { getPublicBaseUrl } from '@/lib/rams/base-url'
 import type { InternalTaskTemplate, InternalTaskReportSchedule } from '@/lib/types/database'
+
+type ReminderContact = {
+  id: string
+  full_name: string | null
+  email: string | null
+  manager_id: string | null
+  status: string | null
+}
+
+type OverdueTemplate = {
+  name?: string
+  warn_overdue?: boolean
+  task_kind?: string
+  email_reminders?: boolean
+  overdue_repeat_days?: number
+  overdue_notify_manager?: boolean
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function formatDue(iso: string): string {
+  return new Date(iso).toLocaleString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Europe/London',
+  })
+}
+
+async function sendReminderEmail(
+  to: string,
+  msg: { heading: string; intro: string; ctaUrl: string; ctaLabel: string },
+): Promise<void> {
+  const html = `
+    <div style="font-family:Arial,Helvetica,sans-serif;color:#111;line-height:1.5;max-width:560px">
+      <h2 style="margin:0 0 8px">${escapeHtml(msg.heading)}</h2>
+      <p style="margin:0 0 16px">${escapeHtml(msg.intro)}</p>
+      <p style="margin:0 0 16px">
+        <a href="${escapeHtml(msg.ctaUrl)}" style="display:inline-block;background:#c8102e;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;font-weight:bold">${escapeHtml(msg.ctaLabel)}</a>
+      </p>
+      <p style="margin:0;color:#666;font-size:12px">Sent automatically by PyrocelCRM Tasks &amp; Forms.</p>
+    </div>`
+  try {
+    await sendEmail(to, msg.heading, html)
+  } catch (err) {
+    console.log('[v0] internal-tasks reminder email failed:', (err as Error).message)
+  }
+}
 
 // Runs daily (see vercel.json). For every active internal-task template:
 //  1) ensures the current-period instance exists for each assignee,
@@ -83,49 +140,108 @@ export async function GET(req: Request) {
     }
   }
 
-  // 2) Mark overdue: pending instances past their deadline (whose template
-  //    warns on overdue) → status overdue + one notification per day.
+  // Contact directory for reminder emails + line-manager escalation.
+  const { data: contactRows } = await admin
+    .from('profiles')
+    .select('id, full_name, email, manager_id, status')
+  const contacts = new Map<string, ReminderContact>(
+    ((contactRows ?? []) as ReminderContact[]).map((p) => [p.id, p]),
+  )
+  const baseUrl = getPublicBaseUrl()
+
+  // 2) Overdue: open instances past their deadline. Newly-late pending rows
+  //    flip to overdue and notify; already-overdue rows re-notify every
+  //    `overdue_repeat_days` days. Assignee always; line manager if configured;
+  //    email as well when `email_reminders` is on. Guarded once/day/instance.
   const { data: overdueRows } = await admin
     .from('internal_task_instances')
-    .select('id, user_id, due_at, template:internal_task_templates(name, warn_overdue, task_kind)')
-    .eq('status', 'pending')
+    .select(
+      'id, user_id, due_at, status, template:internal_task_templates(name, warn_overdue, task_kind, email_reminders, overdue_repeat_days, overdue_notify_manager)',
+    )
+    .in('status', ['pending', 'overdue'])
     .lt('due_at', now.toISOString())
 
   for (const row of overdueRows ?? []) {
-    const template = Array.isArray(row.template) ? row.template[0] : row.template
+    const template = (Array.isArray(row.template) ? row.template[0] : row.template) as OverdueTemplate | null
     // Surveys close (they don't nag respondents as "overdue") — leave them
     // pending; the survey sweep below handles closing + summarising.
-    if ((template as { task_kind?: string } | null)?.task_kind === 'survey') continue
-    // Flip status regardless; only notify when the template warns.
-    await admin.from('internal_task_instances').update({ status: 'overdue' }).eq('id', row.id)
-    markedOverdue += 1
-    if (!(template as { warn_overdue?: boolean } | null)?.warn_overdue) continue
+    if (template?.task_kind === 'survey') continue
 
-    const already = await notifiedToday(admin, todayStart, 'internal_task_overdue', row.id as string, [
-      row.user_id as string,
-    ])
+    const justWentOverdue = row.status === 'pending'
+    if (justWentOverdue) {
+      await admin.from('internal_task_instances').update({ status: 'overdue' }).eq('id', row.id)
+      markedOverdue += 1
+    }
+    if (!template?.warn_overdue) continue
+
+    const daysOverdue = Math.floor((now.getTime() - new Date(row.due_at as string).getTime()) / 86_400_000)
+    const repeat = template.overdue_repeat_days ?? 0
+    const repeatDue = repeat > 0 && daysOverdue > 0 && daysOverdue % repeat === 0
+    if (!justWentOverdue && !repeatDue) continue
+
+    const assigneeId = row.user_id as string
+    const already = await notifiedToday(admin, todayStart, 'internal_task_overdue', row.id as string, [assigneeId])
     if (already) continue
+
+    const name = template.name ?? 'A task'
+    const assignee = contacts.get(assigneeId)
+    const lateLabel = daysOverdue >= 1 ? `${daysOverdue} day${daysOverdue === 1 ? '' : 's'} overdue` : 'now overdue'
+
     await notifyUsers({
-      userIds: [row.user_id as string],
-      title: 'Internal task overdue',
-      body: `${(template as { name?: string } | null)?.name ?? 'A task'} is now overdue.`,
+      userIds: [assigneeId],
+      title: 'Task overdue',
+      body: `${name} is ${lateLabel}.`,
       url: '/dashboard/my-tasks',
       category: 'internal_task',
       data: { kind: 'internal_task_overdue', instanceId: row.id },
     })
+    if (template.email_reminders && assignee?.email) {
+      await sendReminderEmail(assignee.email, {
+        heading: `${name} is ${lateLabel}`,
+        intro: `Hi ${assignee.full_name ?? 'there'}, this task/form was due ${formatDue(row.due_at as string)} and hasn't been completed yet.`,
+        ctaUrl: `${baseUrl}/dashboard/my-tasks`,
+        ctaLabel: 'Complete it now',
+      })
+    }
+
+    // Line-manager escalation.
+    const manager = template.overdue_notify_manager && assignee?.manager_id ? contacts.get(assignee.manager_id) : null
+    if (manager && manager.status === 'active' && manager.id !== assigneeId) {
+      const who = assignee?.full_name ?? 'A team member'
+      await notifyUsers({
+        userIds: [manager.id],
+        title: 'Team member task overdue',
+        body: `${who}'s "${name}" is ${lateLabel}.`,
+        url: `/dashboard/internal-tasks/submissions?instance=${row.id}`,
+        category: 'internal_task',
+        data: { kind: 'internal_task_overdue_manager', instanceId: row.id },
+      })
+      if (manager.email) {
+        await sendReminderEmail(manager.email, {
+          heading: `${who}'s ${name} is ${lateLabel}`,
+          intro: `You're receiving this as ${who}'s line manager. "${name}" was due ${formatDue(row.due_at as string)} and is still outstanding.`,
+          ctaUrl: `${baseUrl}/dashboard/internal-tasks/submissions?instance=${row.id}`,
+          ctaLabel: 'View task',
+        })
+      }
+    }
     reminded += 1
   }
 
   // 3) Reminders: pending instances due within their template's reminder window.
   const { data: pending } = await admin
     .from('internal_task_instances')
-    .select('id, user_id, due_at, template:internal_task_templates(name, reminder_days_before)')
+    .select('id, user_id, due_at, template:internal_task_templates(name, reminder_days_before, email_reminders)')
     .eq('status', 'pending')
     .gte('due_at', now.toISOString())
 
   for (const row of pending ?? []) {
-    const template = Array.isArray(row.template) ? row.template[0] : row.template
-    const windows = ((template as { reminder_days_before?: number[] } | null)?.reminder_days_before ?? [])
+    const template = (Array.isArray(row.template) ? row.template[0] : row.template) as {
+      name?: string
+      reminder_days_before?: number[]
+      email_reminders?: boolean
+    } | null
+    const windows = template?.reminder_days_before ?? []
     if (windows.length === 0) continue
     const daysUntil = Math.ceil((new Date(row.due_at as string).getTime() - now.getTime()) / 86_400_000)
     if (!windows.includes(daysUntil)) continue
@@ -134,14 +250,24 @@ export async function GET(req: Request) {
       row.user_id as string,
     ])
     if (already) continue
+    const name = template?.name ?? 'A task'
     await notifyUsers({
       userIds: [row.user_id as string],
-      title: 'Internal task due soon',
-      body: `${(template as { name?: string } | null)?.name ?? 'A task'} is due in ${daysUntil} day(s).`,
+      title: 'Task due soon',
+      body: `${name} is due in ${daysUntil} day(s).`,
       url: '/dashboard/my-tasks',
       category: 'internal_task',
       data: { kind: 'internal_task_reminder', instanceId: row.id },
     })
+    const assignee = contacts.get(row.user_id as string)
+    if (template?.email_reminders && assignee?.email) {
+      await sendReminderEmail(assignee.email, {
+        heading: `${name} is due ${daysUntil === 0 ? 'today' : `in ${daysUntil} day${daysUntil === 1 ? '' : 's'}`}`,
+        intro: `Hi ${assignee.full_name ?? 'there'}, a reminder that this task/form is due ${formatDue(row.due_at as string)}.`,
+        ctaUrl: `${baseUrl}/dashboard/my-tasks`,
+        ctaLabel: 'Open my tasks',
+      })
+    }
     reminded += 1
   }
 

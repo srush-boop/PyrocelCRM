@@ -46,8 +46,11 @@ export function useCompletionExit(role: string, discipline?: string | null) {
   const offerNearby = role === 'engineer' && discipline !== 'cdo'
 
   const goToCalls = useCallback(() => {
-    router.push(CALLS_ROUTE)
+    // Invalidate the client Router Cache BEFORE navigating so the Calls list
+    // loads fresh (via its loading.tsx skeleton) with the completed call already
+    // gone, rather than briefly showing the cached list with it still open.
     router.refresh()
+    router.push(CALLS_ROUTE)
   }, [router])
 
   // Run once completion persistence is done. Resolves after either navigating to

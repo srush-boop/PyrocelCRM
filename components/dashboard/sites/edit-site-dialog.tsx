@@ -73,6 +73,7 @@ export function EditSiteDialog({
     branch_id: site.branch_id || '',
     property_type_id: site.property_type_id || '',
     uprn: site.uprn || '',
+    internal_reference_no: site.internal_reference_no || '',
     status: site.status || 'live',
     notes: site.notes || '',
     po_number: site.po_number || '',
@@ -153,6 +154,7 @@ export function EditSiteDialog({
       .update({
         ...formData,
         authorised_works_limit: undefined,
+        internal_reference_no: formData.internal_reference_no.trim() || null,
         po_number: formData.po_number.trim() || null,
         authorised_works_po: formData.authorised_works_po.trim() || null,
         authorised_works_limit_pence:
@@ -250,12 +252,23 @@ export function EditSiteDialog({
             <div className="grid gap-2">
               <Label htmlFor="uprn">UPRN</Label>
               <Input
-                id="uprn"
-                value={formData.uprn}
-                onChange={(e) => setFormData({ ...formData, uprn: e.target.value })}
-                placeholder="Unique Property Reference Number"
-                inputMode="numeric"
-              />
+              id="uprn"
+              value={formData.uprn}
+              onChange={(e) => setFormData({ ...formData, uprn: e.target.value })}
+              placeholder="Unique Property Reference Number"
+              inputMode="numeric"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="internal_reference_no">Internal Reference No</Label>
+            <Input
+              id="internal_reference_no"
+              value={formData.internal_reference_no}
+              onChange={(e) =>
+                setFormData({ ...formData, internal_reference_no: e.target.value })
+              }
+              placeholder="Reference from your existing CRM"
+            />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">

@@ -842,7 +842,7 @@ export interface ChecklistCondition {
   // - fail/advisory/pass  → pass_fail items
   // - checked/unchecked   → checkbox items
   // - number              → number items (uses comparator + threshold)
-  when: 'fail' | 'advisory' | 'pass' | 'checked' | 'unchecked' | 'number'
+  when: 'fail' | 'advisory' | 'pass' | 'checked' | 'unchecked' | 'number' | 'yes' | 'no'
   // Number triggers only: how to compare the entered value against `threshold`.
   comparator?: 'gt' | 'lt' | 'gte' | 'lte' | 'eq'
   threshold?: number
@@ -1126,6 +1126,12 @@ export interface InternalTaskTemplate {
   allow_multiple: boolean
   reminder_days_before: number[]
   warn_overdue: boolean
+  // Also email the assignee for due-soon/overdue reminders (in-app always sent).
+  email_reminders: boolean
+  // Once overdue, repeat the reminder every N days (0 = only the first day).
+  overdue_repeat_days: number
+  // Also alert the assignee's line manager (profiles.manager_id) when overdue.
+  overdue_notify_manager: boolean
   // Content
   questions: InternalTaskItem[]
   requires_reference: boolean
@@ -1139,6 +1145,8 @@ export interface InternalTaskTemplate {
   // In-app notification to these profile ids, plus an optional email address.
   notify_on_issue_user_ids: string[]
   notify_on_issue_email: string | null
+  // Also alert the submitter's line manager (in-app + email) on Fail/Advisory.
+  notify_on_issue_manager: boolean
   // --- Survey-only (task_kind === 'survey') ---------------------------------
   // When true, the results summary and per-response views never reveal who gave
   // which answer (identity is hidden at the presentation layer).
@@ -1331,6 +1339,13 @@ export type RemoteMonitoringType = 'fire' | 'fire_and_fault' | 'fault'
 
 export interface Site {
   id: string
+  // Human-readable reference (e.g. SITE-00001), auto-assigned on insert by the
+  // set_site_reference DB trigger and locked once set. Non year-scoped: a site
+  // keeps one stable reference for its whole life.
+  reference_number: string | null
+  // Editable reference carried over from the legacy CRM. Optional free text,
+  // searchable alongside reference_number.
+  internal_reference_no: string | null
   name: string
   address: string
   postcode: string | null

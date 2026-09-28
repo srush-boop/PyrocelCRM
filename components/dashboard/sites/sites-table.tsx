@@ -72,12 +72,14 @@ export function SitesTable({
   const filteredSites = sites.filter((site) => {
     // Text search
     const matchesSearch = 
-      site.name.toLowerCase().includes(search.toLowerCase()) ||
-      site.address.toLowerCase().includes(search.toLowerCase()) ||
-      site.contact_name?.toLowerCase().includes(search.toLowerCase()) ||
-      site.contact_email?.toLowerCase().includes(search.toLowerCase()) ||
-      site.route?.name?.toLowerCase().includes(search.toLowerCase()) ||
-      site.client?.name?.toLowerCase().includes(search.toLowerCase())
+        site.name.toLowerCase().includes(search.toLowerCase()) ||
+        site.address.toLowerCase().includes(search.toLowerCase()) ||
+        site.contact_name?.toLowerCase().includes(search.toLowerCase()) ||
+        site.contact_email?.toLowerCase().includes(search.toLowerCase()) ||
+        site.route?.name?.toLowerCase().includes(search.toLowerCase()) ||
+        site.client?.name?.toLowerCase().includes(search.toLowerCase()) ||
+        site.reference_number?.toLowerCase().includes(search.toLowerCase()) ||
+        site.internal_reference_no?.toLowerCase().includes(search.toLowerCase())
     
     // Route filter
     const matchesRoute = selectedRoute === 'all' || 
@@ -151,6 +153,7 @@ export function SitesTable({
           <TableHeader>
             <TableRow>
               <TableHead>Site Name</TableHead>
+              <TableHead className="hidden lg:table-cell">Reference</TableHead>
               <TableHead className="hidden xl:table-cell">CASH ID</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Client</TableHead>
@@ -166,7 +169,7 @@ export function SitesTable({
           <TableBody>
             {filteredSites.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={branches.length > 0 ? 9 : 8} className="h-24 text-center">
+                <TableCell colSpan={branches.length > 0 ? 10 : 9} className="h-24 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <Building2 className="h-8 w-8 text-muted-foreground/50 mb-2" />
                     <p className="text-muted-foreground">No sites found</p>
@@ -184,6 +187,16 @@ export function SitesTable({
                       {site.name}
                     </Link>
                   </TableCell>
+              <TableCell className="hidden lg:table-cell">
+                <span className="text-sm font-mono text-muted-foreground">
+                  {site.reference_number || '-'}
+                </span>
+                {site.internal_reference_no && (
+                  <span className="block text-xs text-muted-foreground">
+                    {site.internal_reference_no}
+                  </span>
+                )}
+              </TableCell>
                   <TableCell className="hidden xl:table-cell">
                     <span className="text-sm font-mono text-muted-foreground">
                       {site.site_id_cash || '-'}

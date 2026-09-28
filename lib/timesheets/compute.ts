@@ -363,10 +363,15 @@ export function computeTimesheet(inputs: TimesheetInputs): TimesheetSummary {
 
     // Jobs on this date (actual on-site times, fall back to booked slot).
     for (const job of inputs.jobs) {
-      if (job.scheduled_date !== date) continue
+      const hasActual = Boolean(job.testing_start_time && job.testing_end_time)
+      // A call done early/late belongs to the day it was actually worked, not the
+      // day it was booked — otherwise its real times stretch the booked day's
+      // span across several days (e.g. booked Mon, worked Thu ⇒ ~90h "overtime").
+      const workedDate = hasActual ? fmtDate(new Date(job.testing_start_time as string)) : job.scheduled_date
+      if (workedDate !== date) continue
       let start: string | null = null
       let end: string | null = null
-      if (job.testing_start_time && job.testing_end_time) {
+      if (hasActual) {
         start = job.testing_start_time
         end = job.testing_end_time
       } else if (job.booked_start_time) {
@@ -428,6 +433,9 @@ export function computeTimesheet(inputs: TimesheetInputs): TimesheetSummary {
     const extendSpan = (iso: string | null | undefined, isEnd: boolean) => {
       if (!iso) return
       const m = epochMin(iso)
+      // A malformed/empty timestamp parses to NaN; letting it seed startMin/endMin
+      // would later blow up `new Date(NaN).toISOString()`. Skip it entirely.
+      if (!Number.isFinite(m)) return
       if (isEnd) {
         if (endMin === null || m > endMin) endMin = m
       } else if (startMin === null || m < startMin) {

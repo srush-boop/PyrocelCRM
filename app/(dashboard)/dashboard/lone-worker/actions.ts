@@ -10,17 +10,16 @@ import {
   evaluateSessionRow,
   mapSession,
   resetSessionCycle,
+  SESSION_COLS,
   type SessionRow,
 } from '@/lib/lone-worker/engine'
-import type {
-  LoneWorkerEventLevel,
-  LoneWorkerMonitorData,
-  LoneWorkerMonitorRow,
-  MyLoneWorkerState,
+import {
+  SHIFT_EXTEND_OPTIONS,
+  type LoneWorkerEventLevel,
+  type LoneWorkerMonitorData,
+  type LoneWorkerMonitorRow,
+  type MyLoneWorkerState,
 } from '@/lib/lone-worker/types'
-
-const SESSION_COLS =
-  'id, user_id, shift_start, shift_end, checkin_interval_minutes, amber_minutes, red_minutes, status, prompt_state, last_checkin_at, next_prompt_at, amber_at, red_at, last_lat, last_lng, last_accuracy, location_updated_at, last_heartbeat_at, created_at, finished_at'
 
 async function getCaller() {
   const supabase = await createClient()
@@ -203,6 +202,38 @@ export async function finishShift(): Promise<{ error: string | null }> {
   return { error: null }
 }
 
+/**
+ * Worker is still on site after their planned end: push the shift end out by
+ * 30/60/120 min from whichever is later (now or the current end). Check-ins are
+ * untouched; the end-of-shift prompt re-arms for the new end time. Extending is
+ * also a positive response, so it counts as a safety check-in.
+ */
+export async function extendShift(minutes: number): Promise<{ error: string | null; shiftEnd?: string }> {
+  const { user } = await getCaller()
+  if (!user) return { error: 'Not signed in' }
+  if (!(SHIFT_EXTEND_OPTIONS as readonly number[]).includes(minutes)) {
+    return { error: 'Choose 30 minutes, 1 hour or 2 hours' }
+  }
+  const admin = createAdminClient()
+  const session = await activeSessionFor(admin, user.id)
+  if (!session) return { error: 'No active shift' }
+
+  const now = new Date()
+  const base = Math.max(now.getTime(), new Date(session.shift_end).getTime())
+  const newEnd = new Date(base + minutes * 60_000).toISOString()
+
+  const { error } = await admin
+    .from('lone_worker_sessions')
+    .update({ shift_end: newEnd, shift_extended_count: (session.shift_extended_count ?? 0) + 1 })
+    .eq('id', session.id)
+  if (error) return { error: error.message }
+
+  await resetSessionCycle(admin, { ...session, shift_end: newEnd }, { via: 'self', by: user.id, now })
+  revalidatePath('/dashboard')
+  revalidatePath('/dashboard/lone-worker')
+  return { error: null, shiftEnd: newEnd }
+}
+
 export async function confirmSafe(): Promise<{ error: string | null }> {
   const { user } = await getCaller()
   if (!user) return { error: 'Not signed in' }
@@ -380,6 +411,7 @@ export async function getMonitorData(): Promise<LoneWorkerMonitorData> {
       userName: nameById.get(s.user_id) ?? 'Lone worker',
       shiftStart: s.shift_start,
       shiftEnd: s.shift_end,
+      shiftExtendedCount: s.shift_extended_count ?? 0,
       promptState: s.prompt_state,
       lastCheckinAt: s.last_checkin_at,
       nextPromptAt: s.next_prompt_at,

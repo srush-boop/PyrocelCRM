@@ -708,7 +708,12 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             )}
           </div>
           <h1 className="text-2xl font-bold">{site.name}</h1>
-        </div>
+          {(site as Site).reference_number && (
+            <p className="text-sm font-mono text-muted-foreground">
+              {(site as Site).reference_number}
+            </p>
+          )}
+          </div>
         <div className="flex items-center gap-2">
           {reactiveServiceTypes.length > 0 && (
             <CreateTaskDialog
@@ -790,12 +795,18 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
               <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
               <span>{site.address}</span>
             </div>
-            {(site as Site).uprn && (
-              <div className="text-sm">
-                <span className="text-muted-foreground">UPRN: </span>
-                {(site as Site).uprn}
-              </div>
-            )}
+              {(site as Site).uprn && (
+                <div className="text-sm">
+                  <span className="text-muted-foreground">UPRN: </span>
+                  {(site as Site).uprn}
+                </div>
+              )}
+              {(site as Site).internal_reference_no && (
+                <div className="text-sm">
+                  <span className="text-muted-foreground">Internal Ref: </span>
+                  {(site as Site).internal_reference_no}
+                </div>
+              )}
             {site.contact_name && (
               <div className="text-sm">
                 <span className="text-muted-foreground">Contact: </span>

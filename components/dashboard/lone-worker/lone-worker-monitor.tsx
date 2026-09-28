@@ -26,6 +26,7 @@ import {
 } from '@/app/(dashboard)/dashboard/lone-worker/actions'
 import {
   formatShiftTime,
+  isShiftOverrunning,
   type LoneWorkerMonitorData,
   type LoneWorkerMonitorRow,
 } from '@/lib/lone-worker/types'
@@ -336,6 +337,21 @@ function MonitorRow({
             <Badge variant="outline" className="gap-1">
               <ShieldCheck className="h-3 w-3" />
               OK
+            </Badge>
+          )}
+          {isShiftOverrunning(row.shiftEnd, now) && (
+            <Badge
+              variant="outline"
+              className="gap-1 border-amber-500/60 text-amber-600"
+              title={`Planned end ${formatShiftTime(row.shiftEnd)} has passed — still checking in`}
+            >
+              <Clock className="h-3 w-3" />
+              Overrunning
+            </Badge>
+          )}
+          {row.shiftExtendedCount > 0 && (
+            <Badge variant="outline" className="gap-1">
+              Extended{row.shiftExtendedCount > 1 ? ` ×${row.shiftExtendedCount}` : ''}
             </Badge>
           )}
           {deviceOffline && (

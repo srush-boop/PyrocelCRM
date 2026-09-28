@@ -177,6 +177,10 @@ function isConditionActive(row: Row, cond: ChecklistCondition): boolean {
       return row.value === true
     case 'unchecked':
       return row.value === false
+    case 'yes':
+      return row.value === 'yes'
+    case 'no':
+      return row.value === 'no'
     case 'number': {
       const n = Number(row.value)
       if (Number.isNaN(n) || cond.threshold == null) return false

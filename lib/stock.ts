@@ -7,6 +7,7 @@ import type {
   StockLocationKind,
   StockLocationSummary,
   StockMovement,
+  ToleranceUnit,
 } from '@/lib/types/database'
 
 // Re-exported for server-side callers; defined in client-safe lib/utils.
@@ -367,20 +368,30 @@ export async function getEngineerUpcomingParts(
   const supabase = await createClient()
 
   const today = new Date()
-  const start = today.toISOString().slice(0, 10)
+  today.setHours(0, 0, 0, 0)
   const endDate = new Date(today)
   endDate.setDate(endDate.getDate() + days)
   const end = endDate.toISOString().slice(0, 10)
+  // Open calls booked in the past (including overdue ones) still need their
+  // parts, so look back far enough to catch any call not yet completed.
+  const lookBack = new Date(today)
+  lookBack.setDate(lookBack.getDate() - 400)
+  const start = lookBack.toISOString().slice(0, 10)
 
   const { data: tasks } = await supabase
     .from('tasks')
     .select(
-      `id, reference_number, scheduled_date,
-       site_service:site_services(site:sites(name)),
+      `id, reference_number, scheduled_date, status,
+       direct_site:sites!tasks_site_id_fkey(name),
+       site_service:site_services(
+         frequency_value, frequency_unit, client_tolerance_value, client_tolerance_unit,
+         site:sites(name),
+         service_type:service_types(is_recurring, regulatory_tolerance_value, regulatory_tolerance_unit)
+       ),
        call_parts(part_id, quantity, part:parts(name, sku, unit))`,
     )
     .eq('assigned_engineer_id', engineerId)
-    .in('status', ['pending', 'in_progress'])
+    .in('status', ['pending', 'in_progress', 'paused'])
     .gte('scheduled_date', start)
     .lte('scheduled_date', end)
     .order('scheduled_date', { ascending: true })
@@ -394,16 +405,32 @@ export async function getEngineerUpcomingParts(
     id: string
     reference_number: string | null
     scheduled_date: string | null
-    site_service: { site: { name: string | null } | null } | null
+    status: string
+    direct_site: { name: string | null } | null
+    site_service: {
+      frequency_value: number | null
+      frequency_unit: 'weeks' | 'months' | null
+      client_tolerance_value: number | null
+      client_tolerance_unit: ToleranceUnit | null
+      site: { name: string | null } | null
+      service_type: {
+        is_recurring: boolean | null
+        regulatory_tolerance_value: number | null
+        regulatory_tolerance_unit: ToleranceUnit | null
+      } | null
+    } | null
     call_parts: PartRow[] | null
   }
 
-  const rows = (tasks || []) as unknown as TaskRow[]
+  // Parts stay listed from the visit date until the call is completed or
+  // cancelled — including overdue calls past their "complete by" date, so the
+  // engineer still carries parts for late work.
+  const rows = ((tasks || []) as unknown as TaskRow[]).filter((t) => !!t.scheduled_date)
 
   // Aggregate by part across every upcoming call.
   const byPart = new Map<string, UpcomingPartSummary>()
   for (const t of rows) {
-    const siteName = t.site_service?.site?.name ?? 'Unknown site'
+    const siteName = t.site_service?.site?.name ?? t.direct_site?.name ?? 'Unknown site'
     for (const cp of t.call_parts ?? []) {
       if (!cp.part_id) continue
       const qty = cp.quantity ?? 0

@@ -110,6 +110,11 @@ import {
   type QuoteInput,
 } from '@/app/(dashboard)/dashboard/sales/actions'
 import { linkDefectToQuote } from '@/app/(dashboard)/dashboard/defects/actions'
+import type { DefectSuggestedPart } from '@/lib/defects/suggested-parts'
+import {
+  SuggestedPartsReview,
+  type SuggestedPartDecision,
+} from '@/components/dashboard/defects/suggested-parts-review'
 
 // Default terms shown on a brand-new quote (editable per quote).
 const DEFAULT_QUOTE_TERMS = 'Standard terms and conditions apply which are available on request.'
@@ -600,6 +605,8 @@ interface QuoteBuilderProps {
   initialNotes?: string
   // When set, links the saved quote back to this defect and marks it 'quoted'.
   defectId?: string
+  // Parts the engineer suggested on the defect, offered for confirm/remove.
+  defectSuggestedParts?: DefectSuggestedPart[]
   // Seed the first system for a brand-new quote (e.g. a remedial quote raised
   // from a defect): the originating service's system type, the work type
   // (Remedial), and a scope of works placed in the system specification.
@@ -641,6 +648,7 @@ export function QuoteBuilder({
   initialTitle,
   initialNotes,
   defectId,
+  defectSuggestedParts = [],
   initialSystemTypeId,
   initialWorkType,
   initialSpecification,
@@ -653,6 +661,10 @@ export function QuoteBuilder({
 }: QuoteBuilderProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const [suggestedDecisions, setSuggestedDecisions] = useState<
+    Record<string, SuggestedPartDecision | undefined>
+  >({})
+  const [suggestedLineKeys, setSuggestedLineKeys] = useState<Record<string, string>>({})
 
   // ----- Header state -----
   const [title, setTitle] = useState(quote?.title ?? initialTitle ?? '')
@@ -678,7 +690,11 @@ export function QuoteBuilder({
     (quote?.prospect_site_name || quote?.prospect_name) && !quote?.site_id ? 'new' : 'existing',
   )
   // Issuing branch: existing quote's branch, else the preparer's own branch.
-  const [branchId, setBranchId] = useState(quote?.branch_id ?? defaultBranchId ?? '')
+  const siteBranchId = (id: string | null | undefined) =>
+    (id && (sites.find((s) => s.id === id) as { branch_id?: string | null } | undefined)?.branch_id) || null
+  const [branchId, setBranchId] = useState(
+    quote?.branch_id ?? siteBranchId(initialSiteId) ?? defaultBranchId ?? '',
+  )
   const [clientId, setClientId] = useState(quote?.client_id ?? initialClientId ?? '')
   const [siteId, setSiteId] = useState(quote?.site_id ?? initialSiteId ?? '')
   const [clientPickerOpen, setClientPickerOpen] = useState(false)
@@ -1023,6 +1039,46 @@ export function QuoteBuilder({
       standard: null,
       is_maintenance_allowance: false,
     })
+  }
+
+  // Confirm/remove an engineer-suggested part (remedial quote from a defect).
+  // Confirming adds a priced line to the first system; undoing a confirmation
+  // removes that same line again.
+  function decideSuggestedPart(part: DefectSuggestedPart, decision: SuggestedPartDecision | null) {
+    const existingKey = suggestedLineKeys[part.partId]
+    if (existingKey) {
+      setSystems((prev) =>
+        prev.map((s) => ({ ...s, lines: s.lines.filter((l) => l.key !== existingKey) })),
+      )
+      setSuggestedLineKeys((prev) => {
+        const next = { ...prev }
+        delete next[part.partId]
+        return next
+      })
+    }
+    if (decision === 'confirmed' && systems[0]) {
+      const item = part.catalogueItem
+      const key = uid()
+      addLine(systems[0].key, {
+        key,
+        productCode: item?.product_code ?? part.sku ?? '',
+        description: item?.name ?? part.name,
+        detail: '',
+        service_type_id: item?.service_type_id ?? null,
+        is_service: false,
+        catalogue_item_id: item?.id ?? null,
+        quantity: String(part.quantity),
+        unit: item?.default_unit ?? part.unit ?? '',
+        unitCost: penceToPounds(item?.unit_cost_pence ?? part.unitCostPence),
+        margin: '',
+        is_optional: false,
+        option_group: null,
+        standard: null,
+        is_maintenance_allowance: false,
+      })
+      setSuggestedLineKeys((prev) => ({ ...prev, [part.partId]: key }))
+    }
+    setSuggestedDecisions((prev) => ({ ...prev, [part.partId]: decision ?? undefined }))
   }
 
   // Link an existing line to a catalogue item (used by the product-code box).
@@ -1865,7 +1921,10 @@ export function QuoteBuilder({
                             key={s.id}
                             value={`${s.name} ${s.clientName ?? ''}`}
                             onSelect={() => {
-                              setSiteId(s.id === siteId ? '' : s.id)
+                              const nextSiteId = s.id === siteId ? '' : s.id
+                              setSiteId(nextSiteId)
+                              const nextBranch = siteBranchId(nextSiteId)
+                              if (nextBranch) setBranchId(nextBranch)
                               setSitePickerOpen(false)
                             }}
                           >
@@ -2183,6 +2242,26 @@ export function QuoteBuilder({
               rows={8}
               disabled={readOnly || isPending}
               placeholder="Description of the remedial works required."
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {defectId && !readOnly && defectSuggestedParts.length > 0 && systems.length > 0 && (
+        <Card>
+          <CardHeader>
+            <SectionHeading
+              icon={Wrench}
+              title="Engineer's suggested parts"
+              description="Confirm a part to add it as a line on the first system, or remove it to leave it off the quote."
+            />
+          </CardHeader>
+          <CardContent>
+            <SuggestedPartsReview
+              parts={defectSuggestedParts}
+              decisions={suggestedDecisions}
+              disabled={isPending}
+              onDecide={decideSuggestedPart}
             />
           </CardContent>
         </Card>

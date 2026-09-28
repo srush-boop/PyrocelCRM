@@ -870,6 +870,8 @@ export interface ChecklistCalculation {
 export interface ChecklistItem {
   id: string
   label: string
+  // Asked once for the whole call rather than repeated per panel.
+  siteLevel?: boolean
   // 'choice'      : a dropdown / multi-select of author-defined options, each of
   //                 which can carry a suggested answer pre-filled into the note.
   // 'calculation' : a read-only field computed from other number answers (sum,
@@ -932,6 +934,9 @@ export interface ClientChecklistItem {
   required: boolean
   system_type_ids: string[]
   service_type_ids: string[]
+  // Site-level question: asked once per site visit (not on every system/call
+  // or panel) and skipped once another call at the site that day answered it.
+  per_site: boolean
   position: number
   created_at: string
   updated_at: string
@@ -2367,6 +2372,13 @@ export interface CompanyInfo {
   // invoices; there are no per-charge overrides.
   default_vat_rate: number
   default_tax_code: string
+  /** Remittance details printed on invoice PDFs. */
+  bank_name?: string | null
+  bank_account_name?: string | null
+  bank_sort_code?: string | null
+  bank_account_number?: string | null
+  bank_iban?: string | null
+  bank_bic?: string | null
   // Editable maintenance pricing rate tables (seeded from the Excel calculator).
   // NULL = use the built-in DEFAULT_MAINTENANCE_RATES. Typed as MaintenanceRates.
   maintenance_rates: Record<string, unknown> | null

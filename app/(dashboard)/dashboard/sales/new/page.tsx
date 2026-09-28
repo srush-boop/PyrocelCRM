@@ -7,6 +7,7 @@ import { QuoteBuilder } from '@/components/dashboard/sales/quote-builder'
 import { resolveDefaultMargin } from '@/lib/sales'
 import { getFailedChecklistItems, buildRemedialScope } from '@/lib/defects'
 import { draftRemedialScope } from '@/lib/ai/draft-remedial-scope'
+import { loadDefectSuggestedParts, type DefectSuggestedPart } from '@/lib/defects/suggested-parts'
 import type { ChecklistResult } from '@/lib/types/database'
 import type {
   Client,
@@ -75,7 +76,7 @@ export default async function NewQuotePage({
     { data: branches },
   ] = await Promise.all([
     supabase.from('clients').select('id, name').order('name'),
-    supabase.from('sites').select('id, name, client_id').order('name'),
+    supabase.from('sites').select('id, name, client_id, branch_id').order('name'),
     supabase.from('system_types').select('*').eq('active', true).order('name'),
     supabase.from('service_types').select('*').order('name'),
     supabase.from('quote_services').select('*').eq('active', true).order('position').order('name'),
@@ -121,6 +122,7 @@ export default async function NewQuotePage({
         title: string
         scope: string
         systemTypeId?: string | null
+        suggestedParts: DefectSuggestedPart[]
       }
     | undefined
   if (defectParam) {
@@ -130,7 +132,7 @@ export default async function NewQuotePage({
         `id, site_id, client_id, reference_number,
          task_result:task_results(checklist_results, engineer_notes),
          site:sites(name),
-         task:tasks!defects_task_id_fkey(site_service:site_services(service_type:service_types(name, system_type_id)))`,
+         task:tasks!defects_task_id_fkey(id, site_service:site_services(service_type:service_types(name, system_type_id)))`,
       )
       .eq('id', defectParam)
       .maybeSingle()
@@ -176,6 +178,7 @@ export default async function NewQuotePage({
           d.reference_number ? ` (${d.reference_number})` : ''
         }`,
         scope,
+        suggestedParts: await loadDefectSuggestedParts(supabase, d.task?.id),
       }
     }
   }
@@ -219,6 +222,7 @@ export default async function NewQuotePage({
         initialWorkType={defectPrefill ? 'REM' : undefined}
         initialSpecification={defectPrefill?.scope}
         defectId={defectPrefill?.defectId}
+        defectSuggestedParts={defectPrefill?.suggestedParts}
         systemTypes={(systemTypes ?? []) as SystemType[]}
         serviceTypes={(serviceTypes ?? []) as ServiceType[]}
         quoteServices={(quoteServices ?? []) as QuoteService[]}

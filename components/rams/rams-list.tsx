@@ -21,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Plus, Search, FileText, ShieldCheck, Wrench } from 'lucide-react'
+import { BookOpen, Plus, Search, FileText, ShieldCheck, Wrench } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { RAMS_STATUS_META } from '@/lib/rams/risk'
 import type { RamsDocument } from '@/lib/rams/types'
@@ -80,6 +80,14 @@ export function RamsList({ documents, canManage, canAdmin }: RamsListProps) {
               <SelectItem value="archived">Archived</SelectItem>
             </SelectContent>
           </Select>
+          {canAdmin && (
+            <Button asChild variant="outline">
+              <Link href="/dashboard/rams/admin/library">
+                <BookOpen className="mr-2 h-4 w-4" />
+                Library
+              </Link>
+            </Button>
+          )}
           {canAdmin && (
             <Button asChild variant="outline">
               <Link href="/dashboard/rams/admin/equipment">

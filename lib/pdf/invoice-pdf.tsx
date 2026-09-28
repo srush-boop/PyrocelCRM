@@ -123,6 +123,16 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     padding: 10,
   },
+  bankGrid: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  bankRow: { width: '50%', flexDirection: 'row', marginBottom: 3 },
+  bankKey: { width: 72, color: MUTED },
   footer: {
     position: 'absolute',
     bottom: 24,
@@ -166,6 +176,16 @@ function InvoicePdfDocument({
   const docLabel = isCreditNote ? 'Credit Note' : 'Invoice'
   const companyName = company?.name || 'Pyrocel Ltd'
   const billToName = invoice.bill_to_name || invoice.billing_account?.name || 'Customer'
+  const bankRows: [string, string][] = (
+    [
+      ['Bank', company?.bank_name],
+      ['Account name', company?.bank_account_name],
+      ['Sort code', company?.bank_sort_code],
+      ['Account no.', company?.bank_account_number],
+      ['IBAN', company?.bank_iban],
+      ['BIC / SWIFT', company?.bank_bic],
+    ] as [string, string | null | undefined][]
+  ).flatMap(([label, value]) => (value?.trim() ? [[label, value.trim()] as [string, string]] : []))
 
   return (
     <Document title={`${docLabel} ${invoice.invoice_number}`}>
@@ -296,6 +316,20 @@ function InvoicePdfDocument({
               {invoice.due_date ? ` (by ${formatDateUK(invoice.due_date)})` : ''}. Please quote
               invoice number {invoice.invoice_number} with your remittance.
             </Text>
+            {bankRows.length > 0 ? (
+              <View style={styles.bankGrid}>
+                {bankRows.map(([label, value]) => (
+                  <View key={label} style={styles.bankRow}>
+                    <Text style={styles.bankKey}>{label}</Text>
+                    <Text style={styles.bold}>{value}</Text>
+                  </View>
+                ))}
+                <View style={styles.bankRow}>
+                  <Text style={styles.bankKey}>Reference</Text>
+                  <Text style={styles.bold}>{invoice.invoice_number}</Text>
+                </View>
+              </View>
+            ) : null}
           </View>
         ) : null}
 

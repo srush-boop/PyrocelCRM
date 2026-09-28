@@ -25,6 +25,7 @@ import {
   GripVertical,
   Check,
   MapPin,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -35,6 +36,21 @@ import {
   type AppliedRamsSuggestion,
 } from '@/components/rams/rams-ai-assistant'
 import { findNearestHospital } from '@/lib/ai/find-nearest-hospital'
+import {
+  getHospitalsByPostcode,
+  generateEmergencyText,
+  type Hospital,
+} from '@/lib/rams/uk-hospitals'
+import type { EmergencyHospitalInfo } from '@/lib/rams/types'
+
+type NearbyHospital = Hospital & { distance: number }
+
+const UK_POSTCODE_RE = /\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})\b/i
+
+function extractUkPostcode(text: string): string | null {
+  const m = text.match(UK_POSTCODE_RE)
+  return m ? `${m[1]} ${m[2]}`.toUpperCase() : null
+}
 import {
   createRamsDocument,
   updateRamsDocument,
@@ -86,6 +102,7 @@ export function RamsWizard({
   const router = useRouter()
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
+  const [additionalPpeInput, setAdditionalPpeInput] = useState('')
 
   const activityTemplates = templates.filter(
     (t) => t.template_type !== 'system' && t.is_active,
@@ -107,6 +124,7 @@ export function RamsWizard({
     plannedEndDate: existing?.planned_end_date ?? '',
     noEndDate: existing?.no_end_date ?? false,
     ppeRequirements: existing?.ppe_requirements ?? [],
+    additionalPpe: existing?.additional_ppe ?? [],
     equipmentList: existing?.equipment_list ?? [],
     emergencyProcedures: existing?.emergency_procedures ?? '',
     hospitalName: existing?.emergency_hospital_info?.name ?? '',
@@ -130,6 +148,22 @@ export function RamsWizard({
   const [equipSearch, setEquipSearch] = useState('')
   const [findingHospital, setFindingHospital] = useState(false)
   const [hospitalNote, setHospitalNote] = useState<string | null>(null)
+  const [hospitalOptions, setHospitalOptions] = useState<NearbyHospital[]>([])
+  const [hospitalExtra, setHospitalExtra] = useState<Partial<EmergencyHospitalInfo>>(() => {
+    const h = existing?.emergency_hospital_info
+    return h
+      ? {
+          name: h.name,
+          hospital_id: h.hospital_id ?? null,
+          type: h.type ?? null,
+          postcode: h.postcode ?? null,
+          opening_hours: h.opening_hours ?? null,
+          services: h.services ?? null,
+          emergency_text: h.emergency_text ?? null,
+          distance: h.distance ?? null,
+        }
+      : {}
+  })
 
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
@@ -325,6 +359,25 @@ export function RamsWizard({
     }))
   }
 
+  function addAdditionalPpe() {
+    const item = additionalPpeInput.trim()
+    if (!item) return
+    setForm((f) => {
+      const exists = [...f.ppeRequirements, ...f.additionalPpe].some(
+        (p) => p.toLowerCase() === item.toLowerCase(),
+      )
+      return exists ? f : { ...f, additionalPpe: [...f.additionalPpe, item] }
+    })
+    setAdditionalPpeInput('')
+  }
+
+  function removeAdditionalPpe(item: string) {
+    setForm((f) => ({
+      ...f,
+      additionalPpe: f.additionalPpe.filter((p) => p !== item),
+    }))
+  }
+
   function addEquipment() {
     const v = equipInput.trim()
     if (!v) return
@@ -351,6 +404,27 @@ export function RamsWizard({
   // the author already has. Equipment already present is left untouched.
   function selectSystemType(systemTypeId: string) {
     set('systemTypeId', systemTypeId)
+    const sysHazards = systemHazards.filter((h) => h.system_type_id === systemTypeId)
+    const have = new Set(selectedHazards.map((s) => s.description.trim().toLowerCase()))
+    const additions: SelectedHazard[] = sysHazards
+      .filter((h) => !have.has(h.hazard_name.trim().toLowerCase()))
+      .map((h) => ({
+        id: uid(),
+        category: h.category,
+        description: h.hazard_name,
+        potential_consequences: h.potential_consequences ?? h.hazard_description,
+        likelihood: h.default_likelihood,
+        severity: h.default_severity,
+        residual_likelihood: Math.max(1, h.default_likelihood - 1),
+        residual_severity: h.default_severity,
+        controls: h.standard_controls ?? [],
+      }))
+    if (additions.length > 0) {
+      setSelectedHazards((prev) => [...prev, ...additions])
+      toast.success(
+        `Added ${additions.length} system-specific hazard${additions.length === 1 ? '' : 's'}`,
+      )
+    }
     const sys = systemTemplates.find((t) => t.id === systemTypeId)
     const defaults = sys?.default_equipment ?? []
     if (defaults.length === 0) return
@@ -383,19 +457,32 @@ export function RamsWizard({
     )
   }
 
-  // Looks up the nearest A&E hospital from the site address (falling back to the
-  // work location) and fills the emergency fields. Results are AI-generated, so
-  // the returned caveat is surfaced for the author to verify.
+  // Uses the site postcode against the built-in UK A&E/UTC list and offers the
+  // 5 nearest to pick from. Falls back to the AI lookup when no postcode can be
+  // resolved (its caveat is surfaced for the author to verify).
   async function handleFindHospital() {
     const site = sites.find((s) => s.id === form.siteId)
-    const location = (site?.address || form.workLocation || '').trim()
+    const location = [site?.address, site?.postcode, form.workLocation]
+      .filter(Boolean)
+      .join(' ')
+      .trim()
     if (!location) {
       toast.error('Add a site or work location first so we can find the nearest hospital.')
       return
     }
     setFindingHospital(true)
     setHospitalNote(null)
+    setHospitalOptions([])
     try {
+      const postcode = site?.postcode || extractUkPostcode(location)
+      if (postcode) {
+        const nearest = await getHospitalsByPostcode(postcode)
+        if (nearest.some((h) => h.distance > 0)) {
+          setHospitalOptions(nearest.slice(0, 5))
+          return
+        }
+      }
+
       const res = await findNearestHospital({ location })
       if (!res.ok || !res.hospital) {
         toast.error(res.error ?? 'Could not find a hospital.')
@@ -417,6 +504,31 @@ export function RamsWizard({
     } finally {
       setFindingHospital(false)
     }
+  }
+
+  function selectHospital(h: NearbyHospital) {
+    const emergencyText = generateEmergencyText(h)
+    setForm((f) => ({
+      ...f,
+      hospitalName: h.name,
+      hospitalAddress: `${h.address}, ${h.postcode}`,
+      hospitalPhone: h.phone,
+      emergencyProcedures: f.emergencyProcedures.trim()
+        ? f.emergencyProcedures
+        : emergencyText,
+    }))
+    setHospitalExtra({
+      name: h.name,
+      hospital_id: h.id,
+      type: h.type,
+      postcode: h.postcode,
+      opening_hours: h.openingHours,
+      services: h.services,
+      emergency_text: emergencyText,
+      distance: `${h.distance.toFixed(1)} miles`,
+    })
+    setHospitalOptions([])
+    toast.success(`${h.name} added — please verify the details.`)
   }
 
   function addPerson() {
@@ -460,6 +572,7 @@ export function RamsWizard({
       noEndDate: form.noEndDate,
       selectedHazards,
       ppeRequirements: form.ppeRequirements,
+      additionalPpe: form.additionalPpe,
       equipmentList: form.equipmentList,
       methodSteps: methodSteps.filter((s) => s.description.trim()),
       keyPersonnel: keyPersonnel.filter((p) => p.name.trim()),
@@ -467,10 +580,16 @@ export function RamsWizard({
       emergencyHospitalInfo:
         form.hospitalName || form.hospitalAddress || form.hospitalPhone
           ? {
+              ...(hospitalExtra.name && hospitalExtra.name === form.hospitalName
+                ? hospitalExtra
+                : {}),
               name: form.hospitalName || null,
               address: form.hospitalAddress || null,
               phone: form.hospitalPhone || null,
-              distance: null,
+              distance:
+                hospitalExtra.name === form.hospitalName
+                  ? (hospitalExtra.distance ?? null)
+                  : null,
             }
           : null,
       siteSpecificConsiderations: form.siteSpecificConsiderations || null,
@@ -689,6 +808,9 @@ export function RamsWizard({
                   <Label className="text-xs uppercase text-muted-foreground">
                     System-specific hazards
                   </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Loaded automatically for the selected system. Tap one to remove or re-add it.
+                  </p>
                   <div className="flex flex-wrap gap-2">
                     {systemHazards
                       .filter((h) => h.system_type_id === form.systemTypeId)
@@ -880,23 +1002,86 @@ export function RamsWizard({
             <CardHeader>
               <CardTitle>PPE Requirements</CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-2">
-              {PPE_OPTIONS.map((item) => (
-                <label
-                  key={item}
-                  className={cn(
-                    'flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm',
-                    form.ppeRequirements.includes(item) &&
-                      'border-primary bg-primary/5',
-                  )}
+            <CardContent className="flex flex-col gap-5">
+              <div className="flex flex-col gap-2">
+                <Label className="text-xs uppercase text-muted-foreground">
+                  Required PPE
+                </Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {PPE_OPTIONS.map((item) => (
+                    <label
+                      key={item}
+                      className={cn(
+                        'flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm',
+                        form.ppeRequirements.includes(item) &&
+                          'border-primary bg-primary/5',
+                      )}
+                    >
+                      <Checkbox
+                        checked={form.ppeRequirements.includes(item)}
+                        onCheckedChange={() => togglePpe(item)}
+                      />
+                      {item}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label
+                  htmlFor="additional-ppe"
+                  className="text-xs uppercase text-muted-foreground"
                 >
-                  <Checkbox
-                    checked={form.ppeRequirements.includes(item)}
-                    onCheckedChange={() => togglePpe(item)}
+                  Additional PPE (task or site specific)
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="additional-ppe"
+                    value={additionalPpeInput}
+                    placeholder="e.g. Arc flash face shield"
+                    onChange={(e) => setAdditionalPpeInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (
+                        e.key === 'Enter' &&
+                        !e.nativeEvent.isComposing &&
+                        e.keyCode !== 229
+                      ) {
+                        e.preventDefault()
+                        addAdditionalPpe()
+                      }
+                    }}
                   />
-                  {item}
-                </label>
-              ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={addAdditionalPpe}
+                    disabled={!additionalPpeInput.trim()}
+                  >
+                    <Plus className="size-4" aria-hidden="true" />
+                    Add
+                  </Button>
+                </div>
+                {form.additionalPpe.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {form.additionalPpe.map((item) => (
+                      <Badge key={item} variant="secondary" className="gap-1 pr-1">
+                        {item}
+                        <button
+                          type="button"
+                          onClick={() => removeAdditionalPpe(item)}
+                          className="rounded-sm p-0.5 hover:bg-muted-foreground/20"
+                          aria-label={`Remove ${item}`}
+                        >
+                          <X className="size-3" aria-hidden="true" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Add any extra PPE this job needs beyond the standard list.
+                  </p>
+                )}
+              </div>
             </CardContent>
           </Card>
           <Card>
@@ -1149,6 +1334,44 @@ export function RamsWizard({
                   Find nearest hospital
                 </Button>
               </div>
+              {hospitalOptions.length > 0 && (
+                <div className="rounded-md border">
+                  <p className="border-b px-3 py-2 text-xs text-muted-foreground">
+                    Nearest A&amp;E / Urgent Treatment Centres to the site. Pick one to fill the details.
+                  </p>
+                  <ul className="divide-y">
+                    {hospitalOptions.map((h) => (
+                      <li key={h.id}>
+                        <button
+                          type="button"
+                          onClick={() => selectHospital(h)}
+                          className="flex w-full items-start justify-between gap-3 px-3 py-2 text-left hover:bg-muted/60"
+                        >
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-medium">{h.name}</span>
+                              <Badge variant="outline" className="text-[10px]">
+                                {h.type}
+                              </Badge>
+                            </div>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {h.address}, {h.postcode} · {h.phone}
+                            </p>
+                          </div>
+                          <span className="shrink-0 text-xs font-medium tabular-nums">
+                            {h.distance.toFixed(1)} mi
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {hospitalExtra.name === form.hospitalName && hospitalExtra.services?.length ? (
+                <p className="text-xs text-muted-foreground">
+                  {hospitalExtra.type} · {hospitalExtra.opening_hours} · {hospitalExtra.services.join(', ')}
+                </p>
+              ) : null}
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="grid gap-2">
                   <Label>Hospital Name</Label>
@@ -1210,8 +1433,12 @@ export function RamsWizard({
             />
             <ReviewRow label="Hazards" value={`${selectedHazards.length} identified`} />
             <ReviewRow
-              label="PPE"
+              label="Required PPE"
               value={form.ppeRequirements.join(', ') || '—'}
+            />
+            <ReviewRow
+              label="Additional PPE"
+              value={form.additionalPpe.join(', ') || '—'}
             />
             <ReviewRow
               label="Method steps"

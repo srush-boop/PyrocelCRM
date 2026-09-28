@@ -218,14 +218,17 @@ function buildInitialResults(
   }
 
   if (panels.length === 0) return items.flatMap((item) => makeRows(item, null))
-  return panels.flatMap((panel) => {
+  const panelItems = items.filter((item) => !item.siteLevel)
+  const siteLevelItems = items.filter((item) => item.siteLevel)
+  const panelRows = panels.flatMap((panel) => {
     // Panel rotation: this panel may use its own template + level on this visit.
     const rotated = panelChecklists[panel.id]
     if (rotated) {
       return rotated.template.items.flatMap((item) => makeRows(item, panel, rotated.level))
     }
-    return items.flatMap((item) => makeRows(item, panel))
+    return panelItems.flatMap((item) => makeRows(item, panel))
   })
+  return [...panelRows, ...siteLevelItems.flatMap((item) => makeRows(item, null))]
 }
 
 // Evaluates whether a conditional rule is currently "active" given the parent
@@ -1917,6 +1920,7 @@ export function TaskExecution({
                               {canEdit && (
                                 <ReportNotesAssist
                                   label="AI describe"
+                                  seedText={result.notes || ''}
                                   input={{
                                     mode: 'defect',
                                     serviceType: serviceType?.name,

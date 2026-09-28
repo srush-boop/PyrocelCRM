@@ -189,6 +189,7 @@ export interface RamsDocumentInput {
   noEndDate: boolean
   selectedHazards: SelectedHazard[]
   ppeRequirements: string[]
+  additionalPpe: string[]
   equipmentList: string[]
   methodSteps: MethodStep[]
   keyPersonnel: KeyPerson[]
@@ -213,6 +214,7 @@ function toRow(input: RamsDocumentInput, projectId: string | null) {
     no_end_date: input.noEndDate,
     selected_hazards: input.selectedHazards,
     ppe_requirements: input.ppeRequirements,
+    additional_ppe: (input.additionalPpe ?? []).map((p) => p.trim()).filter(Boolean),
     equipment_list: input.equipmentList,
     method_steps: input.methodSteps,
     key_personnel: input.keyPersonnel,

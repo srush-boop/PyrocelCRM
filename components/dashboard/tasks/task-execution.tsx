@@ -1920,6 +1920,7 @@ export function TaskExecution({
                               {canEdit && (
                                 <ReportNotesAssist
                                   label="AI describe"
+                                  seedText={result.notes || ''}
                                   input={{
                                     mode: 'defect',
                                     serviceType: serviceType?.name,

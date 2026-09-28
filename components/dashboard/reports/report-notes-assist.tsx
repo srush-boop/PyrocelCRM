@@ -26,6 +26,11 @@ interface ReportNotesAssistProps {
   // "defect" shows a small observation box; "summary" generates straight away.
   disabled?: boolean
   label?: string
+  // Text the engineer already typed into the field. When present in "defect"
+  // mode, opening the assist generates immediately from it instead of asking
+  // them to retype it.
+  seedText?: string
+  seedLabel?: string
 }
 
 export function ReportNotesAssist({
@@ -33,19 +38,30 @@ export function ReportNotesAssist({
   onInsert,
   disabled,
   label = 'AI assist',
+  seedText,
+  seedLabel = 'AI rewrite',
 }: ReportNotesAssistProps) {
   const [open, setOpen] = useState(false)
   const [observation, setObservation] = useState('')
   const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(false)
   const isDefect = input.mode === 'defect'
+  const seed = isDefect ? seedText?.trim() ?? '' : ''
 
-  async function generate() {
+  function handleOpenChange(next: boolean) {
+    setOpen(next)
+    if (next && seed) {
+      setObservation(seed)
+      void generate(seed)
+    }
+  }
+
+  async function generate(observationOverride?: string) {
     setLoading(true)
     setDraft('')
     const res = await suggestReportNotes({
       ...input,
-      observation: isDefect ? observation : undefined,
+      observation: isDefect ? observationOverride ?? observation : undefined,
     })
     setLoading(false)
     if (!res.ok || !res.text) {
@@ -65,7 +81,7 @@ export function ReportNotesAssist({
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           type="button"
@@ -74,8 +90,12 @@ export function ReportNotesAssist({
           disabled={disabled}
           className="gap-1.5"
         >
-          <Sparkles className="h-3.5 w-3.5" />
-          {label}
+          {seed ? (
+            <RefreshCw className="h-3.5 w-3.5" />
+          ) : (
+            <Sparkles className="h-3.5 w-3.5" />
+          )}
+          {seed ? seedLabel : label}
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -89,7 +109,9 @@ export function ReportNotesAssist({
             {isDefect ? 'Describe the fault' : 'Draft engineer summary'}
           </p>
           <p className="text-xs text-muted-foreground">
-            {isDefect
+            {isDefect && seed
+              ? 'Rewritten from your note. Edit the note below and regenerate if needed.'
+              : isDefect
               ? 'Add a short note and the assistant will write a technical defect description.'
               : 'Generates a technical summary from your checklist results.'}
           </p>
@@ -130,7 +152,7 @@ export function ReportNotesAssist({
                 type="button"
                 size="sm"
                 variant="ghost"
-                onClick={generate}
+                onClick={() => generate()}
                 disabled={loading}
               >
                 {loading ? (
@@ -147,7 +169,7 @@ export function ReportNotesAssist({
             type="button"
             size="sm"
             className="w-full"
-            onClick={generate}
+            onClick={() => generate()}
             disabled={loading || (isDefect && !observation.trim())}
           >
             {loading ? (

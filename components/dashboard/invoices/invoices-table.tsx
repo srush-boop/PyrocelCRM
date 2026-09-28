@@ -26,7 +26,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { ReceiptText, FileCheck2, Send, Loader2, X, FileSpreadsheet } from 'lucide-react'
+import {
+  ReceiptText,
+  FileCheck2,
+  Send,
+  Loader2,
+  X,
+  FileSpreadsheet,
+  Undo2,
+  Briefcase,
+  RefreshCw,
+  PenLine,
+  Siren,
+  ClipboardCheck,
+  Wrench,
+  type LucideIcon,
+} from 'lucide-react'
 import type { InvoiceStatus } from '@/lib/types/database'
 import { formatPence, INVOICE_STATUS_LABELS } from '@/lib/billing/invoices'
 import type { InvoiceRow } from '@/app/(dashboard)/dashboard/invoices/page'
@@ -83,6 +98,31 @@ function billToLabel(inv: InvoiceRow): string {
   return inv.billing_account?.name || inv.bill_to_name || inv.client?.name || ''
 }
 
+type InvoiceSource = { label: string; icon: LucideIcon; className: string }
+
+// Where an invoice was derived from, most specific first.
+function invoiceSource(inv: InvoiceRow): InvoiceSource {
+  if (inv.document_type === 'credit_note') {
+    return { label: 'Credit note', icon: Undo2, className: 'text-muted-foreground' }
+  }
+  if (inv.job_id) return { label: 'Job', icon: Briefcase, className: 'text-indigo-700' }
+  if (inv.origin === 'recurring') {
+    return { label: 'Recurring charge', icon: RefreshCw, className: 'text-teal-700' }
+  }
+  const calls = inv.calls ?? []
+  if (calls.length === 0) {
+    return { label: 'Manual invoice', icon: PenLine, className: 'text-muted-foreground' }
+  }
+  const plural = calls.length > 1 ? ` ×${calls.length}` : ''
+  if (calls.some((c) => c.is_emergency)) {
+    return { label: `Emergency call${plural}`, icon: Siren, className: 'text-red-700' }
+  }
+  if (calls.every((c) => c.site_service_id)) {
+    return { label: `Service call${plural}`, icon: ClipboardCheck, className: 'text-blue-700' }
+  }
+  return { label: `Reactive call${plural}`, icon: Wrench, className: 'text-amber-700' }
+}
+
 // Whether a row satisfies every active filter dimension. Within a dimension the
 // selected values are OR-ed; across dimensions they are AND-ed. An empty
 // dimension is ignored (no filtering).
@@ -97,6 +137,7 @@ function matchesFilters(inv: InvoiceRow, f: InvoiceFilterState): boolean {
       inv.site?.name,
       inv.client?.name,
       inv.billing_account?.name,
+      invoiceSource(inv).label,
     ]
       .filter(Boolean)
       .join(' ')
@@ -426,6 +467,22 @@ export function InvoicesTable({
                       {inv.invoice_number}
                     </Link>
                     {/* Site name as a muted description sub-line. */}
+                    {(() => {
+                      const source = invoiceSource(inv)
+                      const Icon = source.icon
+                      return (
+                        <p
+                          className={cn(
+                            'mt-0.5 flex items-center gap-1 text-xs font-medium',
+                            source.className,
+                          )}
+                        >
+                          <Icon className="h-3 w-3 shrink-0" aria-hidden="true" />
+                          <span className="sr-only">Source: </span>
+                          {source.label}
+                        </p>
+                      )
+                    })()}
                     {inv.site?.name && (
                       <p className="text-xs font-normal text-muted-foreground">{inv.site.name}</p>
                     )}

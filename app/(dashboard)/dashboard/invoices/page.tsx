@@ -33,7 +33,7 @@ export default async function InvoicesPage() {
     supabase
       .from('invoices')
       .select(
-        'id, invoice_number, status, financial_year, total_pence, issue_date, due_date, created_at, bill_to_name, bill_to_email, document_type, sent_at, sage_exported_at, site:sites(name), billing_account:billing_accounts(name), client:clients(name)',
+        'id, invoice_number, status, financial_year, total_pence, issue_date, due_date, created_at, bill_to_name, bill_to_email, document_type, sent_at, sage_exported_at, origin, job_id, calls:tasks(is_emergency, site_service_id), site:sites(name), billing_account:billing_accounts(name), client:clients(name)',
       )
       .order('created_at', { ascending: false })
       .limit(500),
@@ -132,7 +132,11 @@ export interface InvoiceRow
     | 'document_type'
     | 'sent_at'
     | 'sage_exported_at'
+    | 'origin'
+    | 'job_id'
   > {
+  /** Calls invoiced on this invoice (tasks.invoice_id) — used to derive its source. */
+  calls: { is_emergency: boolean | null; site_service_id: string | null }[] | null
   site: { name: string } | null
   billing_account: { name: string } | null
   client: { name: string } | null

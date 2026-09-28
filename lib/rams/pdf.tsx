@@ -413,7 +413,7 @@ function RamsPdfDocument({
 
         <Section number="5" title="PPE &amp; Equipment Requirements">
           <View style={{ marginBottom: 15 }}>
-            <Text style={[styles.controlsTitle, { marginBottom: 10 }]}>Personal Protective Equipment (PPE)</Text>
+            <Text style={[styles.controlsTitle, { marginBottom: 10 }]}>Required PPE</Text>
             <View style={styles.ppeGrid}>
               {doc.ppe_requirements?.length ? (
                 doc.ppe_requirements.map((ppe, idx) => (
@@ -426,6 +426,18 @@ function RamsPdfDocument({
               )}
             </View>
           </View>
+          {doc.additional_ppe?.length ? (
+            <View style={{ marginBottom: 15 }}>
+              <Text style={[styles.controlsTitle, { marginBottom: 10 }]}>Additional PPE (task / site specific)</Text>
+              <View style={styles.ppeGrid}>
+                {doc.additional_ppe.map((ppe, idx) => (
+                  <Text key={idx} style={styles.ppeBadge}>
+                    {ppe}
+                  </Text>
+                ))}
+              </View>
+            </View>
+          ) : null}
           {doc.equipment_list?.length ? (
             <View style={styles.equipmentList}>
               <Text style={[styles.controlsTitle, { marginBottom: 10 }]}>Equipment Required</Text>

@@ -25,6 +25,7 @@ import {
   GripVertical,
   Check,
   MapPin,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -101,6 +102,7 @@ export function RamsWizard({
   const router = useRouter()
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
+  const [additionalPpeInput, setAdditionalPpeInput] = useState('')
 
   const activityTemplates = templates.filter(
     (t) => t.template_type !== 'system' && t.is_active,
@@ -122,6 +124,7 @@ export function RamsWizard({
     plannedEndDate: existing?.planned_end_date ?? '',
     noEndDate: existing?.no_end_date ?? false,
     ppeRequirements: existing?.ppe_requirements ?? [],
+    additionalPpe: existing?.additional_ppe ?? [],
     equipmentList: existing?.equipment_list ?? [],
     emergencyProcedures: existing?.emergency_procedures ?? '',
     hospitalName: existing?.emergency_hospital_info?.name ?? '',
@@ -356,6 +359,25 @@ export function RamsWizard({
     }))
   }
 
+  function addAdditionalPpe() {
+    const item = additionalPpeInput.trim()
+    if (!item) return
+    setForm((f) => {
+      const exists = [...f.ppeRequirements, ...f.additionalPpe].some(
+        (p) => p.toLowerCase() === item.toLowerCase(),
+      )
+      return exists ? f : { ...f, additionalPpe: [...f.additionalPpe, item] }
+    })
+    setAdditionalPpeInput('')
+  }
+
+  function removeAdditionalPpe(item: string) {
+    setForm((f) => ({
+      ...f,
+      additionalPpe: f.additionalPpe.filter((p) => p !== item),
+    }))
+  }
+
   function addEquipment() {
     const v = equipInput.trim()
     if (!v) return
@@ -382,6 +404,27 @@ export function RamsWizard({
   // the author already has. Equipment already present is left untouched.
   function selectSystemType(systemTypeId: string) {
     set('systemTypeId', systemTypeId)
+    const sysHazards = systemHazards.filter((h) => h.system_type_id === systemTypeId)
+    const have = new Set(selectedHazards.map((s) => s.description.trim().toLowerCase()))
+    const additions: SelectedHazard[] = sysHazards
+      .filter((h) => !have.has(h.hazard_name.trim().toLowerCase()))
+      .map((h) => ({
+        id: uid(),
+        category: h.category,
+        description: h.hazard_name,
+        potential_consequences: h.potential_consequences ?? h.hazard_description,
+        likelihood: h.default_likelihood,
+        severity: h.default_severity,
+        residual_likelihood: Math.max(1, h.default_likelihood - 1),
+        residual_severity: h.default_severity,
+        controls: h.standard_controls ?? [],
+      }))
+    if (additions.length > 0) {
+      setSelectedHazards((prev) => [...prev, ...additions])
+      toast.success(
+        `Added ${additions.length} system-specific hazard${additions.length === 1 ? '' : 's'}`,
+      )
+    }
     const sys = systemTemplates.find((t) => t.id === systemTypeId)
     const defaults = sys?.default_equipment ?? []
     if (defaults.length === 0) return
@@ -529,6 +572,7 @@ export function RamsWizard({
       noEndDate: form.noEndDate,
       selectedHazards,
       ppeRequirements: form.ppeRequirements,
+      additionalPpe: form.additionalPpe,
       equipmentList: form.equipmentList,
       methodSteps: methodSteps.filter((s) => s.description.trim()),
       keyPersonnel: keyPersonnel.filter((p) => p.name.trim()),
@@ -764,6 +808,9 @@ export function RamsWizard({
                   <Label className="text-xs uppercase text-muted-foreground">
                     System-specific hazards
                   </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Loaded automatically for the selected system. Tap one to remove or re-add it.
+                  </p>
                   <div className="flex flex-wrap gap-2">
                     {systemHazards
                       .filter((h) => h.system_type_id === form.systemTypeId)
@@ -955,23 +1002,86 @@ export function RamsWizard({
             <CardHeader>
               <CardTitle>PPE Requirements</CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-2">
-              {PPE_OPTIONS.map((item) => (
-                <label
-                  key={item}
-                  className={cn(
-                    'flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm',
-                    form.ppeRequirements.includes(item) &&
-                      'border-primary bg-primary/5',
-                  )}
+            <CardContent className="flex flex-col gap-5">
+              <div className="flex flex-col gap-2">
+                <Label className="text-xs uppercase text-muted-foreground">
+                  Required PPE
+                </Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {PPE_OPTIONS.map((item) => (
+                    <label
+                      key={item}
+                      className={cn(
+                        'flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm',
+                        form.ppeRequirements.includes(item) &&
+                          'border-primary bg-primary/5',
+                      )}
+                    >
+                      <Checkbox
+                        checked={form.ppeRequirements.includes(item)}
+                        onCheckedChange={() => togglePpe(item)}
+                      />
+                      {item}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label
+                  htmlFor="additional-ppe"
+                  className="text-xs uppercase text-muted-foreground"
                 >
-                  <Checkbox
-                    checked={form.ppeRequirements.includes(item)}
-                    onCheckedChange={() => togglePpe(item)}
+                  Additional PPE (task or site specific)
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="additional-ppe"
+                    value={additionalPpeInput}
+                    placeholder="e.g. Arc flash face shield"
+                    onChange={(e) => setAdditionalPpeInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (
+                        e.key === 'Enter' &&
+                        !e.nativeEvent.isComposing &&
+                        e.keyCode !== 229
+                      ) {
+                        e.preventDefault()
+                        addAdditionalPpe()
+                      }
+                    }}
                   />
-                  {item}
-                </label>
-              ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={addAdditionalPpe}
+                    disabled={!additionalPpeInput.trim()}
+                  >
+                    <Plus className="size-4" aria-hidden="true" />
+                    Add
+                  </Button>
+                </div>
+                {form.additionalPpe.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {form.additionalPpe.map((item) => (
+                      <Badge key={item} variant="secondary" className="gap-1 pr-1">
+                        {item}
+                        <button
+                          type="button"
+                          onClick={() => removeAdditionalPpe(item)}
+                          className="rounded-sm p-0.5 hover:bg-muted-foreground/20"
+                          aria-label={`Remove ${item}`}
+                        >
+                          <X className="size-3" aria-hidden="true" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Add any extra PPE this job needs beyond the standard list.
+                  </p>
+                )}
+              </div>
             </CardContent>
           </Card>
           <Card>
@@ -1323,8 +1433,12 @@ export function RamsWizard({
             />
             <ReviewRow label="Hazards" value={`${selectedHazards.length} identified`} />
             <ReviewRow
-              label="PPE"
+              label="Required PPE"
               value={form.ppeRequirements.join(', ') || '—'}
+            />
+            <ReviewRow
+              label="Additional PPE"
+              value={form.additionalPpe.join(', ') || '—'}
             />
             <ReviewRow
               label="Method steps"

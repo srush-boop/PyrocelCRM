@@ -172,6 +172,7 @@ export interface RamsDocument {
   no_end_date: boolean | null
   selected_hazards: SelectedHazard[]
   ppe_requirements: string[]
+  additional_ppe: string[] | null
   equipment_list: string[]
   emergency_procedures: string | null
   emergency_hospital_info: EmergencyHospitalInfo | null

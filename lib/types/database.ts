@@ -1367,6 +1367,8 @@ export interface Site {
   authorised_works_limit_pence: number | null
   /** PO to stamp on non-recurring calls that fall within the authorised limit. */
   authorised_works_po: string | null
+  /** When true, every invoice for this site's recurring services must carry a PO number. */
+  requires_po_recurring: boolean
   site_id_cash: string | null
   // Unique Property Reference Number (UK national property identifier).
   uprn: string | null

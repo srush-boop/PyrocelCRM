@@ -77,6 +77,7 @@ export function EditSiteDialog({
     status: site.status || 'live',
     notes: site.notes || '',
     po_number: site.po_number || '',
+    requires_po_recurring: site.requires_po_recurring ?? false,
     authorised_works_limit:
       site.authorised_works_limit_pence != null
         ? (site.authorised_works_limit_pence / 100).toString()
@@ -472,6 +473,22 @@ export function EditSiteDialog({
                   value={formData.po_number}
                   onChange={(e) => setFormData({ ...formData, po_number: e.target.value })}
                   placeholder="Customer purchase order for this site"
+                />
+              </div>
+              <div className="flex items-start justify-between gap-4 rounded-md bg-muted/50 p-3">
+                <div className="grid gap-1">
+                  <Label htmlFor="edit_requires_po_recurring" className="text-sm font-medium">
+                    PO required on recurring invoices
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Every invoice for this site&apos;s recurring services must have a PO number
+                    before it can be issued.
+                  </p>
+                </div>
+                <Switch
+                  id="edit_requires_po_recurring"
+                  checked={formData.requires_po_recurring}
+                  onCheckedChange={(v) => setFormData({ ...formData, requires_po_recurring: v })}
                 />
               </div>
               <div className="grid gap-3 sm:grid-cols-2">

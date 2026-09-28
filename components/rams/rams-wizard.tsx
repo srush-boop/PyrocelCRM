@@ -36,6 +36,21 @@ import {
 } from '@/components/rams/rams-ai-assistant'
 import { findNearestHospital } from '@/lib/ai/find-nearest-hospital'
 import {
+  getHospitalsByPostcode,
+  generateEmergencyText,
+  type Hospital,
+} from '@/lib/rams/uk-hospitals'
+import type { EmergencyHospitalInfo } from '@/lib/rams/types'
+
+type NearbyHospital = Hospital & { distance: number }
+
+const UK_POSTCODE_RE = /\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})\b/i
+
+function extractUkPostcode(text: string): string | null {
+  const m = text.match(UK_POSTCODE_RE)
+  return m ? `${m[1]} ${m[2]}`.toUpperCase() : null
+}
+import {
   createRamsDocument,
   updateRamsDocument,
   type RamsDocumentInput,
@@ -130,6 +145,22 @@ export function RamsWizard({
   const [equipSearch, setEquipSearch] = useState('')
   const [findingHospital, setFindingHospital] = useState(false)
   const [hospitalNote, setHospitalNote] = useState<string | null>(null)
+  const [hospitalOptions, setHospitalOptions] = useState<NearbyHospital[]>([])
+  const [hospitalExtra, setHospitalExtra] = useState<Partial<EmergencyHospitalInfo>>(() => {
+    const h = existing?.emergency_hospital_info
+    return h
+      ? {
+          name: h.name,
+          hospital_id: h.hospital_id ?? null,
+          type: h.type ?? null,
+          postcode: h.postcode ?? null,
+          opening_hours: h.opening_hours ?? null,
+          services: h.services ?? null,
+          emergency_text: h.emergency_text ?? null,
+          distance: h.distance ?? null,
+        }
+      : {}
+  })
 
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
@@ -383,19 +414,32 @@ export function RamsWizard({
     )
   }
 
-  // Looks up the nearest A&E hospital from the site address (falling back to the
-  // work location) and fills the emergency fields. Results are AI-generated, so
-  // the returned caveat is surfaced for the author to verify.
+  // Uses the site postcode against the built-in UK A&E/UTC list and offers the
+  // 5 nearest to pick from. Falls back to the AI lookup when no postcode can be
+  // resolved (its caveat is surfaced for the author to verify).
   async function handleFindHospital() {
     const site = sites.find((s) => s.id === form.siteId)
-    const location = (site?.address || form.workLocation || '').trim()
+    const location = [site?.address, site?.postcode, form.workLocation]
+      .filter(Boolean)
+      .join(' ')
+      .trim()
     if (!location) {
       toast.error('Add a site or work location first so we can find the nearest hospital.')
       return
     }
     setFindingHospital(true)
     setHospitalNote(null)
+    setHospitalOptions([])
     try {
+      const postcode = site?.postcode || extractUkPostcode(location)
+      if (postcode) {
+        const nearest = await getHospitalsByPostcode(postcode)
+        if (nearest.some((h) => h.distance > 0)) {
+          setHospitalOptions(nearest.slice(0, 5))
+          return
+        }
+      }
+
       const res = await findNearestHospital({ location })
       if (!res.ok || !res.hospital) {
         toast.error(res.error ?? 'Could not find a hospital.')
@@ -417,6 +461,31 @@ export function RamsWizard({
     } finally {
       setFindingHospital(false)
     }
+  }
+
+  function selectHospital(h: NearbyHospital) {
+    const emergencyText = generateEmergencyText(h)
+    setForm((f) => ({
+      ...f,
+      hospitalName: h.name,
+      hospitalAddress: `${h.address}, ${h.postcode}`,
+      hospitalPhone: h.phone,
+      emergencyProcedures: f.emergencyProcedures.trim()
+        ? f.emergencyProcedures
+        : emergencyText,
+    }))
+    setHospitalExtra({
+      name: h.name,
+      hospital_id: h.id,
+      type: h.type,
+      postcode: h.postcode,
+      opening_hours: h.openingHours,
+      services: h.services,
+      emergency_text: emergencyText,
+      distance: `${h.distance.toFixed(1)} miles`,
+    })
+    setHospitalOptions([])
+    toast.success(`${h.name} added — please verify the details.`)
   }
 
   function addPerson() {
@@ -467,10 +536,16 @@ export function RamsWizard({
       emergencyHospitalInfo:
         form.hospitalName || form.hospitalAddress || form.hospitalPhone
           ? {
+              ...(hospitalExtra.name && hospitalExtra.name === form.hospitalName
+                ? hospitalExtra
+                : {}),
               name: form.hospitalName || null,
               address: form.hospitalAddress || null,
               phone: form.hospitalPhone || null,
-              distance: null,
+              distance:
+                hospitalExtra.name === form.hospitalName
+                  ? (hospitalExtra.distance ?? null)
+                  : null,
             }
           : null,
       siteSpecificConsiderations: form.siteSpecificConsiderations || null,
@@ -1149,6 +1224,44 @@ export function RamsWizard({
                   Find nearest hospital
                 </Button>
               </div>
+              {hospitalOptions.length > 0 && (
+                <div className="rounded-md border">
+                  <p className="border-b px-3 py-2 text-xs text-muted-foreground">
+                    Nearest A&amp;E / Urgent Treatment Centres to the site. Pick one to fill the details.
+                  </p>
+                  <ul className="divide-y">
+                    {hospitalOptions.map((h) => (
+                      <li key={h.id}>
+                        <button
+                          type="button"
+                          onClick={() => selectHospital(h)}
+                          className="flex w-full items-start justify-between gap-3 px-3 py-2 text-left hover:bg-muted/60"
+                        >
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-medium">{h.name}</span>
+                              <Badge variant="outline" className="text-[10px]">
+                                {h.type}
+                              </Badge>
+                            </div>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {h.address}, {h.postcode} · {h.phone}
+                            </p>
+                          </div>
+                          <span className="shrink-0 text-xs font-medium tabular-nums">
+                            {h.distance.toFixed(1)} mi
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {hospitalExtra.name === form.hospitalName && hospitalExtra.services?.length ? (
+                <p className="text-xs text-muted-foreground">
+                  {hospitalExtra.type} · {hospitalExtra.opening_hours} · {hospitalExtra.services.join(', ')}
+                </p>
+              ) : null}
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="grid gap-2">
                   <Label>Hospital Name</Label>

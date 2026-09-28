@@ -51,7 +51,7 @@ export async function loadWizardData(): Promise<{
     supabase.from('clients').select('id, name').order('name'),
     supabase
       .from('sites')
-      .select('id, name, address, client_id, contact_email')
+      .select('id, name, address, postcode, client_id, contact_email')
       .eq('status', 'live')
       .order('name'),
   ])

@@ -50,6 +50,13 @@ export interface EmergencyHospitalInfo {
   address: string | null
   phone: string | null
   distance: string | null
+  // Populated when picked via the nearest-hospital finder (jsonb, optional).
+  hospital_id?: string | null
+  type?: string | null
+  postcode?: string | null
+  opening_hours?: string | null
+  services?: string[] | null
+  emergency_text?: string | null
 }
 
 // A CRM site option offered when linking a RAMS document to an existing site.
@@ -57,6 +64,7 @@ export interface SiteOption {
   id: string
   name: string
   address: string | null
+  postcode?: string | null
   client_id: string | null
   contact_email: string | null
 }

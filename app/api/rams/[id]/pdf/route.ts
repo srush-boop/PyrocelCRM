@@ -23,13 +23,13 @@ export async function GET(
 
   if (!doc) return new NextResponse('Not found', { status: 404 })
 
-  const [settings, clientRes, siteRes, preparerRes] = await Promise.all([
+  const [settings, clientRes, siteRes, preparerRes, approverRes, templateRes, confirmRes] = await Promise.all([
     getRamsSettings(),
     doc.client_id
       ? supabase.from('clients').select('name').eq('id', doc.client_id).maybeSingle()
       : Promise.resolve({ data: null }),
     doc.site_id
-      ? supabase.from('sites').select('name').eq('id', doc.site_id).maybeSingle()
+      ? supabase.from('sites').select('name, address, postcode').eq('id', doc.site_id).maybeSingle()
       : Promise.resolve({ data: null }),
     doc.prepared_by
       ? supabase
@@ -38,7 +38,34 @@ export async function GET(
           .eq('id', doc.prepared_by)
           .maybeSingle()
       : Promise.resolve({ data: null }),
+    doc.approved_by
+      ? supabase.from('profiles').select('full_name').eq('id', doc.approved_by).maybeSingle()
+      : Promise.resolve({ data: null }),
+    doc.template_id
+      ? supabase.from('rams_master_templates').select('name, code').eq('id', doc.template_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    supabase
+      .from('rams_engineer_confirmations')
+      .select('status, confirmed_at, signature_data, engineer:profiles!rams_engineer_confirmations_engineer_id_fkey(full_name)')
+      .eq('rams_id', id)
+      .eq('status', 'confirmed')
+      .order('confirmed_at'),
   ])
+
+  const site = siteRes.data as { name?: string; address?: string | null; postcode?: string | null } | null
+  const template = templateRes.data as { name?: string; code?: string } | null
+  const engineerSignOffs = ((confirmRes.data || []) as unknown as {
+    confirmed_at: string | null
+    signature_data: string | null
+    engineer: { full_name: string | null } | { full_name: string | null }[] | null
+  }[]).map((c) => {
+    const eng = Array.isArray(c.engineer) ? c.engineer[0] : c.engineer
+    return {
+      name: eng?.full_name || 'Engineer',
+      signedAt: c.confirmed_at,
+      signatureUrl: c.signature_data?.startsWith('data:') ? c.signature_data : null,
+    }
+  })
 
   const preparer = preparerRes.data as {
     full_name?: string | null
@@ -51,7 +78,11 @@ export async function GET(
     doc: doc as RamsDocument,
     settings,
     clientName: (clientRes.data as { name?: string } | null)?.name ?? null,
-    siteName: (siteRes.data as { name?: string } | null)?.name ?? null,
+    siteName: site?.name ?? null,
+    siteAddress: [site?.address, site?.postcode].filter(Boolean).join(', ') || null,
+    templateName: template?.name ? `${template.name}${template.code ? ` (${template.code})` : ''}` : null,
+    approvedByName: (approverRes.data as { full_name?: string | null } | null)?.full_name ?? null,
+    engineerSignOffs,
     preparedByName: preparer?.full_name ?? null,
     preparedByRole: preparer?.role_ref?.name ?? preparer?.job_title ?? null,
     // @react-pdf fetches this image server-side (no session), so resolve the

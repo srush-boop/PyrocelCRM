@@ -101,6 +101,7 @@ export function AddSiteDialog({
     status: 'live' as 'live' | 'new' | 'dead',
     notes: '',
     po_number: '',
+    requires_po_recurring: false,
     authorised_works_limit: '',
     authorised_works_po: '',
     has_remote_monitoring: false,
@@ -340,9 +341,10 @@ export function AddSiteDialog({
         property_type_id: '',
         site_id_cash: '',
         uprn: '',
-        internal_reference_no: '',
-        po_number: '',
-        authorised_works_limit: '',
+      internal_reference_no: '',
+      po_number: '',
+      requires_po_recurring: false,
+      authorised_works_limit: '',
         authorised_works_po: '',
         status: 'live',
         notes: '',
@@ -784,6 +786,22 @@ export function AddSiteDialog({
                   value={formData.po_number}
                   onChange={(e) => setFormData({ ...formData, po_number: e.target.value })}
                   placeholder="Customer purchase order for this site"
+                />
+              </div>
+              <div className="flex items-start justify-between gap-4 rounded-md bg-muted/50 p-3">
+                <div className="grid gap-1">
+                  <Label htmlFor="requires_po_recurring" className="text-sm font-medium">
+                    PO required on recurring invoices
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Every invoice for this site&apos;s recurring services must have a PO number
+                    before it can be issued.
+                  </p>
+                </div>
+                <Switch
+                  id="requires_po_recurring"
+                  checked={formData.requires_po_recurring}
+                  onCheckedChange={(v) => setFormData({ ...formData, requires_po_recurring: v })}
                 />
               </div>
               <div className="grid gap-3 sm:grid-cols-2">

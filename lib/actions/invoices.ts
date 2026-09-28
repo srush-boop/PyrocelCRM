@@ -1220,11 +1220,35 @@ export async function issueInvoice(invoiceId: string): Promise<{ error: string |
 
   const { data: inv } = await supabase
     .from('invoices')
-    .select('payment_terms_days, total_pence, on_hold, invoice_number')
+    .select('payment_terms_days, total_pence, on_hold, invoice_number, origin, po_number')
     .eq('id', invoiceId)
     .single()
   if ((inv as { on_hold: boolean } | null)?.on_hold) {
     return { error: 'This invoice is on hold. Release it before issuing.' }
+  }
+
+  // Sites flagged "PO required on recurring invoices" block issuing a recurring
+  // invoice until every one of their lines has a PO (line PO or invoice header PO).
+  const invMeta = inv as { origin: string | null; po_number: string | null } | null
+  if (invMeta?.origin === 'recurring' && !invMeta.po_number?.trim()) {
+    const { data: poLines } = await supabase
+      .from('invoice_line_items')
+      .select('customer_po, site_service:site_services(site:sites(name, requires_po_recurring))')
+      .eq('invoice_id', invoiceId)
+      .not('site_service_id', 'is', null)
+    const missing = new Set<string>()
+    for (const l of (poLines ?? []) as unknown as {
+      customer_po: string | null
+      site_service: { site: { name: string; requires_po_recurring: boolean } | null } | null
+    }[]) {
+      const site = l.site_service?.site
+      if (site?.requires_po_recurring && !l.customer_po?.trim()) missing.add(site.name)
+    }
+    if (missing.size > 0) {
+      return {
+        error: `A PO number is required for recurring invoices at ${Array.from(missing).join(', ')}. Add the PO number to the invoice and try again.`,
+      }
+    }
   }
   const terms = (inv as { payment_terms_days: number } | null)?.payment_terms_days ?? 30
 

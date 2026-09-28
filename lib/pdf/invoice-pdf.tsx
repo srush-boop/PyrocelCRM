@@ -176,7 +176,7 @@ function InvoicePdfDocument({
   const docLabel = isCreditNote ? 'Credit Note' : 'Invoice'
   const companyName = company?.name || 'Pyrocel Ltd'
   const billToName = invoice.bill_to_name || invoice.billing_account?.name || 'Customer'
-  const bankRows = (
+  const bankRows: [string, string][] = (
     [
       ['Bank', company?.bank_name],
       ['Account name', company?.bank_account_name],
@@ -184,8 +184,8 @@ function InvoicePdfDocument({
       ['Account no.', company?.bank_account_number],
       ['IBAN', company?.bank_iban],
       ['BIC / SWIFT', company?.bank_bic],
-    ] as const
-  ).filter((row): row is readonly [string, string] => Boolean(row[1]?.trim()))
+    ] as [string, string | null | undefined][]
+  ).flatMap(([label, value]) => (value?.trim() ? [[label, value.trim()] as [string, string]] : []))
 
   return (
     <Document title={`${docLabel} ${invoice.invoice_number}`}>

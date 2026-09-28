@@ -26,7 +26,12 @@ export interface SessionRow {
   last_heartbeat_at: string | null
   created_at: string
   finished_at: string | null
+  shift_end_prompted_at: string | null
+  shift_extended_count: number
 }
+
+export const SESSION_COLS =
+  'id, user_id, shift_start, shift_end, checkin_interval_minutes, amber_minutes, red_minutes, status, prompt_state, last_checkin_at, next_prompt_at, amber_at, red_at, last_lat, last_lng, last_accuracy, location_updated_at, last_heartbeat_at, created_at, finished_at, shift_end_prompted_at, shift_extended_count'
 
 export function mapSession(r: SessionRow): LoneWorkerSession {
   return {
@@ -50,6 +55,55 @@ export function mapSession(r: SessionRow): LoneWorkerSession {
     lastHeartbeatAt: r.last_heartbeat_at,
     createdAt: r.created_at,
     finishedAt: r.finished_at,
+    shiftEndPromptedAt: r.shift_end_prompted_at,
+    shiftExtendedCount: r.shift_extended_count ?? 0,
+  }
+}
+
+/**
+ * Once the planned shift end passes, ask the worker (push + in-app) whether
+ * they're still working. Protection is NOT switched off — check-ins carry on —
+ * this just stops a forgotten "Finish shift" turning into a false emergency.
+ *
+ * Atomic claim: the stamp is only written if it is null or older than the
+ * current shift_end, so concurrent evaluators (cron, monitor, device ticker)
+ * send exactly one prompt per shift end — and extending the shift re-arms it.
+ */
+async function promptShiftEndIfDue(
+  admin: SupabaseClient,
+  session: SessionRow,
+  now: Date,
+): Promise<void> {
+  const shiftEnd = new Date(session.shift_end)
+  if (Number.isNaN(shiftEnd.getTime()) || now.getTime() < shiftEnd.getTime()) return
+  if (
+    session.shift_end_prompted_at &&
+    new Date(session.shift_end_prompted_at).getTime() >= shiftEnd.getTime()
+  ) {
+    return
+  }
+
+  const { data: claimed } = await admin
+    .from('lone_worker_sessions')
+    .update({ shift_end_prompted_at: now.toISOString() })
+    .eq('id', session.id)
+    .eq('status', 'active')
+    .or(`shift_end_prompted_at.is.null,shift_end_prompted_at.lt.${shiftEnd.toISOString()}`)
+    .select('id')
+  if (!claimed || claimed.length === 0) return
+  session.shift_end_prompted_at = now.toISOString()
+
+  try {
+    await notifyUsers({
+      userIds: [session.user_id],
+      title: 'Your shift was due to end',
+      body: "Still working? Open the app to finish your shift or extend it. Check-ins continue until you do.",
+      url: '/dashboard',
+      category: 'lone_worker',
+      data: { kind: 'lone_worker_shift_end', sessionId: session.id },
+    })
+  } catch (err) {
+    console.log('[v0] lone-worker shift-end push failed:', (err as Error).message)
   }
 }
 
@@ -202,6 +256,8 @@ export async function evaluateSessionRow(
   now: Date = new Date(),
 ): Promise<{ changed: boolean; state: LoneWorkerPromptState }> {
   if (session.status !== 'active') return { changed: false, state: session.prompt_state }
+
+  await promptShiftEndIfDue(admin, session, now)
 
   const t = now.getTime()
   const amberAt = new Date(session.amber_at).getTime()

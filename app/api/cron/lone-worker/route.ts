@@ -1,15 +1,13 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { evaluateSessionRow, type SessionRow } from '@/lib/lone-worker/engine'
+import { evaluateSessionRow, SESSION_COLS, type SessionRow } from '@/lib/lone-worker/engine'
 
 // Runs every minute (see vercel.json). Advances every active lone-worker
 // session's state machine so warnings/emergencies are raised even if the
-// worker's device is closed, and auto-finishes sessions whose shift end has
-// long passed with no active alert. Idempotent + guarded by CRON_SECRET.
+// worker's device is closed. Sessions are NEVER auto-finished: once the planned
+// shift end passes the worker gets a one-off "still working?" prompt (finish or
+// extend) and check-ins continue until they act. Idempotent + CRON_SECRET-guarded.
 export const dynamic = 'force-dynamic'
-
-const SESSION_COLS =
-  'id, user_id, shift_start, shift_end, checkin_interval_minutes, amber_minutes, red_minutes, status, prompt_state, last_checkin_at, next_prompt_at, amber_at, red_at, last_lat, last_lng, last_accuracy, location_updated_at, last_heartbeat_at, created_at, finished_at'
 
 function isAuthorised(req: Request): boolean {
   const secret = process.env.CRON_SECRET

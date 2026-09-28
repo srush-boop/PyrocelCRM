@@ -271,7 +271,7 @@ export async function submitInternalTask(input: {
   const { data: instance } = await supabase
     .from('internal_task_instances')
     .select(
-      'id, user_id, template:internal_task_templates(id, name, questions, requires_reference, notify_on_issue_user_ids, notify_on_issue_email, requires_approval, approval_manager, approval_user_ids)',
+      'id, user_id, template:internal_task_templates(id, name, questions, requires_reference, notify_on_issue_user_ids, notify_on_issue_email, notify_on_issue_manager, requires_approval, approval_manager, approval_user_ids)',
     )
     .eq('id', input.instanceId)
     .single()
@@ -289,6 +289,7 @@ export async function submitInternalTask(input: {
     requires_reference?: boolean
     notify_on_issue_user_ids?: string[] | null
     notify_on_issue_email?: string | null
+    notify_on_issue_manager?: boolean
     requires_approval?: boolean
     approval_manager?: boolean
     approval_user_ids?: string[] | null
@@ -358,15 +359,27 @@ export async function submitInternalTask(input: {
   const issues = (input.answers ?? []).filter((a) => a.passed === false || a.advisory === true)
   const hasNotifyTargets =
     (template?.notify_on_issue_user_ids?.length ?? 0) > 0 ||
-    !!template?.notify_on_issue_email?.trim()
+    !!template?.notify_on_issue_email?.trim() ||
+    !!template?.notify_on_issue_manager
   if (issues.length > 0 && hasNotifyTargets) {
     try {
+      // Line manager (profiles.manager_id) gets the alert in-app + by email.
+      const notifyUserIds = [...(template?.notify_on_issue_user_ids ?? [])]
+      const extraEmails: string[] = []
+      if (template?.notify_on_issue_manager) {
+        const manager = await resolveLineManager(userId)
+        if (manager) {
+          if (!notifyUserIds.includes(manager.id)) notifyUserIds.push(manager.id)
+          if (manager.email) extraEmails.push(manager.email)
+        }
+      }
       await dispatchIssueAlerts({
         supabase,
         submitterId: userId,
         templateName: template?.name ?? 'Internal task',
-        notifyUserIds: template?.notify_on_issue_user_ids ?? [],
+        notifyUserIds,
         notifyEmail: template?.notify_on_issue_email ?? null,
+        extraEmails,
         referenceNumber: input.referenceNumber?.trim() || null,
         issues,
         instanceId: input.instanceId,
@@ -948,6 +961,10 @@ function conditionFired(ans: InternalTaskAnswer, cond: ChecklistCondition): bool
       return ans.value === true
     case 'unchecked':
       return ans.value === false
+    case 'yes':
+      return ans.value === 'yes'
+    case 'no':
+      return ans.value === 'no'
     case 'number': {
       const n = Number(ans.value)
       if (Number.isNaN(n) || cond.threshold == null) return false
@@ -981,12 +998,20 @@ async function dispatchIssueAlerts(args: {
   templateName: string
   notifyUserIds: string[]
   notifyEmail: string | null
+  extraEmails?: string[]
   referenceNumber: string | null
   issues: InternalTaskAnswer[]
   instanceId: string
 }): Promise<void> {
   const { supabase, submitterId, templateName, notifyUserIds, notifyEmail, issues, instanceId } =
     args
+  const emailRecipients = Array.from(
+    new Set(
+      [notifyEmail, ...(args.extraEmails ?? [])]
+        .map((e) => e?.trim().toLowerCase())
+        .filter((e): e is string => !!e),
+    ),
+  )
 
   // Who completed it (for the alert body).
   const { data: submitter } = await supabase
@@ -1026,8 +1051,8 @@ async function dispatchIssueAlerts(args: {
     })
   }
 
-  // 2) Email the nominated address.
-  if (notifyEmail?.trim()) {
+  // 2) Email the nominated address + line manager (if configured).
+  if (emailRecipients.length > 0) {
     const { sendEmail } = await import('@/lib/email/send-email')
     const ref = args.referenceNumber ? ` (ref ${args.referenceNumber})` : ''
     const html = `
@@ -1044,8 +1069,30 @@ async function dispatchIssueAlerts(args: {
           Sent automatically by PyrocelCRM Internal Tasks.
         </p>
       </div>`
-    await sendEmail(notifyEmail.trim(), `Issue: ${templateName} — ${summary}`, html)
+    for (const to of emailRecipients) {
+      await sendEmail(to, `Issue: ${templateName} — ${summary}`, html)
+    }
   }
+}
+
+// The submitter's line manager (profiles.manager_id). Uses the service role
+// because staff can't generally read another profile's email under RLS.
+async function resolveLineManager(
+  userId: string,
+): Promise<{ id: string; email: string | null } | null> {
+  const { createAdminClient } = await import('@/lib/supabase/admin')
+  const admin = createAdminClient()
+  const { data: me } = await admin.from('profiles').select('manager_id').eq('id', userId).single()
+  const managerId = (me as { manager_id?: string | null } | null)?.manager_id
+  if (!managerId) return null
+  const { data: mgr } = await admin
+    .from('profiles')
+    .select('id, email, status')
+    .eq('id', managerId)
+    .single()
+  const m = mgr as { id: string; email: string | null; status?: string | null } | null
+  if (!m || (m.status && m.status !== 'active')) return null
+  return { id: m.id, email: m.email }
 }
 
 // Minimal HTML escaper for user-provided strings in the alert email.
@@ -1510,6 +1557,9 @@ export async function saveInternalTaskTemplate(
     allow_multiple: input.allow_multiple ?? false,
     reminder_days_before: input.reminder_days_before ?? [1],
     warn_overdue: input.warn_overdue ?? true,
+    email_reminders: input.email_reminders ?? false,
+    overdue_repeat_days: Math.min(90, Math.max(0, Math.round(input.overdue_repeat_days ?? 0))),
+    overdue_notify_manager: input.overdue_notify_manager ?? false,
     questions: input.questions ?? [],
     requires_reference: input.requires_reference ?? false,
     reference_label: input.reference_label ?? null,
@@ -1519,6 +1569,7 @@ export async function saveInternalTaskTemplate(
     user_ids: input.user_ids ?? [],
     notify_on_issue_user_ids: input.notify_on_issue_user_ids ?? [],
     notify_on_issue_email: input.notify_on_issue_email?.trim() || null,
+    notify_on_issue_manager: input.notify_on_issue_manager ?? false,
   }
 
   if (input.id) {

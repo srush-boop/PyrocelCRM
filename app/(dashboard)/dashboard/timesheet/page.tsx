@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { isTimesheetRequired } from '@/lib/types/database'
@@ -38,10 +39,17 @@ export default async function TimesheetPage({
     )
   }
 
-  const [view, outstandingRes] = await Promise.all([
+  const [view, outstandingRes, { data: returned }] = await Promise.all([
     getOrBuildTimesheet(requestedWeek),
     getOutstandingTasks(),
+    supabase
+      .from('timesheets')
+      .select('week_ending, rejection_reason')
+      .eq('user_id', user.id)
+      .eq('status', 'rejected')
+      .order('week_ending', { ascending: false }),
   ])
+  const returnedWeeks = (returned ?? []) as Array<{ week_ending: string; rejection_reason: string | null }>
   const outstanding = outstandingRes.ok ? (outstandingRes.instances ?? []) : []
 
   if (!view.ok) {
@@ -62,6 +70,32 @@ export default async function TimesheetPage({
           Monday 09:00.
         </p>
       </header>
+      {returnedWeeks
+        .filter((r) => r.week_ending !== view.timesheet.week_ending)
+        .map((r) => (
+          <div
+            key={r.week_ending}
+            role="alert"
+            className="mb-4 flex flex-col gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div className="flex flex-col gap-0.5">
+              <p className="font-medium text-destructive">
+                {'Timesheet for week ending '}
+                {new Date(`${r.week_ending}T00:00:00`).toLocaleDateString('en-GB')}
+                {' was returned for changes'}
+              </p>
+              {r.rejection_reason && (
+                <p className="text-sm text-muted-foreground">{r.rejection_reason}</p>
+              )}
+            </div>
+            <Link
+              href={`/dashboard/timesheet?week=${r.week_ending}`}
+              className="shrink-0 rounded-md bg-destructive px-3 py-2 text-center text-sm font-medium text-destructive-foreground"
+            >
+              Amend &amp; resubmit
+            </Link>
+          </div>
+        ))}
       <TimesheetView
         initial={{
           timesheet: view.timesheet,

@@ -64,6 +64,7 @@ export function ClientChecklistDialog({
   const [label, setLabel] = useState('')
   const [type, setType] = useState<ClientChecklistItem['type']>('pass_fail')
   const [required, setRequired] = useState(true)
+  const [perSite, setPerSite] = useState(false)
   const [systemTypeIds, setSystemTypeIds] = useState<string[]>([])
   const [serviceTypeIds, setServiceTypeIds] = useState<string[]>([])
 
@@ -110,6 +111,7 @@ export function ClientChecklistDialog({
       label: label.trim(),
       type,
       required,
+      per_site: perSite,
       system_type_ids: systemTypeIds,
       service_type_ids: serviceTypeIds,
       position: items.length,
@@ -121,7 +123,23 @@ export function ClientChecklistDialog({
     }
     toast.success('Checklist item added')
     resetForm()
+    setPerSite(false)
     loadItems()
+    router.refresh()
+  }
+
+  async function togglePerSite(item: ClientChecklistItem) {
+    const next = !item.per_site
+    const { error } = await supabase
+      .from('client_checklist_items')
+      .update({ per_site: next })
+      .eq('id', item.id)
+    if (error) {
+      toast.error('Could not update item')
+      return
+    }
+    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, per_site: next } : i)))
+    toast.success(next ? 'Now asked once per site visit' : 'Now asked on every system')
     router.refresh()
   }
 
@@ -192,6 +210,14 @@ export function ClientChecklistDialog({
                           Required
                         </Badge>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => togglePerSite(item)}
+                        className="rounded-md border px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted"
+                        aria-label={item.per_site ? 'Ask on every system instead' : 'Ask once per site instead'}
+                      >
+                        {item.per_site ? 'Once per site' : 'Every system'}
+                      </button>
                     </div>
                     <p className="text-xs text-muted-foreground">{scopeSummary(item)}</p>
                   </div>
@@ -240,13 +266,20 @@ export function ClientChecklistDialog({
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-end">
+            <div className="flex flex-col justify-end gap-2">
               <label className="flex items-center gap-2 text-sm">
                 <Checkbox
                   checked={required}
                   onCheckedChange={(c) => setRequired(c === true)}
                 />
                 Required
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={perSite}
+                  onCheckedChange={(c) => setPerSite(c === true)}
+                />
+                Site-level (ask once per site visit)
               </label>
             </div>
           </div>

@@ -870,6 +870,8 @@ export interface ChecklistCalculation {
 export interface ChecklistItem {
   id: string
   label: string
+  // Asked once for the whole call rather than repeated per panel.
+  siteLevel?: boolean
   // 'choice'      : a dropdown / multi-select of author-defined options, each of
   //                 which can carry a suggested answer pre-filled into the note.
   // 'calculation' : a read-only field computed from other number answers (sum,
@@ -932,6 +934,9 @@ export interface ClientChecklistItem {
   required: boolean
   system_type_ids: string[]
   service_type_ids: string[]
+  // Site-level question: asked once per site visit (not on every system/call
+  // or panel) and skipped once another call at the site that day answered it.
+  per_site: boolean
   position: number
   created_at: string
   updated_at: string

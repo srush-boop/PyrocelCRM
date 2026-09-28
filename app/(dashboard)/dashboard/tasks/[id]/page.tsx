@@ -817,12 +817,54 @@ export default async function TaskPage({ params }: PageProps) {
       return systemOk && serviceOk
     })
 
-    if (matched.length > 0) {
-      const extraItems = matched.map((item) => ({
+    // Site-level items (e.g. "asbestos register checked") are asked once per
+    // site visit: drop them when another completed call at the same site on the
+    // same day already answered them, unless this call itself holds an answer.
+    const siteLevelIds = matched.filter((item) => item.per_site).map((item) => `client-${item.id}`)
+    const answeredElsewhere = new Set<string>()
+    const siteId = task.site_service?.site?.id ?? task.site_service?.site_id
+    if (siteLevelIds.length > 0 && siteId && task.scheduled_date) {
+      const { data: siteServiceRows } = await supabase
+        .from('site_services')
+        .select('id')
+        .eq('site_id', siteId)
+      const siteServiceIds = (siteServiceRows || []).map((r: { id: string }) => r.id)
+      if (siteServiceIds.length > 0) {
+        const { data: siblingRows } = await supabase
+          .from('tasks')
+          .select('id, status, task_results(checklist_results)')
+          .in('site_service_id', siteServiceIds)
+          .eq('scheduled_date', task.scheduled_date)
+        const answeredIn = (row: { task_results: unknown }) => {
+          const results = Array.isArray(row.task_results) ? row.task_results[0] : row.task_results
+          const rows = ((results as { checklist_results?: { item_id: string }[] } | null)
+            ?.checklist_results ?? []) as { item_id: string }[]
+          return new Set(
+            rows.map((r) => r.item_id.split('::').pop() ?? r.item_id).filter((itemId) => siteLevelIds.includes(itemId)),
+          )
+        }
+        const own = new Set<string>()
+        const others = new Set<string>()
+        for (const row of (siblingRows || []) as { id: string; status: string; task_results: unknown }[]) {
+          const ids = answeredIn(row)
+          if (row.id === task.id) ids.forEach((i) => own.add(i))
+          else if (row.status === 'completed') ids.forEach((i) => others.add(i))
+        }
+        others.forEach((i) => {
+          if (!own.has(i)) answeredElsewhere.add(i)
+        })
+      }
+    }
+
+    const applicable = matched.filter((item) => !answeredElsewhere.has(`client-${item.id}`))
+
+    if (applicable.length > 0) {
+      const extraItems = applicable.map((item) => ({
         id: `client-${item.id}`,
         label: item.label,
         type: item.type,
         required: item.required,
+        siteLevel: item.per_site === true,
       }))
       // Merge onto the existing template, or synthesise one if none exists so the
       // client items still reach the engineer.

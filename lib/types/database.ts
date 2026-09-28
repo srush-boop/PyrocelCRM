@@ -2372,6 +2372,13 @@ export interface CompanyInfo {
   // invoices; there are no per-charge overrides.
   default_vat_rate: number
   default_tax_code: string
+  /** Remittance details printed on invoice PDFs. */
+  bank_name?: string | null
+  bank_account_name?: string | null
+  bank_sort_code?: string | null
+  bank_account_number?: string | null
+  bank_iban?: string | null
+  bank_bic?: string | null
   // Editable maintenance pricing rate tables (seeded from the Excel calculator).
   // NULL = use the built-in DEFAULT_MAINTENANCE_RATES. Typed as MaintenanceRates.
   maintenance_rates: Record<string, unknown> | null

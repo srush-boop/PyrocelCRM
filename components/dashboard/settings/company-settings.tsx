@@ -45,6 +45,12 @@ export function CompanySettings({ company, branches }: CompanySettingsProps) {
     default_margin_percent: String(company?.default_margin_percent ?? 0),
     default_vat_rate: String(company?.default_vat_rate ?? 20),
     default_tax_code: company?.default_tax_code || 'T1',
+    bank_name: company?.bank_name || '',
+    bank_account_name: company?.bank_account_name || '',
+    bank_sort_code: company?.bank_sort_code || '',
+    bank_account_number: company?.bank_account_number || '',
+    bank_iban: company?.bank_iban || '',
+    bank_bic: company?.bank_bic || '',
   })
   const [savingCompany, setSavingCompany] = useState(false)
   const [companyMessage, setCompanyMessage] = useState<Feedback>(null)
@@ -74,6 +80,12 @@ export function CompanySettings({ company, branches }: CompanySettingsProps) {
       default_margin_percent: Number.parseFloat(form.default_margin_percent) || 0,
       default_vat_rate: Number.parseFloat(form.default_vat_rate) || 0,
       default_tax_code: form.default_tax_code.trim() || 'T1',
+      bank_name: form.bank_name.trim() || null,
+      bank_account_name: form.bank_account_name.trim() || null,
+      bank_sort_code: form.bank_sort_code.trim() || null,
+      bank_account_number: form.bank_account_number.trim() || null,
+      bank_iban: form.bank_iban.trim().toUpperCase() || null,
+      bank_bic: form.bank_bic.trim().toUpperCase() || null,
       updated_at: new Date().toISOString(),
     }
 
@@ -280,6 +292,36 @@ export function CompanySettings({ company, branches }: CompanySettingsProps) {
                 </p>
               </div>
             </div>
+
+            <fieldset className="grid gap-4 rounded-lg border p-4">
+              <legend className="px-1 text-sm font-medium">Bank details for payment</legend>
+              <p className="-mt-2 text-xs text-muted-foreground">
+                Printed on every invoice PDF so customers know where to pay. Leave blank to hide.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {(
+                  [
+                    ['bank_name', 'Bank name', 'e.g. Barclays'],
+                    ['bank_account_name', 'Account name', 'e.g. Pyrocel Ltd'],
+                    ['bank_sort_code', 'Sort code', '00-00-00'],
+                    ['bank_account_number', 'Account number', '12345678'],
+                    ['bank_iban', 'IBAN (optional)', 'GB00 XXXX 0000 0000 0000 00'],
+                    ['bank_bic', 'BIC / SWIFT (optional)', 'XXXXGB22'],
+                  ] as const
+                ).map(([key, label, placeholder]) => (
+                  <div key={key} className="grid gap-2">
+                    <Label htmlFor={`company_${key}`}>{label}</Label>
+                    <Input
+                      id={`company_${key}`}
+                      value={form[key]}
+                      onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                      placeholder={placeholder}
+                      autoComplete="off"
+                    />
+                  </div>
+                ))}
+              </div>
+            </fieldset>
 
             {companyMessage && (
               <div

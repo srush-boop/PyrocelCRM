@@ -19,6 +19,7 @@ export interface InvoiceFilterState {
   sites: string[]
   clients: string[]
   flags: string[]
+  sources: string[]
 }
 
 export const EMPTY_INVOICE_FILTERS: InvoiceFilterState = {
@@ -29,15 +30,28 @@ export const EMPTY_INVOICE_FILTERS: InvoiceFilterState = {
   sites: [],
   clients: [],
   flags: [],
+  sources: [],
 }
 
 // Delivery/export flag options. Opposing pairs (e.g. sent + unsent) combine to
 // "show all", so selecting both is a no-op — matching OR-set semantics.
 export const FLAG_OPTIONS: MultiSelectOption[] = [
+  { value: 'overdue', label: 'Overdue' },
   { value: 'sent', label: 'Sent to client' },
   { value: 'unsent', label: 'Not sent' },
   { value: 'sage_exported', label: 'Sent to Sage' },
   { value: 'sage_pending', label: 'Not in Sage' },
+]
+
+// Where an invoice was derived from (keys match invoiceSource().key).
+export const SOURCE_OPTIONS: MultiSelectOption[] = [
+  { value: 'recurring', label: 'Recurring charge' },
+  { value: 'emergency', label: 'Emergency call' },
+  { value: 'service', label: 'Service call' },
+  { value: 'reactive', label: 'Reactive call' },
+  { value: 'job', label: 'Job' },
+  { value: 'manual', label: 'Manual invoice' },
+  { value: 'credit_note', label: 'Credit note' },
 ]
 
 export const DOC_TYPE_OPTIONS: MultiSelectOption[] = [
@@ -81,7 +95,8 @@ export function InvoicesFilters({
     value.billingAccounts.length +
     value.sites.length +
     value.clients.length +
-    value.flags.length
+    value.flags.length +
+    value.sources.length
 
   return (
     <div className="space-y-3">
@@ -108,6 +123,13 @@ export function InvoicesFilters({
           )}
         </div>
 
+        <MultiSelectFilter
+          allLabel="All sources"
+          noun="sources"
+          options={SOURCE_OPTIONS}
+          selected={value.sources}
+          onChange={(v) => set('sources', v)}
+        />
         <MultiSelectFilter
           allLabel="All types"
           noun="types"

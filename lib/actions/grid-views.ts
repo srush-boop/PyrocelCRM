@@ -15,6 +15,7 @@ const GRID_META: Record<string, { label: string; href: string }> = {
   quotes: { label: 'Quotes', href: '/dashboard/sales' },
   chargeable: { label: 'Chargeable Calls', href: '/dashboard/chargeable' },
   'follow-ups': { label: 'Follow-Ups', href: '/dashboard/follow-ups' },
+  invoices: { label: 'Invoices', href: '/dashboard/invoices' },
 }
 
 async function getAuth() {

@@ -1220,7 +1220,7 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
   // Shared Upcoming / Overdue / Completed switcher. Rendered centred in the
   // filter row (normal mode) or standalone above the rich Completed table.
   const tabTriggers = (
-    <TabsList>
+    <TabsList className="w-full sm:w-auto">
       <TabsTrigger value="upcoming" className="gap-1.5">
         Upcoming
         <span className="rounded-full bg-background/60 px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums">
@@ -1271,7 +1271,7 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
           value={search}
           onChange={setSearch}
           placeholder="Search calls or ref number..."
-          className="w-full sm:w-[240px]"
+          className="min-w-0 flex-1 sm:w-[240px] sm:flex-none"
         />
 
         {loadingAll && (
@@ -1301,9 +1301,9 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
         )}
 
         {/* Upcoming / Overdue / Completed switcher, centred between the two sides. */}
-        <div className="flex min-w-0 flex-1 items-center sm:mx-auto sm:flex-none sm:justify-center">{tabTriggers}</div>
+        <div className="order-last flex w-full items-center sm:order-none sm:mx-auto sm:w-auto sm:justify-center">{tabTriggers}</div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1.5">
           {hasActiveFilters && (
             <Button
               variant="ghost"

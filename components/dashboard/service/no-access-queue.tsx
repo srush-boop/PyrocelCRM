@@ -4,7 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { DoorClosed, Loader2, CalendarClock, Building2, Coins } from 'lucide-react'
+import { DoorClosed, Loader2, CalendarClock, Building2, Coins, ChevronDown } from 'lucide-react'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
   Card,
   CardContent,
@@ -56,6 +57,7 @@ const UNASSIGNED = '__unassigned__'
 
 export function NoAccessQueue({ calls, engineers }: NoAccessQueueProps) {
   const router = useRouter()
+  const [expanded, setExpanded] = useState(false)
   const [active, setActive] = useState<NoAccessCall | null>(null)
   const [mode, setMode] = useState<'rearrange' | 'dismiss'>('rearrange')
 
@@ -133,22 +135,36 @@ export function NoAccessQueue({ calls, engineers }: NoAccessQueueProps) {
 
   return (
     <>
+      <Collapsible open={expanded} onOpenChange={setExpanded} asChild>
       <Card className="border-2 border-amber-500 bg-amber-500/5">
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/15 text-amber-600">
-              <DoorClosed className="h-5 w-5" />
-            </div>
-            <div>
-              <CardTitle className="text-amber-700">
-                {calls.length} no-access call{calls.length === 1 ? '' : 's'} to rearrange
-              </CardTitle>
-              <CardDescription>
-                An engineer couldn&apos;t gain entry — contact the client to rearrange the visit.
-              </CardDescription>
-            </div>
-          </div>
+        <CardHeader className={expanded ? 'pb-3' : undefined}>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-600">
+                <DoorClosed className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <CardTitle className="text-amber-700">
+                  {calls.length} no-access call{calls.length === 1 ? '' : 's'} to rearrange
+                </CardTitle>
+                <CardDescription>
+                  An engineer couldn&apos;t gain entry — contact the client to rearrange the visit.
+                </CardDescription>
+              </div>
+              <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-700">
+                {expanded ? 'Hide' : 'Show'}
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`}
+                  aria-hidden="true"
+                />
+              </span>
+            </button>
+          </CollapsibleTrigger>
         </CardHeader>
+        <CollapsibleContent>
         <CardContent className="space-y-2">
           {calls.map((call) => (
             <div
@@ -204,7 +220,9 @@ export function NoAccessQueue({ calls, engineers }: NoAccessQueueProps) {
             </div>
           ))}
         </CardContent>
+        </CollapsibleContent>
       </Card>
+      </Collapsible>
 
       <Dialog open={active !== null} onOpenChange={(v) => (v ? null : closeDialog())}>
         <DialogContent>

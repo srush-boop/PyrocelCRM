@@ -606,7 +606,11 @@ export async function rejectTimesheet(
 ): Promise<{ ok: boolean; error?: string }> {
   const base = await getAuth()
   if ('error' in base) return { ok: false, error: base.error }
-  const { data: ts } = await base.supabase.from('timesheets').select('user_id').eq('id', id).maybeSingle()
+  const { data: ts } = await base.supabase
+    .from('timesheets')
+    .select('user_id, week_ending')
+    .eq('id', id)
+    .maybeSingle()
   if (!ts) return { ok: false, error: 'Not found' }
   const auth = await requireReviewer((ts as Timesheet).user_id)
   if ('error' in auth) return { ok: false, error: auth.error as string }

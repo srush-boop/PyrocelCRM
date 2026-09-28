@@ -362,14 +362,15 @@ const engineerPeopleNavItem: NavItem = {
   ],
 }
 
-// Documents: groups the two document stores (general Documents + RAMS).
+// Documents group. The legacy RAMS module (/dashboard/rams) is ARCHIVED and
+// hidden from the menu while the replacement RAMS app is integrated — see the
+// archive gate in app/(dashboard)/dashboard/rams/layout.tsx.
 const documentsNavItem: NavItem = {
   key: 'documents',
   title: 'Documents',
   icon: FolderOpen,
   children: [
     { title: 'Documents', href: '/dashboard/documents', icon: FolderOpen },
-    { title: 'RAMS', href: '/dashboard/rams', icon: ShieldCheck },
   ],
 }
 

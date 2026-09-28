@@ -75,7 +75,7 @@ export default async function NewQuotePage({
     { data: branches },
   ] = await Promise.all([
     supabase.from('clients').select('id, name').order('name'),
-    supabase.from('sites').select('id, name, client_id').order('name'),
+    supabase.from('sites').select('id, name, client_id, branch_id').order('name'),
     supabase.from('system_types').select('*').eq('active', true).order('name'),
     supabase.from('service_types').select('*').order('name'),
     supabase.from('quote_services').select('*').eq('active', true).order('position').order('name'),

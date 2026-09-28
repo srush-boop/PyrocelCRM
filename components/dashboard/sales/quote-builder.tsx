@@ -678,7 +678,11 @@ export function QuoteBuilder({
     (quote?.prospect_site_name || quote?.prospect_name) && !quote?.site_id ? 'new' : 'existing',
   )
   // Issuing branch: existing quote's branch, else the preparer's own branch.
-  const [branchId, setBranchId] = useState(quote?.branch_id ?? defaultBranchId ?? '')
+  const siteBranchId = (id: string | null | undefined) =>
+    (id && (sites.find((s) => s.id === id) as { branch_id?: string | null } | undefined)?.branch_id) || null
+  const [branchId, setBranchId] = useState(
+    quote?.branch_id ?? siteBranchId(initialSiteId) ?? defaultBranchId ?? '',
+  )
   const [clientId, setClientId] = useState(quote?.client_id ?? initialClientId ?? '')
   const [siteId, setSiteId] = useState(quote?.site_id ?? initialSiteId ?? '')
   const [clientPickerOpen, setClientPickerOpen] = useState(false)
@@ -1865,7 +1869,10 @@ export function QuoteBuilder({
                             key={s.id}
                             value={`${s.name} ${s.clientName ?? ''}`}
                             onSelect={() => {
-                              setSiteId(s.id === siteId ? '' : s.id)
+                              const nextSiteId = s.id === siteId ? '' : s.id
+                              setSiteId(nextSiteId)
+                              const nextBranch = siteBranchId(nextSiteId)
+                              if (nextBranch) setBranchId(nextBranch)
                               setSitePickerOpen(false)
                             }}
                           >

@@ -18,6 +18,7 @@ import { isExtinguisherService } from '@/lib/extinguishers'
 import { DefectStatusActions } from '@/components/dashboard/defects/defect-status-actions'
 import { RaiseRemedialDialog } from '@/components/dashboard/defects/raise-remedial-dialog'
 import { SuggestedPartsPicker } from '@/components/dashboard/tasks/suggested-parts-picker'
+import { loadDefectSuggestedParts } from '@/lib/defects/suggested-parts'
 import { AddRequestButton } from '@/components/dashboard/requests/add-request-button'
 import { EntityRequestsCard } from '@/components/dashboard/requests/entity-requests-card'
 import type { ChecklistResult, DefectStatus } from '@/lib/types/database'
@@ -99,6 +100,7 @@ export default async function DefectDetailPage({
     (d.task_result?.checklist_results ?? []) as ChecklistResult[],
   )
   const isOpen = status === 'open'
+  const suggestedParts = isOpen ? await loadDefectSuggestedParts(supabase, d.task?.id) : []
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6">
@@ -130,7 +132,13 @@ export default async function DefectDetailPage({
                 </Link>
               </Button>
             )}
-            {isOpen && <RaiseRemedialDialog defectId={d.id} engineers={engineers} />}
+            {isOpen && (
+              <RaiseRemedialDialog
+                defectId={d.id}
+                engineers={engineers}
+                suggestedParts={suggestedParts}
+              />
+            )}
             <AddRequestButton
               entityType="defect"
               entityId={d.id}

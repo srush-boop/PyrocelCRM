@@ -24,6 +24,11 @@ import {
 } from '@/components/ui/select'
 import { toast } from 'sonner'
 import { createRemedialCallFromDefect } from '@/app/(dashboard)/dashboard/defects/actions'
+import type { DefectSuggestedPart } from '@/lib/defects/suggested-parts'
+import {
+  SuggestedPartsReview,
+  type SuggestedPartDecision,
+} from '@/components/dashboard/defects/suggested-parts-review'
 
 export interface RemedialEngineerOption {
   id: string
@@ -45,14 +50,17 @@ function todayIso(): string {
 export function RaiseRemedialDialog({
   defectId,
   engineers,
+  suggestedParts = [],
 }: {
   defectId: string
   engineers: RemedialEngineerOption[]
+  suggestedParts?: DefectSuggestedPart[]
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [engineerId, setEngineerId] = useState('')
   const [scheduledDate, setScheduledDate] = useState(todayIso())
+  const [decisions, setDecisions] = useState<Record<string, SuggestedPartDecision | undefined>>({})
   const [isPending, startTransition] = useTransition()
 
   function submit() {
@@ -60,8 +68,15 @@ export function RaiseRemedialDialog({
       toast.error('Choose an engineer')
       return
     }
+    const confirmedPartIds = suggestedParts
+      .filter((p) => decisions[p.partId] === 'confirmed')
+      .map((p) => p.partId)
     startTransition(async () => {
-      const res = await createRemedialCallFromDefect(defectId, { engineerId, scheduledDate })
+      const res = await createRemedialCallFromDefect(defectId, {
+        engineerId,
+        scheduledDate,
+        confirmedPartIds,
+      })
       if (!res.ok) {
         toast.error(res.error ?? 'Could not raise remedial call')
         return
@@ -87,7 +102,7 @@ export function RaiseRemedialDialog({
           Raise remedial call
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Raise remedial call</DialogTitle>
           <DialogDescription>
@@ -126,6 +141,25 @@ export function RaiseRemedialDialog({
               onChange={(e) => setScheduledDate(e.target.value)}
             />
           </div>
+          {suggestedParts.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <div>
+                <p className="text-sm font-medium">Suggested parts</p>
+                <p className="text-xs text-muted-foreground">
+                  Confirm the parts the engineer suggested to add them to this call. Removed parts
+                  are left off.
+                </p>
+              </div>
+              <SuggestedPartsReview
+                parts={suggestedParts}
+                decisions={decisions}
+                disabled={isPending}
+                onDecide={(p, decision) =>
+                  setDecisions((prev) => ({ ...prev, [p.partId]: decision ?? undefined }))
+                }
+              />
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setOpen(false)} disabled={isPending}>

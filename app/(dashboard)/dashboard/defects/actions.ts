@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getFailedChecklistItems } from '@/lib/defects'
+import { loadDefectSuggestedParts } from '@/lib/defects/suggested-parts'
 import type { ChecklistResult, DefectStatus } from '@/lib/types/database'
 
 async function requireStaff() {
@@ -50,7 +51,7 @@ export async function linkDefectToQuote(defectId: string, quoteId: string) {
 // defect reference and its failed checks so the attending engineer has context.
 export async function createRemedialCallFromDefect(
   defectId: string,
-  input: { engineerId: string; scheduledDate: string },
+  input: { engineerId: string; scheduledDate: string; confirmedPartIds?: string[] },
 ): Promise<{ ok: boolean; taskId?: string; error?: string }> {
   const auth = await requireStaff()
   if (!auth.ok) return { ok: false, error: auth.error }
@@ -156,6 +157,31 @@ export async function createRemedialCallFromDefect(
       notes: `Carried over from defect ${d.reference_number ?? ''}`.trim(),
       added_by: null,
     }))
+
+    // Engineer-suggested parts the office confirmed in the dialog. Only accept
+    // ids that really are suggestions on this defect, and skip any part the
+    // carry-over above already planned.
+    const confirmedIds = new Set((input.confirmedPartIds ?? []).filter(Boolean))
+    if (confirmedIds.size > 0) {
+      const alreadyPlanned = new Set(partRows.map((p) => p.part_id))
+      const suggestions = await loadDefectSuggestedParts(supabase, originTask.id)
+      for (const s of suggestions) {
+        if (!confirmedIds.has(s.partId) || alreadyPlanned.has(s.partId)) continue
+        partRows.push({
+          task_id: newTaskId,
+          part_id: s.partId,
+          quantity: s.quantity,
+          unit_cost_pence: s.unitCostPence,
+          sale_unit_price_pence:
+            s.catalogueItem?.service_sale_price_pence ||
+            s.catalogueItem?.default_unit_price_pence ||
+            null,
+          chargeable: true,
+          notes: `Confirmed from engineer suggestion on defect ${d.reference_number ?? ''}`.trim(),
+          added_by: null,
+        })
+      }
+    }
 
     if (partRows.length > 0) {
       const { error: partsError } = await supabase.from('call_parts').insert(partRows)

@@ -9,6 +9,7 @@ import { getReadyToInvoiceGroups } from '@/lib/actions/invoices'
 import { profileCanEditInvoices } from '@/lib/auth/invoices'
 import { InvoicesTable } from '@/components/dashboard/invoices/invoices-table'
 import { PushToSageButton } from '@/components/dashboard/invoices/push-to-sage-button'
+import { getSavedGridViews, getSharedGridViews } from '@/lib/actions/grid-views'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,7 +30,7 @@ export default async function InvoicesPage() {
   const role = (profile as Profile | null)?.role
   if (role !== 'admin' && role !== 'office') redirect('/dashboard')
 
-  const [{ data: invoices }, readyGroups] = await Promise.all([
+  const [{ data: invoices }, readyGroups, savedViews, sharedViews] = await Promise.all([
     supabase
       .from('invoices')
       .select(
@@ -38,6 +39,8 @@ export default async function InvoicesPage() {
       .order('created_at', { ascending: false })
       .limit(500),
     getReadyToInvoiceGroups(),
+    getSavedGridViews('invoices'),
+    getSharedGridViews('invoices'),
   ])
 
   const readyCount = readyGroups.reduce((s, g) => s + g.tasks.length, 0)
@@ -48,8 +51,7 @@ export default async function InvoicesPage() {
     (i) => (i.status === 'issued' || i.status === 'paid') && !i.sage_exported_at,
   ).length
 
-  return (
-    <div className="space-y-6">
+  const header = (
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Invoices</h1>
@@ -79,9 +81,11 @@ export default async function InvoicesPage() {
           </Button>
         </div>
       </div>
+  )
 
-      {readyCount > 0 && (
-        <Card className="border-primary/30 bg-primary/5">
+  const banner =
+    readyCount > 0 ? (
+<Card className="border-primary/30 bg-primary/5">
           <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
             <div className="flex items-center gap-3">
               <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -105,13 +109,18 @@ export default async function InvoicesPage() {
             </Button>
           </CardContent>
         </Card>
-      )}
+    ) : null
 
-      <InvoicesTable
-        invoices={(invoices ?? []) as unknown as InvoiceRow[]}
-        canEdit={canEdit}
-      />
-    </div>
+  return (
+    <InvoicesTable
+      invoices={(invoices ?? []) as unknown as InvoiceRow[]}
+      canEdit={canEdit}
+      header={header}
+      banner={banner}
+      savedViews={savedViews}
+      sharedViews={sharedViews}
+      currentUserId={user.id}
+    />
   )
 }
 

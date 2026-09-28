@@ -1,6 +1,8 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useMemo, useState, useTransition, type ReactNode } from 'react'
+import { GridViewsBar } from '@/components/dashboard/grid-views-bar'
+import type { SavedGridView, SharedGridView } from '@/lib/types/database'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -98,35 +100,90 @@ function billToLabel(inv: InvoiceRow): string {
   return inv.billing_account?.name || inv.bill_to_name || inv.client?.name || ''
 }
 
-type InvoiceSource = { label: string; icon: LucideIcon; className: string }
+type InvoiceSource = { key: string; label: string; icon: LucideIcon; className: string }
 
 // Where an invoice was derived from, most specific first.
 function invoiceSource(inv: InvoiceRow): InvoiceSource {
   if (inv.document_type === 'credit_note') {
-    return { label: 'Credit note', icon: Undo2, className: 'text-muted-foreground' }
+    return { key: 'credit_note', label: 'Credit note', icon: Undo2, className: 'text-muted-foreground' }
   }
-  if (inv.job_id) return { label: 'Job', icon: Briefcase, className: 'text-indigo-700' }
+  if (inv.job_id) return { key: 'job', label: 'Job', icon: Briefcase, className: 'text-indigo-700' }
   if (inv.origin === 'recurring') {
-    return { label: 'Recurring charge', icon: RefreshCw, className: 'text-teal-700' }
+    return { key: 'recurring', label: 'Recurring charge', icon: RefreshCw, className: 'text-teal-700' }
   }
   const calls = inv.calls ?? []
   if (calls.length === 0) {
-    return { label: 'Manual invoice', icon: PenLine, className: 'text-muted-foreground' }
+    return { key: 'manual', label: 'Manual invoice', icon: PenLine, className: 'text-muted-foreground' }
   }
   const plural = calls.length > 1 ? ` ×${calls.length}` : ''
   if (calls.some((c) => c.is_emergency)) {
-    return { label: `Emergency call${plural}`, icon: Siren, className: 'text-red-700' }
+    return { key: 'emergency', label: `Emergency call${plural}`, icon: Siren, className: 'text-red-700' }
   }
   if (calls.every((c) => c.site_service_id)) {
-    return { label: `Service call${plural}`, icon: ClipboardCheck, className: 'text-blue-700' }
+    return { key: 'service', label: `Service call${plural}`, icon: ClipboardCheck, className: 'text-blue-700' }
   }
-  return { label: `Reactive call${plural}`, icon: Wrench, className: 'text-amber-700' }
+  return { key: 'reactive', label: `Reactive call${plural}`, icon: Wrench, className: 'text-amber-700' }
+}
+
+const todayIso = () => new Date().toISOString().slice(0, 10)
+
+// Issued (unpaid) and past its due date.
+function isOverdue(inv: InvoiceRow, today: string): boolean {
+  return inv.status === 'issued' && !!inv.due_date && inv.due_date.slice(0, 10) < today
+}
+
+// Credit notes reduce the running total.
+function signedTotal(inv: InvoiceRow): number {
+  return inv.document_type === 'credit_note' ? -Math.abs(inv.total_pence) : inv.total_pence
+}
+
+type Preset = { key: string; label: string; status: Filter; filters: Partial<InvoiceFilterState> }
+
+// Preconfigured one-click views; users can save their own on top via Views.
+const PRESETS: Preset[] = [
+  { key: 'all', label: 'All invoices', status: 'all', filters: {} },
+  { key: 'drafts', label: 'Drafts to issue', status: 'draft', filters: {} },
+  { key: 'overdue', label: 'Overdue', status: 'all', filters: { flags: ['overdue'] } },
+  { key: 'unsent', label: 'Issued, not sent', status: 'issued', filters: { flags: ['unsent'] } },
+  { key: 'sage', label: 'Awaiting Sage', status: 'issued', filters: { flags: ['sage_pending'] } },
+  { key: 'recurring', label: 'Recurring', status: 'all', filters: { sources: ['recurring'] } },
+  {
+    key: 'calls',
+    label: 'Calls',
+    status: 'all',
+    filters: { sources: ['emergency', 'service', 'reactive'] },
+  },
+  { key: 'jobs', label: 'Jobs', status: 'all', filters: { sources: ['job'] } },
+]
+
+function presetState(p: Preset): InvoiceFilterState {
+  return { ...EMPTY_INVOICE_FILTERS, ...p.filters }
+}
+
+// Restore a saved view, tolerating older blobs missing newer keys.
+function normaliseSaved(f: Record<string, unknown>): { filters: InvoiceFilterState; status: Filter } {
+  const arr = (k: keyof InvoiceFilterState) => (Array.isArray(f[k]) ? (f[k] as string[]) : [])
+  const status = FILTERS.some((x) => x.value === f.status) ? (f.status as Filter) : 'all'
+  return {
+    status,
+    filters: {
+      search: typeof f.search === 'string' ? f.search : '',
+      docTypes: arr('docTypes'),
+      financialYears: arr('financialYears'),
+      billingAccounts: arr('billingAccounts'),
+      sites: arr('sites'),
+      clients: arr('clients'),
+      flags: arr('flags'),
+      sources: arr('sources'),
+    },
+  }
 }
 
 // Whether a row satisfies every active filter dimension. Within a dimension the
 // selected values are OR-ed; across dimensions they are AND-ed. An empty
 // dimension is ignored (no filtering).
-function matchesFilters(inv: InvoiceRow, f: InvoiceFilterState): boolean {
+function matchesFilters(inv: InvoiceRow, f: InvoiceFilterState, today: string): boolean {
+  if (f.sources.length > 0 && !f.sources.includes(invoiceSource(inv).key)) return false
   // Free-text search across the fields a user is likely to look up.
   const q = f.search.trim().toLowerCase()
   if (q) {
@@ -167,6 +224,8 @@ function matchesFilters(inv: InvoiceRow, f: InvoiceFilterState): boolean {
   if (f.flags.length > 0) {
     const satisfies = f.flags.some((flag) => {
       switch (flag) {
+        case 'overdue':
+          return isOverdue(inv, today)
         case 'sent':
           return !!inv.sent_at
         case 'unsent':
@@ -225,9 +284,21 @@ function buildFilterOptions(invoices: InvoiceRow[]): {
 export function InvoicesTable({
   invoices,
   canEdit,
+  header,
+  banner,
+  savedViews,
+  sharedViews,
+  currentUserId,
 }: {
   invoices: InvoiceRow[]
   canEdit: boolean
+  /** Page title + actions, rendered above the status infographics. */
+  header?: ReactNode
+  /** Optional callout rendered beneath the infographics. */
+  banner?: ReactNode
+  savedViews?: SavedGridView[]
+  sharedViews?: SharedGridView[]
+  currentUserId?: string
 }) {
   const router = useRouter()
   const [filter, setFilter] = useState<Filter>('all')
@@ -235,6 +306,22 @@ export function InvoicesTable({
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [confirmSend, setConfirmSend] = useState(false)
   const [pending, startTransition] = useTransition()
+  const today = todayIso()
+
+  const viewFilters = useMemo(
+    () => ({ ...filters, status: filter }) as Record<string, unknown>,
+    [filters, filter],
+  )
+  const isFiltered = filter !== 'all' || JSON.stringify(filters) !== JSON.stringify(EMPTY_INVOICE_FILTERS)
+  const applyView = (f: Record<string, unknown>) => {
+    const next = normaliseSaved(f)
+    setFilters(next.filters)
+    setFilter(next.status)
+    setSelected(new Set())
+  }
+  const activePreset = PRESETS.find(
+    (p) => p.status === filter && JSON.stringify(presetState(p)) === JSON.stringify(filters),
+  )?.key
 
   // Build the option lists for the multi-select dropdowns from the data, each
   // with a live count as a hint and sorted for easy scanning.
@@ -245,7 +332,37 @@ export function InvoicesTable({
 
   // Everything except the status tab — used both for the tab counts and as the
   // base set the status tab narrows, so counts reflect the active filters.
-  const preStatusRows = useMemo(() => invoices.filter((i) => matchesFilters(i, filters)), [invoices, filters])
+  const preStatusRows = useMemo(
+    () => invoices.filter((i) => matchesFilters(i, filters, today)),
+    [invoices, filters, today],
+  )
+
+  // Count + value per status for the header infographics (respects filters).
+  const stats = useMemo(() => {
+    const blank = () => ({ count: 0, value: 0 })
+    const s = {
+      all: blank(),
+      draft: blank(),
+      issued: blank(),
+      overdue: blank(),
+      paid: blank(),
+      void: blank(),
+    }
+    for (const inv of preStatusRows) {
+      const v = signedTotal(inv)
+      s[inv.status].count += 1
+      s[inv.status].value += v
+      if (inv.status !== 'void') {
+        s.all.count += 1
+        s.all.value += v
+      }
+      if (isOverdue(inv, today)) {
+        s.overdue.count += 1
+        s.overdue.value += v
+      }
+    }
+    return s
+  }, [preStatusRows, today])
 
   const counts = useMemo(() => {
     const c: Record<Filter, number> = {
@@ -336,8 +453,138 @@ export function InvoicesTable({
     })
   }
 
+  const statTiles: {
+    key: string
+    label: string
+    stat: { count: number; value: number }
+    tone: string
+    bar: string
+    onClick: () => void
+    active: boolean
+  }[] = [
+    {
+      key: 'all',
+      label: 'Total (excl. void)',
+      stat: stats.all,
+      tone: 'text-foreground',
+      bar: 'bg-foreground/70',
+      onClick: () => changeFilter('all'),
+      active: filter === 'all' && !filters.flags.includes('overdue'),
+    },
+    {
+      key: 'draft',
+      label: 'Draft',
+      stat: stats.draft,
+      tone: 'text-amber-700',
+      bar: 'bg-amber-500',
+      onClick: () => changeFilter('draft'),
+      active: filter === 'draft',
+    },
+    {
+      key: 'issued',
+      label: 'Issued',
+      stat: stats.issued,
+      tone: 'text-blue-700',
+      bar: 'bg-blue-500',
+      onClick: () => changeFilter('issued'),
+      active: filter === 'issued',
+    },
+    {
+      key: 'overdue',
+      label: 'Overdue',
+      stat: stats.overdue,
+      tone: 'text-red-700',
+      bar: 'bg-red-500',
+      onClick: () => {
+        setFilter('all')
+        applyFilters({ ...filters, flags: ['overdue'] })
+      },
+      active: filters.flags.length === 1 && filters.flags[0] === 'overdue',
+    },
+    {
+      key: 'paid',
+      label: 'Paid',
+      stat: stats.paid,
+      tone: 'text-emerald-700',
+      bar: 'bg-emerald-500',
+      onClick: () => changeFilter('paid'),
+      active: filter === 'paid',
+    },
+  ]
+  const valueBase = Math.max(1, Math.abs(stats.all.value))
+
   return (
     <div className="space-y-4">
+      <div className="space-y-3">
+        {header}
+        {/* Status infographics — live against the applied filters. */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          {statTiles.map((t) => {
+            const share = t.key === 'all' ? 100 : Math.min(100, (Math.abs(t.stat.value) / valueBase) * 100)
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={t.onClick}
+                aria-pressed={t.active}
+                className={cn(
+                  'flex flex-col gap-1 rounded-lg border bg-card px-3 py-2 text-left transition-colors hover:bg-muted/50',
+                  t.active && 'border-primary/50 ring-1 ring-primary/30',
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className={cn('text-xs font-medium', t.tone)}>{t.label}</span>
+                  <span className="rounded bg-muted px-1.5 text-xs font-medium tabular-nums text-muted-foreground">
+                    {t.stat.count}
+                  </span>
+                </div>
+                <span className="text-lg font-semibold leading-tight tabular-nums">
+                  {formatPence(t.stat.value)}
+                </span>
+                <span className="h-1 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                  <span className={cn('block h-full rounded-full', t.bar)} style={{ width: `${share}%` }} />
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {banner}
+
+      {/* Preconfigured views + saved/shared views. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Quick views">
+          {PRESETS.map((p) => (
+            <Button
+              key={p.key}
+              size="sm"
+              variant={activePreset === p.key ? 'default' : 'outline'}
+              className="h-7 rounded-full px-3 text-xs"
+              onClick={() => {
+                setFilter(p.status)
+                applyFilters(presetState(p))
+              }}
+            >
+              {p.label}
+            </Button>
+          ))}
+        </div>
+        {currentUserId && (
+          <div className="ml-auto">
+            <GridViewsBar
+              gridKey="invoices"
+              filters={viewFilters}
+              isFiltered={isFiltered}
+              onApply={applyView}
+              savedViews={savedViews ?? []}
+              sharedViews={sharedViews ?? []}
+              currentUserId={currentUserId}
+            />
+          </div>
+        )}
+      </div>
+
       <InvoicesFilters
         value={filters}
         onChange={applyFilters}
@@ -450,7 +697,11 @@ export function InvoicesTable({
             </TableHeader>
             <TableBody>
               {rows.map((inv) => (
-                <TableRow key={inv.id} data-state={selected.has(inv.id) ? 'selected' : undefined}>
+                <TableRow
+                  key={inv.id}
+                  data-state={selected.has(inv.id) ? 'selected' : undefined}
+                  className="[&>td]:py-1"
+                >
                   {showSelectColumn && (
                     <TableCell>
                       {isSelectable(inv) ? (
@@ -462,44 +713,52 @@ export function InvoicesTable({
                       ) : null}
                     </TableCell>
                   )}
-                  <TableCell className="font-medium">
-                    <Link href={`/dashboard/invoices/${inv.id}`} className="hover:underline">
+                  <TableCell className="max-w-72 font-medium">
+                    <Link href={`/dashboard/invoices/${inv.id}`} className="text-sm hover:underline">
                       {inv.invoice_number}
                     </Link>
-                    {/* Site name as a muted description sub-line. */}
+                    {/* Source + site on one muted sub-line. */}
                     {(() => {
                       const source = invoiceSource(inv)
                       const Icon = source.icon
                       return (
-                        <p
-                          className={cn(
-                            'mt-0.5 flex items-center gap-1 text-xs font-medium',
-                            source.className,
+                        <p className="flex min-w-0 items-center gap-1 text-xs leading-tight">
+                          <span className={cn('flex shrink-0 items-center gap-1 font-medium', source.className)}>
+                            <Icon className="h-3 w-3" aria-hidden="true" />
+                            <span className="sr-only">Source: </span>
+                            {source.label}
+                          </span>
+                          {inv.site?.name && (
+                            <span className="truncate font-normal text-muted-foreground">
+                              {'· '}
+                              {inv.site.name}
+                            </span>
                           )}
-                        >
-                          <Icon className="h-3 w-3 shrink-0" aria-hidden="true" />
-                          <span className="sr-only">Source: </span>
-                          {source.label}
                         </p>
                       )
                     })()}
-                    {inv.site?.name && (
-                      <p className="text-xs font-normal text-muted-foreground">{inv.site.name}</p>
-                    )}
                   </TableCell>
-                  <TableCell>{billToLabel(inv) || '—'}</TableCell>
+                  <TableCell className="max-w-56 truncate text-sm">{billToLabel(inv) || '—'}</TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1">
                       <Badge
                         variant="outline"
-                        className={cn('font-medium', statusClasses(inv.status))}
+                        className={cn('px-1.5 py-0 text-[11px] font-medium', statusClasses(inv.status))}
                       >
                         {INVOICE_STATUS_LABELS[inv.status]}
                       </Badge>
+                      {isOverdue(inv, today) && (
+                        <Badge
+                          variant="outline"
+                          className="border-red-200 bg-red-50 px-1.5 py-0 text-[11px] text-red-700"
+                        >
+                          Overdue
+                        </Badge>
+                      )}
                       {inv.sent_at && (
                         <Badge
                           variant="outline"
-                          className="border-emerald-200 bg-emerald-50 text-emerald-700"
+                          className="border-emerald-200 bg-emerald-50 px-1.5 py-0 text-[11px] text-emerald-700"
                         >
                           Sent
                         </Badge>
@@ -507,17 +766,22 @@ export function InvoicesTable({
                       {inv.sage_exported_at && (
                         <Badge
                           variant="outline"
-                          className="gap-1 border-teal-200 bg-teal-50 text-teal-700"
+                          className="gap-1 border-teal-200 bg-teal-50 px-1.5 py-0 text-[11px] text-teal-700"
+                          title="Sent to Sage"
                         >
                           <FileSpreadsheet className="h-3 w-3" />
-                          Sent to Sage
+                          Sage
                         </Badge>
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{formatDate(inv.issue_date)}</TableCell>
-                  <TableCell className="text-muted-foreground">{formatDate(inv.due_date)}</TableCell>
-                  <TableCell className="text-right font-medium">
+                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                    {formatDate(inv.issue_date)}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                    {formatDate(inv.due_date)}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-right text-sm font-medium tabular-nums">
                     {formatPence(inv.total_pence)}
                   </TableCell>
                   <TableCell className="text-right">

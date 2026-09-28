@@ -1,5 +1,4 @@
 import { createClient } from '@/lib/supabase/server'
-import { getCallTargetDate } from '@/lib/kpi'
 import type {
   LowStockAlert,
   Part,
@@ -373,8 +372,8 @@ export async function getEngineerUpcomingParts(
   const endDate = new Date(today)
   endDate.setDate(endDate.getDate() + days)
   const end = endDate.toISOString().slice(0, 10)
-  // Calls booked in the past can still be inside their "complete by" window,
-  // so look back far enough to catch any open tolerance window.
+  // Open calls booked in the past (including overdue ones) still need their
+  // parts, so look back far enough to catch any call not yet completed.
   const lookBack = new Date(today)
   lookBack.setDate(lookBack.getDate() - 400)
   const start = lookBack.toISOString().slice(0, 10)
@@ -423,26 +422,10 @@ export async function getEngineerUpcomingParts(
     call_parts: PartRow[] | null
   }
 
-  // Keep a call while today is within its designated window: from the visit
-  // date through its "complete by" target date (same rule as the Calls grid).
-  // Calls without a tolerance fall back to their visit date.
-  const rows = ((tasks || []) as unknown as TaskRow[]).filter((t) => {
-    if (!t.scheduled_date) return false
-    const ss = t.site_service
-    const target =
-      getCallTargetDate({
-        scheduledDate: t.scheduled_date,
-        status: t.status,
-        isRecurring: ss?.service_type?.is_recurring ?? null,
-        frequencyValue: ss?.frequency_value ?? null,
-        frequencyUnit: ss?.frequency_unit ?? null,
-        clientToleranceValue: ss?.client_tolerance_value ?? null,
-        clientToleranceUnit: ss?.client_tolerance_unit ?? null,
-        regulatoryToleranceValue: ss?.service_type?.regulatory_tolerance_value ?? null,
-        regulatoryToleranceUnit: ss?.service_type?.regulatory_tolerance_unit ?? null,
-      }) ?? new Date(t.scheduled_date)
-    return target.getTime() >= today.getTime()
-  })
+  // Parts stay listed from the visit date until the call is completed or
+  // cancelled — including overdue calls past their "complete by" date, so the
+  // engineer still carries parts for late work.
+  const rows = ((tasks || []) as unknown as TaskRow[]).filter((t) => !!t.scheduled_date)
 
   // Aggregate by part across every upcoming call.
   const byPart = new Map<string, UpcomingPartSummary>()

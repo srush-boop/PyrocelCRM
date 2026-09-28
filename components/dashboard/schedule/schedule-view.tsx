@@ -281,8 +281,8 @@ function FilterGroup({
 }) {
   const s = FILTER_SECTION[tone]
   return (
-    <section className={cn('space-y-1.5 rounded-lg p-2 ring-1 ring-inset', s.wrap, className)}>
-      <span className={cn('flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide', s.label)}>
+  <section aria-label={label} className={cn('rounded-lg p-1.5 ring-1 ring-inset sm:space-y-1.5 sm:p-2', s.wrap, className)}>
+  <span className={cn('hidden items-center gap-1 text-[11px] font-semibold uppercase tracking-wide sm:flex', s.label)}>
         <Icon className="h-3 w-3" />
         {label}
       </span>
@@ -1301,7 +1301,7 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
         )}
 
         {/* Upcoming / Overdue / Completed switcher, centred between the two sides. */}
-        <div className="mx-auto flex items-center justify-center">{tabTriggers}</div>
+        <div className="flex min-w-0 flex-1 items-center sm:mx-auto sm:flex-none sm:justify-center">{tabTriggers}</div>
 
         <div className="flex items-center gap-1.5">
           {hasActiveFilters && (
@@ -1309,20 +1309,23 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
               variant="ghost"
               size="sm"
               onClick={clearFilters}
-              className="gap-1.5 text-muted-foreground hover:text-foreground"
+              className="gap-1.5 px-2 text-muted-foreground hover:text-foreground"
+              aria-label="Clear filters"
             >
               <X className="h-4 w-4" />
-              Clear
+              <span className="hidden sm:inline">Clear</span>
             </Button>
           )}
           <Select value={sortBy} onValueChange={(v) => handleSortChange(v as SortKey)}>
-            <SelectTrigger className="w-[140px]">
+            <SelectTrigger className="w-auto sm:w-[140px]" aria-label="Sort calls">
               {locating ? (
-                <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground sm:mr-2" />
               ) : (
-                <ArrowUpDown className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+                <ArrowUpDown className="h-4 w-4 shrink-0 text-muted-foreground sm:mr-2" />
               )}
-              <SelectValue placeholder="Sort by" />
+              <span className="hidden sm:inline">
+                <SelectValue placeholder="Sort by" />
+              </span>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="date">Due date</SelectItem>

@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { CalendarClock, MapPinned } from 'lucide-react'
+import { CalendarClock, MapPinned, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScheduleView } from '@/components/dashboard/schedule/schedule-view'
 import { CreateTaskDialog } from '@/components/dashboard/schedule/create-task-dialog'
@@ -190,15 +190,36 @@ export default async function SchedulePage({
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Calls</h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="hidden text-sm text-muted-foreground sm:block">
               {isAdminOrOffice ? 'Manage and book service calls' : 'View your calls'}
             </p>
           </div>
-          <ScanQrButton
-            variant="outline"
-            size="icon"
-            className="h-11 w-11 shrink-0 rounded-full"
-          />
+          <div className="flex shrink-0 items-center gap-2">
+            {/* On-call engineers log reactive / emergency call-outs from here. */}
+            {!isAdminOrOffice && onCallNow && (
+              <CreateTaskDialog
+                siteServices={siteServices}
+                engineers={engineers}
+                clients={clients}
+                reactiveServiceTypes={reactiveServiceTypes}
+                sites={sites}
+                systemTypes={systemTypes}
+                lockReactive
+                defaultEngineerId={user.id}
+                trigger={
+                  <Button size="sm" className="h-10 gap-1.5 rounded-full px-4">
+                    <Plus className="h-4 w-4" />
+                    Log call
+                  </Button>
+                }
+              />
+            )}
+            <ScanQrButton
+              variant="outline"
+              size="icon"
+              className="h-10 w-10 shrink-0 rounded-full"
+            />
+          </div>
         </div>
 
         {/* Admin/office actions get their own tidy row below the title. */}
@@ -229,21 +250,6 @@ export default async function SchedulePage({
           </div>
         )}
 
-        {/* On-call engineers can log reactive / emergency call-outs during their shift. */}
-        {!isAdminOrOffice && onCallNow && (
-          <div className="flex flex-wrap items-center gap-2 [&>*]:flex-1 sm:[&>*]:flex-none">
-            <CreateTaskDialog
-              siteServices={siteServices}
-              engineers={engineers}
-              clients={clients}
-              reactiveServiceTypes={reactiveServiceTypes}
-              sites={sites}
-              systemTypes={systemTypes}
-              lockReactive
-              defaultEngineerId={user.id}
-            />
-          </div>
-        )}
       </div>
 
       <ScheduleView 

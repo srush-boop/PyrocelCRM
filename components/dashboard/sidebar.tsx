@@ -2,8 +2,9 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
+  useSidebar,
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -166,6 +167,13 @@ function NavGroupItem({ item }: { item: NavItem }) {
 export function DashboardSidebar({ profile }: DashboardSidebarProps) {
   const pathname = usePathname()
   const navItems = getVisibleMenu(profile.role, profile.menu_permissions)
+  const { setOpenMobile } = useSidebar()
+
+  // The pathname only changes once the new route has rendered, so closing the
+  // mobile drawer here dismisses it after the selected page has loaded.
+  useEffect(() => {
+    setOpenMobile(false)
+  }, [pathname, setOpenMobile])
 
   // Labour Costs is a sensitive, individually-granted view (not a role menu key),
   // so we inject it here rather than in the shared role menus. Mirrors the pure

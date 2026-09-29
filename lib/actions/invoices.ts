@@ -1092,6 +1092,8 @@ export interface SageExportResult {
   filename?: string
   /** Number of invoices written into the CSV. */
   count?: number
+  /** Issued invoices held back because they haven't been emailed to the client. */
+  skippedUnsent?: number
 }
 
 /**
@@ -1110,7 +1112,7 @@ export async function exportInvoicesToSage(invoiceIds?: string[]): Promise<SageE
   let query = supabase
     .from('invoices')
     .select(
-      'id, invoice_number, document_type, sage_account_ref, issue_date, tax_rate, status, sage_exported_at, billing_account:billing_accounts(sage_account_ref), line_items:invoice_line_items(description, amount_pence, nominal_code, sort_order)',
+      'id, invoice_number, document_type, sage_account_ref, issue_date, tax_rate, status, sent_at, sage_exported_at, billing_account:billing_accounts(sage_account_ref), line_items:invoice_line_items(description, amount_pence, nominal_code, sort_order)',
     )
     .in('status', ['issued', 'paid'])
     .order('issue_date', { ascending: true })
@@ -1133,11 +1135,23 @@ export async function exportInvoicesToSage(invoiceIds?: string[]): Promise<SageE
     billing_account: { sage_account_ref: string | null } | null
     line_items: Pick<InvoiceLineItem, 'description' | 'amount_pence' | 'nominal_code' | 'sort_order'>[]
   }
-  const rows = (data ?? []) as unknown as Row[]
+  const rows = (data ?? []) as unknown as (Row & { sent_at: string | null })[]
 
-  const exportable = rows.filter((r) => (r.line_items ?? []).length > 0)
+  // Invoices must be emailed to the client before they go to Sage. Credit notes
+  // can't be emailed from the CRM, so they're exempt.
+  const isSentOrCredit = (r: { document_type: string; sent_at: string | null }) =>
+    r.document_type === 'credit_note' || !!r.sent_at
+  const withLines = rows.filter((r) => (r.line_items ?? []).length > 0)
+  const skippedUnsent = withLines.filter((r) => !isSentOrCredit(r)).length
+  const exportable = withLines.filter(isSentOrCredit)
   if (exportable.length === 0) {
-    return { error: 'No issued invoices are waiting to be sent to Sage.' }
+    return {
+      error:
+        skippedUnsent > 0
+          ? `${skippedUnsent} issued invoice${skippedUnsent === 1 ? ' has' : 's have'} not been sent to the client yet. Send them before pushing to Sage.`
+          : 'No issued invoices are waiting to be sent to Sage.',
+      skippedUnsent,
+    }
   }
 
   // Company-level Sage tax code (e.g. T1) applied to every exported line.
@@ -1182,6 +1196,7 @@ export async function exportInvoicesToSage(invoiceIds?: string[]): Promise<SageE
     csv,
     filename: `sage-export-${stamp}.csv`,
     count: exportable.length,
+    skippedUnsent,
   }
 }
 

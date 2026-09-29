@@ -48,7 +48,11 @@ export default async function InvoicesPage() {
 
   // Issued/paid invoices not yet pushed to Sage — drives the "Push to Sage" badge.
   const sagePending = ((invoices ?? []) as unknown as InvoiceRow[]).filter(
-    (i) => (i.status === 'issued' || i.status === 'paid') && !i.sage_exported_at,
+    (i) =>
+      (i.status === 'issued' || i.status === 'paid') &&
+      !i.sage_exported_at &&
+      // Must be emailed to the client first (credit notes are exempt).
+      (i.document_type === 'credit_note' || !!i.sent_at),
   ).length
 
   const header = (

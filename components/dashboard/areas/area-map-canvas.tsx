@@ -78,10 +78,10 @@ function DistrictLayer({
         const dim = focus && !isFocus
         return {
           color: isFocus ? '#0f172a' : (d.color ?? UNMAPPED),
-          weight: isFocus ? 2.5 : 1,
-          opacity: dim ? 0.35 : 0.9,
+          weight: isFocus ? 3 : d.color ? 2 : 1.25,
+          opacity: dim ? 0.45 : 1,
           fillColor: d.color ?? UNMAPPED,
-          fillOpacity: d.color ? (dim ? 0.08 : isFocus ? 0.4 : 0.28) : 0.04,
+          fillOpacity: d.color ? (dim ? 0.15 : isFocus ? 0.6 : 0.45) : 0.1,
           dashArray: d.partial || !d.color ? '4 3' : undefined,
         }
       }}
@@ -167,7 +167,7 @@ export const AreaMapCanvas = memo(function AreaMapCanvas({
     <MapContainer center={[54.97, -1.61]} zoom={10} scrollWheelZoom className="h-full w-full">
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · Postcode boundaries &copy; OS Code-Point Open'
-        url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+        url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
       />
       <FitOnce points={coords} />
       <InvalidateSize />

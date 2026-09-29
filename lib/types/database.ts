@@ -3370,7 +3370,8 @@ export interface StockLocationSummary extends StockLocation {
 }
 
 // A request from one engineer to borrow/transfer a part from another's location.
-export type PartRequestStatus = 'pending' | 'approved' | 'declined' | 'cancelled'
+// 'approved' = partially collected; 'collected' = fully collected (stock moved).
+export type PartRequestStatus = 'pending' | 'approved' | 'collected' | 'declined' | 'cancelled'
 
 export interface PartRequest {
   id: string
@@ -3382,6 +3383,11 @@ export interface PartRequest {
   status: PartRequestStatus
   resolved_by: string | null
   resolved_at: string | null
+  collected_qty: number
+  collected_at: string | null
+  collected_by: string | null
+  to_location_id: string | null
+  resolution_note: string | null
   created_at: string
   updated_at: string
   // Joined relations

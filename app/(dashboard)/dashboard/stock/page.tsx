@@ -14,6 +14,8 @@ import {
 import { LowStockAlerts } from '@/components/dashboard/stock/low-stock-alerts'
 import { LocationsOverview } from '@/components/dashboard/stock/locations-overview'
 import { PartLocator } from '@/components/dashboard/stock/part-locator'
+import { PartRequestsQueue } from '@/components/dashboard/stock/part-requests-queue'
+import { getPartRequestQueue } from '@/lib/part-requests'
 import { BranchFilter } from '@/components/dashboard/branch-filter'
 import { getBranchScope } from '@/lib/branches'
 
@@ -51,9 +53,10 @@ export default async function StockPage({
     ? undefined
     : await getEngineerLocationIds(profile.id)
 
-  const [locations, lowStock] = await Promise.all([
+  const [locations, lowStock, partRequests] = await Promise.all([
     getStockLocationSummaries(scope.activeBranchId),
     getLowStockAlerts(alertLocationIds),
+    getPartRequestQueue(),
   ])
 
   const totalHeldValue = locations.reduce((sum, l) => sum + l.heldValue, 0)
@@ -142,6 +145,12 @@ export default async function StockPage({
           </CardContent>
         </Card>
       </div>
+
+      <PartRequestsQueue
+        requests={partRequests}
+        currentUserId={profile.id}
+        isManager={isManager}
+      />
 
       <PartLocator />
 

@@ -154,6 +154,11 @@
 .leaflet-tooltip.area-map-district-label::before {
   display: none;
 }
+.area-map-district-label .area-map-district-value {
+  font-size: 10px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
 .area-map-hide-labels .area-map-district-label {
   display: none;
 }

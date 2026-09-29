@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { NearbyCallsPrompt } from '@/components/dashboard/tasks/nearby-calls-prompt'
 import {
@@ -45,11 +45,15 @@ export function useCompletionExit(role: string, discipline?: string | null) {
   // routes so they are excluded too.
   const offerNearby = role === 'engineer' && discipline !== 'cdo'
 
+  // Warm the Calls route while the engineer works so the exit is instant.
+  useEffect(() => {
+    router.prefetch(CALLS_ROUTE)
+  }, [router])
+
+  // No router.refresh(): dynamic pages aren't kept in the client Router Cache,
+  // so push loads fresh data anyway; refresh() only re-rendered the heavy task
+  // page on the way out and delayed the exit.
   const goToCalls = useCallback(() => {
-    // Invalidate the client Router Cache BEFORE navigating so the Calls list
-    // loads fresh (via its loading.tsx skeleton) with the completed call already
-    // gone, rather than briefly showing the cached list with it still open.
-    router.refresh()
     router.push(CALLS_ROUTE)
   }, [router])
 
@@ -61,7 +65,6 @@ export function useCompletionExit(role: string, discipline?: string | null) {
       // On a route: go straight to the next pending call in route order.
       if (nextRouteTaskId) {
         router.push(`/dashboard/tasks/${nextRouteTaskId}`)
-        router.refresh()
         return
       }
       if (offerNearby) {

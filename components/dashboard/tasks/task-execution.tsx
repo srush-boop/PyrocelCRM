@@ -1009,6 +1009,19 @@ export function TaskExecution({
       return
     }
 
+    // Start the nearby-calls lookup and warm the Calls route NOW so they run
+    // alongside the saves rather than after them (the lookup already excludes
+    // this task, so it doesn't need to wait for the completion write).
+    const offerNearby =
+      !routeProgress?.nextTaskId && profile.role === 'engineer' && profile.discipline !== 'cdo'
+    const nearbyLookup = offerNearby
+      ? findNearbyOverdueCalls({ fromTaskId: task.id }).catch((err) => {
+          console.error('[v0] Nearby calls lookup failed:', err)
+          return null
+        })
+      : null
+    router.prefetch(routeProgress?.nextTaskId ? `/dashboard/tasks/${routeProgress.nextTaskId}` : '/dashboard/schedule')
+
     // Save/update task result
     const persisted = await persistTaskResult(supabase, {
       rowId: resultIdRef.current,
@@ -1109,45 +1122,30 @@ export function TaskExecution({
 
     // On a CDO route: skip the nearby prompt and go straight to the next pending
     // call in route order so the engineer can work the route uninterrupted.
+    // No router.refresh() before navigating: dynamic pages aren't held in the
+    // client Router Cache, so push already loads fresh data. refresh() only
+    // re-rendered this (heavy) task page on the way out and delayed the exit.
     if (routeProgress?.nextTaskId) {
-      // Invalidate the client Router Cache BEFORE navigating so the next call
-      // loads fresh — otherwise the cached page can briefly show stale state.
-      router.refresh()
       router.push(`/dashboard/tasks/${routeProgress.nextTaskId}`)
       return
     }
 
-    // Before leaving, check for overdue / due-soon calls at other nearby sites so
-    // the engineer can take them on while they're in the area (avoids sending a
-    // second engineer out later). Best-effort — never block completion on it.
-    // Internal engineers only — sub-contractors go straight back to Calls, and
-    // CDO engineers work planned routes so they are excluded too.
-    if (profile.role === 'engineer' && profile.discipline !== 'cdo') {
-      try {
-        const res = await findNearbyOverdueCalls({ fromTaskId: task.id })
-        if (res.ok && res.calls && res.calls.length > 0) {
-          setNearbyCalls(res.calls)
-          setShowNearbyPrompt(true)
-          setSubmitting(false)
-          return
-        }
-      } catch (err) {
-        console.error('[v0] Nearby calls lookup failed:', err)
-      }
+    // Nearby overdue / due-soon calls (internal non-CDO engineers only), started
+    // in parallel above. Best-effort — never block completion on it.
+    const nearby = nearbyLookup ? await nearbyLookup : null
+    if (nearby?.ok && nearby.calls && nearby.calls.length > 0) {
+      setNearbyCalls(nearby.calls)
+      setShowNearbyPrompt(true)
+      setSubmitting(false)
+      return
     }
 
-    // Invalidate the client Router Cache BEFORE navigating so the schedule
-    // loads fresh (via its loading.tsx skeleton) with the completed call already
-    // gone, instead of briefly showing the cached list with the call still open.
-    // Keep the loader up through navigation — the component unmounts on push.
-    router.refresh()
     router.push('/dashboard/schedule')
   }
 
   // Leave the completed task once the engineer dismisses the nearby-calls prompt.
   const handleNearbyPromptClose = () => {
     setShowNearbyPrompt(false)
-    router.refresh()
     router.push('/dashboard/schedule')
   }
 
@@ -1173,7 +1171,6 @@ export function TaskExecution({
       return
     }
     if (routeProgress?.nextTaskId) {
-      router.refresh()
       router.push(`/dashboard/tasks/${routeProgress.nextTaskId}`)
       return
     }
@@ -1190,7 +1187,6 @@ export function TaskExecution({
         console.error('[v0] Nearby calls lookup failed:', err)
       }
     }
-    router.refresh()
     router.push('/dashboard/schedule')
   }
 

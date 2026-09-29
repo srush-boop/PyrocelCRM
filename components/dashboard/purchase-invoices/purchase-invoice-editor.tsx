@@ -285,19 +285,12 @@ export function PurchaseInvoiceEditor({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>Supplier</Label>
-              <Select value={supplierId || NONE} onValueChange={(v) => setSupplierId(v === NONE ? '' : v)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select supplier" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE}>None</SelectItem>
-                  {options.suppliers.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SmartSelect
+                value={supplierId}
+                onChange={setSupplierId}
+                placeholder="Select supplier"
+                options={options.suppliers.map((s) => ({ value: s.id, label: s.name }))}
+              />
             </div>
             <div className="space-y-2">
               <Label>Supplier ref</Label>
@@ -313,92 +306,54 @@ export function PurchaseInvoiceEditor({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>Site</Label>
-              <Select value={siteId || NONE} onValueChange={(v) => setSiteId(v === NONE ? '' : v)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select site" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE}>None</SelectItem>
-                  {options.sites.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SmartSelect
+                value={siteId}
+                onChange={setSiteId}
+                placeholder="Select site"
+                options={options.sites.map((s) => ({ value: s.id, label: s.name, hint: s.postcode }))}
+              />
             </div>
             <div className="space-y-2">
               <Label>Client</Label>
-              <Select value={clientId || NONE} onValueChange={(v) => setClientId(v === NONE ? '' : v)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select client" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE}>None</SelectItem>
-                  {options.clients.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SmartSelect
+                value={clientId}
+                onChange={setClientId}
+                placeholder="Select client"
+                options={options.clients.map((c) => ({ value: c.id, label: c.name }))}
+              />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>Branch</Label>
-              <Select value={branchId || NONE} onValueChange={(v) => setBranchId(v === NONE ? '' : v)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select branch" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE}>None</SelectItem>
-                  {options.branches.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>
-                      {b.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SmartSelect
+                value={branchId}
+                onChange={setBranchId}
+                placeholder="Select branch"
+                options={options.branches.map((b) => ({ value: b.id, label: b.name }))}
+              />
             </div>
             <div className="space-y-2">
               <Label>Department</Label>
-              <Select
-                value={departmentId || NONE}
-                onValueChange={(v) => setDepartmentId(v === NONE ? '' : v)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select department" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE}>None</SelectItem>
-                  {options.departments.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>
-                      {d.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SmartSelect
+                value={departmentId}
+                onChange={setDepartmentId}
+                placeholder="Select department"
+                options={options.departments.map((d) => ({ value: d.id, label: d.name }))}
+              />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>Nominal code</Label>
-              <Select value={nominalId || NONE} onValueChange={(v) => setNominalId(v === NONE ? '' : v)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select nominal code" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE}>None</SelectItem>
-                  {options.nominalCodes.map((n) => (
-                    <SelectItem key={n.id} value={n.id}>
-                      {n.code} — {n.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SmartSelect
+                value={nominalId}
+                onChange={setNominalId}
+                placeholder="Select nominal code"
+                options={options.nominalCodes.map((n) => ({ value: n.id, label: `${n.code} — ${n.name}` }))}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="pi-department-code">Department code (Sage)</Label>
@@ -457,22 +412,12 @@ export function PurchaseInvoiceEditor({
           {/* Authoriser */}
           <div className="space-y-2 rounded-md border p-3">
             <Label>Assign authoriser</Label>
-            <Select
-              value={authoriserId || NONE}
-              onValueChange={(v) => setAuthoriserId(v === NONE ? '' : v)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select authoriser" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE}>None</SelectItem>
-                {options.authorisers.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.full_name ?? 'Unnamed'}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SmartSelect
+                value={authoriserId}
+                onChange={setAuthoriserId}
+                placeholder="Select authoriser"
+                options={options.authorisers.map((a) => ({ value: a.id, label: a.full_name ?? 'Unnamed' }))}
+              />
             <p className="text-xs text-muted-foreground">
               They&apos;ll be notified to approve the invoice for payment. Requires a supplier and
               amount.
@@ -493,5 +438,99 @@ export function PurchaseInvoiceEditor({
         </SheetFooter>
       </SheetContent>
     </Sheet>
+  )
+}
+
+const SEARCH_THRESHOLD = 5
+
+type SmartOption = { value: string; label: string; hint?: string | null }
+
+function SmartSelect({
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  value: string
+  onChange: (value: string) => void
+  options: SmartOption[]
+  placeholder: string
+}) {
+  const [open, setOpen] = useState(false)
+
+  if (options.length <= SEARCH_THRESHOLD) {
+    return (
+      <Select value={value || NONE} onValueChange={(v) => onChange(v === NONE ? '' : v)}>
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NONE}>None</SelectItem>
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    )
+  }
+
+  const selected = options.find((o) => o.value === value)
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between font-normal"
+        >
+          <span className={cn('truncate', !selected && 'text-muted-foreground')}>
+            {selected ? selected.label : 'None'}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] min-w-64 p-0" align="start">
+        <Command>
+          <CommandInput placeholder={`Search ${options.length} options…`} />
+          <CommandList>
+            <CommandEmpty>No results.</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value="__none__ none"
+                onSelect={() => {
+                  onChange('')
+                  setOpen(false)
+                }}
+              >
+                <Check className={cn('mr-2 h-4 w-4', !value ? 'opacity-100' : 'opacity-0')} />
+                None
+              </CommandItem>
+              {options.map((o) => (
+                <CommandItem
+                  key={o.value}
+                  value={`${o.label} ${o.hint ?? ''} ${o.value}`}
+                  onSelect={() => {
+                    onChange(o.value)
+                    setOpen(false)
+                  }}
+                >
+                  <Check
+                    className={cn('mr-2 h-4 w-4', value === o.value ? 'opacity-100' : 'opacity-0')}
+                  />
+                  <span className="truncate">{o.label}</span>
+                  {o.hint && (
+                    <span className="ml-auto shrink-0 pl-2 text-xs text-muted-foreground">{o.hint}</span>
+                  )}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   )
 }

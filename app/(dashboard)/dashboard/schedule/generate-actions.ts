@@ -77,16 +77,17 @@ interface ServiceRow {
  * everything due that month exactly as before.
  */
 export interface GenerateCallsFilters {
-  clientId?: string | null
-  siteId?: string | null
-  branchId?: string | null
-  areaId?: string | null
-  routeId?: string | null
-  subcontractorId?: string | null
-  systemTypeId?: string | null
-  serviceTypeId?: string | null
+  /** Each list matches ANY of its values; empty/undefined = no filter. */
+  clientIds?: string[]
+  siteIds?: string[]
+  branchIds?: string[]
+  areaIds?: string[]
+  routeIds?: string[]
+  subcontractorIds?: string[]
+  systemTypeIds?: string[]
+  serviceTypeIds?: string[]
   /** 'cdo' | 'engineer' | 'subcontractor' */
-  workerType?: string | null
+  workerTypes?: string[]
   /** YYYY-MM-DD. Keep only calls whose projected date is on/before this day. */
   dueByDate?: string | null
 }
@@ -140,19 +141,26 @@ function isGeneratableService(s: ServiceRow): boolean {
   )
 }
 
-/** Apply the optional user filters to a single service (equality matches). */
+/** True when the list is empty (no filter) or contains the value. */
+function inList(list: string[] | undefined, value: string | null | undefined): boolean {
+  if (!list || list.length === 0) return true
+  return value != null && list.includes(value)
+}
+
+/** Apply the optional user filters to a single service (any-of matches per filter). */
 function serviceMatchesFilters(s: ServiceRow, f: GenerateCallsFilters): boolean {
-  if (f.clientId && s.site?.client_id !== f.clientId) return false
-  if (f.siteId && s.site_id !== f.siteId) return false
-  if (f.branchId && s.site?.branch_id !== f.branchId) return false
-  if (f.areaId && s.area_id !== f.areaId) return false
-  // Routes are site-level (a route is an ordered list of sites).
-  if (f.routeId && s.site?.route_id !== f.routeId) return false
-  if (f.subcontractorId && s.subcontractor_id !== f.subcontractorId) return false
-  if (f.systemTypeId && s.site_system?.system_type?.id !== f.systemTypeId) return false
-  if (f.serviceTypeId && s.service_type_id !== f.serviceTypeId) return false
-  if (f.workerType && s.worker_type !== f.workerType) return false
-  return true
+  return (
+    inList(f.clientIds, s.site?.client_id) &&
+    inList(f.siteIds, s.site_id) &&
+    inList(f.branchIds, s.site?.branch_id) &&
+    inList(f.areaIds, s.area_id) &&
+    // Routes are site-level (a route is an ordered list of sites).
+    inList(f.routeIds, s.site?.route_id) &&
+    inList(f.subcontractorIds, s.subcontractor_id) &&
+    inList(f.systemTypeIds, s.site_system?.system_type?.id) &&
+    inList(f.serviceTypeIds, s.service_type_id) &&
+    inList(f.workerTypes, s.worker_type)
+  )
 }
 
 interface TaskRow {

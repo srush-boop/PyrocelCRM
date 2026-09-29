@@ -38,6 +38,7 @@ import {
   type GenerateCallsFilters,
   type GenerateCallsFilterOptions,
 } from '@/app/(dashboard)/dashboard/schedule/generate-actions'
+import { MultiSelectFilter } from '@/components/dashboard/schedule/multi-select-filter'
 
 interface MonthOption {
   value: string
@@ -79,21 +80,12 @@ function formatCallDate(dateStr: string) {
 
 const ALL = '__all__'
 
-// The filter keys that map 1:1 to an option list from the server.
-type OptionFilterKey =
-  | 'clientId'
-  | 'siteId'
-  | 'branchId'
-  | 'areaId'
-  | 'routeId'
-  | 'subcontractorId'
-  | 'systemTypeId'
-  | 'serviceTypeId'
+type ListFilterKey = Exclude<keyof GenerateCallsFilters, 'dueByDate'>
 
-const WORKER_TYPES: { value: string; label: string }[] = [
-  { value: 'cdo', label: 'CDO' },
-  { value: 'engineer', label: 'Engineer' },
-  { value: 'subcontractor', label: 'Sub-contractor' },
+const WORKER_TYPES: { id: string; name: string }[] = [
+  { id: 'cdo', name: 'CDO' },
+  { id: 'engineer', name: 'Engineer' },
+  { id: 'subcontractor', name: 'Sub-contractor' },
 ]
 
 export function GenerateCallsButton() {
@@ -137,8 +129,8 @@ export function GenerateCallsButton() {
   }, [open, options, loadingOptions])
 
   // Number of active filters (for the badge on the Filters toggle).
-  const activeFilterCount = Object.values(filters).filter(
-    (v) => v !== undefined && v !== null && v !== '',
+  const activeFilterCount = Object.values(filters).filter((v) =>
+    Array.isArray(v) ? v.length > 0 : Boolean(v),
   ).length
 
   const invalidatePreview = () => {
@@ -152,15 +144,37 @@ export function GenerateCallsButton() {
     invalidatePreview()
   }
 
-  const setFilter = (key: keyof GenerateCallsFilters, value: string | null) => {
+  const setListFilter = (key: ListFilterKey, value: string[]) => {
     setFilters((prev) => {
       const next = { ...prev }
-      if (!value || value === ALL) delete next[key]
+      if (value.length === 0) delete next[key]
       else next[key] = value
       return next
     })
     invalidatePreview()
   }
+
+  const setDueByDate = (value: string) => {
+    setFilters((prev) => {
+      const next = { ...prev }
+      if (value) next.dueByDate = value
+      else delete next.dueByDate
+      return next
+    })
+    invalidatePreview()
+  }
+
+  const listFilters: { key: ListFilterKey; label: string; options: { id: string; name: string }[] }[] = [
+    { key: 'clientIds', label: 'Client', options: options?.clients ?? [] },
+    { key: 'siteIds', label: 'Site', options: options?.sites ?? [] },
+    { key: 'branchIds', label: 'Branch', options: options?.branches ?? [] },
+    { key: 'areaIds', label: 'Area', options: options?.areas ?? [] },
+    { key: 'routeIds', label: 'Route', options: options?.routes ?? [] },
+    { key: 'systemTypeIds', label: 'System type', options: options?.systemTypes ?? [] },
+    { key: 'serviceTypeIds', label: 'Service type', options: options?.serviceTypes ?? [] },
+    { key: 'subcontractorIds', label: 'Sub-contractor', options: options?.subcontractors ?? [] },
+    { key: 'workerTypes', label: 'Worker type', options: WORKER_TYPES },
+  ]
 
   const clearFilters = () => {
     setFilters({})
@@ -249,10 +263,10 @@ export function GenerateCallsButton() {
           Generate Calls
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-3xl">
+        <DialogHeader className="border-b px-6 pb-4 pt-6 text-left">
           <DialogTitle>Generate monthly calls</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-pretty">
             Create the recurring calls that fall due in the selected month. This fills any gaps
             and never duplicates calls that are already scheduled, so it&apos;s safe to run more
             than once. Pick a past month to back-fill a late contract or a site that missed its
@@ -260,10 +274,12 @@ export function GenerateCallsButton() {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-2 py-2">
+        <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="flex min-w-0 flex-col gap-2">
           <Label htmlFor="generate-month">Target month</Label>
           <Select value={selected} onValueChange={handleSelect}>
-            <SelectTrigger id="generate-month">
+            <SelectTrigger id="generate-month" className="w-full">
               <SelectValue placeholder="Select a month" />
             </SelectTrigger>
             <SelectContent>
@@ -287,7 +303,7 @@ export function GenerateCallsButton() {
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs leading-relaxed text-muted-foreground">
             {selectedOption?.retro
               ? 'Retrospective month. Due dates use each service’s real cadence date, even if it has already passed.'
               : 'Due dates are rolled forward from each service’s fixed visit frequency.'}
@@ -295,10 +311,14 @@ export function GenerateCallsButton() {
         </div>
 
         {/* Assign the whole generated batch to one engineer (optional). */}
-        <div className="grid gap-2 py-2">
+        <div className="flex min-w-0 flex-col gap-2">
           <Label htmlFor="assign-engineer">Assign to engineer</Label>
           <Select value={assignEngineerId} onValueChange={setAssignEngineerId}>
-            <SelectTrigger id="assign-engineer" disabled={!options || options.engineers.length === 0}>
+            <SelectTrigger
+              id="assign-engineer"
+              className="w-full"
+              disabled={!options || options.engineers.length === 0}
+            >
               <SelectValue placeholder="Leave unassigned" />
             </SelectTrigger>
             <SelectContent>
@@ -310,15 +330,20 @@ export function GenerateCallsButton() {
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs leading-relaxed text-muted-foreground">
             Every call created in this run is assigned to the chosen engineer. Leave unassigned to
             allocate them later on the schedule.
           </p>
         </div>
+        </div>
 
         {/* Optional filters — narrow which services get generated. */}
-        <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
-          <div className="flex items-center justify-between">
+        <Collapsible
+          open={filtersOpen}
+          onOpenChange={setFiltersOpen}
+          className="rounded-lg border bg-muted/30"
+        >
+          <div className="flex items-center justify-between px-2 py-1.5">
             <CollapsibleTrigger asChild>
               <Button variant="ghost" size="sm" className="gap-2 px-2">
                 <SlidersHorizontal className="h-4 w-4" />
@@ -338,90 +363,34 @@ export function GenerateCallsButton() {
             )}
           </div>
 
-          <CollapsibleContent className="pt-2">
+          <CollapsibleContent className="border-t px-4 pb-4 pt-3">
             {loadingOptions ? (
-              <div className="flex items-center gap-2 px-1 py-4 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Loading filters…
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <FilterSelect
-                  label="Client"
-                  value={filters.clientId ?? null}
-                  onChange={(v) => setFilter('clientId', v)}
-                  options={options?.clients ?? []}
-                />
-                <FilterSelect
-                  label="Site"
-                  value={filters.siteId ?? null}
-                  onChange={(v) => setFilter('siteId', v)}
-                  options={options?.sites ?? []}
-                />
-                <FilterSelect
-                  label="Branch"
-                  value={filters.branchId ?? null}
-                  onChange={(v) => setFilter('branchId', v)}
-                  options={options?.branches ?? []}
-                />
-                <FilterSelect
-                  label="Area"
-                  value={filters.areaId ?? null}
-                  onChange={(v) => setFilter('areaId', v)}
-                  options={options?.areas ?? []}
-                />
-                <FilterSelect
-                  label="Route"
-                  value={filters.routeId ?? null}
-                  onChange={(v) => setFilter('routeId', v)}
-                  options={options?.routes ?? []}
-                />
-                <FilterSelect
-                  label="System type"
-                  value={filters.systemTypeId ?? null}
-                  onChange={(v) => setFilter('systemTypeId', v)}
-                  options={options?.systemTypes ?? []}
-                />
-                <FilterSelect
-                  label="Service type"
-                  value={filters.serviceTypeId ?? null}
-                  onChange={(v) => setFilter('serviceTypeId', v)}
-                  options={options?.serviceTypes ?? []}
-                />
-                <FilterSelect
-                  label="Sub-contractor"
-                  value={filters.subcontractorId ?? null}
-                  onChange={(v) => setFilter('subcontractorId', v)}
-                  options={options?.subcontractors ?? []}
-                />
-                <div className="grid gap-1.5">
-                  <Label className="text-xs text-muted-foreground">Worker type</Label>
-                  <Select
-                    value={filters.workerType ?? ALL}
-                    onValueChange={(v) => setFilter('workerType', v)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="All" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={ALL}>All</SelectItem>
-                      {WORKER_TYPES.map((w) => (
-                        <SelectItem key={w.value} value={w.value}>
-                          {w.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-1.5">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
+                {listFilters.map((f) => (
+                  <MultiSelectFilter
+                    key={f.key}
+                    id={`gen-filter-${f.key}`}
+                    label={f.label}
+                    options={f.options}
+                    value={filters[f.key] ?? []}
+                    onChange={(v) => setListFilter(f.key, v)}
+                  />
+                ))}
+                <div className="flex min-w-0 flex-col gap-1.5">
                   <Label htmlFor="due-by" className="text-xs text-muted-foreground">
                     Due by date
                   </Label>
                   <Input
                     id="due-by"
                     type="date"
+                    className="w-full"
                     value={filters.dueByDate ?? ''}
-                    onChange={(e) => setFilter('dueByDate', e.target.value || null)}
+                    onChange={(e) => setDueByDate(e.target.value)}
                   />
                 </div>
               </div>
@@ -467,7 +436,9 @@ export function GenerateCallsButton() {
           </div>
         )}
 
-        <DialogFooter className="gap-2 sm:gap-2">
+        </div>
+
+        <DialogFooter className="gap-2 border-t px-6 py-4 sm:gap-2">
           <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>
             Cancel
           </Button>
@@ -504,38 +475,3 @@ export function GenerateCallsButton() {
   )
 }
 
-/**
- * A single "All / <options>" filter select. Renders disabled with an
- * "All (none)" hint when the option list is empty (e.g. no areas configured).
- */
-function FilterSelect({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string
-  value: string | null
-  onChange: (value: string | null) => void
-  options: { id: string; name: string }[]
-}) {
-  const empty = options.length === 0
-  return (
-    <div className="grid gap-1.5">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      <Select value={value ?? ALL} onValueChange={onChange} disabled={empty}>
-        <SelectTrigger>
-          <SelectValue placeholder="All" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={ALL}>All</SelectItem>
-          {options.map((o) => (
-            <SelectItem key={o.id} value={o.id}>
-              {o.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  )
-}

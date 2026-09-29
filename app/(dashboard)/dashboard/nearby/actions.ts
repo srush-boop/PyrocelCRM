@@ -485,20 +485,17 @@ export async function findNearbyOverdueCalls(input: {
 
   const radiusMiles = input.radiusMiles ?? 15
 
-  // Requesting engineer's discipline drives CDO isolation of suggestions.
-  const { data: me } = await supabase
-    .from('profiles')
-    .select('discipline')
-    .eq('id', user.id)
-    .single()
+  // Requesting engineer's discipline (drives CDO isolation of suggestions) and
+  // the completed task's site (search origin) are independent — fetch together.
+  const [{ data: me }, { data: fromTask }] = await Promise.all([
+    supabase.from('profiles').select('discipline').eq('id', user.id).single(),
+    supabase
+      .from('tasks')
+      .select(`id, site_service:site_services(site:sites(id, postcode, latitude, longitude))`)
+      .eq('id', input.fromTaskId)
+      .single(),
+  ])
   const myDiscipline = (me as { discipline: Discipline | null } | null)?.discipline ?? null
-
-  // Resolve the completed task's site as the search origin.
-  const { data: fromTask } = await supabase
-    .from('tasks')
-    .select(`id, site_service:site_services(site:sites(id, postcode, latitude, longitude))`)
-    .eq('id', input.fromTaskId)
-    .single()
 
   const fromSite = (
     fromTask as unknown as {

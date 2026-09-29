@@ -3926,6 +3926,7 @@ export interface PurchaseInvoice {
   branch_id: string | null
   nominal_code_id: string | null
   department_id: string | null
+  department_code: string | null
   supplier_id: string | null
   supplier_ref: string | null
   notes: string | null

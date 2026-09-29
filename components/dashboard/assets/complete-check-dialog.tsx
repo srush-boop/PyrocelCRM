@@ -73,6 +73,10 @@ export function CompleteCheckDialog({
       toast.error('A certificate is required for this check')
       return
     }
+    if (isCalibration && calibrationDue && calibrationDue <= checkDate) {
+      toast.error('"Valid until" must be after the date completed — leave it blank to use the schedule interval')
+      return
+    }
     setSaving(true)
     const res = await completeCheck({
       scheduleId: schedule.id,
@@ -131,9 +135,14 @@ export function CompleteCheckDialog({
               <Input
                 id="calib-due"
                 type="date"
+                min={checkDate}
                 value={calibrationDue}
                 onChange={(e) => setCalibrationDue(e.target.value)}
               />
+              <p className="text-xs text-muted-foreground">
+                The expiry date on the certificate. Leave blank to use the schedule
+                (every {schedule.interval_months} month{schedule.interval_months === 1 ? '' : 's'}).
+              </p>
             </div>
           )}
           <div className="grid gap-2">

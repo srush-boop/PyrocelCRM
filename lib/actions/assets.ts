@@ -375,6 +375,10 @@ export async function completeCheck(input: CompleteCheckInput): Promise<Result> 
   if (!mayComplete) return { ok: false, error: 'Not authorised to complete this check' }
 
   const checkDate = input.checkDate || todayIso()
+  // A "valid until" on or before the check date is almost always the check date
+  // typed into the wrong field; honouring it would make the check due again at once.
+  const calibrationDueDate =
+    input.calibrationDueDate && input.calibrationDueDate > checkDate ? input.calibrationDueDate : null
   const admin = createAdminClient()
 
   // Insert the completed check.
@@ -387,14 +391,14 @@ export async function completeCheck(input: CompleteCheckInput): Promise<Result> 
     is_transfer_inspection: false,
     notes: input.notes?.trim() || null,
     certificate_url: input.certificateUrl || null,
-    calibration_due_date: input.calibrationDueDate || null,
+    calibration_due_date: calibrationDueDate,
   })
   if (insErr) return { ok: false, error: insErr.message }
 
   // Recompute the cached next-due: an explicit calibration date wins, else
   // check_date + interval.
   const nextDue =
-    input.calibrationDueDate ||
+    calibrationDueDate ||
     addMonthsIso(checkDate, (schedule as { interval_months: number }).interval_months)
 
   await admin

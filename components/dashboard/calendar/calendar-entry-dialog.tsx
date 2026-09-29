@@ -552,7 +552,7 @@ export function CalendarEntryDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90dvh] overflow-x-hidden overflow-y-auto p-4 sm:p-6">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>{entryId ? 'Edit Entry' : 'New Calendar Entry'}</DialogTitle>
@@ -732,21 +732,23 @@ export function CalendarEntryDialog({
               )}
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="grid gap-2">
+                <div className="grid min-w-0 gap-2">
                   <Label htmlFor="entry-start-date">Start date</Label>
                   <Input
                     id="entry-start-date"
                     type="date"
+                    className="block w-full min-w-0 appearance-none"
                     value={form.start_date}
                     onChange={(e) => update({ start_date: e.target.value })}
                     required
                   />
                 </div>
-                <div className="grid gap-2">
+                <div className="grid min-w-0 gap-2">
                   <Label htmlFor="entry-end-date">End date</Label>
                   <Input
                     id="entry-end-date"
                     type="date"
+                    className="block w-full min-w-0 appearance-none"
                     value={form.end_date}
                     min={form.start_date}
                     onChange={(e) => update({ end_date: e.target.value })}
@@ -1014,10 +1016,10 @@ export function CalendarEntryDialog({
                 </AlertDialogContent>
               </AlertDialog>
             ) : (
-              <span />
+              <span className="hidden sm:block" />
             )}
 
-            <div className="flex gap-2">
+            <div className="flex w-full gap-2 sm:w-auto [&>button]:flex-1 sm:[&>button]:flex-none">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 {readOnly ? 'Close' : 'Cancel'}
               </Button>

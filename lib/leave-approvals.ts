@@ -73,7 +73,7 @@ export async function getVisibleLeaveRequests(): Promise<{
          start_portion, end_portion, start_hours, end_hours,
          user:profiles!calendar_entries_user_id_fkey(
            full_name, work_days, work_day_hours,
-           department:departments(name),
+           department:departments!profiles_department_id_fkey(name),
            branch:branches(name)
          ),
          approver:profiles!calendar_entries_approved_by_fkey(full_name)`,

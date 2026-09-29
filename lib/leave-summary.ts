@@ -15,7 +15,7 @@ export async function getSummaryViewer(): Promise<{ allowed: boolean; userId: st
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role, department:departments(name)')
+    .select('role, department:departments!profiles_department_id_fkey(name)')
     .eq('id', user.id)
     .single()
 
@@ -121,7 +121,7 @@ export async function getSummaryEntries(filters: SummaryFilters): Promise<Summar
          entry_type:calendar_entry_types(id, name, color),
        user:profiles!calendar_entries_user_id_fkey(
          id, full_name, department_id, branch_id,
-         department:departments(name),
+         department:departments!profiles_department_id_fkey(name),
          branch:branches(name)
        )`,
     )

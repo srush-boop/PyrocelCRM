@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { notifyUsers } from '@/lib/notifications'
+import { getSessionUser } from '@/lib/auth/session'
 import type {
   SavedGridView,
   SharedGridView,
@@ -19,10 +20,7 @@ const GRID_META: Record<string, { label: string; href: string }> = {
 }
 
 async function getAuth() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const [supabase, user] = await Promise.all([createClient(), getSessionUser()])
   if (!user) return { error: 'Not signed in' as const }
   return { supabase, userId: user.id }
 }

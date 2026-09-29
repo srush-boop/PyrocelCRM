@@ -150,7 +150,9 @@ export function UpcomingPartsCard({ parts }: { parts: UpcomingPartSummary[] }) {
                   <p className="text-xs text-muted-foreground">
                     Need{' '}
                     <span className="font-medium text-foreground">
-                      {part.totalQuantity} {part.unit}
+                      {part.totalQuantity}
+                      {/* Some catalogue parts store a number (e.g. "1") as their unit, which read as "Need 1 1". */}
+                      {part.unit && !/^\d+(\.\d+)?$/.test(part.unit.trim()) ? ` ${part.unit}` : ''}
                     </span>{' '}
                     across {part.calls.length} call{part.calls.length === 1 ? '' : 's'}
                   </p>

@@ -13,7 +13,7 @@ import { useRouter } from 'next/navigation'
 import { CompletedReportActions } from '@/components/dashboard/reports/completed-report-actions'
 import { ClientSignOffCard } from '@/components/dashboard/tasks/client-sign-off-card'
 import { CallTimeCard } from '@/components/dashboard/tasks/call-times-card'
-import { resolveCallKind } from '@/lib/call-kinds'
+import { resolveClientSignature } from '@/lib/client-signature'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FloorInput } from '@/components/ui/floor-input'
@@ -184,7 +184,8 @@ export function ExtinguisherTaskExecution({
   const serviceType = task.site_service?.service_type
   // Non-recurring calls (reactive / emergency / planned) capture an on-site
   // client sign-off; recurring maintenance visits do not.
-  const isNonRecurring = serviceType ? resolveCallKind(serviceType) !== 'recurring' : true
+  const clientSignatureRule = resolveClientSignature(serviceType)
+  const isNonRecurring = clientSignatureRule.show
 
   const [status, setStatus] = useState(task.status)
   const [search, setSearch] = useState('')
@@ -400,7 +401,7 @@ export function ExtinguisherTaskExecution({
 
   // For non-recurring calls we expect an on-site client signature. If none was
   // captured the engineer must state why before the call can close.
-  const signatureReasonRequired = isNonRecurring && !clientSignature
+  const signatureReasonRequired = clientSignatureRule.required && !clientSignature
 
   // Complete the call. If there are incomplete sections OR a non-recurring call
   // has no client signature, a confirmation dialog is shown (which forces a
@@ -472,7 +473,7 @@ export function ExtinguisherTaskExecution({
       client_signature: isNonRecurring ? clientSignature : null,
       client_signature_name: isNonRecurring ? clientSignatureName.trim() || null : null,
       client_signature_waived_reason:
-        isNonRecurring && !clientSignature ? signatureWaivedReason.trim() || null : null,
+        clientSignatureRule.required && !clientSignature ? signatureWaivedReason.trim() || null : null,
       updated_at: new Date().toISOString(),
     }
     const { data: existing } = await supabase

@@ -47,7 +47,7 @@ import { cacheCallSnapshot } from '@/lib/offline/snapshots'
 import { isNonRecurringCall } from '@/lib/follow-up'
 import { completeCallNoAccess } from '@/lib/tasks/no-access'
 import { NoAccessButton } from '@/components/dashboard/tasks/no-access-button'
-import { resolveCallKind } from '@/lib/call-kinds'
+import { resolveClientSignature } from '@/lib/client-signature'
 import {
   computeCalculation,
   calculationOpLabel,
@@ -630,7 +630,8 @@ export function TaskExecution({
   // Non-recurring = reactive / planned one-off work (or an ad-hoc call with no
   // service type). Only these capture an on-site client name + signature; recurring
   // PPM visits never prompt for one.
-  const isNonRecurring = serviceType ? resolveCallKind(serviceType) !== 'recurring' : true
+  const clientSignatureRule = resolveClientSignature(serviceType)
+  const isNonRecurring = clientSignatureRule.show
 
   // Quick-assign (or reassign) this call to an engineer straight from the summary.
   const assignEngineer = async (value: string) => {
@@ -894,7 +895,7 @@ export function TaskExecution({
 
   // For non-recurring calls we expect an on-site client signature. If none was
   // captured the engineer must state why before the call can close.
-  const signatureReasonRequired = isNonRecurring && !clientSignature
+  const signatureReasonRequired = clientSignatureRule.required && !clientSignature
 
   // Complete the call. Hard blockers (required fields / conditions) block inline.
   // Otherwise, if there are incomplete sections OR a non-recurring call has no
@@ -929,7 +930,7 @@ export function TaskExecution({
       client_signature: clientSignature,
       client_signature_name: clientSignatureName.trim() || null,
       client_signature_waived_reason:
-        isNonRecurring && !clientSignature ? signatureWaivedReason.trim() || null : null,
+        clientSignatureRule.required && !clientSignature ? signatureWaivedReason.trim() || null : null,
       testing_start_time: testingStartTime?.toISOString(),
       testing_end_time: testingEndTime?.toISOString(),
       photos: existingResult?.photos || [],
@@ -981,7 +982,7 @@ export function TaskExecution({
       client_signature: clientSignature,
       client_signature_name: clientSignatureName.trim() || null,
       client_signature_waived_reason:
-        isNonRecurring && !clientSignature ? signatureWaivedReason.trim() || null : null,
+        clientSignatureRule.required && !clientSignature ? signatureWaivedReason.trim() || null : null,
       testing_start_time: testingStartTime?.toISOString(),
       testing_end_time: endTime.toISOString(),
       photos: existingResult?.photos || [],

@@ -10,23 +10,20 @@ import { profileCanEditInvoices } from '@/lib/auth/invoices'
 import { InvoicesTable } from '@/components/dashboard/invoices/invoices-table'
 import { PushToSageButton } from '@/components/dashboard/invoices/push-to-sage-button'
 import { getSavedGridViews, getSharedGridViews } from '@/lib/actions/grid-views'
+import { getSessionUser, getSessionProfile } from '@/lib/auth/session'
 
 export const dynamic = 'force-dynamic'
 
 // The invoices workspace: CRM-owned invoices built from reviewed chargeable
 // calls. Office/admin only.
 export default async function InvoicesPage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const [supabase, user, profile] = await Promise.all([
+    createClient(),
+    getSessionUser(),
+    getSessionProfile(),
+  ])
   if (!user) redirect('/auth/login')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
   const role = (profile as Profile | null)?.role
   if (role !== 'admin' && role !== 'office') redirect('/dashboard')
 

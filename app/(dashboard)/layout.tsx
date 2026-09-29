@@ -12,6 +12,7 @@ import { LoneWorkerPrompt } from '@/components/dashboard/lone-worker/lone-worker
 import { OnboardingWizard } from '@/components/dashboard/onboarding/onboarding-wizard'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { getAalState, mfaRequiredForRole } from '@/lib/auth/mfa'
+import { getSessionUser, getSessionProfile } from '@/lib/auth/session'
 import { getSimpleSectionsForUser } from '@/lib/config/simple-app'
 import type { Profile } from '@/lib/types/database'
 
@@ -22,17 +23,11 @@ export default async function DashboardLayout({
 }) {
   const supabase = await createClient()
   
-  const { data: { user } } = await supabase.auth.getUser()
+  const [user, profile] = await Promise.all([getSessionUser(), getSessionProfile()])
   
   if (!user) {
     redirect('/auth/login')
   }
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
 
   if (!profile) {
     redirect('/auth/login')

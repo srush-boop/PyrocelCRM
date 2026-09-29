@@ -67,6 +67,63 @@ export async function removeAreaPostcode(ruleId: string): Promise<AreaActionResu
   return { ok: true }
 }
 
+export interface ServiceAreaAssignment {
+  serviceId: string
+  areaId: string
+}
+
+/**
+ * Move reviewed services into the areas their site postcodes now fall in, and
+ * hand their pending calls to each area's engineer. Only engineer services with
+ * no direct engineer or route are touched, since those outrank area assignment.
+ */
+export async function assignServicesToAreas(
+  assignments: ServiceAreaAssignment[],
+): Promise<{ ok: boolean; error?: string; updated?: number; skipped?: number }> {
+  const auth = await requireStaff()
+  if ('error' in auth) return { ok: false, error: auth.error }
+  const { supabase } = auth
+  if (assignments.length === 0) return { ok: false, error: 'No services selected' }
+
+  const byArea = new Map<string, string[]>()
+  for (const a of assignments) byArea.set(a.areaId, [...(byArea.get(a.areaId) ?? []), a.serviceId])
+
+  const { data: areas, error: areaErr } = await supabase
+    .from('areas')
+    .select('id, assigned_engineer_id')
+    .in('id', [...byArea.keys()])
+  if (areaErr) return { ok: false, error: areaErr.message }
+  const engineerByArea = new Map((areas ?? []).map((a) => [a.id, a.assigned_engineer_id as string | null]))
+
+  let updated = 0
+  for (const [areaId, ids] of byArea) {
+    if (!engineerByArea.has(areaId)) continue
+    const { data: moved, error } = await supabase
+      .from('site_services')
+      .update({ area_id: areaId })
+      .in('id', ids)
+      .in('worker_type', ['engineer'])
+      .is('assigned_engineer_id', null)
+      .is('route_id', null)
+      .select('id')
+    if (error) return { ok: false, error: error.message, updated }
+    const movedIds = (moved ?? []).map((m) => m.id)
+    updated += movedIds.length
+    if (movedIds.length === 0) continue
+
+    const { error: taskErr } = await supabase
+      .from('tasks')
+      .update({ assigned_engineer_id: engineerByArea.get(areaId) ?? null })
+      .in('site_service_id', movedIds)
+      .eq('status', 'pending')
+    if (taskErr) return { ok: false, error: taskErr.message, updated }
+  }
+
+  revalidatePath('/dashboard/areas')
+  revalidatePath('/dashboard/schedule')
+  return { ok: true, updated, skipped: assignments.length - updated }
+}
+
 export async function setAreaColor(areaId: string, color: string): Promise<AreaActionResult> {
   const auth = await requireStaff()
   if ('error' in auth) return { ok: false, error: auth.error }

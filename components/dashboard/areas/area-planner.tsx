@@ -16,6 +16,7 @@ import { assignPostcodeToArea, removeAreaPostcode } from '@/lib/actions/areas'
 import type { AreaPlannerData } from '@/lib/areas/planner-data'
 import type { AreaMapPoint } from './area-map-canvas'
 import { AreaPlannerCard, type AreaSummary } from './area-planner-card'
+import { AreaReassignDialog, type ReassignSite } from './area-reassign-dialog'
 
 const AreaMapCanvas = dynamic(() => import('./area-map-canvas').then((m) => m.AreaMapCanvas), {
   ssr: false,
@@ -36,6 +37,7 @@ export function AreaPlanner({ data }: { data: AreaPlannerData }) {
   const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null)
   const [districtTarget, setDistrictTarget] = useState<string>('')
   const [unmappedOnly, setUnmappedOnly] = useState(false)
+  const [reviewOpen, setReviewOpen] = useState(false)
 
   const areaById = useMemo(() => new Map(data.areas.map((a) => [a.id, a])), [data.areas])
   const ruleInputs = useMemo(() => data.rules.map((r) => ({ prefix: r.prefix, areaId: r.areaId })), [data.rules])
@@ -73,6 +75,25 @@ export function AreaPlanner({ data }: { data: AreaPlannerData }) {
       }),
     [data, siteAreaId],
   )
+
+  // Services whose site postcode now sits in a different area than they're allocated to.
+  const reassignCandidates: ReassignSite[] = useMemo(() => {
+    const siteById = new Map(data.sites.map((s) => [s.id, s]))
+    const bySite = new Map<string, ReassignSite>()
+    for (const svc of data.services) {
+      if (svc.hasDirectOrRoute) continue
+      const target = siteAreaId.get(svc.siteId)
+      if (!target || target === svc.areaId) continue
+      const site = siteById.get(svc.siteId)
+      if (!site) continue
+      const row = bySite.get(site.id) ?? { site, fromAreaIds: [], toAreaId: target, services: [] }
+      row.fromAreaIds.push(svc.areaId)
+      row.services.push(svc)
+      bySite.set(site.id, row)
+    }
+    return [...bySite.values()].sort((a, b) => a.site.name.localeCompare(b.site.name))
+  }, [data.sites, data.services, siteAreaId])
+  const reassignServiceCount = reassignCandidates.reduce((n, c) => n + c.services.length, 0)
 
   const totalAllocated = summaries.reduce((sum, s) => sum + s.revenuePence, 0)
   const unallocated = data.services.filter((s) => !s.areaId)
@@ -132,6 +153,8 @@ export function AreaPlanner({ data }: { data: AreaPlannerData }) {
     [data.sites, siteAreaId, areaById, selectedAreaId, selectedDistrict],
   )
 
+  const reviewAction = { label: 'Review services', onClick: () => setReviewOpen(true) }
+
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>, success: string) =>
     startTransition(async () => {
       const res = await fn()
@@ -139,7 +162,7 @@ export function AreaPlanner({ data }: { data: AreaPlannerData }) {
         toast.error(res.error ?? 'Something went wrong')
         return
       }
-      toast.success(success)
+      toast.success(success, { action: reviewAction })
       router.refresh()
     })
 
@@ -153,6 +176,7 @@ export function AreaPlanner({ data }: { data: AreaPlannerData }) {
       const name = areaById.get(areaId)?.name
       toast.success(
         res.movedFrom ? `${res.prefix} moved from ${res.movedFrom} to ${name}` : `${res.prefix} added to ${name}`,
+        { description: 'Assign the affected services to their new areas?', action: reviewAction },
       )
       router.refresh()
     })
@@ -177,6 +201,31 @@ export function AreaPlanner({ data }: { data: AreaPlannerData }) {
 
   return (
     <div className="flex flex-col gap-4">
+      {reassignServiceCount > 0 && (
+        <div className="flex flex-col gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950 sm:flex-row sm:items-center dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+          <MapPinned className="h-5 w-5 shrink-0" aria-hidden />
+          <div className="flex-1 text-sm">
+            <p className="font-medium">
+              {reassignServiceCount} service{reassignServiceCount === 1 ? '' : 's'} at {reassignCandidates.length} site
+              {reassignCandidates.length === 1 ? '' : 's'} sit in a different area from their postcode
+            </p>
+            <p className="text-pretty opacity-80">
+              Review and assign them to the areas you&apos;ve planned, leaving out any sites you want to keep as they are.
+            </p>
+          </div>
+          <Button size="sm" onClick={() => setReviewOpen(true)}>
+            Review &amp; assign
+          </Button>
+        </div>
+      )}
+
+      <AreaReassignDialog
+        open={reviewOpen}
+        onOpenChange={setReviewOpen}
+        candidates={reassignCandidates}
+        areaById={areaById}
+      />
+
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-lg border bg-card p-4">
           <p className="text-sm text-muted-foreground">Recurring revenue allocated to areas</p>

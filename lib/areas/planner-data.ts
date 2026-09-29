@@ -33,6 +33,8 @@ export interface PlannerService {
   serviceTypeName: string
   areaId: string | null
   annualPence: number
+  /** Direct engineer or route assignments outrank areas, so these are never auto-moved. */
+  hasDirectOrRoute: boolean
 }
 
 export interface AreaPlannerData {
@@ -71,7 +73,7 @@ export async function getAreaPlannerData(): Promise<AreaPlannerData> {
     supabase
       .from('site_services')
       .select(
-        `id, site_id, area_id, worker_type, status,
+        `id, site_id, area_id, worker_type, status, assigned_engineer_id, route_id,
          service_type:service_types(name),
          recurring_charges(unit_price_pence, quantity, frequency, is_subcontracted, active)`,
       ),
@@ -136,6 +138,7 @@ export async function getAreaPlannerData(): Promise<AreaPlannerData> {
         serviceTypeName: first<{ name: string }>(ss.service_type)?.name ?? 'Service',
         areaId: ss.area_id,
         annualPence,
+        hasDirectOrRoute: Boolean(ss.assigned_engineer_id || ss.route_id),
       }
     })
 

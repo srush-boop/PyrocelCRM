@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
@@ -23,7 +24,15 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { CalendarDays, Check, X, Clock, CheckCircle2, List as ListIcon } from 'lucide-react'
+import {
+  CalendarDays,
+  CalendarSearch,
+  Check,
+  X,
+  Clock,
+  CheckCircle2,
+  List as ListIcon,
+} from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { formatLeaveLength, formatPortionNote } from '@/lib/leave-utils'
 import type { LeaveRequestRow } from '@/lib/leave-approvals'
@@ -148,7 +157,8 @@ export function LeaveApprovals({ pending, decided }: Props) {
                       </p>
                       {r.notes && <p className="text-sm text-muted-foreground">{r.notes}</p>}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <ShowInCalendarButton row={r} />
                       <Button
                         size="sm"
                         variant="outline"
@@ -227,9 +237,12 @@ export function LeaveApprovals({ pending, decided }: Props) {
                         <p className="text-sm text-destructive">Reason: {r.rejectionReason}</p>
                       )}
                     </div>
-                    <div className="text-right text-xs text-muted-foreground">
-                      {r.approverName && <div>by {r.approverName}</div>}
-                      {r.approvedAt && <div>{formatDateUK(r.approvedAt)}</div>}
+                    <div className="flex items-center gap-3">
+                      <div className="text-right text-xs text-muted-foreground">
+                        {r.approverName && <div>by {r.approverName}</div>}
+                        {r.approvedAt && <div>{formatDateUK(r.approvedAt)}</div>}
+                      </div>
+                      <ShowInCalendarButton row={r} />
                     </div>
                   </CardContent>
                 </Card>
@@ -283,7 +296,8 @@ export function LeaveApprovals({ pending, decided }: Props) {
                       )}
                     </div>
                     {r.status === 'requested' ? (
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <ShowInCalendarButton row={r} />
                         <Button
                           size="sm"
                           variant="outline"
@@ -306,9 +320,12 @@ export function LeaveApprovals({ pending, decided }: Props) {
                         </Button>
                       </div>
                     ) : (
-                      <div className="text-right text-xs text-muted-foreground">
-                        {r.approverName && <div>by {r.approverName}</div>}
-                        {r.approvedAt && <div>{formatDateUK(r.approvedAt)}</div>}
+                      <div className="flex items-center gap-3">
+                        <div className="text-right text-xs text-muted-foreground">
+                          {r.approverName && <div>by {r.approverName}</div>}
+                          {r.approvedAt && <div>{formatDateUK(r.approvedAt)}</div>}
+                        </div>
+                        <ShowInCalendarButton row={r} />
                       </div>
                     )}
                   </CardContent>
@@ -351,6 +368,18 @@ export function LeaveApprovals({ pending, decided }: Props) {
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+function ShowInCalendarButton({ row }: { row: LeaveRequestRow }) {
+  const href = `/dashboard/calendar?date=${row.startAt.slice(0, 10)}&entry=${row.id}`
+  return (
+    <Button asChild size="sm" variant="ghost">
+      <Link href={href}>
+        <CalendarSearch className="mr-1 h-4 w-4" />
+        Show in calendar
+      </Link>
+    </Button>
   )
 }
 

@@ -11,9 +11,10 @@ import type { CalendarFilterTemplate } from '@/lib/types/database'
 export default async function CalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ branch?: string }>
+  searchParams: Promise<{ branch?: string; date?: string; entry?: string }>
 }) {
-  const { branch } = await searchParams
+  const { branch, date, entry } = await searchParams
+  const initialDate = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : undefined
   const data = await getCalendarData(branch)
   if (!data) redirect('/auth/login')
 
@@ -84,6 +85,8 @@ export default async function CalendarPage({
         profile={profile}
         canManageOthers={canManageOthers}
         templates={(templates ?? []) as CalendarFilterTemplate[]}
+        initialDate={initialDate}
+        initialEntryId={entry}
       />
     </div>
   )

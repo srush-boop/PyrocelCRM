@@ -82,6 +82,10 @@ interface CalendarViewProps {
   canManageOthers: boolean
   // The current user's saved calendar filter templates.
   templates: CalendarFilterTemplate[]
+  // Deep-link (e.g. "Show in calendar" from leave approvals): open on this
+  // YYYY-MM-DD in week view and pop the matching entry's detail sheet.
+  initialDate?: string
+  initialEntryId?: string
 }
 
 const ALL = '__all__'
@@ -180,11 +184,19 @@ export function CalendarView({
   profile,
   canManageOthers,
   templates,
+  initialDate,
+  initialEntryId,
   }: CalendarViewProps) {
   const router = useRouter()
-  const [view, setView] = useState<ViewMode>('day')
-  const [cursor, setCursor] = useState<Date>(new Date())
-  const [selected, setSelected] = useState<CalendarItem | null>(null)
+  const [view, setView] = useState<ViewMode>(initialDate ? 'week' : 'day')
+  const [cursor, setCursor] = useState<Date>(() =>
+    initialDate ? new Date(`${initialDate}T12:00:00`) : new Date(),
+  )
+  const [selected, setSelected] = useState<CalendarItem | null>(() =>
+    initialEntryId
+      ? (items.find((i) => i.kind === 'entry' && i.entryId === initialEntryId) ?? null)
+      : null,
+  )
 
   // Filters. Each is a list of selected values; an empty list means "no filter"
   // (show everything). This drives the multi-select checklists in the toolbar.

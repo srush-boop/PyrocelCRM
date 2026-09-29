@@ -1220,7 +1220,7 @@ export async function issueInvoice(invoiceId: string): Promise<{ error: string |
 
   const { data: inv } = await supabase
     .from('invoices')
-    .select('payment_terms_days, total_pence, on_hold, invoice_number, origin, po_number, po_not_required')
+    .select('payment_terms_days, total_pence, on_hold, invoice_number, origin, po_number, po_not_required, issue_date')
     .eq('id', invoiceId)
     .single()
   if ((inv as { on_hold: boolean } | null)?.on_hold) {
@@ -1257,15 +1257,19 @@ export async function issueInvoice(invoiceId: string): Promise<{ error: string |
   }
   const terms = (inv as { payment_terms_days: number } | null)?.payment_terms_days ?? 30
 
+  // A draft may carry a chosen invoice date (e.g. set when bulk-committing
+  // renewals); keep it, otherwise the invoice is dated today.
+  const presetDate = (inv as { issue_date: string | null } | null)?.issue_date ?? null
   const issue = new Date()
-  const due = new Date(issue)
-  due.setDate(due.getDate() + terms)
+  const issueDate = presetDate ?? issue.toISOString().slice(0, 10)
+  const due = new Date(`${issueDate}T12:00:00Z`)
+  due.setUTCDate(due.getUTCDate() + terms)
 
   const { error } = await supabase
     .from('invoices')
     .update({
       status: 'issued',
-      issue_date: issue.toISOString().slice(0, 10),
+      issue_date: issueDate,
       due_date: due.toISOString().slice(0, 10),
       issued_at: issue.toISOString(),
       issued_by: userId,

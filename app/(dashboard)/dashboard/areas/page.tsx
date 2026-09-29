@@ -1,7 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AreasTable } from '@/components/dashboard/areas/areas-table'
 import { AddAreaDialog } from '@/components/dashboard/areas/add-area-dialog'
+import { AreaPlanner } from '@/components/dashboard/areas/area-planner'
+import { getAreaPlannerData } from '@/lib/areas/planner-data'
 import type { Area, Profile } from '@/lib/types/database'
 
 export default async function AreasPage() {
@@ -20,13 +23,14 @@ export default async function AreasPage() {
     redirect('/dashboard')
   }
 
-  const [areasResult, workersResult, areaServicesResult] = await Promise.all([
+  const [areasResult, workersResult, areaServicesResult, plannerData] = await Promise.all([
     supabase
       .from('areas')
       .select(`*, assigned_engineer:profiles(*)`)
       .order('name'),
     supabase.from('profiles').select('*').eq('role', 'engineer').order('full_name'),
     supabase.from('site_services').select('area_id').not('area_id', 'is', null),
+    getAreaPlannerData(),
   ])
 
   const areas = (areasResult.data || []) as (Area & { assigned_engineer: Profile | null })[]
@@ -46,17 +50,28 @@ export default async function AreasPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Areas</h1>
-          <p className="text-muted-foreground">
-            Manage operational areas and the workers who cover non-route services
+          <p className="text-muted-foreground text-pretty">
+            Plan areas by postcode and see the recurring revenue each one carries
           </p>
         </div>
         <AddAreaDialog workers={workers} />
       </div>
 
-      <AreasTable areas={areasWithCounts} workers={workers} />
+      <Tabs defaultValue="planner">
+        <TabsList>
+          <TabsTrigger value="planner">Planner</TabsTrigger>
+          <TabsTrigger value="list">List</TabsTrigger>
+        </TabsList>
+        <TabsContent value="planner" className="mt-4">
+          <AreaPlanner data={plannerData} />
+        </TabsContent>
+        <TabsContent value="list" className="mt-4">
+          <AreasTable areas={areasWithCounts} workers={workers} />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

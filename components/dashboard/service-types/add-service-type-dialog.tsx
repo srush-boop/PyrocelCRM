@@ -25,11 +25,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { WorkerType, ToleranceUnit, SystemType, ServiceType, NominalCode } from '@/lib/types/database'
+import type { WorkerType, ToleranceUnit, SystemType, ServiceType, NominalCode, ClientSignatureMode } from '@/lib/types/database'
 import { NominalCodeSelect } from '@/components/dashboard/billing/nominal-code-select'
 import { WORKER_TYPE_LABELS } from '@/lib/assignment'
 import { ServiceColorPicker } from './service-color-picker'
 import { ToleranceFields } from './tolerance-fields'
+import { ClientSignatureField } from './client-signature-field'
 import { PYROCEL_RED } from '@/lib/service-colors'
 import {
   ServiceTypeChecklistsField,
@@ -61,6 +62,7 @@ export function AddServiceTypeDialog({
     regulatory_tolerance_unit: 'months' as ToleranceUnit,
     // Subject to regulatory compliance by default; turn off for non-regulated services.
     regulatory_compliance: true,
+    client_signature_mode: null as ClientSignatureMode | null,
     // Recurring PPM by default. Change the kind to make this a reactive
     // on-demand call type or a planned one-off (e.g. Commissioning).
     call_kind: 'recurring' as ServiceType['call_kind'],
@@ -105,6 +107,7 @@ export function AddServiceTypeDialog({
         regulatory_tolerance_value: formData.regulatory_tolerance_value,
         regulatory_tolerance_unit: formData.regulatory_tolerance_unit,
         regulatory_compliance: formData.regulatory_compliance,
+        client_signature_mode: formData.client_signature_mode,
         // Client tier defaults to the regulatory standard; tighter client KPIs are
         // set per site/service. Keep the legacy default columns in sync as the fallback.
         client_tolerance_value: formData.regulatory_tolerance_value,
@@ -155,6 +158,7 @@ export function AddServiceTypeDialog({
         regulatory_tolerance_value: 0,
         regulatory_tolerance_unit: 'months',
         regulatory_compliance: true,
+        client_signature_mode: null,
         call_kind: 'recurring',
         is_emergency: false,
         default_kpi_hours: 24,
@@ -336,6 +340,10 @@ export function AddServiceTypeDialog({
                 />
               </>
             )}
+            <ClientSignatureField
+              value={formData.client_signature_mode}
+              onChange={(client_signature_mode) => setFormData({ ...formData, client_signature_mode })}
+            />
             <div className="grid gap-2">
               <Label htmlFor="description">Description</Label>
               <Textarea

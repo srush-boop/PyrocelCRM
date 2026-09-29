@@ -68,6 +68,8 @@ export type Discipline = 'fire' | 'security' | 'installer' | 'cdo' | 'general'
 // Unit for a compliance tolerance window.
 export type ToleranceUnit = 'days' | 'months'
 
+export type ClientSignatureMode = 'required' | 'optional' | 'none'
+
 // An operational/geographic area with one responsible worker (CDO or engineer).
 export interface Area {
   id: string
@@ -754,6 +756,8 @@ export interface ServiceType {
   // it is kept in the client KPI tier but omitted from regulatory figures and
   // the regulatory compliance chart. Defaults to true.
   regulatory_compliance: boolean
+  // Null = default by call kind (required non-recurring, none recurring).
+  client_signature_mode?: ClientSignatureMode | null
   client_tolerance_value: number
   client_tolerance_unit: ToleranceUnit
   color?: string | null

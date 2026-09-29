@@ -18,11 +18,12 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Loader2, Siren, Coins, Route } from 'lucide-react'
-import type { ServiceType, WorkerType, ToleranceUnit, SystemType, ChecklistTemplate, NominalCode } from '@/lib/types/database'
+import type { ServiceType, WorkerType, ToleranceUnit, SystemType, ChecklistTemplate, NominalCode, ClientSignatureMode } from '@/lib/types/database'
 import { NominalCodeSelect } from '@/components/dashboard/billing/nominal-code-select'
 import { WORKER_TYPE_LABELS } from '@/lib/assignment'
 import { ServiceColorPicker } from './service-color-picker'
 import { ToleranceFields } from './tolerance-fields'
+import { ClientSignatureField } from './client-signature-field'
 import { ServiceVisitTypesManager } from './service-visit-types-manager'
 import { PYROCEL_RED } from '@/lib/service-colors'
 import {
@@ -64,6 +65,7 @@ export function EditServiceTypeDialog({ serviceType, systemTypes, nominalCodes, 
     regulatory_tolerance_unit: (serviceType.regulatory_tolerance_unit || 'days') as ToleranceUnit,
     // Legacy rows may be null; default to subject-to-regulatory.
     regulatory_compliance: serviceType.regulatory_compliance !== false,
+    client_signature_mode: (serviceType.client_signature_mode ?? null) as ClientSignatureMode | null,
     // Derive call_kind from the stored value, falling back to the legacy flags
     // for rows created before call_kind existed.
     call_kind: (serviceType.call_kind ??
@@ -136,6 +138,7 @@ export function EditServiceTypeDialog({ serviceType, systemTypes, nominalCodes, 
         regulatory_tolerance_value: formData.regulatory_tolerance_value,
         regulatory_tolerance_unit: formData.regulatory_tolerance_unit,
         regulatory_compliance: formData.regulatory_compliance,
+        client_signature_mode: formData.client_signature_mode,
         // Keep the legacy service-type client default in step with regulatory;
         // tighter client KPIs live per site/service.
         client_tolerance_value: formData.regulatory_tolerance_value,
@@ -343,6 +346,10 @@ export function EditServiceTypeDialog({ serviceType, systemTypes, nominalCodes, 
                 />
               </>
             )}
+            <ClientSignatureField
+              value={formData.client_signature_mode}
+              onChange={(client_signature_mode) => setFormData({ ...formData, client_signature_mode })}
+            />
             <div className="grid gap-2">
               <Label htmlFor="description">Description</Label>
               <Textarea

@@ -366,7 +366,9 @@ export async function getRecurringDue(clientId?: string): Promise<RecurringDueGr
 export async function createInvoiceFromRecurringCharges(
   billingAccountId: string,
   chargeIds: string[],
-): Promise<{ error: string | null; invoiceId?: string }> {
+  options: { poNotRequired?: boolean } = {},
+): Promise<{ error: string | null; invoiceId?: string; issues?: string[] }> {
+  const poNotRequired = !!options.poNotRequired
   const ctx = await requireManager()
   if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
   const { supabase, userId } = ctx
@@ -501,10 +503,21 @@ export async function createInvoiceFromRecurringCharges(
   }
 
   // Remaining (advance/arrears/on_completion) charges use the flat path.
+  if (poNotRequired && engineInvoiceIds.length > 0) {
+    await supabase
+      .from('invoices')
+      .update({ po_not_required: true })
+      .in('id', engineInvoiceIds)
+      .eq('status', 'draft')
+  }
+
   const rows = allRows.filter((r) => r.timing !== 'per_visit')
   if (rows.length === 0) {
     revalidatePath('/dashboard/invoices')
-    return { error: null, invoiceId: engineInvoiceIds[0] }
+    const issues = engineInvoiceIds[0]
+      ? await draftInvoiceIssues(supabase, engineInvoiceIds[0])
+      : []
+    return { error: null, invoiceId: engineInvoiceIds[0], issues }
   }
 
   // Map nominal-code id → code text for a stable per-line snapshot.
@@ -542,6 +555,7 @@ export async function createInvoiceFromRecurringCharges(
       sage_account_ref: account.sage_account_ref,
       payment_terms_days: account.payment_terms_days ?? 30,
       tax_rate: taxRate,
+      po_not_required: poNotRequired,
       created_by: userId,
     })
     .select('id')
@@ -624,5 +638,53 @@ export async function createInvoiceFromRecurringCharges(
     )
 
   revalidatePath('/dashboard/invoices')
-  return { error: null, invoiceId }
+  revalidatePath('/dashboard/invoices/renewals')
+  const issues = await draftInvoiceIssues(supabase, invoiceId)
+  return { error: null, invoiceId, issues }
+}
+
+/**
+ * Anything that would block issuing this draft (mirrors issueInvoice's gates):
+ * lines missing a nominal code, and sites that need a PO on recurring invoices
+ * with no PO on the line/header (skipped when marked "PO not required").
+ */
+async function draftInvoiceIssues(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  invoiceId: string,
+): Promise<string[]> {
+  const [{ data: inv }, { data: lines }] = await Promise.all([
+    supabase
+      .from('invoices')
+      .select('po_number, po_not_required, on_hold')
+      .eq('id', invoiceId)
+      .single(),
+    supabase
+      .from('invoice_line_items')
+      .select(
+        'nominal_code_id, customer_po, site_service:site_services(site:sites(name, requires_po_recurring))',
+      )
+      .eq('invoice_id', invoiceId),
+  ])
+  const meta = inv as { po_number: string | null; po_not_required: boolean | null; on_hold: boolean | null } | null
+  const rows = (lines ?? []) as unknown as {
+    nominal_code_id: string | null
+    customer_po: string | null
+    site_service: { site: { name: string; requires_po_recurring: boolean } | null } | null
+  }[]
+
+  const issues: string[] = []
+  const missingNominal = rows.filter((l) => !l.nominal_code_id).length
+  if (missingNominal > 0) {
+    issues.push(`${missingNominal} line${missingNominal === 1 ? '' : 's'} missing a nominal code`)
+  }
+  if (!meta?.po_number?.trim() && !meta?.po_not_required) {
+    const sites = new Set<string>()
+    for (const l of rows) {
+      const site = l.site_service?.site
+      if (site?.requires_po_recurring && !l.customer_po?.trim()) sites.add(site.name)
+    }
+    if (sites.size > 0) issues.push(`PO required for ${Array.from(sites).join(', ')}`)
+  }
+  if (meta?.on_hold) issues.push('Invoice is on hold')
+  return issues
 }

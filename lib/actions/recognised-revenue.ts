@@ -17,7 +17,12 @@ type LineRow = {
   site_service_id: string | null
   task_id: string | null
   sort_order: number
+  nominal_code: string | null
 }
+
+const RECURRING_REVENUE_NOMINAL = '2107'
+const isRecurringRevenueLine = (line: LineRow | undefined) =>
+  line?.nominal_code?.trim() === RECURRING_REVENUE_NOMINAL
 
 type InvoiceRow = {
   id: string
@@ -30,11 +35,14 @@ type InvoiceRow = {
   credited_invoice_id: string | null
   sage_exported_at: string | null
   bill_to_name: string | null
+  billing_account_id: string | null
   lines: LineRow[] | null
 }
 
 type ChargeRow = {
-  site_service_id: string
+  site_service_id: string | null
+  billing_account_id: string | null
+  description: string
   unit_price_pence: number
   quantity: number | null
   frequency: string
@@ -42,7 +50,7 @@ type ChargeRow = {
 }
 
 const INVOICE_COLS =
-  'id, invoice_number, document_type, origin, status, issue_date, issued_at, credited_invoice_id, sage_exported_at, bill_to_name, lines:invoice_line_items(id, description, amount_pence, site_service_id, task_id, sort_order)'
+  'id, invoice_number, document_type, origin, status, issue_date, issued_at, credited_invoice_id, sage_exported_at, bill_to_name, billing_account_id, lines:invoice_line_items(id, description, amount_pence, site_service_id, task_id, sort_order, nominal_code)'
 
 const FREQUENCY_BASIS: Record<string, RecognitionBasis> = {
   annual: 'annual',
@@ -71,7 +79,7 @@ export async function getRecognisedRevenue(
   if (source === 'sage') rows = rows.filter((r) => r.sage_exported_at)
 
   const recurringInvoices = rows.filter(
-    (r) => r.document_type !== 'credit_note' && r.origin === 'recurring',
+    (r) => r.document_type !== 'credit_note' && (r.lines ?? []).some(isRecurringRevenueLine),
   )
   const credits = rows.filter((r) => r.document_type === 'credit_note' && r.credited_invoice_id)
 
@@ -85,22 +93,29 @@ export async function getRecognisedRevenue(
     const { data: extra } = await supabase.from('invoices').select(INVOICE_COLS).in('id', missing)
     for (const r of (extra ?? []) as unknown as InvoiceRow[]) originals.set(r.id, r)
   }
-  const recurringCredits = credits.filter(
-    (c) => originals.get(c.credited_invoice_id as string)?.origin === 'recurring',
-  )
+  const recurringCredits = credits.filter((c) => originals.has(c.credited_invoice_id as string))
 
   const allLines = [...originals.values()].flatMap((r) => r.lines ?? [])
   const serviceIds = Array.from(
     new Set(allLines.map((l) => l.site_service_id).filter((v): v is string => !!v)),
   )
   const lineIds = allLines.map((l) => l.id)
+  const accountIds = Array.from(
+    new Set([...originals.values()].map((r) => r.billing_account_id).filter((v): v is string => !!v)),
+  )
+  const CHARGE_COLS =
+    'site_service_id, billing_account_id, description, unit_price_pence, quantity, frequency, timing'
 
-  const [chargesRes, ledgerRes] = await Promise.all([
+  const [chargesRes, accountChargesRes, ledgerRes] = await Promise.all([
     serviceIds.length
+      ? supabase.from('recurring_charges').select(CHARGE_COLS).in('site_service_id', serviceIds)
+      : Promise.resolve({ data: [] }),
+    accountIds.length
       ? supabase
           .from('recurring_charges')
-          .select('site_service_id, unit_price_pence, quantity, frequency, timing')
-          .in('site_service_id', serviceIds)
+          .select(CHARGE_COLS)
+          .is('site_service_id', null)
+          .in('billing_account_id', accountIds)
       : Promise.resolve({ data: [] }),
     lineIds.length
       ? supabase
@@ -112,9 +127,17 @@ export async function getRecognisedRevenue(
 
   const chargesByService = new Map<string, ChargeRow[]>()
   for (const c of (chargesRes.data ?? []) as ChargeRow[]) {
+    if (!c.site_service_id) continue
     const list = chargesByService.get(c.site_service_id) ?? []
     list.push(c)
     chargesByService.set(c.site_service_id, list)
+  }
+  const accountCharges = new Map<string, ChargeRow[]>()
+  for (const c of (accountChargesRes.data ?? []) as ChargeRow[]) {
+    if (!c.billing_account_id) continue
+    const list = accountCharges.get(c.billing_account_id) ?? []
+    list.push(c)
+    accountCharges.set(c.billing_account_id, list)
   }
   const perVisitLineIds = new Set(
     ((ledgerRes.data ?? []) as { invoice_line_item_id: string | null }[])
@@ -122,10 +145,26 @@ export async function getRecognisedRevenue(
       .filter((v): v is string => !!v),
   )
 
-  function basisFor(line: LineRow): RecognitionBasis {
+  // Account-level charges have no service link, so a line matches one only when
+  // it starts with the charge description and carries the charge amount.
+  function accountChargesFor(line: LineRow, inv: InvoiceRow | undefined): ChargeRow[] {
+    if (line.site_service_id || !inv?.billing_account_id) return []
+    const desc = line.description.toLowerCase()
+    return (accountCharges.get(inv.billing_account_id) ?? []).filter(
+      (c) =>
+        desc.startsWith(c.description.toLowerCase()) &&
+        Math.round(c.unit_price_pence * Number(c.quantity ?? 1)) === Math.abs(line.amount_pence),
+    )
+  }
+
+  // Which lines count is decided by nominal 2107; the charge only supplies the
+  // spread. A 2107 line with no traceable charge recognises in full ('unmatched').
+  function basisFor(line: LineRow, inv: InvoiceRow | undefined): RecognitionBasis {
     if (perVisitLineIds.has(line.id)) return 'per_visit'
-    const charges = line.site_service_id ? chargesByService.get(line.site_service_id) ?? [] : []
-    if (!charges.length) return line.task_id ? 'on_completion' : 'unmatched'
+    const charges = line.site_service_id
+      ? chargesByService.get(line.site_service_id) ?? []
+      : accountChargesFor(line, inv)
+    if (!charges.length) return 'unmatched'
     const exact = charges.filter(
       (c) => Math.round(c.unit_price_pence * Number(c.quantity ?? 1)) === Math.abs(line.amount_pence),
     )
@@ -155,7 +194,8 @@ export async function getRecognisedRevenue(
     const date = dateOf(inv)
     if (!date) continue
     for (const line of inv.lines ?? []) {
-      if (!line.amount_pence) continue
+      if (!line.amount_pence || !isRecurringRevenueLine(line)) continue
+      const basis = basisFor(line, inv)
       out.push({
         lineId: line.id,
         invoiceId: inv.id,
@@ -165,7 +205,7 @@ export async function getRecognisedRevenue(
         clientName: inv.bill_to_name,
         description: line.description,
         amountPence: line.amount_pence,
-        basis: basisFor(line),
+        basis,
       })
     }
   }
@@ -177,6 +217,8 @@ export async function getRecognisedRevenue(
     for (const line of cn.lines ?? []) {
       if (!line.amount_pence) continue
       const source = originalLineFor(line, original)
+      if (!isRecurringRevenueLine(line) && !isRecurringRevenueLine(source)) continue
+      const basis = source ? basisFor(source, original) : 'unmatched'
       out.push({
         lineId: line.id,
         invoiceId: cn.id,
@@ -186,7 +228,7 @@ export async function getRecognisedRevenue(
         clientName: cn.bill_to_name,
         description: line.description,
         amountPence: -Math.abs(line.amount_pence),
-        basis: source ? basisFor(source) : 'unmatched',
+        basis,
       })
     }
   }
@@ -199,7 +241,6 @@ export async function getRecognitionYears(): Promise<number[]> {
   const { data } = await supabase
     .from('invoices')
     .select('issue_date')
-    .eq('origin', 'recurring')
     .not('issue_date', 'is', null)
     .order('issue_date', { ascending: true })
     .limit(1)

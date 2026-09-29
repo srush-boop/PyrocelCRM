@@ -50,7 +50,8 @@ export default async function RecognisedRevenuePage({
         </Button>
         <h1 className="text-3xl font-bold tracking-tight text-balance">Recognised recurring revenue</h1>
         <p className="max-w-3xl text-pretty text-muted-foreground">
-          The real monthly value of recurring invoices. Each invoice is spread across the months it
+          The real monthly value of recurring service revenue: only invoice lines on nominal
+          code 2107 (Annual Maintenance) are included. Each line is spread across the months it
           covers from its invoice date (annual 1/12, bi-annual 1/6, quarterly 1/3); monthly,
           per-visit and on-completion charges count in full. Credit notes are deducted the same
           way. Figures are ex-VAT.

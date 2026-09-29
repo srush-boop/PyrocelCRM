@@ -46,7 +46,11 @@ export async function GET(
   ])
 
   const lineList = (lines ?? []) as InvoiceLineItem[]
-  const siteByLineId = await resolveInvoiceLineSites(supabase, lineList)
+  const siteByLineId = await resolveInvoiceLineSites(
+    supabase,
+    lineList,
+    (invoice as { site_id?: string | null }).site_id,
+  )
   const typedInvoice = invoice as unknown as Invoice & {
     billing_account: { name: string } | null
   }

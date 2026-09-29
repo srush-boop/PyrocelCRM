@@ -1220,7 +1220,7 @@ export async function issueInvoice(invoiceId: string): Promise<{ error: string |
 
   const { data: inv } = await supabase
     .from('invoices')
-    .select('payment_terms_days, total_pence, on_hold, invoice_number, origin, po_number')
+    .select('payment_terms_days, total_pence, on_hold, invoice_number, origin, po_number, po_not_required')
     .eq('id', invoiceId)
     .single()
   if ((inv as { on_hold: boolean } | null)?.on_hold) {
@@ -1228,9 +1228,14 @@ export async function issueInvoice(invoiceId: string): Promise<{ error: string |
   }
 
   // Sites flagged "PO required on recurring invoices" block issuing a recurring
-  // invoice until every one of their lines has a PO (line PO or invoice header PO).
-  const invMeta = inv as { origin: string | null; po_number: string | null } | null
-  if (invMeta?.origin === 'recurring' && !invMeta.po_number?.trim()) {
+  // invoice until every one of their lines has a PO (line PO or invoice header PO),
+  // unless the office explicitly marked the invoice "PO not required".
+  const invMeta = inv as {
+    origin: string | null
+    po_number: string | null
+    po_not_required: boolean | null
+  } | null
+  if (invMeta?.origin === 'recurring' && !invMeta.po_number?.trim() && !invMeta.po_not_required) {
     const { data: poLines } = await supabase
       .from('invoice_line_items')
       .select('customer_po, site_service:site_services(site:sites(name, requires_po_recurring))')

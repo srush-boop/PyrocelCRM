@@ -11,10 +11,24 @@ export const dynamic = 'force-dynamic'
 
 export default async function InvoiceDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ from?: string; month?: string }>
 }) {
   const { id } = await params
+  const sp = await searchParams
+  const renewalMonth = Number(sp.month)
+  const back =
+    sp.from === 'renewals'
+      ? {
+          href:
+            renewalMonth >= 1 && renewalMonth <= 12
+              ? `/dashboard/invoices/renewals?month=${renewalMonth}`
+              : '/dashboard/invoices/renewals',
+          label: 'Back to renewals',
+        }
+      : { href: '/dashboard/invoices', label: 'Back to invoices' }
   const supabase = await createClient()
   const {
     data: { user },
@@ -91,9 +105,9 @@ export default async function InvoiceDetailPage({
   return (
     <div className="space-y-6">
       <Button asChild variant="ghost" size="sm" className="-ml-2 h-8 text-muted-foreground">
-        <Link href="/dashboard/invoices">
+        <Link href={back.href}>
           <ArrowLeft className="mr-1.5 h-4 w-4" />
-          Back to invoices
+          {back.label}
         </Link>
       </Button>
 

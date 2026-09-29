@@ -235,6 +235,8 @@ export interface Invoice {
   held_by: string | null
   /** Customer PO number. Set only when common across all covered calls / from the job. */
   po_number: string | null
+  /** Office confirmed no PO is needed — skips the site "PO required on recurring" issue gate. */
+  po_not_required?: boolean
   /** Optional site the work relates to, plus a text snapshot of its address. */
   site_id: string | null
   site_address: string | null

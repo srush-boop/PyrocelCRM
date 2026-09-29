@@ -75,6 +75,7 @@ export function PurchaseInvoiceEditor({
   const [supplierRef, setSupplierRef] = useState(invoice.supplier_ref ?? '')
   const [nominalId, setNominalId] = useState(invoice.nominal_code_id ?? '')
   const [departmentId, setDepartmentId] = useState(invoice.department_id ?? '')
+  const [departmentCode, setDepartmentCode] = useState(invoice.department_code ?? '')
   const [amount, setAmount] = useState(
     invoice.amount_pence != null ? (invoice.amount_pence / 100).toString() : '',
   )
@@ -145,6 +146,7 @@ export function PurchaseInvoiceEditor({
         branch_id: branchId || null,
         nominal_code_id: nominalId || null,
         department_id: departmentId || null,
+        department_code: departmentCode.trim() || null,
         supplier_id: supplierId || null,
         supplier_ref: supplierRef.trim() || null,
         notes: notes.trim() || null,
@@ -172,8 +174,8 @@ export function PurchaseInvoiceEditor({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="flex w-full flex-col overflow-y-auto sm:max-w-xl">
-        <SheetHeader>
+      <SheetContent className="flex w-full flex-col gap-0 sm:max-w-xl">
+        <SheetHeader className="border-b pr-10">
           <SheetTitle>Allocate invoice</SheetTitle>
           <SheetDescription className="flex items-center gap-2">
             <span className="truncate">{invoice.name}</span>
@@ -188,7 +190,7 @@ export function PurchaseInvoiceEditor({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex-1 space-y-4 py-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
           {/* Reference picker — drives site/client/branch auto-fill */}
           <div className="space-y-2 rounded-md border p-3">
             <Label>Call / job reference</Label>
@@ -284,7 +286,7 @@ export function PurchaseInvoiceEditor({
             <div className="space-y-2">
               <Label>Supplier</Label>
               <Select value={supplierId || NONE} onValueChange={(v) => setSupplierId(v === NONE ? '' : v)}>
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select supplier" />
                 </SelectTrigger>
                 <SelectContent>
@@ -312,7 +314,7 @@ export function PurchaseInvoiceEditor({
             <div className="space-y-2">
               <Label>Site</Label>
               <Select value={siteId || NONE} onValueChange={(v) => setSiteId(v === NONE ? '' : v)}>
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select site" />
                 </SelectTrigger>
                 <SelectContent>
@@ -328,7 +330,7 @@ export function PurchaseInvoiceEditor({
             <div className="space-y-2">
               <Label>Client</Label>
               <Select value={clientId || NONE} onValueChange={(v) => setClientId(v === NONE ? '' : v)}>
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select client" />
                 </SelectTrigger>
                 <SelectContent>
@@ -347,7 +349,7 @@ export function PurchaseInvoiceEditor({
             <div className="space-y-2">
               <Label>Branch</Label>
               <Select value={branchId || NONE} onValueChange={(v) => setBranchId(v === NONE ? '' : v)}>
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select branch" />
                 </SelectTrigger>
                 <SelectContent>
@@ -366,7 +368,7 @@ export function PurchaseInvoiceEditor({
                 value={departmentId || NONE}
                 onValueChange={(v) => setDepartmentId(v === NONE ? '' : v)}
               >
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select department" />
                 </SelectTrigger>
                 <SelectContent>
@@ -381,25 +383,37 @@ export function PurchaseInvoiceEditor({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label>Nominal code</Label>
-            <Select value={nominalId || NONE} onValueChange={(v) => setNominalId(v === NONE ? '' : v)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select nominal code" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE}>None</SelectItem>
-                {options.nominalCodes.map((n) => (
-                  <SelectItem key={n.id} value={n.id}>
-                    {n.code} — {n.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Nominal code</Label>
+              <Select value={nominalId || NONE} onValueChange={(v) => setNominalId(v === NONE ? '' : v)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select nominal code" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE}>None</SelectItem>
+                  {options.nominalCodes.map((n) => (
+                    <SelectItem key={n.id} value={n.id}>
+                      {n.code} — {n.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pi-department-code">Department code (Sage)</Label>
+              <Input
+                id="pi-department-code"
+                value={departmentCode}
+                onChange={(e) => setDepartmentCode(e.target.value)}
+                placeholder="e.g. 3"
+                maxLength={20}
+              />
+            </div>
           </div>
 
           {/* Money + dates */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="space-y-2">
               <Label>Amount (£)</Label>
               <Input
@@ -468,7 +482,7 @@ export function PurchaseInvoiceEditor({
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
 
-        <SheetFooter>
+        <SheetFooter className="mt-0 flex-row justify-end border-t">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
             Cancel
           </Button>

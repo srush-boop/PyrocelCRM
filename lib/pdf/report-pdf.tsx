@@ -93,7 +93,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  logo: { height: 34, width: 'auto', objectFit: 'contain' },
+  logoTile: {
+    backgroundColor: '#ffffff',
+    borderRadius: 4,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+  },
+  logo: { height: 30, width: 'auto', objectFit: 'contain' },
   companyName: {
     fontSize: 15,
     fontFamily: 'Helvetica-Bold',
@@ -223,7 +229,11 @@ function ReportPdfDocument({ data }: { data: ReportPdfData }) {
       <Page size="A4" style={styles.page}>
         <View style={[styles.header, { backgroundColor: headerColor }]} fixed>
           <View style={styles.headerLeft}>
-            {data.logoUrl ? <Image src={data.logoUrl} style={styles.logo} /> : null}
+            {data.logoUrl ? (
+              <View style={styles.logoTile}>
+                <Image src={data.logoUrl} style={styles.logo} />
+              </View>
+            ) : null}
             <View>
               <Text style={styles.companyName}>{data.companyName}</Text>
               <Text style={styles.headerSub}>Service Report · {data.docSubtitle}</Text>

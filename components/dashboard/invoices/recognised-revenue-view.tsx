@@ -127,7 +127,7 @@ export function RecognisedRevenueView({
         <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
           <p className="text-pretty">
-            {data.unmatchedLineCount} recurring line{data.unmatchedLineCount === 1 ? '' : 's'} in{' '}
+            {data.unmatchedLineCount} nominal 2107 line{data.unmatchedLineCount === 1 ? '' : 's'} in{' '}
             {data.year} couldn&apos;t be matched to a recurring charge, so{' '}
             {data.unmatchedLineCount === 1 ? 'it is' : 'they are'} counted in full in the invoice
             month. Look for &ldquo;Unmatched&rdquo; in the month detail.

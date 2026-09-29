@@ -65,7 +65,7 @@ import {
   CalendarClock,
   Navigation,
   PauseCircle,
-  BellRing,
+  Flame,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
@@ -939,11 +939,10 @@ export function ScheduleView({ tasks: baseTasks, profile, engineers = [], initia
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               {isEngineer && task.is_emergency && (
-                <BellRing
-                  className="h-3.5 w-3.5 shrink-0 animate-pulse text-destructive"
-                  role="img"
-                  aria-label="Emergency call"
-                />
+                <Badge variant="destructive" className="shrink-0 animate-pulse gap-1 px-1.5 py-0 text-[10px]">
+                  <Flame className="h-3 w-3" aria-hidden="true" />
+                  Emergency
+                </Badge>
               )}
               {task.status === 'paused' && (
                 <PauseCircle

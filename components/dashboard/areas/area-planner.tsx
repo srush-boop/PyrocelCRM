@@ -27,6 +27,7 @@ const AreaMapCanvas = dynamic(() => import('./area-map-canvas').then((m) => m.Ar
 interface DistrictSummary {
   district: string
   siteCount: number
+  valuePence: number
   areaId: string | null
   ruleId: string | null
 }
@@ -101,11 +102,14 @@ export function AreaPlanner({ data }: { data: AreaPlannerData }) {
   const unallocatedPence = unallocated.reduce((sum, s) => sum + s.annualPence, 0)
 
   const districts: DistrictSummary[] = useMemo(() => {
-    const map = new Map<string, { count: number; areaCounts: Map<string, number> }>()
+    const valueBySite = new Map<string, number>()
+    for (const svc of data.services) valueBySite.set(svc.siteId, (valueBySite.get(svc.siteId) ?? 0) + svc.annualPence)
+    const map = new Map<string, { count: number; pence: number; areaCounts: Map<string, number> }>()
     for (const s of data.sites) {
       const d = postcodeParts(s.postcode)?.district
       if (!d) continue
-      const entry = map.get(d) ?? { count: 0, areaCounts: new Map() }
+      const entry = map.get(d) ?? { count: 0, pence: 0, areaCounts: new Map() }
+      entry.pence += valueBySite.get(s.id) ?? 0
       entry.count += 1
       const a = siteAreaId.get(s.id)
       if (a) entry.areaCounts.set(a, (entry.areaCounts.get(a) ?? 0) + 1)
@@ -117,18 +121,20 @@ export function AreaPlanner({ data }: { data: AreaPlannerData }) {
         return {
           district,
           siteCount: e.count,
+          valuePence: e.pence,
           areaId: top?.[0] ?? null,
           ruleId: data.rules.find((r) => r.prefix === district)?.id ?? null,
         }
       })
       .sort((a, b) => a.district.localeCompare(b.district, 'en', { numeric: true }))
-  }, [data.sites, data.rules, siteAreaId])
+  }, [data.sites, data.services, data.rules, siteAreaId])
 
   const visibleDistricts = unmappedOnly ? districts.filter((d) => !d.areaId) : districts
   const activeDistrict: DistrictSummary | null = selectedDistrict
     ? (districts.find((d) => d.district === selectedDistrict) ?? {
         district: selectedDistrict,
         siteCount: 0,
+        valuePence: 0,
         areaId: matchArea(selectedDistrict, ruleInputs)?.areaId ?? null,
         ruleId: data.rules.find((r) => r.prefix === selectedDistrict)?.id ?? null,
       })
@@ -153,7 +159,7 @@ export function AreaPlanner({ data }: { data: AreaPlannerData }) {
     { revalidateOnFocus: false },
   )
 
-  const siteCountByDistrict = useMemo(() => new Map(districts.map((d) => [d.district, d.siteCount])), [districts])
+  const statsByDistrict = useMemo(() => new Map(districts.map((d) => [d.district, d])), [districts])
 
   const districtInfo = useCallback(
     (district: string): DistrictInfo => {
@@ -167,10 +173,11 @@ export function AreaPlanner({ data }: { data: AreaPlannerData }) {
         color: area?.color ?? null,
         areaName: area?.name ?? null,
         partial: sectorRules.some((r) => r.areaId !== areaId) || (!base && sectorRules.length > 0),
-        siteCount: siteCountByDistrict.get(district) ?? 0,
+        siteCount: statsByDistrict.get(district)?.siteCount ?? 0,
+        valuePence: statsByDistrict.get(district)?.valuePence ?? 0,
       }
     },
-    [ruleInputs, data.rules, areaById, siteCountByDistrict],
+    [ruleInputs, data.rules, areaById, statsByDistrict],
   )
 
   const styleKey = useMemo(
@@ -397,7 +404,9 @@ export function AreaPlanner({ data }: { data: AreaPlannerData }) {
                         style={{ backgroundColor: area?.color ?? 'transparent', border: area ? undefined : '1px dashed currentColor' }}
                       />
                       <span className="font-medium">{d.district}</span>
-                      <span className="text-xs text-muted-foreground">{d.siteCount}</span>
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {formatPence(d.valuePence)} · {d.siteCount} site{d.siteCount === 1 ? '' : 's'}
+                      </span>
                     </button>
                   )
                 })}
@@ -409,7 +418,8 @@ export function AreaPlanner({ data }: { data: AreaPlannerData }) {
                     <Label htmlFor="district-area">
                       Area for {activeDistrict.district}{' '}
                       <span className="font-normal text-muted-foreground">
-                        ({activeDistrict.siteCount} site{activeDistrict.siteCount === 1 ? '' : 's'})
+                        ({activeDistrict.siteCount} site{activeDistrict.siteCount === 1 ? '' : 's'} ·{' '}
+                        {formatPence(activeDistrict.valuePence)}/yr)
                       </span>
                     </Label>
                     <Select value={districtTarget} onValueChange={setDistrictTarget}>

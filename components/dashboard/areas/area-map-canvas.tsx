@@ -26,7 +26,17 @@ export interface DistrictInfo {
   /** Some sectors inside the district belong to a different area. */
   partial: boolean
   siteCount: number
+  /** Annual recurring value of the district's engineer services, in pence. */
+  valuePence: number
 }
+
+const compactGbp = new Intl.NumberFormat('en-GB', {
+  style: 'currency',
+  currency: 'GBP',
+  notation: 'compact',
+  maximumFractionDigits: 1,
+})
+const fullGbp = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 })
 
 export interface DistrictBoundaries {
   type: 'FeatureCollection'
@@ -88,7 +98,17 @@ function DistrictLayer({
       onEachFeature={(feature, layer) => {
         const name = feature.properties.name
         const d = info(name)
-        layer.bindTooltip(name, {
+        const label = document.createElement('div')
+        const labelName = document.createElement('div')
+        labelName.textContent = name
+        label.append(labelName)
+        if (d.valuePence > 0) {
+          const labelValue = document.createElement('div')
+          labelValue.className = 'area-map-district-value'
+          labelValue.textContent = compactGbp.format(d.valuePence / 100)
+          label.append(labelValue)
+        }
+        layer.bindTooltip(label, {
           permanent: true,
           direction: 'center',
           className: 'area-map-district-label',
@@ -103,7 +123,9 @@ function DistrictLayer({
           : 'Not in an area'
         const sitesLine = document.createElement('div')
         sitesLine.textContent = `${d.siteCount} site${d.siteCount === 1 ? '' : 's'}`
-        summary.append(title, areaLine, sitesLine)
+        const valueLine = document.createElement('div')
+        valueLine.textContent = `Recurring value: ${fullGbp.format(d.valuePence / 100)}/yr`
+        summary.append(title, areaLine, sitesLine, valueLine)
         layer.bindPopup(summary, { closeButton: false, autoPan: false })
         layer.on('click', () => onSelectDistrict(name))
       }}

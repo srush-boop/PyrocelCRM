@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useCallback, useMemo, useState, useTransition } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -11,10 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { formatPence } from '@/lib/billing/invoices'
-import { matchArea, postcodeParts } from '@/lib/areas/postcodes'
+import useSWR from 'swr'
+import { matchArea, postcodeParts, prefixLevel } from '@/lib/areas/postcodes'
 import { assignPostcodeToArea, removeAreaPostcode } from '@/lib/actions/areas'
 import type { AreaPlannerData } from '@/lib/areas/planner-data'
-import type { AreaMapPoint } from './area-map-canvas'
+import type { AreaMapPoint, DistrictBoundaries, DistrictInfo } from './area-map-canvas'
 import { AreaPlannerCard, type AreaSummary } from './area-planner-card'
 import { AreaReassignDialog, type ReassignSite } from './area-reassign-dialog'
 
@@ -124,7 +125,61 @@ export function AreaPlanner({ data }: { data: AreaPlannerData }) {
   }, [data.sites, data.rules, siteAreaId])
 
   const visibleDistricts = unmappedOnly ? districts.filter((d) => !d.areaId) : districts
-  const activeDistrict = districts.find((d) => d.district === selectedDistrict) ?? null
+  const activeDistrict: DistrictSummary | null = selectedDistrict
+    ? (districts.find((d) => d.district === selectedDistrict) ?? {
+        district: selectedDistrict,
+        siteCount: 0,
+        areaId: matchArea(selectedDistrict, ruleInputs)?.areaId ?? null,
+        ruleId: data.rules.find((r) => r.prefix === selectedDistrict)?.id ?? null,
+      })
+    : null
+
+  const postcodeAreas = useMemo(() => {
+    const set = new Set<string>()
+    for (const s of data.sites) {
+      const a = postcodeParts(s.postcode)?.area
+      if (a) set.add(a)
+    }
+    for (const r of data.rules) {
+      const a = postcodeParts(r.prefix)?.area
+      if (a) set.add(a)
+    }
+    return [...set].sort().slice(0, 12)
+  }, [data.sites, data.rules])
+
+  const { data: boundaries } = useSWR<DistrictBoundaries>(
+    postcodeAreas.length ? `/api/areas/boundaries?areas=${postcodeAreas.join(',')}` : null,
+    (url: string) => fetch(url).then((r) => (r.ok ? r.json() : null)),
+    { revalidateOnFocus: false },
+  )
+
+  const siteCountByDistrict = useMemo(() => new Map(districts.map((d) => [d.district, d.siteCount])), [districts])
+
+  const districtInfo = useCallback(
+    (district: string): DistrictInfo => {
+      const base = matchArea(district, ruleInputs)
+      const sectorRules = data.rules.filter(
+        (r) => prefixLevel(r.prefix) === 'sector' && r.prefix.startsWith(`${district} `),
+      )
+      const areaId = base?.areaId ?? sectorRules[0]?.areaId ?? null
+      const area = areaId ? areaById.get(areaId) : null
+      return {
+        color: area?.color ?? null,
+        areaName: area?.name ?? null,
+        partial: sectorRules.some((r) => r.areaId !== areaId) || (!base && sectorRules.length > 0),
+        siteCount: siteCountByDistrict.get(district) ?? 0,
+      }
+    },
+    [ruleInputs, data.rules, areaById, siteCountByDistrict],
+  )
+
+  const styleKey = useMemo(
+    () =>
+      `${boundaries?.features.length ?? 0}|${data.rules.map((r) => `${r.prefix}:${r.areaId}`).join(',')}|${data.areas
+        .map((a) => `${a.id}:${a.color}`)
+        .join(',')}`,
+    [boundaries, data.rules, data.areas],
+  )
 
   const points: AreaMapPoint[] = useMemo(
     () =>
@@ -260,8 +315,47 @@ export function AreaPlanner({ data }: { data: AreaPlannerData }) {
         </div>
 
         <div className="flex min-w-0 flex-col gap-4">
-          <div className="h-[420px] overflow-hidden rounded-lg border lg:h-[480px]">
-            <AreaMapCanvas points={points} anyHighlight={points.some((p) => p.highlighted)} onSelectDistrict={selectDistrict} />
+          <div className="flex flex-col gap-2">
+            <div className="h-[420px] overflow-hidden rounded-lg border lg:h-[520px]">
+              <AreaMapCanvas
+                points={points}
+                anyHighlight={points.some((p) => p.highlighted)}
+                onSelectDistrict={selectDistrict}
+                boundaries={boundaries ?? null}
+                districtInfo={districtInfo}
+                styleKey={styleKey}
+                selectedDistrict={selectedDistrict}
+                selectedColor={selectedAreaId ? (areaById.get(selectedAreaId)?.color ?? null) : null}
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+              {data.areas.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  aria-pressed={selectedAreaId === a.id}
+                  onClick={() => {
+                    setSelectedDistrict(null)
+                    setSelectedAreaId((cur) => (cur === a.id ? null : a.id))
+                  }}
+                  className={`flex items-center gap-1.5 rounded px-1 py-0.5 hover:text-foreground ${
+                    selectedAreaId === a.id ? 'font-medium text-foreground' : ''
+                  }`}
+                >
+                  <span
+                    aria-hidden
+                    className="h-3 w-3 rounded-sm border"
+                    style={{ backgroundColor: `${a.color ?? '#94a3b8'}66`, borderColor: a.color ?? '#94a3b8' }}
+                  />
+                  {a.name}
+                </button>
+              ))}
+              <span className="flex items-center gap-1.5">
+                <span aria-hidden className="h-3 w-3 rounded-sm border border-dashed border-muted-foreground" />
+                Not in an area / split by sector
+              </span>
+              <span className="ml-auto">Zoom in to see postcode labels · click a district to assign it</span>
+            </div>
           </div>
 
           <Card>

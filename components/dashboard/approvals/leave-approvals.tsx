@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { CalendarDays, Check, X, Clock, CheckCircle2 } from 'lucide-react'
+import { CalendarDays, Check, X, Clock, CheckCircle2, List as ListIcon } from 'lucide-react'
 import { formatDateUK } from '@/lib/utils'
 import { formatLeaveLength, formatPortionNote } from '@/lib/leave-utils'
 import type { LeaveRequestRow } from '@/lib/leave-approvals'
@@ -72,6 +72,10 @@ export function LeaveApprovals({ pending, decided }: Props) {
     }
   }
 
+  const allRequests = [...pending, ...decided].sort((a, b) =>
+    b.startAt.localeCompare(a.startAt),
+  )
+
   return (
     <>
       <Tabs defaultValue="pending" className="space-y-4">
@@ -88,6 +92,13 @@ export function LeaveApprovals({ pending, decided }: Props) {
           <TabsTrigger value="approved" className="gap-2">
             <CheckCircle2 className="h-4 w-4" />
             Approved
+          </TabsTrigger>
+          <TabsTrigger value="all" className="gap-2">
+            <ListIcon className="h-4 w-4" />
+            All
+            <Badge variant="secondary" className="ml-1">
+              {pending.length + decided.length}
+            </Badge>
           </TabsTrigger>
         </TabsList>
 
@@ -220,6 +231,86 @@ export function LeaveApprovals({ pending, decided }: Props) {
                       {r.approverName && <div>by {r.approverName}</div>}
                       {r.approvedAt && <div>{formatDateUK(r.approvedAt)}</div>}
                     </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="all">
+          {allRequests.length === 0 ? (
+            <EmptyState
+              icon={<CalendarDays className="h-10 w-10 text-muted-foreground/40" />}
+              text="No leave requests yet."
+            />
+          ) : (
+            <div className="space-y-3">
+              {allRequests.map((r) => (
+                <Card key={r.id}>
+                  <CardContent className="flex flex-wrap items-center justify-between gap-4 p-4">
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{r.userName}</span>
+                        {r.departmentName && (
+                          <Badge variant="outline" className="font-normal">
+                            {r.departmentName}
+                          </Badge>
+                        )}
+                        {r.status === 'requested' ? (
+                          <Badge variant="secondary">Awaiting approval</Badge>
+                        ) : r.status === 'approved' ? (
+                          <Badge className="bg-emerald-600 text-white hover:bg-emerald-600/90">
+                            Approved
+                          </Badge>
+                        ) : (
+                          <Badge variant="destructive">Declined</Badge>
+                        )}
+                      </div>
+                      <p className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+                        <CalendarDays className="h-4 w-4" />
+                        {formatSpan(r.startAt, r.endAt)}
+                        <span className="text-foreground">
+                          ·{' '}
+                          {formatLeaveLength(r.workingDays, r.workingHours, {
+                            hourly: r.startPortion === 'hours' || r.endPortion === 'hours',
+                          })}
+                        </span>
+                      </p>
+                      {r.notes && <p className="text-sm text-muted-foreground">{r.notes}</p>}
+                      {r.status === 'rejected' && r.rejectionReason && (
+                        <p className="text-sm text-destructive">Reason: {r.rejectionReason}</p>
+                      )}
+                    </div>
+                    {r.status === 'requested' ? (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busyId === r.id || isPending}
+                          onClick={() => {
+                            setRejecting(r)
+                            setReason('')
+                          }}
+                        >
+                          <X className="mr-1 h-4 w-4" />
+                          Decline
+                        </Button>
+                        <Button
+                          size="sm"
+                          disabled={busyId === r.id || isPending}
+                          onClick={() => decide(r.id, 'approve')}
+                        >
+                          <Check className="mr-1 h-4 w-4" />
+                          Approve
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="text-right text-xs text-muted-foreground">
+                        {r.approverName && <div>by {r.approverName}</div>}
+                        {r.approvedAt && <div>{formatDateUK(r.approvedAt)}</div>}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}

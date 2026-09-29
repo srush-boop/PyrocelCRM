@@ -123,7 +123,7 @@ export async function getLabourDashboard(
        engineer:profiles!tasks_assigned_engineer_id_fkey(
          id, full_name, department_id, branch_id, role_id, cost_per_hour_pence,
          role_ref:roles(id, name, cost_per_hour_pence),
-         department:departments(id, name),
+         department:departments!profiles_department_id_fkey(id, name),
          branch:branches(id, name)
        ),
        direct_site:sites!tasks_site_id_fkey(id, name, client:clients(id, name)),

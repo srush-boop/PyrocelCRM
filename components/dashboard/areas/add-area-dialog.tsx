@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/select'
 import { Plus, Loader2 } from 'lucide-react'
 import type { Profile } from '@/lib/types/database'
+import { nextAreaColor } from '@/lib/areas/postcodes'
 
 interface AddAreaDialogProps {
   workers: Profile[]
@@ -45,8 +46,10 @@ export function AddAreaDialog({ workers }: AddAreaDialogProps) {
     e.preventDefault()
     setLoading(true)
 
+    const { data: existing } = await supabase.from('areas').select('color')
     const { error } = await supabase.from('areas').insert({
       ...formData,
+      color: nextAreaColor((existing ?? []).map((a) => a.color)),
       assigned_engineer_id: formData.assigned_engineer_id || null,
     })
 

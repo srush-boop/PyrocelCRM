@@ -93,3 +93,11 @@ export const AREA_COLORS = [
   '#475569',
   '#ea580c',
 ] as const
+
+export function nextAreaColor(usedColors: (string | null | undefined)[]): string {
+  const counts = new Map<string, number>(AREA_COLORS.map((c) => [c, 0]))
+  for (const c of usedColors) if (c && counts.has(c)) counts.set(c, (counts.get(c) ?? 0) + 1)
+  let best: string = AREA_COLORS[0]
+  for (const c of AREA_COLORS) if ((counts.get(c) ?? 0) < (counts.get(best) ?? 0)) best = c
+  return best
+}

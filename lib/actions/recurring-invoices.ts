@@ -366,9 +366,13 @@ export async function getRecurringDue(clientId?: string): Promise<RecurringDueGr
 export async function createInvoiceFromRecurringCharges(
   billingAccountId: string,
   chargeIds: string[],
-  options: { poNotRequired?: boolean } = {},
+  options: { poNotRequired?: boolean; invoiceDate?: string | null } = {},
 ): Promise<{ error: string | null; invoiceId?: string; issues?: string[] }> {
   const poNotRequired = !!options.poNotRequired
+  const invoiceDate = options.invoiceDate?.trim() || null
+  if (invoiceDate && (!/^\d{4}-\d{2}-\d{2}$/.test(invoiceDate) || Number.isNaN(Date.parse(invoiceDate)))) {
+    return { error: 'Invalid invoice date' }
+  }
   const ctx = await requireManager()
   if ('error' in ctx) return { error: ctx.error ?? 'Not authorised' }
   const { supabase, userId } = ctx
@@ -503,10 +507,13 @@ export async function createInvoiceFromRecurringCharges(
   }
 
   // Remaining (advance/arrears/on_completion) charges use the flat path.
-  if (poNotRequired && engineInvoiceIds.length > 0) {
+  if ((poNotRequired || invoiceDate) && engineInvoiceIds.length > 0) {
     await supabase
       .from('invoices')
-      .update({ po_not_required: true })
+      .update({
+        ...(poNotRequired ? { po_not_required: true } : {}),
+        ...(invoiceDate ? { issue_date: invoiceDate } : {}),
+      })
       .in('id', engineInvoiceIds)
       .eq('status', 'draft')
   }
@@ -525,7 +532,8 @@ export async function createInvoiceFromRecurringCharges(
   const nominalText = new Map<string, string>((ncRows ?? []).map((n: any) => [n.id, n.code]))
 
   const now = new Date()
-  const fy = financialYearOf(now)
+  const invoiceAt = invoiceDate ? new Date(`${invoiceDate}T12:00:00`) : now
+  const fy = financialYearOf(invoiceAt)
   const { data: seq, error: seqError } = await supabase.rpc('next_invoice_seq', { p_fy: fy })
   if (seqError || typeof seq !== 'number') {
     return { error: seqError?.message || 'Could not allocate an invoice number' }
@@ -556,6 +564,7 @@ export async function createInvoiceFromRecurringCharges(
       payment_terms_days: account.payment_terms_days ?? 30,
       tax_rate: taxRate,
       po_not_required: poNotRequired,
+      issue_date: invoiceDate,
       created_by: userId,
     })
     .select('id')
@@ -631,7 +640,7 @@ export async function createInvoiceFromRecurringCharges(
   // Stamp last_invoiced_date so these charges leave the due queue.
   await supabase
     .from('recurring_charges')
-    .update({ last_invoiced_date: toISODate(now), updated_at: now.toISOString() })
+    .update({ last_invoiced_date: invoiceDate ?? toISODate(now), updated_at: now.toISOString() })
     .in(
       'id',
       rows.map((r) => r.id),

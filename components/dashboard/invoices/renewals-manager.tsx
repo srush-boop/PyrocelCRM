@@ -102,9 +102,19 @@ export function RenewalsManager({ rows, month }: RenewalsManagerProps) {
   const [confirmJobs, setConfirmJobs] = useState<{ label: string; jobs: CommitJob[] } | null>(null)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [results, setResults] = useState<CommitResult[] | null>(null)
+  const [invoiceDate, setInvoiceDate] = useState('')
+  // Charges committed in this session: hidden at once, without waiting for refresh.
+  const [committedIds, setCommittedIds] = useState<Set<string>>(new Set())
+  const markCommitted = (ids: string[]) =>
+    setCommittedIds((prev) => {
+      const next = new Set(prev)
+      for (const id of ids) next.add(id)
+      return next
+    })
 
   const cutoff = useMemo(() => committedCutoff(month), [month])
-  const isCommitted = (c: RenewalRow) => !!c.last_invoiced_date && c.last_invoiced_date >= cutoff
+  const isCommitted = (c: RenewalRow) =>
+    committedIds.has(c.id) || (!!c.last_invoiced_date && c.last_invoiced_date >= cutoff)
   const invoiceHref = (id: string) => `/dashboard/invoices/${id}?from=renewals&month=${month}`
 
   const frequencyOptions = useMemo(
@@ -116,7 +126,7 @@ export function RenewalsManager({ rows, month }: RenewalsManagerProps) {
     const q = search.trim().toLowerCase()
     const map = new Map<string, AccountGroup>()
     for (const r of rows) {
-      const committed = !!r.last_invoiced_date && r.last_invoiced_date >= cutoff
+      const committed = isCommitted(r)
       if (status === 'to_commit' && committed) continue
       if (status === 'committed' && !committed) continue
       if (frequency !== 'all' && r.frequency !== frequency) continue
@@ -213,7 +223,9 @@ export function RenewalsManager({ rows, month }: RenewalsManagerProps) {
         try {
           const res = await createInvoiceFromRecurringCharges(job.accountId, job.chargeIds, {
             poNotRequired,
+            invoiceDate: invoiceDate || null,
           })
+          if (!res.error) markCommitted(job.chargeIds)
           out.push({
             accountId: job.accountId,
             accountName: job.accountName,
@@ -298,12 +310,14 @@ export function RenewalsManager({ rows, month }: RenewalsManagerProps) {
     setCreatingAccount(group.accountId)
     const result = await createInvoiceFromRecurringCharges(group.accountId, chargeIds, {
       poNotRequired,
+      invoiceDate: invoiceDate || null,
     })
     setCreatingAccount(null)
     if (result.error) {
       toast.error(result.error)
       return
     }
+    markCommitted(chargeIds)
     setMany(group.charges, false)
     if (result.invoiceId && result.issues && result.issues.length > 0) {
       toast.warning(`Draft needs attention: ${result.issues.join('; ')}`)
@@ -477,6 +491,24 @@ export function RenewalsManager({ rows, month }: RenewalsManagerProps) {
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="renewal-invoice-date" className="text-sm font-normal">
+              Invoice date
+            </Label>
+            <Input
+              id="renewal-invoice-date"
+              type="date"
+              value={invoiceDate}
+              onChange={(e) => setInvoiceDate(e.target.value)}
+              className="h-8 w-40"
+              title="Leave blank to date each invoice when it is issued"
+            />
+            {invoiceDate && (
+              <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => setInvoiceDate('')}>
+                Clear
+              </Button>
+            )}
+          </div>
           <label className="flex items-center gap-2 text-sm">
             <Checkbox checked={poNotRequired} onCheckedChange={(v) => setPoNotRequired(!!v)} />
             PO not required
@@ -690,6 +722,8 @@ export function RenewalsManager({ rows, month }: RenewalsManagerProps) {
                   committed charges are skipped. You&apos;ll stay on this page — only drafts that
                   need attention are listed afterwards.
                   {poNotRequired && ' They will be marked "PO not required".'}
+                  {invoiceDate &&
+                    ` Invoices will be dated ${new Date(`${invoiceDate}T12:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}.`}
                 </>
               )}
             </AlertDialogDescription>

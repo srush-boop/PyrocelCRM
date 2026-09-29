@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { matchArea } from '@/lib/areas/postcodes'
 import { getCallEstimateLookup, buildTaskEstimates } from '@/lib/task-duration'
 import { getGlobalConfig } from '@/lib/actions/global-config'
 import { CALL_URGENCY_CONFIG_KEY, parseCallUrgencyConfig } from '@/lib/kpi'
@@ -145,7 +146,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
     createdByName = creator?.full_name || creator?.email || null
   }
 
-  const [siteServicesResult, serviceTypesResult, engineersResult, routesResult, areasResult, subcontractorsResult, clientsResult, siteSystemsResult, systemTypesResult, quotesResult, panelFieldDefsResult, remMonFieldDefsResult, remMonLinkDefsResult] = await Promise.all([
+  const [siteServicesResult, serviceTypesResult, engineersResult, routesResult, areasResult, subcontractorsResult, clientsResult, siteSystemsResult, systemTypesResult, quotesResult, panelFieldDefsResult, remMonFieldDefsResult, remMonLinkDefsResult, areaRulesResult] = await Promise.all([
     supabase
       .from('site_services')
       .select(`
@@ -182,6 +183,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
     supabase.from('panel_field_defs').select('*').eq('active', true).order('position'),
     supabase.from('rem_mon_field_defs').select('*').eq('active', true).order('position'),
     supabase.from('rem_mon_link_defs').select('*').eq('active', true).order('position'),
+    supabase.from('area_postcodes').select('prefix, area_id'),
   ])
 
   const siteServices = (siteServicesResult.data || []) as (SiteService & { service_type: ServiceType })[]
@@ -189,6 +191,14 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
   const engineers = (engineersResult.data || []) as Profile[]
   const routes = (routesResult.data || []) as Route[]
   const areas = (areasResult.data || []) as Area[]
+  // Area suggested for "By area" assignment, from the site's postcode rules.
+  const suggestedArea = matchArea(
+    (site as Site).postcode,
+    ((areaRulesResult.data || []) as { prefix: string; area_id: string }[]).map((r) => ({
+      prefix: r.prefix,
+      areaId: r.area_id,
+    })),
+  )
   const subcontractorsBase = (subcontractorsResult.data || []) as Subcontractor[]
 
   // Attach each sub-contractor's provided service types so the assignment UI can
@@ -1064,6 +1074,7 @@ export default async function SiteDetailPage({ params, searchParams }: PageProps
             engineers={engineers}
             routes={routes}
             areas={areas}
+            suggestedArea={suggestedArea}
             subcontractors={subcontractors}
             tasks={tasks}
                   siteStatus={(site as Site).status}

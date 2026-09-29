@@ -80,6 +80,9 @@ interface SiteServicesManagerProps {
   engineers?: Profile[]
   routes?: Route[]
   areas?: Area[]
+  // Area whose postcode rules match this site (area planner). Pre-selected when
+  // a service is assigned "By area".
+  suggestedArea?: { areaId: string; prefix: string } | null
   subcontractors?: Subcontractor[]
   tasks?: Task[]
   siteStatus?: 'live' | 'dead' | 'new'
@@ -103,6 +106,7 @@ export function SiteServicesManager({
   engineers = [],
   routes = [],
   areas = [],
+  suggestedArea = null,
   subcontractors = [],
   tasks = [],
   siteStatus = 'live',
@@ -300,6 +304,7 @@ export function SiteServicesManager({
     else if (ss.area_id) method = 'area'
     else method = allowedMethodsForWorker(workerType)[0]
     setEditMethod(method)
+    if (method === 'area' && !ss.area_id && suggestedArea) setEditAreaId(suggestedArea.areaId)
     setEditNextServiceDate(ss.next_service_date ? new Date(ss.next_service_date) : undefined)
     setEditReportingEmails(Array.isArray(ss.reporting_emails) ? ss.reporting_emails : [])
     setEditDefectsToEmail(ss.defects_to_email || '')
@@ -1357,7 +1362,9 @@ export function SiteServicesManager({
                   const nextMethod = allowedMethodsForWorker(wt)[0]
                   setEditMethod(nextMethod)
                   setEditRouteId(NONE_VALUE)
-                  setEditAreaId(NONE_VALUE)
+                  setEditAreaId(
+                    nextMethod === 'area' && suggestedArea ? suggestedArea.areaId : NONE_VALUE,
+                  )
                   setEditEngineerId(NONE_VALUE)
                   setEditSubcontractorId(NONE_VALUE)
                 }}
@@ -1385,6 +1392,7 @@ export function SiteServicesManager({
                       // Clear vectors not relevant to the chosen method.
                       if (m !== 'route') setEditRouteId(NONE_VALUE)
                       if (m !== 'area') setEditAreaId(NONE_VALUE)
+                      else if (editAreaId === NONE_VALUE && suggestedArea) setEditAreaId(suggestedArea.areaId)
                       if (m !== 'direct') setEditEngineerId(NONE_VALUE)
                     }}
                   >
@@ -1443,6 +1451,33 @@ export function SiteServicesManager({
                       ))}
                     </SelectContent>
                   </Select>
+                  {suggestedArea ? (
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                      <MapPinned className="h-3.5 w-3.5 text-primary" aria-hidden />
+                      <span>
+                        Suggested:{' '}
+                        <span className="font-medium">
+                          {areas.find((a) => a.id === suggestedArea.areaId)?.name ?? 'area'}
+                        </span>{' '}
+                        <span className="text-muted-foreground">(postcode {suggestedArea.prefix})</span>
+                      </span>
+                      {editAreaId !== suggestedArea.areaId && (
+                        <Button
+                          type="button"
+                          variant="link"
+                          size="sm"
+                          className="h-auto p-0 text-xs"
+                          onClick={() => setEditAreaId(suggestedArea.areaId)}
+                        >
+                          Use suggestion
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      No area covers this site&apos;s postcode yet. Add it in the Areas planner to get a suggestion.
+                    </p>
+                  )}
                   <p className="text-xs text-muted-foreground">
                     Work flows to the worker assigned to this area.
                   </p>

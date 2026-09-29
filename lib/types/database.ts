@@ -76,9 +76,20 @@ export interface Area {
   name: string
   description: string | null
   assigned_engineer_id: string | null
+  /** Map colour used by the area planner. */
+  color?: string | null
   created_at: string
   updated_at: string
   assigned_engineer?: Profile | null
+}
+
+// A postcode rule placing sites into an area. `prefix` is area letters ("NE"),
+// a district ("NE2") or a sector ("NE2 4"); the most specific match wins.
+export interface AreaPostcode {
+  id: string
+  area_id: string
+  prefix: string
+  created_at: string
 }
 
 export type SupplierType = 'subcontractor' | 'product'
@@ -1126,7 +1137,7 @@ export interface InternalTaskTemplate {
   // Monthly frequency only: how the completion deadline within the month is set.
   //  - 'period_end'       → last day of the month (+grace_days) [default]
   //  - 'day_of_month'     → the given calendar day (monthly_due_day)
-  //  - 'weekday_of_month' → the nth/last weekday (monthly_due_week + _weekday),
+  //  - 'weekday_of_month' �� the nth/last weekday (monthly_due_week + _weekday),
   //                         e.g. the last Monday of the month.
   monthly_due_rule: 'period_end' | 'day_of_month' | 'weekday_of_month'
   monthly_due_day: number | null // 1..31 (day_of_month rule)

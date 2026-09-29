@@ -1,7 +1,7 @@
 'use client'
 
 import { memo, useEffect, useMemo, useRef } from 'react'
-import { MapContainer, TileLayer, CircleMarker, Tooltip, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, CircleMarker, GeoJSON, Tooltip, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
@@ -18,6 +18,98 @@ export interface AreaMapPoint {
 }
 
 const UNMAPPED = '#94a3b8'
+const LABEL_MIN_ZOOM = 11
+
+export interface DistrictInfo {
+  color: string | null
+  areaName: string | null
+  /** Some sectors inside the district belong to a different area. */
+  partial: boolean
+  siteCount: number
+}
+
+export interface DistrictBoundaries {
+  type: 'FeatureCollection'
+  features: {
+    type: 'Feature'
+    properties: { name: string }
+    geometry: { type: 'Polygon' | 'MultiPolygon'; coordinates: unknown }
+  }[]
+}
+
+function LabelVisibility() {
+  const map = useMap()
+  useEffect(() => {
+    const sync = () =>
+      map.getContainer().classList.toggle('area-map-hide-labels', map.getZoom() < LABEL_MIN_ZOOM)
+    sync()
+    map.on('zoomend', sync)
+    return () => {
+      map.off('zoomend', sync)
+    }
+  }, [map])
+  return null
+}
+
+function DistrictLayer({
+  boundaries,
+  info,
+  styleKey,
+  selectedDistrict,
+  selectedColor,
+  onSelectDistrict,
+}: {
+  boundaries: DistrictBoundaries
+  info: (district: string) => DistrictInfo
+  styleKey: string
+  selectedDistrict: string | null
+  selectedColor: string | null
+  onSelectDistrict: (district: string) => void
+}) {
+  const focus = selectedDistrict || selectedColor
+  return (
+    <GeoJSON
+      key={`${styleKey}|${selectedDistrict ?? ''}|${selectedColor ?? ''}`}
+      data={boundaries}
+      style={(feature) => {
+        const name = feature?.properties?.name ?? ''
+        const d = info(name)
+        const isFocus = selectedDistrict ? name === selectedDistrict : selectedColor ? d.color === selectedColor : false
+        const dim = focus && !isFocus
+        return {
+          color: isFocus ? '#0f172a' : (d.color ?? UNMAPPED),
+          weight: isFocus ? 2.5 : 1,
+          opacity: dim ? 0.35 : 0.9,
+          fillColor: d.color ?? UNMAPPED,
+          fillOpacity: d.color ? (dim ? 0.08 : isFocus ? 0.4 : 0.28) : 0.04,
+          dashArray: d.partial || !d.color ? '4 3' : undefined,
+        }
+      }}
+      onEachFeature={(feature, layer) => {
+        const name = feature.properties.name
+        const d = info(name)
+        layer.bindTooltip(name, {
+          permanent: true,
+          direction: 'center',
+          className: 'area-map-district-label',
+        })
+        const summary = document.createElement('div')
+        summary.style.fontSize = '12px'
+        const title = document.createElement('strong')
+        title.textContent = name
+        const areaLine = document.createElement('div')
+        areaLine.textContent = d.areaName
+          ? `Area: ${d.areaName}${d.partial ? ' (some sectors elsewhere)' : ''}`
+          : 'Not in an area'
+        const sitesLine = document.createElement('div')
+        sitesLine.textContent = `${d.siteCount} site${d.siteCount === 1 ? '' : 's'}`
+        summary.append(title, areaLine, sitesLine)
+        layer.bindPopup(summary, { closeButton: false, autoPan: false })
+        layer.on('click', () => onSelectDistrict(name))
+      }}
+    />
+  )
+}
 
 function FitOnce({ points }: { points: [number, number][] }) {
   const map = useMap()
@@ -54,21 +146,42 @@ export const AreaMapCanvas = memo(function AreaMapCanvas({
   points,
   anyHighlight,
   onSelectDistrict,
+  boundaries,
+  districtInfo,
+  styleKey,
+  selectedDistrict,
+  selectedColor,
 }: {
   points: AreaMapPoint[]
   anyHighlight: boolean
   onSelectDistrict: (district: string) => void
+  boundaries: DistrictBoundaries | null
+  districtInfo: (district: string) => DistrictInfo
+  styleKey: string
+  selectedDistrict: string | null
+  selectedColor: string | null
 }) {
   const coords = useMemo(() => points.map((p) => [p.latitude, p.longitude] as [number, number]), [points])
 
   return (
     <MapContainer center={[54.97, -1.61]} zoom={10} scrollWheelZoom className="h-full w-full">
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · Postcode boundaries &copy; OS Code-Point Open'
+        url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
       />
       <FitOnce points={coords} />
       <InvalidateSize />
+      <LabelVisibility />
+      {boundaries && boundaries.features.length > 0 && (
+        <DistrictLayer
+          boundaries={boundaries}
+          info={districtInfo}
+          styleKey={styleKey}
+          selectedDistrict={selectedDistrict}
+          selectedColor={selectedColor}
+          onSelectDistrict={onSelectDistrict}
+        />
+      )}
       {points.map((p) => {
         const dim = anyHighlight && !p.highlighted
         const fill = p.color ?? UNMAPPED

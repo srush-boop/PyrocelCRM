@@ -136,6 +136,28 @@
   z-index: 0;
 }
 
+/* Postcode district labels on the area planner map: plain text, no tooltip chrome. */
+.leaflet-tooltip.area-map-district-label {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: #0f172a;
+  text-shadow:
+    0 0 3px #ffffff,
+    0 0 3px #ffffff,
+    0 0 3px #ffffff;
+  pointer-events: none;
+}
+.leaflet-tooltip.area-map-district-label::before {
+  display: none;
+}
+.area-map-hide-labels .area-map-district-label {
+  display: none;
+}
+
 /* Lone worker full-screen escalation takeover. Amber = warning, red = emergency.
    Strong flashing background so it is unmissable on any screen. */
 @keyframes lw-flash-amber {

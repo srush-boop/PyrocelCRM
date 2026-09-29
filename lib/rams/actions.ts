@@ -345,10 +345,8 @@ export async function submitForApproval(
   if (updErr) return { success: false, error: updErr.message }
 
   // Best-effort approval-notification email with the public link.
-  const baseUrl =
-    process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : ''
+  const { getPublicBaseUrl } = await import('./base-url')
+  const baseUrl = getPublicBaseUrl()
   const link = `${baseUrl}/approve/${approval.token}`
 
   // Escape user/AI-supplied text before embedding it in the HTML email.

@@ -1496,7 +1496,7 @@ export async function sendInvoiceToClient(
   ])
 
   const emailLines = (lines ?? []) as InvoiceLineItem[]
-  const emailSiteByLineId = await resolveInvoiceLineSites(supabase, emailLines)
+  const emailSiteByLineId = await resolveInvoiceLineSites(supabase, emailLines, fresh.site_id)
 
   // Fall back to the client's address when the billing-account snapshot is blank
   // so the customer copy still shows an address where one is on file.

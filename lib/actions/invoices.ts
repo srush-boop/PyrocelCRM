@@ -203,7 +203,7 @@ export interface ReadyGroup {
 export async function getReadyToInvoiceGroups(): Promise<ReadyGroup[]> {
   const supabase = await createClient()
 
-  const [{ data: tasks }, { data: accounts }] = await Promise.all([
+  const [{ data: tasks }, { data: accounts }, { data: issuedRows }] = await Promise.all([
     supabase
       .from('tasks')
       .select(
@@ -226,22 +226,24 @@ export async function getReadyToInvoiceGroups(): Promise<ReadyGroup[]> {
       .is('invoice_id', null)
       .order('completed_at', { ascending: true })
       .limit(1000),
-    supabase.from('billing_accounts').select('*'),
-  ])
-
-  const pool = (accounts ?? []) as BillingAccount[]
-
+  supabase.from('billing_accounts').select('*'),
   // Last issued invoice date per billing account, for the cadence due-hint.
-  const { data: issuedRows } = await supabase
-    .from('invoices')
-    .select('billing_account_id, invoice_date')
-    .not('invoice_date', 'is', null)
-    .order('invoice_date', { ascending: false })
+  supabase
+  .from('invoices')
+  .select('billing_account_id, issue_date')
+  .not('billing_account_id', 'is', null)
+  .not('issue_date', 'is', null)
+  .order('issue_date', { ascending: false })
+  .limit(2000),
+  ])
+  
+  const pool = (accounts ?? []) as BillingAccount[]
+  
   const lastIssuedByAccount = new Map<string, string>()
-  for (const row of (issuedRows ?? []) as { billing_account_id: string | null; invoice_date: string | null }[]) {
-    if (row.billing_account_id && row.invoice_date && !lastIssuedByAccount.has(row.billing_account_id)) {
-      lastIssuedByAccount.set(row.billing_account_id, row.invoice_date)
-    }
+  for (const row of (issuedRows ?? []) as { billing_account_id: string | null; issue_date: string | null }[]) {
+  if (row.billing_account_id && row.issue_date && !lastIssuedByAccount.has(row.billing_account_id)) {
+  lastIssuedByAccount.set(row.billing_account_id, row.issue_date)
+  }
   }
 
   const groups = new Map<string, ReadyGroup>()

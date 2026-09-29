@@ -7,6 +7,7 @@ import type { Invoice, InvoiceLineItem, NominalCode, Profile } from '@/lib/types
 import { InvoiceDetail } from '@/components/dashboard/invoices/invoice-detail'
 import { profileCanEditInvoices } from '@/lib/auth/invoices'
 import { resolveInvoiceLineSites } from '@/lib/billing/invoice-line-sites'
+import { getSessionUser, getSessionProfile } from '@/lib/auth/session'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,39 +31,34 @@ export default async function InvoiceDetailPage({
           label: 'Back to renewals',
         }
       : { href: '/dashboard/invoices', label: 'Back to invoices' }
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const [supabase, user, profile] = await Promise.all([
+    createClient(),
+    getSessionUser(),
+    getSessionProfile(),
+  ])
   if (!user) redirect('/auth/login')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
-  const role = (profile as Profile | null)?.role
+  const role = profile?.role
   if (role !== 'admin' && role !== 'office') redirect('/dashboard')
 
-  const { data: invoice } = await supabase
-    .from('invoices')
-    .select('*, billing_account:billing_accounts(name, invoice_email), client:clients(name)')
-    .eq('id', id)
-    .maybeSingle()
+  // Invoice, its lines and the nominal list are independent — fetch together.
+  const [{ data: invoice }, { data: lines }, { data: nominalCodeRows }] = await Promise.all([
+    supabase
+      .from('invoices')
+      .select('*, billing_account:billing_accounts(name, invoice_email), client:clients(name)')
+      .eq('id', id)
+      .maybeSingle(),
+    supabase
+      .from('invoice_line_items')
+      .select('*')
+      .eq('invoice_id', id)
+      .order('sort_order', { ascending: true }),
+    // Managed nominal codes for the internal per-line accounting picker.
+    supabase.from('nominal_codes').select('*').order('code', { ascending: true }),
+  ])
 
   if (!invoice) notFound()
 
-  const { data: lines } = await supabase
-    .from('invoice_line_items')
-    .select('*')
-    .eq('invoice_id', id)
-    .order('sort_order', { ascending: true })
-
-  // Managed nominal codes for the internal per-line accounting picker.
-  const { data: nominalCodeRows } = await supabase
-    .from('nominal_codes')
-    .select('*')
-    .order('code', { ascending: true })
   const nominalCodes = (nominalCodeRows ?? []) as NominalCode[]
 
   // Resolve each task-sourced line's service type so the detail can group
@@ -73,16 +69,20 @@ export default async function InvoiceDetailPage({
   )
   const serviceTypeByLineId: Record<string, string> = {}
   // Per-line site name (call → service → job → invoice site), shared with PDF/email.
-  const siteByLineId = await resolveInvoiceLineSites(
-    supabase,
-    lineList,
-    (invoice as { site_id?: string | null }).site_id,
-  )
+  const [siteByLineId, { data: taskRows }] = await Promise.all([
+    resolveInvoiceLineSites(
+      supabase,
+      lineList,
+      (invoice as { site_id?: string | null }).site_id,
+    ),
+    taskIds.length > 0
+      ? supabase
+          .from('tasks')
+          .select('id, site_service:site_services(service_type:service_types(name))')
+          .in('id', taskIds)
+      : Promise.resolve({ data: [] as unknown[] }),
+  ])
   if (taskIds.length > 0) {
-    const { data: taskRows } = await supabase
-      .from('tasks')
-      .select('id, site_service:site_services(service_type:service_types(name))')
-      .in('id', taskIds)
     const nameByTask = new Map<string, string>()
     for (const t of (taskRows ?? []) as any[]) {
       const ss = Array.isArray(t.site_service) ? t.site_service[0] : t.site_service

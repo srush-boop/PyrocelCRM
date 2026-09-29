@@ -90,10 +90,14 @@ function formatDate(value: string | null): string {
   })
 }
 
-// A draft (non credit-note) invoice can be bulk issued/emailed.
+// Any invoice not yet emailed (draft, or issued but unsent) can be bulk sent.
+// Credit notes can't be emailed from the CRM.
 function isSelectable(inv: InvoiceRow): boolean {
-  return inv.status === 'draft' && inv.document_type !== 'credit_note'
+  if (inv.document_type === 'credit_note' || inv.sent_at) return false
+  return inv.status === 'draft' || inv.status === 'issued'
 }
+
+const SEND_BATCH_SIZE = 10
 
 // The "Bill to" label used in both the table and free-text search.
 function billToLabel(inv: InvoiceRow): string {
@@ -305,6 +309,9 @@ export function InvoicesTable({
   const [filters, setFilters] = useState<InvoiceFilterState>(EMPTY_INVOICE_FILTERS)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [confirmSend, setConfirmSend] = useState(false)
+  // Ids the confirm dialog will send: the selection, or every unsent row in view.
+  const [sendTargetIds, setSendTargetIds] = useState<string[]>([])
+  const [sendProgress, setSendProgress] = useState<{ done: number; total: number } | null>(null)
   const [pending, startTransition] = useTransition()
   const today = todayIso()
 
@@ -425,7 +432,11 @@ export function InvoicesTable({
   }
 
   const runIssue = () => {
-    const ids = selectedRows.map((r) => r.id)
+    const ids = selectedRows.filter((r) => r.status === 'draft').map((r) => r.id)
+    if (ids.length === 0) {
+      toast.info('No drafts in the selection to issue.')
+      return
+    }
     startTransition(async () => {
       const { ok, failures } = await bulkIssueInvoices(ids)
       if (ok > 0) toast.success(`Issued ${ok} invoice${ok === 1 ? '' : 's'}`)
@@ -439,15 +450,36 @@ export function InvoicesTable({
     })
   }
 
+  // Send in small batches so hundreds of invoices don't hit one request's
+  // time limit, and so progress can be shown as it goes.
   const runSend = () => {
-    const ids = selectedRows.map((r) => r.id)
+    const ids = sendTargetIds
     setConfirmSend(false)
+    if (ids.length === 0) return
+    setSendProgress({ done: 0, total: ids.length })
     startTransition(async () => {
-      const { ok, failures } = await bulkSendInvoices(ids)
+      let ok = 0
+      const failures: { invoiceId: string; error: string }[] = []
+      for (let i = 0; i < ids.length; i += SEND_BATCH_SIZE) {
+        const chunk = ids.slice(i, i + SEND_BATCH_SIZE)
+        try {
+          const res = await bulkSendInvoices(chunk)
+          ok += res.ok
+          failures.push(...res.failures)
+        } catch {
+          chunk.forEach((id) => failures.push({ invoiceId: id, error: 'Request failed' }))
+        }
+        setSendProgress({ done: Math.min(i + chunk.length, ids.length), total: ids.length })
+      }
       if (ok > 0) toast.success(`Emailed ${ok} invoice${ok === 1 ? '' : 's'} to clients`)
       if (failures.length > 0) {
-        toast.error(`${failures.length} could not be sent: ${failures[0].error}`)
+        const numberById = new Map(invoices.map((inv) => [inv.id, inv.invoice_number]))
+        toast.error(
+          `${failures.length} could not be sent. ${numberById.get(failures[0].invoiceId) ?? ''}: ${failures[0].error}`,
+          { duration: 10000 },
+        )
       }
+      setSendProgress(null)
       setSelected(new Set())
       router.refresh()
     })
@@ -596,18 +628,54 @@ export function InvoicesTable({
         totalCount={invoices.length}
       />
 
-      <Tabs value={filter} onValueChange={(v) => changeFilter(v as Filter)}>
-        <TabsList>
-          {FILTERS.map((f) => (
-            <TabsTrigger key={f.value} value={f.value} className="gap-1.5">
-              {f.label}
-              <span className="text-xs text-muted-foreground">{counts[f.value]}</span>
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Tabs value={filter} onValueChange={(v) => changeFilter(v as Filter)}>
+          <TabsList>
+            {FILTERS.map((f) => (
+              <TabsTrigger key={f.value} value={f.value} className="gap-1.5">
+                {f.label}
+                <span className="text-xs text-muted-foreground">{counts[f.value]}</span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+        {canEdit && selectableRows.length > 0 && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={pending}
+            onClick={() => {
+              setSendTargetIds(selectableRows.map((r) => r.id))
+              setConfirmSend(true)
+            }}
+          >
+            <Send className="mr-2 h-4 w-4" />
+            Send all unsent ({selectableRows.length})
+          </Button>
+        )}
+      </div>
 
-      {/* Sticky bulk-action bar, shown once one or more drafts are selected. */}
+      {sendProgress && (
+        <div className="flex flex-col gap-1.5 rounded-lg border bg-card px-4 py-2.5" role="status">
+          <div className="flex items-center justify-between text-sm">
+            <span className="flex items-center gap-2 font-medium">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Sending invoices
+            </span>
+            <span className="tabular-nums text-muted-foreground">
+              {sendProgress.done} / {sendProgress.total}
+            </span>
+          </div>
+          <span className="h-1.5 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
+            <span
+              className="block h-full rounded-full bg-primary transition-all"
+              style={{ width: `${(sendProgress.done / Math.max(1, sendProgress.total)) * 100}%` }}
+            />
+          </span>
+        </div>
+      )}
+
+      {/* Sticky bulk-action bar, shown once one or more unsent invoices are selected. */}
       {selected.size > 0 && (
         <div className="sticky top-2 z-10 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card px-4 py-2.5 shadow-sm">
           <div className="flex items-center gap-2">
@@ -631,7 +699,14 @@ export function InvoicesTable({
               )}
               Issue
             </Button>
-            <Button size="sm" onClick={() => setConfirmSend(true)} disabled={pending}>
+            <Button
+              size="sm"
+              onClick={() => {
+                setSendTargetIds(selectedRows.map((r) => r.id))
+                setConfirmSend(true)
+              }}
+              disabled={pending}
+            >
               {pending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
@@ -680,7 +755,7 @@ export function InvoicesTable({
                     <Checkbox
                       checked={allSelected}
                       onCheckedChange={toggleAll}
-                      aria-label="Select all draft invoices"
+                      aria-label="Select all unsent invoices"
                     />
                   </TableHead>
                 )}
@@ -798,12 +873,13 @@ export function InvoicesTable({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Email {selected.size} invoice{selected.size === 1 ? '' : 's'} to clients?
+              Email {sendTargetIds.length} invoice{sendTargetIds.length === 1 ? '' : 's'} to clients?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Each draft is issued (assigning issue and due dates) and its PDF emailed to the
-              billing account&apos;s invoice email. Once sent, invoices are locked and can no longer
-              be edited. Any without an invoice email will be skipped and reported.
+              Any drafts are issued first (assigning issue and due dates), then each PDF is emailed
+              to the billing account&apos;s invoice email. Once sent, invoices are locked and can be
+              pushed to Sage. Any that fail (e.g. no invoice email, missing nominal code) are
+              skipped and reported.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

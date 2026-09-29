@@ -49,6 +49,11 @@ export function PushToSageButton({ pendingCount }: { pendingCount: number }) {
       toast.success(
         `Pushed ${res.count} invoice${res.count === 1 ? '' : 's'} to Sage. CSV downloaded.`,
       )
+      if (res.skippedUnsent) {
+        toast.warning(
+          `${res.skippedUnsent} issued invoice${res.skippedUnsent === 1 ? ' was' : 's were'} held back because ${res.skippedUnsent === 1 ? "it hasn't" : "they haven't"} been sent to the client yet.`,
+        )
+      }
       router.refresh()
     })
   }
@@ -76,7 +81,8 @@ export function PushToSageButton({ pendingCount }: { pendingCount: number }) {
               Push {pendingCount} invoice{pendingCount === 1 ? '' : 's'} to Sage?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This downloads a Sage 50 CSV containing every issued invoice not yet exported, with
+              This downloads a Sage 50 CSV containing every issued invoice that has been sent to
+              the client and not yet exported (unsent invoices are held back), with
               one row per line (posted to its nominal code). The invoices are then labelled
               <span className="font-medium"> Sent to Sage</span>. Import the file into Sage via File
               &rarr; Import &rarr; Audit Trail transactions.
